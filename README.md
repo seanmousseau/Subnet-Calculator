@@ -10,7 +10,8 @@ A lightweight, web-based IPv4 Subnet Calculator written in PHP with no external 
   - Netmask in CIDR and Octet notation
   - First and last usable IP
   - Broadcast IP
-  - Total hosts and usable IPs
+  - Usable IPs
+- Reset button to clear inputs and results
 - Handles edge cases: `/0` (default route), `/31` (point-to-point), `/32` (host route)
 - Single-file, zero dependencies — just PHP
 
@@ -46,7 +47,6 @@ Then open `http://localhost:8080` in your browser.
 | First Usable IP | `192.168.1.1` |
 | Last Usable IP | `192.168.1.254` |
 | Broadcast IP | `192.168.1.255` |
-| Total Hosts | `256` |
 | Usable IPs | `254` |
 
 ## Versioning

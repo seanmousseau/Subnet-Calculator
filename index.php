@@ -178,8 +178,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         input[type="text"]::placeholder { color: #475569; }
 
+        .btn-row {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 0.25rem;
+        }
+
         button {
-            width: 100%;
+            flex: 1;
             background: #3b82f6;
             border: none;
             border-radius: 6px;
@@ -189,10 +195,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-weight: 600;
             padding: 0.65rem 1rem;
             transition: background 0.15s;
-            margin-top: 0.25rem;
         }
 
         button:hover { background: #2563eb; }
+
+        button.reset {
+            background: #1e293b;
+            border: 1px solid #334155;
+            color: #94a3b8;
+        }
+
+        button.reset:hover { background: #334155; color: #e2e8f0; }
 
         .error {
             background: #450a0a;
@@ -283,7 +296,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                        autocomplete="off" spellcheck="false">
             </div>
         </div>
-        <button type="submit">Calculate</button>
+        <div class="btn-row">
+            <button type="submit">Calculate</button>
+            <button type="reset" class="reset">Reset</button>
+        </div>
     </form>
 
     <?php if ($error): ?>
@@ -316,10 +332,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="result-row">
                 <span class="result-label">Broadcast IP</span>
                 <span class="result-value"><?= htmlspecialchars($result['broadcast']) ?></span>
-            </div>
-            <div class="result-row hosts-row">
-                <span class="result-label">Total Hosts</span>
-                <span class="result-value"><?= number_format($result['total_hosts']) ?></span>
             </div>
             <div class="result-row hosts-row">
                 <span class="result-label">Usable IPs</span>
