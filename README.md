@@ -2,6 +2,8 @@
 
 A lightweight, web-based IPv4 Subnet Calculator written in PHP with no external dependencies.
 
+https://seanmousseau.com/sc/
+
 ## Features
 
 - Accepts netmask in **CIDR** notation (`/24`, `24`) or **dotted-decimal** (`255.255.255.0`)
