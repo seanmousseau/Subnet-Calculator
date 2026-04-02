@@ -78,6 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Subnet Calculator</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -103,9 +104,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         .title-row {
             display: flex;
-            align-items: baseline;
+            align-items: center;
             gap: 0.6rem;
             margin-bottom: 0.25rem;
+        }
+
+        .logo {
+            width: 32px;
+            height: 32px;
+            flex-shrink: 0;
         }
 
         h1 {
@@ -253,6 +260,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
 <div class="card">
     <div class="title-row">
+        <img src="logo.svg" alt="Subnet Calculator logo" class="logo">
         <h1>Subnet Calculator</h1>
         <span class="version">v0.1</span>
     </div>
