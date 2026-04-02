@@ -1,0 +1,36 @@
+name: Claude Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       contains(github.event.comment.body, '@claude'))
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          trigger_phrase: "@claude"
+          direct_prompt: |
+            Review this pull request. Focus on:
+            - Correctness of subnet/IP calculations
+            - Security (input validation, XSS prevention)
+            - Code clarity and efficiency
+            - Edge cases (e.g. /0, /31, /32)
+            Be concise. Flag issues as blocking or non-blocking.
