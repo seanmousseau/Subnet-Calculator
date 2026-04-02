@@ -77,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IPv4 Subnet Calculator</title>
+    <title>Subnet Calculator</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -101,11 +101,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             max-width: 560px;
         }
 
+        .title-row {
+            display: flex;
+            align-items: baseline;
+            gap: 0.6rem;
+            margin-bottom: 0.25rem;
+        }
+
         h1 {
             font-size: 1.5rem;
             font-weight: 700;
             color: #f8fafc;
-            margin-bottom: 0.25rem;
+        }
+
+        .version {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #475569;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 4px;
+            padding: 0.15rem 0.4rem;
+            letter-spacing: 0.04em;
         }
 
         .subtitle {
@@ -235,7 +252,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
 <div class="card">
-    <h1>IPv4 Subnet Calculator</h1>
+    <div class="title-row">
+        <h1>Subnet Calculator</h1>
+        <span class="version">v0.1</span>
+    </div>
     <p class="subtitle">Enter an IP and netmask in CIDR (/24) or dotted-decimal (255.255.255.0) notation.</p>
 
     <form method="post" novalidate>
@@ -294,7 +314,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <span class="result-value"><?= number_format($result['total_hosts']) ?></span>
             </div>
             <div class="result-row hosts-row">
-                <span class="result-label">Usable Hosts</span>
+                <span class="result-label">Usable IPs</span>
                 <span class="result-value"><?= number_format($result['usable_hosts']) ?></span>
             </div>
         </div>
