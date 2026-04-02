@@ -199,13 +199,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         button:hover { background: #2563eb; }
 
-        button.reset {
+        button.reset, a.btn.reset {
             background: #1e293b;
             border: 1px solid #334155;
             color: #94a3b8;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        button.reset:hover { background: #334155; color: #e2e8f0; }
+        button.reset:hover, a.btn.reset:hover { background: #334155; color: #e2e8f0; }
 
         .error {
             background: #450a0a;
@@ -298,7 +302,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <div class="btn-row">
             <button type="submit">Calculate</button>
-            <button type="reset" class="reset">Reset</button>
+            <a href="?" class="btn reset">Reset</a>
         </div>
     </form>
 
