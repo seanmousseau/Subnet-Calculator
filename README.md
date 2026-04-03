@@ -23,8 +23,9 @@ A lightweight, web-based subnet calculator written in PHP supporting both IPv4 a
 - Click any result row to copy the value to clipboard
 - Light/dark mode toggle with `localStorage` persistence
 - Shareable URL bar — copy a link that auto-populates and calculates on load
-- Subnet splitter — split an IPv4 subnet into equal smaller subnets (up to 16 shown)
+- Subnet splitter — split an IPv4 subnet into equal smaller subnets (configurable limit)
 - All colours configured via CSS custom properties; optional `$fixed_bg_color` override
+- iframe-friendly mode with automatic height reporting via `postMessage`
 - Single-file, minimal dependencies
 
 ## Requirements
@@ -44,6 +45,49 @@ php -S localhost:8080
 ```
 
 Then open `http://localhost:8080` in your browser.
+
+## Configuration
+
+All tuneable values are declared at the top of `index.php` under the `// ─── Configuration ───` block:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `$fixed_bg_color` | `'null'` | Pin the page background to a hex colour (e.g. `'#1a1a2e'`) regardless of light/dark mode. Leave as `'null'` to use the theme default. |
+| `$iframe_mode` | `false` | Set to `true` when embedding in an iframe (see [Embedding](#embedding)). |
+| `$default_tab` | `'ipv4'` | Active tab on page load: `'ipv4'` or `'ipv6'`. |
+| `$split_max_subnets` | `16` | Maximum number of subnets shown in the subnet splitter results list. |
+
+## Embedding
+
+The calculator can be embedded in an iframe with automatic height adjustment.
+
+**1. Set `$iframe_mode = true;` in `index.php`.**
+
+This removes body margins/padding and makes the page broadcast its own height to the parent via `postMessage` whenever the content changes.
+
+**2. Add this to your host page:**
+
+```html
+<div style="width:100%; max-width:1200px; margin:0 auto;">
+  <iframe
+    id="scFrame"
+    src="https://your-domain.com/sc/index.php"
+    width="100%"
+    scrolling="no"
+    style="border:none; display:block; height:0;"
+    loading="lazy">
+  </iframe>
+</div>
+<script>
+window.addEventListener('message', function (e) {
+  if (e.data && e.data.type === 'sc-resize') {
+    document.getElementById('scFrame').style.height = e.data.height + 'px';
+  }
+});
+</script>
+```
+
+The iframe resizes automatically on load, form submission, tab switches, and any other content change — no polling or manual measurement required.
 
 ## Example
 
@@ -86,6 +130,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 | Version | Notes |
 |---------|-------|
+| 0.7 | Config consolidation, `'null'`-safe bg color, iframe mode with postMessage |
 | 0.6 | Subnet splitter, fixed bg override, full share URL, CIDR-on-submit fix |
 | 0.5 | Light/dark mode toggle, address type badges, shareable URL |
 | 0.4 | Wildcard mask, copy-to-clipboard, CSS variable theming, input auto-detection |
