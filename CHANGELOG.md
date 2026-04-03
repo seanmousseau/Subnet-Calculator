@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6] - 2026-04-03
+
+### Added
+- Subnet splitter in IPv4 panel — enter a larger prefix to split the current subnet into equal subnets (up to 16 shown, each copyable)
+- Fixed background colour override: set `$fixed_bg_color` at the top of `index.php` to pin the page background regardless of light/dark mode
+- Share bar now displays the full absolute URL (scheme + host + path + query string)
+
+### Changed
+- Light mode page background (`--color-bg`) changed from `#f1f5f9` to `#ffffff`
+
+### Fixed
+- Entering CIDR notation (e.g. `192.168.1.0/24`) in the IP field and pressing Enter now works correctly — the split is handled server-side in PHP before validation, so it no longer depends on the JS `blur` event
+
 ## [0.5] - 2026-04-03
 
 ### Added

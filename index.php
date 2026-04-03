@@ -1,5 +1,11 @@
 <?php
 
+// ─── Configuration ────────────────────────────────────────────────────────────
+
+// Optional: set to a hex colour (e.g. '#1a1a2e') to pin the page background
+// regardless of light/dark mode. Set to null to use the theme default.
+$fixed_bg_color = null;
+
 // ─── IPv4 ─────────────────────────────────────────────────────────────────────
 
 function cidr_to_mask(int $cidr): string {
@@ -92,6 +98,23 @@ function calculate_subnet6(string $ip, int $prefix): array {
     ];
 }
 
+// ─── Subnet splitter ──────────────────────────────────────────────────────────
+
+function split_subnet(string $network_ip, int $cidr, int $new_prefix): array {
+    if ($new_prefix <= $cidr || $new_prefix > 32) {
+        return ['subnets' => [], 'total' => 0, 'showing' => 0];
+    }
+    $count      = 1 << ($new_prefix - $cidr);
+    $showing    = min($count, 16);
+    $base       = ip2long($network_ip) & 0xFFFFFFFF;
+    $block_size = 1 << (32 - $new_prefix);
+    $subnets    = [];
+    for ($i = 0; $i < $showing; $i++) {
+        $subnets[] = long2ip(($base + $i * $block_size) & 0xFFFFFFFF) . '/' . $new_prefix;
+    }
+    return ['subnets' => $subnets, 'total' => $count, 'showing' => $showing];
+}
+
 // ─── Address type detection ───────────────────────────────────────────────────
 
 function get_ipv4_type(string $ip): string {
@@ -153,12 +176,22 @@ $input_ip = $input_mask = '';
 $result6 = $error6 = null;
 $input_ipv6 = $input_prefix = '';
 
+$split_result = $split_error = null;
+$input_split_prefix = '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $active_tab = ($_POST['tab'] ?? 'ipv4') === 'ipv6' ? 'ipv6' : 'ipv4';
 
     if ($active_tab === 'ipv4') {
         $input_ip   = trim((string)($_POST['ip']   ?? ''));
         $input_mask = trim((string)($_POST['mask'] ?? ''));
+
+        // Server-side CIDR auto-detection: handle "192.168.1.0/24" typed in IP field (#27)
+        if (strpos($input_ip, '/') !== false && $input_mask === '') {
+            [$input_ip, $input_mask] = array_pad(explode('/', $input_ip, 2), 2, '');
+            $input_ip   = trim($input_ip);
+            $input_mask = trim($input_mask);
+        }
 
         if (!is_valid_ipv4($input_ip)) {
             $error = 'Invalid IPv4 address.';
@@ -177,9 +210,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Invalid netmask. Use CIDR (e.g. /24) or dotted-decimal (e.g. 255.255.255.0).';
             }
         }
+
+        // Subnet splitter
+        if ($result && isset($_POST['split_prefix'])) {
+            $input_split_prefix = trim((string)($_POST['split_prefix'] ?? ''));
+            $sp = ltrim($input_split_prefix, '/');
+            if (!ctype_digit($sp) || (int)$sp < 1 || (int)$sp > 32) {
+                $split_error = 'New prefix must be between 1 and 32.';
+            } else {
+                $new_pfx      = (int)$sp;
+                $current_cidr = (int)ltrim($result['netmask_cidr'], '/');
+                $network_ip   = explode('/', $result['network_cidr'])[0];
+                if ($new_pfx <= $current_cidr) {
+                    $split_error = 'New prefix must be larger than /' . $current_cidr . '.';
+                } else {
+                    $split_result = split_subnet($network_ip, $current_cidr, $new_pfx);
+                }
+            }
+        }
     } else {
         $input_ipv6   = trim((string)($_POST['ipv6']   ?? ''));
         $input_prefix = trim((string)($_POST['prefix'] ?? ''));
+
+        // Server-side CIDR auto-detection for IPv6 (#27)
+        if (strpos($input_ipv6, '/') !== false && $input_prefix === '') {
+            [$input_ipv6, $input_prefix] = array_pad(explode('/', $input_ipv6, 2), 2, '');
+            $input_ipv6   = trim($input_ipv6);
+            $input_prefix = trim($input_prefix);
+        }
 
         if (!extension_loaded('gmp')) {
             $error6 = 'IPv6 calculation requires the PHP GMP extension.';
@@ -204,6 +262,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $get_mask = trim((string)($_GET['mask'] ?? ''));
         if ($get_ip !== '' && $get_mask !== '') {
             $input_ip = $get_ip; $input_mask = $get_mask;
+            // Server-side CIDR auto-detection (#27)
+            if (strpos($input_ip, '/') !== false && $input_mask === '') {
+                [$input_ip, $input_mask] = array_pad(explode('/', $input_ip, 2), 2, '');
+                $input_ip = trim($input_ip); $input_mask = trim($input_mask);
+            }
             if (!is_valid_ipv4($input_ip)) {
                 $error = 'Invalid IPv4 address.';
             } else {
@@ -227,6 +290,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $get_prefix = trim((string)($_GET['prefix'] ?? ''));
         if ($get_ipv6 !== '' && $get_prefix !== '') {
             $input_ipv6 = $get_ipv6; $input_prefix = $get_prefix;
+            // Server-side CIDR auto-detection for IPv6 (#27)
+            if (strpos($input_ipv6, '/') !== false && $input_prefix === '') {
+                [$input_ipv6, $input_prefix] = array_pad(explode('/', $input_ipv6, 2), 2, '');
+                $input_ipv6 = trim($input_ipv6); $input_prefix = trim($input_prefix);
+            }
             if (!extension_loaded('gmp')) {
                 $error6 = 'IPv6 calculation requires the PHP GMP extension.';
             } elseif (!is_valid_ipv6($input_ipv6)) {
@@ -294,7 +362,7 @@ if ($result) {
         }
 
         html[data-theme="light"] {
-            --color-bg:           #f1f5f9;
+            --color-bg:           #ffffff;
             --color-surface:      #ffffff;
             --color-surface-alt:  #f8fafc;
             --color-border:       #cbd5e1;
@@ -643,17 +711,108 @@ if ($result) {
             transform: translateX(-50%) translateY(0);
         }
 
+        /* Subnet splitter */
+        .splitter {
+            margin-top: 1rem;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .splitter-title {
+            background: var(--color-input-bg);
+            color: var(--color-text-muted);
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            padding: 0.6rem 1rem;
+            text-transform: uppercase;
+        }
+
+        .splitter-form {
+            padding: 0.75rem 1rem;
+            border-top: 1px solid var(--color-border);
+            background: var(--color-surface-alt);
+        }
+
+        .splitter-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .splitter-label {
+            color: var(--color-text-subtle);
+            font-size: 0.8rem;
+            flex-shrink: 0;
+        }
+
+        .splitter-input {
+            width: 80px !important;
+        }
+
+        .splitter-btn {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            color: var(--color-text-subtle);
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 0.45rem 0.75rem;
+            transition: background 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+
+        .splitter-btn:hover { background: var(--color-border); color: var(--color-text); }
+
+        .split-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.4rem;
+            padding: 0.75rem 1rem;
+            border-top: 1px solid var(--color-border);
+            background: var(--color-surface-alt);
+        }
+
+        .split-item {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            color: var(--color-accent-light);
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 0.78rem;
+            padding: 0.3rem 0.5rem;
+            text-align: center;
+            transition: background 0.1s;
+        }
+
+        .split-item:hover { background: var(--color-border); }
+
+        .split-more {
+            color: var(--color-text-faint);
+            font-size: 0.75rem;
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 0.15rem 0;
+        }
+
         @media (max-width: 480px) {
             .form-row { flex-direction: column; }
+            .split-list { grid-template-columns: 1fr; }
         }
     </style>
+    <?php if ($fixed_bg_color !== null && preg_match('/^#[0-9a-fA-F]{3,8}$/', $fixed_bg_color)): ?>
+    <style>:root, html[data-theme="light"] { --color-bg: <?= htmlspecialchars($fixed_bg_color) ?>; }</style>
+    <?php endif; ?>
 </head>
 <body>
 <div class="card">
     <div class="title-row">
         <img src="logo.svg" alt="Subnet Calculator logo" class="logo">
         <h1>Subnet Calculator</h1>
-        <span class="version">v0.5</span>
+        <span class="version">v0.6</span>
         <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode">
             <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
             <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -740,6 +899,33 @@ if ($result) {
                 <span class="share-label">Share</span>
                 <code class="share-url"><?= htmlspecialchars($share_url) ?></code>
                 <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
+            </div>
+            <div class="splitter">
+                <div class="splitter-title">Split Subnet</div>
+                <form method="post" class="splitter-form">
+                    <input type="hidden" name="tab" value="ipv4">
+                    <input type="hidden" name="ip" value="<?= htmlspecialchars($input_ip) ?>">
+                    <input type="hidden" name="mask" value="<?= htmlspecialchars($input_mask) ?>">
+                    <div class="splitter-row">
+                        <span class="splitter-label">Split into</span>
+                        <input type="text" name="split_prefix" class="splitter-input"
+                               placeholder="/25" value="<?= htmlspecialchars($input_split_prefix) ?>"
+                               autocomplete="off" spellcheck="false">
+                        <button type="submit" class="splitter-btn">Split</button>
+                    </div>
+                </form>
+                <?php if ($split_error): ?>
+                    <div class="error" style="margin:0.75rem 1rem"><?= htmlspecialchars($split_error) ?></div>
+                <?php elseif ($split_result && $split_result['showing'] > 0): ?>
+                    <div class="split-list">
+                        <?php foreach ($split_result['subnets'] as $s): ?>
+                            <div class="split-item" data-copy="<?= htmlspecialchars($s) ?>"><?= htmlspecialchars($s) ?></div>
+                        <?php endforeach; ?>
+                        <?php if ($split_result['total'] > 16): ?>
+                            <div class="split-more">+ <?= number_format($split_result['total'] - 16) ?> more</div>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
     </div>
@@ -864,11 +1050,22 @@ document.querySelectorAll('.results').forEach(results => {
     });
 });
 
-// ── Share URL copy ───────────────────────────────────────────────────────────
+// ── Share URL: show full URL and copy it ─────────────────────────────────────
+const _base = window.location.origin + window.location.pathname;
+document.querySelectorAll('.share-url').forEach(el => {
+    el.textContent = _base + el.textContent.trim();
+});
 document.querySelectorAll('.share-copy').forEach(btn => {
     btn.addEventListener('click', () => {
-        const url = window.location.origin + window.location.pathname + btn.dataset.copy;
+        const url = _base + btn.dataset.copy;
         if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => showToast('Link copied!'));
+    });
+});
+
+// ── Subnet splitter: click to copy ──────────────────────────────────────────
+document.querySelectorAll('.split-item').forEach(item => {
+    item.addEventListener('click', () => {
+        if (navigator.clipboard) navigator.clipboard.writeText(item.dataset.copy).then(() => showToast('Copied!'));
     });
 });
 
