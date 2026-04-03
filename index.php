@@ -6,6 +6,11 @@
 // regardless of light/dark mode. Set to null to use the theme default.
 $fixed_bg_color = null;
 
+// Set to true when embedding the calculator in an iframe.
+// Removes body margins/padding and sends height via postMessage so the host
+// page can resize the iframe automatically with a simple one-liner script.
+$iframe_mode = false;
+
 // ─── IPv4 ─────────────────────────────────────────────────────────────────────
 
 function cidr_to_mask(int $cidr): string {
@@ -314,6 +319,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
+
+// Build iframe style override
+$iframe_style = $iframe_mode ? 'html,body{margin:0;padding:0;overflow:hidden}' : '';
 
 // Build fixed background override style (avoids inline PHP inside CSS block — #32)
 $bg_override_style = '';
@@ -810,6 +818,7 @@ if ($result) {
         }
     </style>
     <?php if ($bg_override_style) echo '<style>' . $bg_override_style . '</style>'; ?>
+    <?php if ($iframe_style) echo '<style>' . $iframe_style . '</style>'; ?>
 </head>
 <body>
 <div class="card">
@@ -1098,6 +1107,20 @@ function autoFocusActive() {
 }
 
 autoFocusActive();
+
+<?php if ($iframe_mode): ?>
+// ── iframe: report height to parent via postMessage ──────────────────────────
+(function () {
+    function postHeight() {
+        var h = Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
+        window.parent.postMessage({ type: 'sc-resize', height: h }, '*');
+    }
+    postHeight();
+    if (window.ResizeObserver) {
+        new ResizeObserver(postHeight).observe(document.documentElement);
+    }
+})();
+<?php endif; ?>
 </script>
 </body>
 </html>
