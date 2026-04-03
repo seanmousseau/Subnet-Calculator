@@ -147,6 +147,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    if ($active_tab === 'ipv4') {
+        $get_ip   = trim((string)($_GET['ip']   ?? ''));
+        $get_mask = trim((string)($_GET['mask'] ?? ''));
+        if ($get_ip !== '' && $get_mask !== '') {
+            $input_ip = $get_ip; $input_mask = $get_mask;
+            if (!is_valid_ipv4($input_ip)) {
+                $error = 'Invalid IPv4 address.';
+            } else {
+                $mask_clean = ltrim($input_mask, '/');
+                if (ctype_digit($mask_clean)) {
+                    $cidr = (int)$mask_clean;
+                    if ($cidr < 0 || $cidr > 32) {
+                        $error = 'CIDR prefix must be between 0 and 32.';
+                    } else {
+                        $result = calculate_subnet($input_ip, $cidr);
+                    }
+                } elseif (is_valid_mask_octet($mask_clean)) {
+                    $result = calculate_subnet($input_ip, mask_to_cidr($mask_clean));
+                } else {
+                    $error = 'Invalid netmask. Use CIDR (e.g. /24) or dotted-decimal (e.g. 255.255.255.0).';
+                }
+            }
+        }
+    } else {
+        $get_ipv6   = trim((string)($_GET['ipv6']   ?? ''));
+        $get_prefix = trim((string)($_GET['prefix'] ?? ''));
+        if ($get_ipv6 !== '' && $get_prefix !== '') {
+            $input_ipv6 = $get_ipv6; $input_prefix = $get_prefix;
+            if (!extension_loaded('gmp')) {
+                $error6 = 'IPv6 calculation requires the PHP GMP extension.';
+            } elseif (!is_valid_ipv6($input_ipv6)) {
+                $error6 = 'Invalid IPv6 address.';
+            } else {
+                $pfx = ltrim($input_prefix, '/');
+                if (!ctype_digit($pfx) || (int)$pfx < 0 || (int)$pfx > 128) {
+                    $error6 = 'Prefix must be between 0 and 128.';
+                } else {
+                    try {
+                        $result6 = calculate_subnet6($input_ipv6, (int)$pfx);
+                    } catch (\Exception $e) {
+                        $error6 = 'Calculation error: ' . $e->getMessage();
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Build shareable URL
+$share_url = '';
+if ($result) {
+    $share_url = '?' . http_build_query(['ip' => $input_ip, 'mask' => ltrim($result['netmask_cidr'], '/')]);
+} elseif ($result6) {
+    $share_url = '?' . http_build_query(['tab' => 'ipv6', 'ipv6' => $input_ipv6, 'prefix' => ltrim($result6['prefix'], '/')]);
 }
 ?>
 <!DOCTYPE html>
@@ -405,6 +460,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         footer a:hover { color: var(--color-text-subtle); }
 
+        /* Share bar */
+        .share-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+            background: var(--color-surface-alt);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+        }
+
+        .share-label {
+            color: var(--color-text-faint);
+            font-size: 0.7rem;
+            font-weight: 600;
+            flex-shrink: 0;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .share-url {
+            color: var(--color-text-subtle);
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .share-copy {
+            background: none;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            color: var(--color-text-subtle);
+            cursor: pointer;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            flex-shrink: 0;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .share-copy:hover { background: var(--color-border); color: var(--color-text); }
+
         /* Toast */
         .toast {
             position: fixed;
@@ -513,6 +614,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <span class="result-value"><?= number_format($result['usable_hosts']) ?></span>
                 </div>
             </div>
+            <div class="share-bar">
+                <span class="share-label">Share</span>
+                <code class="share-url"><?= htmlspecialchars($share_url) ?></code>
+                <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
+            </div>
         <?php endif; ?>
     </div>
 
@@ -570,6 +676,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <span class="result-value"><?= htmlspecialchars($result6['total']) ?></span>
                 </div>
             </div>
+            <div class="share-bar">
+                <span class="share-label">Share</span>
+                <code class="share-url"><?= htmlspecialchars($share_url) ?></code>
+                <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
+            </div>
         <?php endif; ?>
     </div>
 
@@ -607,6 +718,14 @@ document.querySelectorAll('.results').forEach(results => {
         const val = row.querySelector('.result-value');
         if (!val || !navigator.clipboard) return;
         navigator.clipboard.writeText(val.textContent.trim()).then(() => showToast('Copied!'));
+    });
+});
+
+// ── Share URL copy ───────────────────────────────────────────────────────────
+document.querySelectorAll('.share-copy').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const url = window.location.origin + window.location.pathname + btn.dataset.copy;
+        if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => showToast('Link copied!'));
     });
 });
 
