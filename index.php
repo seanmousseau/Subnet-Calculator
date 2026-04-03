@@ -328,6 +328,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         .hosts-row .result-value { color: #4ade80; }
 
+        footer {
+            margin-top: 1.25rem;
+            text-align: center;
+        }
+
+        footer a {
+            color: #475569;
+            font-size: 0.75rem;
+            text-decoration: none;
+            transition: color 0.15s;
+        }
+
+        footer a:hover { color: #94a3b8; }
+
         @media (max-width: 480px) {
             .form-row { flex-direction: column; }
         }
@@ -468,6 +482,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
     </div>
 </div>
+
+<footer>
+    <a href="https://github.com/seanmousseau/Subnet-Calculator" target="_blank" rel="noopener">github.com/seanmousseau/Subnet-Calculator</a>
+</footer>
 
 <script>
 document.querySelectorAll('.tab-btn').forEach(btn => {
