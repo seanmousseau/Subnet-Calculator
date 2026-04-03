@@ -92,6 +92,57 @@ function calculate_subnet6(string $ip, int $prefix): array {
     ];
 }
 
+// ─── Address type detection ───────────────────────────────────────────────────
+
+function get_ipv4_type(string $ip): string {
+    $n = ip2long($ip) & 0xFFFFFFFF;
+    if ($n === 0)                                                  return 'Unspecified';
+    if ($n === 0xFFFFFFFF)                                         return 'Broadcast';
+    if (($n & 0xFF000000) === 0x7F000000)                          return 'Loopback';
+    if (($n & 0xFF000000) === 0x0A000000)                          return 'Private';
+    if (($n & 0xFFF00000) === 0xAC100000)                          return 'Private';
+    if (($n & 0xFFFF0000) === 0xC0A80000)                          return 'Private';
+    if (($n & 0xFFFF0000) === 0xA9FE0000)                          return 'Link-local';
+    if (($n & 0xF0000000) === 0xE0000000)                          return 'Multicast';
+    if (($n & 0xFFFFFF00) === 0xC0000200)                          return 'Documentation';
+    if (($n & 0xFFFFFF00) === 0xC6336400)                          return 'Documentation';
+    if (($n & 0xFFFFFF00) === 0xCB007100)                          return 'Documentation';
+    if (($n & 0xF0000000) === 0xF0000000)                          return 'Reserved';
+    if (($n & 0xFF000000) === 0x00000000)                          return 'This Network';
+    return 'Public';
+}
+
+function get_ipv6_type(string $ip): string {
+    $bin = inet_pton($ip);
+    if ($bin === false) return 'Unknown';
+    $b = array_values(unpack('C*', $bin));
+    if ($bin === str_repeat("\x00", 15) . "\x01")              return 'Loopback';
+    if ($bin === str_repeat("\x00", 16))                       return 'Unspecified';
+    if (substr($bin,0,10)===str_repeat("\x00",10) && substr($bin,10,2)==="\xff\xff") return 'IPv4-mapped';
+    if ($b[0] === 0xFF)                                        return 'Multicast';
+    if ($b[0] === 0xFE && ($b[1] & 0xC0) === 0x80)            return 'Link-local';
+    if (($b[0] & 0xFE) === 0xFC)                              return 'Unique Local';
+    if ($b[0]===0x20 && $b[1]===0x01 && $b[2]===0x0D && $b[3]===0xB8) return 'Documentation';
+    if ($b[0]===0x20 && $b[1]===0x01 && $b[2]===0x00 && $b[3]===0x00) return 'Teredo';
+    if ($b[0] === 0x20 && $b[1] === 0x02)                     return '6to4';
+    if (($b[0] & 0xE0) === 0x20)                              return 'Global Unicast';
+    return 'Unknown';
+}
+
+function type_badge_class(string $type): string {
+    $map = [
+        'Private'       => 'private',
+        'Public'        => 'public',
+        'Loopback'      => 'loopback',
+        'Link-local'    => 'link-local',
+        'Multicast'     => 'multicast',
+        'Documentation' => 'doc',
+        'Global Unicast'=> 'public',
+        'Unique Local'  => 'ula',
+    ];
+    return $map[$type] ?? 'other';
+}
+
 // ─── Request handling ─────────────────────────────────────────────────────────
 
 $active_tab = ($_GET['tab'] ?? '') === 'ipv6' ? 'ipv6' : 'ipv4';
@@ -211,6 +262,7 @@ if ($result) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Subnet Calculator</title>
     <link rel="icon" type="image/svg+xml" href="logo.svg">
+    <script>(function(){var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
     <style>
         :root {
             /* Page background */
@@ -238,6 +290,28 @@ if ($result) {
             --color-error-border: #7f1d1d;
             --color-error-text:   #fca5a5;
             /* Button text */
+            --color-btn-text:     #fff;
+        }
+
+        html[data-theme="light"] {
+            --color-bg:           #f1f5f9;
+            --color-surface:      #ffffff;
+            --color-surface-alt:  #f8fafc;
+            --color-border:       #cbd5e1;
+            --color-text:         #1e293b;
+            --color-text-heading: #0f172a;
+            --color-text-muted:   #64748b;
+            --color-text-subtle:  #475569;
+            --color-text-faint:   #94a3b8;
+            --color-input-bg:     #ffffff;
+            --color-input-text:   #0f172a;
+            --color-accent:       #3b82f6;
+            --color-accent-hover: #2563eb;
+            --color-accent-light: #1d4ed8;
+            --color-green:        #16a34a;
+            --color-error-bg:     #fef2f2;
+            --color-error-border: #fca5a5;
+            --color-error-text:   #dc2626;
             --color-btn-text:     #fff;
         }
 
@@ -446,6 +520,45 @@ if ($result) {
 
         .hosts-row .result-value { color: var(--color-green); }
 
+        /* Address type badge */
+        .badge {
+            border-radius: 4px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 0.15rem 0.45rem;
+        }
+        .badge-private   { background: rgba(245,158,11,0.15); color: #f59e0b; }
+        .badge-public    { background: rgba(74,222,128,0.15); color: #4ade80; }
+        .badge-loopback  { background: rgba(167,139,250,0.15); color: #a78bfa; }
+        .badge-link-local{ background: rgba(251,191,36,0.15); color: #fbbf24; }
+        .badge-multicast { background: rgba(248,113,113,0.15); color: #f87171; }
+        .badge-doc       { background: rgba(96,165,250,0.15); color: #60a5fa; }
+        .badge-ula       { background: rgba(148,163,184,0.15); color: var(--color-text-subtle); }
+        .badge-other     { background: rgba(148,163,184,0.15); color: var(--color-text-subtle); }
+
+        html[data-theme="light"] .badge-private   { color: #92400e; }
+        html[data-theme="light"] .badge-public    { color: #14532d; }
+        html[data-theme="light"] .badge-loopback  { color: #4c1d95; }
+        html[data-theme="light"] .badge-link-local{ color: #78350f; }
+        html[data-theme="light"] .badge-multicast { color: #991b1b; }
+        html[data-theme="light"] .badge-doc       { color: #1e3a5f; }
+
+        /* Theme toggle */
+        .theme-toggle {
+            background: none;
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            color: var(--color-text-subtle);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: auto;
+            padding: 0.3rem 0.4rem;
+            transition: background 0.15s, color 0.15s;
+        }
+        .theme-toggle:hover { background: var(--color-border); color: var(--color-text); }
+
         footer {
             margin-top: 1.25rem;
             text-align: center;
@@ -540,7 +653,11 @@ if ($result) {
     <div class="title-row">
         <img src="logo.svg" alt="Subnet Calculator logo" class="logo">
         <h1>Subnet Calculator</h1>
-        <span class="version">v0.4</span>
+        <span class="version">v0.5</span>
+        <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode">
+            <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+            <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
     </div>
 
     <div class="tabs">
@@ -613,6 +730,11 @@ if ($result) {
                     <span class="result-label">Usable IPs</span>
                     <span class="result-value"><?= number_format($result['usable_hosts']) ?></span>
                 </div>
+                <?php $ip4type = get_ipv4_type($input_ip); ?>
+                <div class="result-row">
+                    <span class="result-label">Address Type</span>
+                    <span class="result-value"><span class="badge badge-<?= type_badge_class($ip4type) ?>"><?= htmlspecialchars($ip4type) ?></span></span>
+                </div>
             </div>
             <div class="share-bar">
                 <span class="share-label">Share</span>
@@ -675,6 +797,11 @@ if ($result) {
                     <span class="result-label">Total Addresses</span>
                     <span class="result-value"><?= htmlspecialchars($result6['total']) ?></span>
                 </div>
+                <?php $ip6type = get_ipv6_type($input_ipv6); ?>
+                <div class="result-row">
+                    <span class="result-label">Address Type</span>
+                    <span class="result-value"><span class="badge badge-<?= type_badge_class($ip6type) ?>"><?= htmlspecialchars($ip6type) ?></span></span>
+                </div>
             </div>
             <div class="share-bar">
                 <span class="share-label">Share</span>
@@ -692,6 +819,22 @@ if ($result) {
 <div id="toast" class="toast">Copied!</div>
 
 <script>
+// ── Theme toggle ─────────────────────────────────────────────────────────────
+function syncThemeIcon() {
+    const light = document.documentElement.getAttribute('data-theme') === 'light';
+    document.querySelector('#theme-toggle .icon-sun').style.display  = light ? 'none' : '';
+    document.querySelector('#theme-toggle .icon-moon').style.display = light ? '' : 'none';
+}
+
+document.getElementById('theme-toggle').addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    syncThemeIcon();
+});
+
+syncThemeIcon();
+
 // ── Tab switcher ─────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {

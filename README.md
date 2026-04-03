@@ -6,7 +6,7 @@ A lightweight, web-based subnet calculator written in PHP supporting both IPv4 a
 
 **IPv4**
 - Accepts netmask in **CIDR** (`/24`, `24`) or **dotted-decimal** (`255.255.255.0`) notation
-- Outputs: Subnet CIDR, Netmask (CIDR & Octet), Wildcard Mask, First/Last Usable IP, Broadcast IP, Usable IPs
+- Outputs: Subnet CIDR, Netmask (CIDR & Octet), Wildcard Mask, First/Last Usable IP, Broadcast IP, Usable IPs, Address Type badge
 - Handles edge cases: `/0`, `/31` (point-to-point), `/32` (host route)
 - Paste a full CIDR string (e.g. `192.168.1.0/24`) into the IP field — it auto-splits on blur
 
@@ -19,6 +19,7 @@ A lightweight, web-based subnet calculator written in PHP supporting both IPv4 a
 - IPv4 / IPv6 tab switcher
 - Reset button to clear inputs and results
 - Click any result row to copy the value to clipboard
+- Light/dark mode toggle with `localStorage` persistence
 - All colours configured via CSS custom properties (`--color-bg`, `--color-input-bg`, etc.)
 - Single-file, minimal dependencies
 
@@ -81,6 +82,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 | Version | Notes |
 |---------|-------|
+| 0.5 | Light/dark mode toggle, address type badges, shareable URL |
 | 0.4 | Wildcard mask, copy-to-clipboard, CSS variable theming, input auto-detection |
 | 0.3 | IPv6 support with tabbed UI |
 | 0.2 | Reset button, removed Total Hosts field |
