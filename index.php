@@ -49,11 +49,23 @@ function is_valid_ipv6(string $ip): bool {
 }
 
 function ipv6_to_gmp(string $ip): \GMP {
-    return gmp_init(bin2hex(inet_pton($ip)), 16);
+    $bin = inet_pton($ip);
+    if ($bin === false || strlen($bin) !== 16) {
+        throw new \InvalidArgumentException('Invalid IPv6 address passed to ipv6_to_gmp.');
+    }
+    return gmp_init(bin2hex($bin), 16);
 }
 
 function gmp_to_ipv6(\GMP $n): string {
-    return inet_ntop(hex2bin(str_pad(gmp_strval($n, 16), 32, '0', STR_PAD_LEFT)));
+    $hex = str_pad(gmp_strval($n, 16), 32, '0', STR_PAD_LEFT);
+    if (strlen($hex) > 32) {
+        throw new \OverflowException('GMP value exceeds 128 bits.');
+    }
+    $result = inet_ntop(hex2bin($hex));
+    if ($result === false) {
+        throw new \RuntimeException('inet_ntop failed on computed IPv6 address.');
+    }
+    return $result;
 }
 
 function calculate_subnet6(string $ip, int $prefix): array {
@@ -88,8 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $active_tab = ($_POST['tab'] ?? 'ipv4') === 'ipv6' ? 'ipv6' : 'ipv4';
 
     if ($active_tab === 'ipv4') {
-        $input_ip   = trim($_POST['ip']   ?? '');
-        $input_mask = trim($_POST['mask'] ?? '');
+        $input_ip   = trim((string)($_POST['ip']   ?? ''));
+        $input_mask = trim((string)($_POST['mask'] ?? ''));
 
         if (!is_valid_ipv4($input_ip)) {
             $error = 'Invalid IPv4 address.';
@@ -109,8 +121,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } else {
-        $input_ipv6   = trim($_POST['ipv6']   ?? '');
-        $input_prefix = trim($_POST['prefix'] ?? '');
+        $input_ipv6   = trim((string)($_POST['ipv6']   ?? ''));
+        $input_prefix = trim((string)($_POST['prefix'] ?? ''));
 
         if (!extension_loaded('gmp')) {
             $error6 = 'IPv6 calculation requires the PHP GMP extension.';
@@ -121,7 +133,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!ctype_digit($pfx) || (int)$pfx < 0 || (int)$pfx > 128) {
                 $error6 = 'Prefix must be between 0 and 128.';
             } else {
-                $result6 = calculate_subnet6($input_ipv6, (int)$pfx);
+                try {
+                    $result6 = calculate_subnet6($input_ipv6, (int)$pfx);
+                } catch (\Exception $e) {
+                    $error6 = 'Calculation error: ' . $e->getMessage();
+                }
             }
         }
     }
