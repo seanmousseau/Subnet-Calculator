@@ -327,7 +327,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Build iframe style override
-$iframe_style = $iframe_mode ? 'html,body{margin:0;padding:0;overflow:hidden}' : '';
+$iframe_style = $iframe_mode ? 'html,body{margin:0;padding:0;overflow:hidden}body{min-height:0!important;align-items:flex-start!important}' : '';
 
 // Build fixed background override style (avoids inline PHP inside CSS block — #32)
 $bg_override_style = '';
@@ -1118,16 +1118,12 @@ autoFocusActive();
 // ── iframe: report height to parent via postMessage ──────────────────────────
 (function () {
     function postHeight() {
-        var card = document.querySelector('.card');
-        if (!card) return;
-        var rect  = card.getBoundingClientRect();
-        var style = window.getComputedStyle(card);
-        var h = Math.ceil(rect.bottom + parseFloat(style.marginBottom || 0));
+        var h = Math.ceil(document.body.getBoundingClientRect().height);
         window.parent.postMessage({ type: 'sc-resize', height: h }, '*');
     }
     postHeight();
     if (window.ResizeObserver) {
-        new ResizeObserver(postHeight).observe(document.querySelector('.card') || document.documentElement);
+        new ResizeObserver(postHeight).observe(document.body);
     }
 })();
 <?php endif; ?>
