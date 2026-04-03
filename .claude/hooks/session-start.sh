@@ -28,4 +28,12 @@ if [ -f "pyproject.toml" ]; then
   pip install -e .
 fi
 
+# Ensure PHP GMP extension is available (required for IPv6 calculation)
+if php -r "exit(extension_loaded('gmp') ? 0 : 1);" 2>/dev/null; then
+  echo "PHP GMP extension already loaded."
+else
+  echo "Installing PHP GMP extension..."
+  apt-get install -y php-gmp 2>/dev/null || true
+fi
+
 echo "Session start hook completed."
