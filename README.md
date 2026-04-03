@@ -22,7 +22,9 @@ A lightweight, web-based subnet calculator written in PHP supporting both IPv4 a
 - Reset button to clear inputs and results
 - Click any result row to copy the value to clipboard
 - Light/dark mode toggle with `localStorage` persistence
-- All colours configured via CSS custom properties (`--color-bg`, `--color-input-bg`, etc.)
+- Shareable URL bar — copy a link that auto-populates and calculates on load
+- Subnet splitter — split an IPv4 subnet into equal smaller subnets (up to 16 shown)
+- All colours configured via CSS custom properties; optional `$fixed_bg_color` override
 - Single-file, minimal dependencies
 
 ## Requirements
@@ -84,6 +86,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 | Version | Notes |
 |---------|-------|
+| 0.6 | Subnet splitter, fixed bg override, full share URL, CIDR-on-submit fix |
 | 0.5 | Light/dark mode toggle, address type badges, shareable URL |
 | 0.4 | Wildcard mask, copy-to-clipboard, CSS variable theming, input auto-detection |
 | 0.3 | IPv6 support with tabbed UI |
