@@ -22,6 +22,11 @@ function is_valid_mask_octet(string $mask): bool {
     return ($inverted & ($inverted + 1)) === 0;
 }
 
+function cidr_to_wildcard(int $cidr): string {
+    $mask_long = $cidr === 0 ? 0 : (~0 << (32 - $cidr));
+    return long2ip(~$mask_long & 0xFFFFFFFF);
+}
+
 function calculate_subnet(string $ip, int $cidr): array {
     $ip_long      = ip2long($ip);
     $mask_long    = $cidr === 0 ? 0 : (~0 << (32 - $cidr));
@@ -35,6 +40,7 @@ function calculate_subnet(string $ip, int $cidr): array {
         'network_cidr'  => long2ip($network_long) . '/' . $cidr,
         'netmask_cidr'  => '/' . $cidr,
         'netmask_octet' => cidr_to_mask($cidr),
+        'wildcard'      => cidr_to_wildcard($cidr),
         'first_usable'  => long2ip($first),
         'last_usable'   => long2ip($last),
         'broadcast'     => long2ip($broadcast),
@@ -49,11 +55,23 @@ function is_valid_ipv6(string $ip): bool {
 }
 
 function ipv6_to_gmp(string $ip): \GMP {
-    return gmp_init(bin2hex(inet_pton($ip)), 16);
+    $bin = inet_pton($ip);
+    if ($bin === false || strlen($bin) !== 16) {
+        throw new \InvalidArgumentException('Invalid IPv6 address passed to ipv6_to_gmp.');
+    }
+    return gmp_init(bin2hex($bin), 16);
 }
 
 function gmp_to_ipv6(\GMP $n): string {
-    return inet_ntop(hex2bin(str_pad(gmp_strval($n, 16), 32, '0', STR_PAD_LEFT)));
+    $hex = str_pad(gmp_strval($n, 16), 32, '0', STR_PAD_LEFT);
+    if (strlen($hex) > 32) {
+        throw new \OverflowException('GMP value exceeds 128 bits.');
+    }
+    $result = inet_ntop(hex2bin($hex));
+    if ($result === false) {
+        throw new \RuntimeException('inet_ntop failed on computed IPv6 address.');
+    }
+    return $result;
 }
 
 function calculate_subnet6(string $ip, int $prefix): array {
@@ -88,8 +106,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $active_tab = ($_POST['tab'] ?? 'ipv4') === 'ipv6' ? 'ipv6' : 'ipv4';
 
     if ($active_tab === 'ipv4') {
-        $input_ip   = trim($_POST['ip']   ?? '');
-        $input_mask = trim($_POST['mask'] ?? '');
+        $input_ip   = trim((string)($_POST['ip']   ?? ''));
+        $input_mask = trim((string)($_POST['mask'] ?? ''));
 
         if (!is_valid_ipv4($input_ip)) {
             $error = 'Invalid IPv4 address.';
@@ -109,8 +127,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } else {
-        $input_ipv6   = trim($_POST['ipv6']   ?? '');
-        $input_prefix = trim($_POST['prefix'] ?? '');
+        $input_ipv6   = trim((string)($_POST['ipv6']   ?? ''));
+        $input_prefix = trim((string)($_POST['prefix'] ?? ''));
 
         if (!extension_loaded('gmp')) {
             $error6 = 'IPv6 calculation requires the PHP GMP extension.';
@@ -121,7 +139,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!ctype_digit($pfx) || (int)$pfx < 0 || (int)$pfx > 128) {
                 $error6 = 'Prefix must be between 0 and 128.';
             } else {
-                $result6 = calculate_subnet6($input_ipv6, (int)$pfx);
+                try {
+                    $result6 = calculate_subnet6($input_ipv6, (int)$pfx);
+                } catch (\Exception $e) {
+                    $error6 = 'Calculation error: ' . $e->getMessage();
+                }
             }
         }
     }
@@ -135,12 +157,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>Subnet Calculator</title>
     <link rel="icon" type="image/svg+xml" href="logo.svg">
     <style>
+        :root {
+            /* Page background */
+            --color-bg:           #0f172a;
+            /* Card & surfaces */
+            --color-surface:      #1e293b;
+            --color-surface-alt:  #111827;
+            --color-border:       #334155;
+            /* Text */
+            --color-text:         #e2e8f0;
+            --color-text-heading: #f8fafc;
+            --color-text-muted:   #64748b;
+            --color-text-subtle:  #94a3b8;
+            --color-text-faint:   #475569;
+            /* Inputs — separate from page bg so each can be themed independently */
+            --color-input-bg:     #0f172a;
+            --color-input-text:   #f1f5f9;
+            /* Accents */
+            --color-accent:       #3b82f6;
+            --color-accent-hover: #2563eb;
+            --color-accent-light: #38bdf8;
+            --color-green:        #4ade80;
+            /* Error */
+            --color-error-bg:     #450a0a;
+            --color-error-border: #7f1d1d;
+            --color-error-text:   #fca5a5;
+            /* Button text */
+            --color-btn-text:     #fff;
+        }
+
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
             font-family: system-ui, -apple-system, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
+            background: var(--color-bg);
+            color: var(--color-text);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -149,8 +200,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         .card {
-            background: #1e293b;
-            border: 1px solid #334155;
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
             border-radius: 12px;
             padding: 2rem;
             width: 100%;
@@ -166,14 +217,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         .logo { width: 32px; height: 32px; flex-shrink: 0; }
 
-        h1 { font-size: 1.5rem; font-weight: 700; color: #f8fafc; }
+        h1 { font-size: 1.5rem; font-weight: 700; color: var(--color-text-heading); }
 
         .version {
             font-size: 0.7rem;
             font-weight: 600;
-            color: #475569;
-            background: #1e293b;
-            border: 1px solid #334155;
+            color: var(--color-text-faint);
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
             border-radius: 4px;
             padding: 0.15rem 0.4rem;
             letter-spacing: 0.04em;
@@ -182,7 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         /* Tabs */
         .tabs {
             display: flex;
-            border-bottom: 1px solid #334155;
+            border-bottom: 1px solid var(--color-border);
             margin-bottom: 1.5rem;
         }
 
@@ -191,7 +242,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border: none;
             border-bottom: 2px solid transparent;
             border-radius: 0;
-            color: #64748b;
+            color: var(--color-text-muted);
             cursor: pointer;
             flex: 0;
             font-size: 0.875rem;
@@ -202,8 +253,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             width: auto;
         }
 
-        .tab-btn:hover { background: none; color: #e2e8f0; }
-        .tab-btn.active { border-bottom-color: #3b82f6; color: #38bdf8; }
+        .tab-btn:hover { background: none; color: var(--color-text); }
+        .tab-btn.active { border-bottom-color: var(--color-accent); color: var(--color-accent-light); }
 
         .panel { display: none; }
         .panel.active { display: block; }
@@ -222,15 +273,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            color: #94a3b8;
+            color: var(--color-text-subtle);
             margin-bottom: 0.4rem;
         }
 
         input[type="text"] {
-            background: #0f172a;
-            border: 1px solid #334155;
+            background: var(--color-input-bg);
+            border: 1px solid var(--color-border);
             border-radius: 6px;
-            color: #f1f5f9;
+            color: var(--color-input-text);
             font-family: 'Courier New', monospace;
             font-size: 0.95rem;
             padding: 0.55rem 0.75rem;
@@ -238,17 +289,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             width: 100%;
         }
 
-        input[type="text"]:focus { outline: none; border-color: #3b82f6; }
-        input[type="text"]::placeholder { color: #475569; }
+        input[type="text"]:focus { outline: none; border-color: var(--color-accent); }
+        input[type="text"]::placeholder { color: var(--color-text-faint); }
 
         .btn-row { display: flex; gap: 0.75rem; margin-top: 0.25rem; }
 
         button[type="submit"] {
             flex: 1;
-            background: #3b82f6;
+            background: var(--color-accent);
             border: none;
             border-radius: 6px;
-            color: #fff;
+            color: var(--color-btn-text);
             cursor: pointer;
             font-size: 0.95rem;
             font-weight: 600;
@@ -256,14 +307,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             transition: background 0.15s;
         }
 
-        button[type="submit"]:hover { background: #2563eb; }
+        button[type="submit"]:hover { background: var(--color-accent-hover); }
 
         a.btn.reset {
             flex: 1;
-            background: #0f172a;
-            border: 1px solid #334155;
+            background: var(--color-input-bg);
+            border: 1px solid var(--color-border);
             border-radius: 6px;
-            color: #94a3b8;
+            color: var(--color-text-subtle);
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -275,14 +326,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             transition: background 0.15s, color 0.15s;
         }
 
-        a.btn.reset:hover { background: #334155; color: #e2e8f0; }
+        a.btn.reset:hover { background: var(--color-border); color: var(--color-text); }
 
         /* Error */
         .error {
-            background: #450a0a;
-            border: 1px solid #7f1d1d;
+            background: var(--color-error-bg);
+            border: 1px solid var(--color-error-border);
             border-radius: 6px;
-            color: #fca5a5;
+            color: var(--color-error-text);
             font-size: 0.875rem;
             margin-top: 1.25rem;
             padding: 0.65rem 0.85rem;
@@ -291,14 +342,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         /* Results */
         .results {
             margin-top: 1.5rem;
-            border: 1px solid #334155;
+            border: 1px solid var(--color-border);
             border-radius: 8px;
             overflow: hidden;
         }
 
         .results-header {
-            background: #0f172a;
-            color: #64748b;
+            background: var(--color-input-bg);
+            color: var(--color-text-muted);
             font-size: 0.7rem;
             font-weight: 700;
             letter-spacing: 0.08em;
@@ -308,25 +359,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         .result-row {
             align-items: center;
-            background: #0f172a;
-            border-top: 1px solid #1e293b;
+            background: var(--color-input-bg);
+            border-top: 1px solid var(--color-surface);
+            cursor: pointer;
             display: flex;
             justify-content: space-between;
             padding: 0.65rem 1rem;
+            transition: background 0.1s;
         }
 
-        .result-row:nth-child(odd) { background: #111827; }
+        .result-row:nth-child(odd) { background: var(--color-surface-alt); }
+        .result-row:hover { background: var(--color-border) !important; }
 
-        .result-label { color: #94a3b8; font-size: 0.8rem; }
+        .result-label { color: var(--color-text-subtle); font-size: 0.8rem; }
 
         .result-value {
-            color: #38bdf8;
+            color: var(--color-accent-light);
             font-family: 'Courier New', monospace;
             font-size: 0.9rem;
             font-weight: 600;
         }
 
-        .hosts-row .result-value { color: #4ade80; }
+        .result-value::after {
+            content: ' \29d8';
+            color: transparent;
+            font-size: 0.8em;
+            transition: color 0.15s;
+        }
+
+        .result-row:hover .result-value::after { color: var(--color-text-faint); }
+
+        .hosts-row .result-value { color: var(--color-green); }
 
         footer {
             margin-top: 1.25rem;
@@ -334,13 +397,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         footer a {
-            color: #475569;
+            color: var(--color-text-faint);
             font-size: 0.75rem;
             text-decoration: none;
             transition: color 0.15s;
         }
 
-        footer a:hover { color: #94a3b8; }
+        footer a:hover { color: var(--color-text-subtle); }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%) translateY(0.5rem);
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            color: var(--color-text);
+            font-size: 0.8rem;
+            font-weight: 600;
+            opacity: 0;
+            padding: 0.5rem 1rem;
+            pointer-events: none;
+            transition: opacity 0.2s, transform 0.2s;
+            z-index: 100;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
 
         @media (max-width: 480px) {
             .form-row { flex-direction: column; }
@@ -352,7 +439,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="title-row">
         <img src="logo.svg" alt="Subnet Calculator logo" class="logo">
         <h1>Subnet Calculator</h1>
-        <span class="version">v0.3</span>
+        <span class="version">v0.4</span>
     </div>
 
     <div class="tabs">
@@ -368,7 +455,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="form-group">
                     <label for="ip">IP Address</label>
                     <input type="text" id="ip" name="ip"
-                           placeholder="192.168.1.0"
+                           placeholder="192.168.1.0 or 192.168.1.0/24"
                            value="<?= htmlspecialchars($input_ip) ?>"
                            autocomplete="off" spellcheck="false">
                 </div>
@@ -393,31 +480,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php if ($result): ?>
             <div class="results">
                 <div class="results-header">Results</div>
-                <div class="result-row">
+                <div class="result-row" title="Click to copy">
                     <span class="result-label">Subnet (CIDR)</span>
                     <span class="result-value"><?= htmlspecialchars($result['network_cidr']) ?></span>
                 </div>
-                <div class="result-row">
+                <div class="result-row" title="Click to copy">
                     <span class="result-label">Netmask (CIDR)</span>
                     <span class="result-value"><?= htmlspecialchars($result['netmask_cidr']) ?></span>
                 </div>
-                <div class="result-row">
+                <div class="result-row" title="Click to copy">
                     <span class="result-label">Netmask (Octet)</span>
                     <span class="result-value"><?= htmlspecialchars($result['netmask_octet']) ?></span>
                 </div>
-                <div class="result-row">
+                <div class="result-row" title="Click to copy">
+                    <span class="result-label">Wildcard Mask</span>
+                    <span class="result-value"><?= htmlspecialchars($result['wildcard']) ?></span>
+                </div>
+                <div class="result-row" title="Click to copy">
                     <span class="result-label">First Usable IP</span>
                     <span class="result-value"><?= htmlspecialchars($result['first_usable']) ?></span>
                 </div>
-                <div class="result-row">
+                <div class="result-row" title="Click to copy">
                     <span class="result-label">Last Usable IP</span>
                     <span class="result-value"><?= htmlspecialchars($result['last_usable']) ?></span>
                 </div>
-                <div class="result-row">
+                <div class="result-row" title="Click to copy">
                     <span class="result-label">Broadcast IP</span>
                     <span class="result-value"><?= htmlspecialchars($result['broadcast']) ?></span>
                 </div>
-                <div class="result-row hosts-row">
+                <div class="result-row hosts-row" title="Click to copy">
                     <span class="result-label">Usable IPs</span>
                     <span class="result-value"><?= number_format($result['usable_hosts']) ?></span>
                 </div>
@@ -433,7 +524,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="form-group">
                     <label for="ipv6">IPv6 Address</label>
                     <input type="text" id="ipv6" name="ipv6"
-                           placeholder="2001:db8::1"
+                           placeholder="2001:db8::1 or 2001:db8::/32"
                            value="<?= htmlspecialchars($input_ipv6) ?>"
                            autocomplete="off" spellcheck="false">
                 </div>
@@ -458,42 +549,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php if ($result6): ?>
             <div class="results">
                 <div class="results-header">Results</div>
-                <div class="result-row">
+                <div class="result-row" title="Click to copy">
                     <span class="result-label">Network (CIDR)</span>
                     <span class="result-value"><?= htmlspecialchars($result6['network_cidr']) ?></span>
                 </div>
-                <div class="result-row">
+                <div class="result-row" title="Click to copy">
                     <span class="result-label">Prefix Length</span>
                     <span class="result-value"><?= htmlspecialchars($result6['prefix']) ?></span>
                 </div>
-                <div class="result-row">
+                <div class="result-row" title="Click to copy">
                     <span class="result-label">First IP</span>
                     <span class="result-value"><?= htmlspecialchars($result6['first_ip']) ?></span>
                 </div>
-                <div class="result-row">
+                <div class="result-row" title="Click to copy">
                     <span class="result-label">Last IP</span>
                     <span class="result-value"><?= htmlspecialchars($result6['last_ip']) ?></span>
                 </div>
-                <div class="result-row hosts-row">
+                <div class="result-row hosts-row" title="Click to copy">
                     <span class="result-label">Total Addresses</span>
                     <span class="result-value"><?= htmlspecialchars($result6['total']) ?></span>
                 </div>
             </div>
         <?php endif; ?>
     </div>
+
     <footer>
         <a href="https://github.com/seanmousseau/Subnet-Calculator" target="_blank" rel="noopener">github.com/seanmousseau/Subnet-Calculator</a>
     </footer>
 </div>
 
+<div id="toast" class="toast">Copied!</div>
+
 <script>
+// ── Tab switcher ─────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.tab-btn, .panel').forEach(el => el.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+        autoFocusActive();
     });
 });
+
+// ── Copy to clipboard ────────────────────────────────────────────────────────
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+document.querySelectorAll('.results').forEach(results => {
+    results.addEventListener('click', e => {
+        const row = e.target.closest('.result-row');
+        if (!row) return;
+        const val = row.querySelector('.result-value');
+        if (!val || !navigator.clipboard) return;
+        navigator.clipboard.writeText(val.textContent.trim()).then(() => showToast('Copied!'));
+    });
+});
+
+// ── Input auto-detection (paste "192.168.1.0/24" into IP field) ──────────────
+function autoDetect(ipId, maskId) {
+    const ipEl   = document.getElementById(ipId);
+    const maskEl = document.getElementById(maskId);
+    if (!ipEl || !maskEl) return;
+    const val   = ipEl.value.trim();
+    const slash = val.indexOf('/');
+    if (slash !== -1) {
+        ipEl.value   = val.slice(0, slash).trim();
+        maskEl.value = val.slice(slash).trim();
+    }
+}
+
+document.getElementById('ip')?.addEventListener('blur',   () => autoDetect('ip',   'mask'));
+document.getElementById('ipv6')?.addEventListener('blur', () => autoDetect('ipv6', 'prefix'));
+
+// ── Auto-focus first empty input on active panel ─────────────────────────────
+function autoFocusActive() {
+    const panel = document.querySelector('.panel.active');
+    if (!panel) return;
+    const first = panel.querySelector('input[type="text"]');
+    if (first && !first.value) first.focus();
+}
+
+autoFocusActive();
 </script>
 </body>
 </html>

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4] - 2026-04-03
+
+### Added
+- `--color-input-bg` CSS variable — input backgrounds are now separately themeable from the page background (`--color-bg`)
+- Wildcard mask output row in IPv4 results (e.g. `0.0.0.255` for `/24`)
+- Click-to-copy on all result rows with toast notification feedback
+- Input auto-detection: pasting a full CIDR string (e.g. `192.168.1.0/24`) into the IP field auto-splits it into IP and mask fields on blur
+- Auto-focus on the first empty input of the active panel on page load
+
+### Fixed
+- POST array injection no longer causes `TypeError` on PHP 8 (all `$_POST` values cast to `string` before `trim()`) — closes #12
+- `ipv6_to_gmp()` now throws `InvalidArgumentException` if `inet_pton()` returns `false`, preventing silent wrong-subnet calculation — closes #13
+- `gmp_to_ipv6()` now throws on 128-bit overflow and explicitly checks `inet_ntop()` return value — closes #14
+
 ## [0.3] - 2026-04-03
 
 ### Added

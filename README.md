@@ -8,8 +8,9 @@ A lightweight, web-based subnet calculator written in PHP supporting both IPv4 a
 
 **IPv4**
 - Accepts netmask in **CIDR** (`/24`, `24`) or **dotted-decimal** (`255.255.255.0`) notation
-- Outputs: Subnet CIDR, Netmask (CIDR & Octet), First/Last Usable IP, Broadcast IP, Usable IPs
+- Outputs: Subnet CIDR, Netmask (CIDR & Octet), Wildcard Mask, First/Last Usable IP, Broadcast IP, Usable IPs
 - Handles edge cases: `/0`, `/31` (point-to-point), `/32` (host route)
+- Paste a full CIDR string (e.g. `192.168.1.0/24`) into the IP field — it auto-splits on blur
 
 **IPv6**
 - CIDR prefix input (`/64`, `64`)
@@ -19,6 +20,8 @@ A lightweight, web-based subnet calculator written in PHP supporting both IPv4 a
 **General**
 - IPv4 / IPv6 tab switcher
 - Reset button to clear inputs and results
+- Click any result row to copy the value to clipboard
+- All colours configured via CSS custom properties (`--color-bg`, `--color-input-bg`, etc.)
 - Single-file, minimal dependencies
 
 ## Requirements
@@ -53,6 +56,7 @@ Then open `http://localhost:8080` in your browser.
 | Subnet (CIDR) | `192.168.1.0/24` |
 | Netmask (CIDR) | `/24` |
 | Netmask (Octet) | `255.255.255.0` |
+| Wildcard Mask | `0.0.0.255` |
 | First Usable IP | `192.168.1.1` |
 | Last Usable IP | `192.168.1.254` |
 | Broadcast IP | `192.168.1.255` |
@@ -79,6 +83,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 | Version | Notes |
 |---------|-------|
+| 0.4 | Wildcard mask, copy-to-clipboard, CSS variable theming, input auto-detection |
 | 0.3 | IPv6 support with tabbed UI |
 | 0.2 | Reset button, removed Total Hosts field |
 | 0.1 | Initial release — IPv4 subnet calculations |
