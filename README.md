@@ -51,19 +51,18 @@ All tuneable values are declared at the top of `index.php` under the `// ──�
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `$fixed_bg_color` | `'null'` | Pin the page background to a hex colour (e.g. `'#1a1a2e'`) regardless of light/dark mode. Leave as `'null'` to use the theme default. |
-| `$iframe_mode` | `false` | Set to `true` when embedding in an iframe (see [Embedding](#embedding)). |
 | `$default_tab` | `'ipv4'` | Active tab on page load: `'ipv4'` or `'ipv6'`. |
 | `$split_max_subnets` | `16` | Maximum number of subnets shown in the subnet splitter results list. |
 
 ## Embedding
 
-The calculator can be embedded in an iframe with automatic height adjustment.
+The calculator automatically detects when it is running inside an iframe. No configuration is required — just embed it and add the host-side resize listener.
 
-**1. Set `$iframe_mode = true;` in `index.php`.**
+When loaded in an iframe the page:
+- Removes body margins, padding, and overflow
+- Broadcasts its height to the parent window via `postMessage` whenever the content changes (form submit, tab switch, results shown/cleared)
 
-This removes body margins/padding and makes the page broadcast its own height to the parent via `postMessage` whenever the content changes.
-
-**2. Add this to your host page:**
+**Add this to your host page:**
 
 ```html
 <div style="width:100%; max-width:1200px; margin:0 auto;">
