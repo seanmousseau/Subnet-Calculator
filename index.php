@@ -481,11 +481,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
     </div>
+    <footer>
+        <a href="https://github.com/seanmousseau/Subnet-Calculator" target="_blank" rel="noopener">github.com/seanmousseau/Subnet-Calculator</a>
+    </footer>
 </div>
-
-<footer>
-    <a href="https://github.com/seanmousseau/Subnet-Calculator" target="_blank" rel="noopener">github.com/seanmousseau/Subnet-Calculator</a>
-</footer>
 
 <script>
 document.querySelectorAll('.tab-btn').forEach(btn => {
