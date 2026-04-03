@@ -315,6 +315,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// Build fixed background override style (avoids inline PHP inside CSS block — #32)
+$bg_override_style = '';
+if ($fixed_bg_color !== null && preg_match('/^#[0-9a-fA-F]{3,8}$/', (string)$fixed_bg_color)) {
+    $bg_override_style = ':root,html[data-theme="light"]{--color-bg:' . htmlspecialchars((string)$fixed_bg_color) . '}';
+}
+
 // Build shareable URL
 $share_url = '';
 if ($result) {
@@ -803,9 +809,7 @@ if ($result) {
             .split-list { grid-template-columns: 1fr; }
         }
     </style>
-    <?php if ($fixed_bg_color !== null && preg_match('/^#[0-9a-fA-F]{3,8}$/', $fixed_bg_color)): ?>
-    <style>:root, html[data-theme="light"] { --color-bg: <?= htmlspecialchars($fixed_bg_color) ?>; }</style>
-    <?php endif; ?>
+    <?php if ($bg_override_style): ?><style><?= $bg_override_style ?></style><?php endif; ?>
 </head>
 <body>
 <div class="card">
