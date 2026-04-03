@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3] - 2026-04-03
+
+### Added
+- IPv6 subnet calculation using PHP GMP extension for 128-bit arithmetic
+- IPv4 / IPv6 tab switcher UI
+- IPv6 outputs: Network CIDR, Prefix Length, First IP, Last IP, Total Addresses (as 2^n)
+- Session-start hook now installs `php-gmp` if not present
+
 ## [0.2] - 2026-04-02
 
 ### Added
