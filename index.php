@@ -3,13 +3,19 @@
 // ─── Configuration ────────────────────────────────────────────────────────────
 
 // Optional: set to a hex colour (e.g. '#1a1a2e') to pin the page background
-// regardless of light/dark mode. Set to null to use the theme default.
-$fixed_bg_color = null;
+// regardless of light/dark mode. Leave as 'null' to use the theme default.
+$fixed_bg_color = 'null';
 
 // Set to true when embedding the calculator in an iframe.
 // Removes body margins/padding and sends height via postMessage so the host
 // page can resize the iframe automatically with a simple one-liner script.
 $iframe_mode = false;
+
+// Default active tab on page load: 'ipv4' or 'ipv6'.
+$default_tab = 'ipv4';
+
+// Maximum number of subnets shown in the subnet splitter results list.
+$split_max_subnets = 16;
 
 // ─── IPv4 ─────────────────────────────────────────────────────────────────────
 
@@ -105,12 +111,12 @@ function calculate_subnet6(string $ip, int $prefix): array {
 
 // ─── Subnet splitter ──────────────────────────────────────────────────────────
 
-function split_subnet(string $network_ip, int $cidr, int $new_prefix): array {
+function split_subnet(string $network_ip, int $cidr, int $new_prefix, int $max = 16): array {
     if ($new_prefix <= $cidr || $new_prefix > 32) {
         return ['subnets' => [], 'total' => 0, 'showing' => 0];
     }
     $count      = 1 << ($new_prefix - $cidr);
-    $showing    = min($count, 16);
+    $showing    = min($count, $max);
     $base       = ip2long($network_ip) & 0xFFFFFFFF;
     $block_size = 1 << (32 - $new_prefix);
     $subnets    = [];
@@ -173,7 +179,7 @@ function type_badge_class(string $type): string {
 
 // ─── Request handling ─────────────────────────────────────────────────────────
 
-$active_tab = ($_GET['tab'] ?? '') === 'ipv6' ? 'ipv6' : 'ipv4';
+$active_tab = ($_GET['tab'] ?? '') === 'ipv6' ? 'ipv6' : $default_tab;
 
 $result = $error = null;
 $input_ip = $input_mask = '';
@@ -185,7 +191,7 @@ $split_result = $split_error = null;
 $input_split_prefix = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $active_tab = ($_POST['tab'] ?? 'ipv4') === 'ipv6' ? 'ipv6' : 'ipv4';
+    $active_tab = ($_POST['tab'] ?? $default_tab) === 'ipv6' ? 'ipv6' : $default_tab;
 
     if ($active_tab === 'ipv4') {
         $input_ip   = trim((string)($_POST['ip']   ?? ''));
@@ -229,7 +235,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($new_pfx <= $current_cidr) {
                     $split_error = 'New prefix must be larger than /' . $current_cidr . '.';
                 } else {
-                    $split_result = split_subnet($network_ip, $current_cidr, $new_pfx);
+                    $split_result = split_subnet($network_ip, $current_cidr, $new_pfx, $split_max_subnets);
                 }
             }
         }
@@ -325,7 +331,7 @@ $iframe_style = $iframe_mode ? 'html,body{margin:0;padding:0;overflow:hidden}' :
 
 // Build fixed background override style (avoids inline PHP inside CSS block — #32)
 $bg_override_style = '';
-if ($fixed_bg_color !== null && preg_match('/^#[0-9a-fA-F]{3,8}$/', (string)$fixed_bg_color)) {
+if ($fixed_bg_color !== 'null' && $fixed_bg_color !== '' && preg_match('/^#[0-9a-fA-F]{3,8}$/', (string)$fixed_bg_color)) {
     $bg_override_style = ':root,html[data-theme="light"]{--color-bg:' . htmlspecialchars((string)$fixed_bg_color) . '}';
 }
 
@@ -825,7 +831,7 @@ if ($result) {
     <div class="title-row">
         <img src="logo.svg" alt="Subnet Calculator logo" class="logo">
         <h1>Subnet Calculator</h1>
-        <span class="version">v0.6</span>
+        <span class="version">v0.7</span>
         <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode">
             <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
             <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -934,8 +940,8 @@ if ($result) {
                         <?php foreach ($split_result['subnets'] as $s): ?>
                             <div class="split-item" data-copy="<?= htmlspecialchars($s) ?>"><?= htmlspecialchars($s) ?></div>
                         <?php endforeach; ?>
-                        <?php if ($split_result['total'] > 16): ?>
-                            <div class="split-more">+ <?= number_format($split_result['total'] - 16) ?> more</div>
+                        <?php if ($split_result['total'] > $split_max_subnets): ?>
+                            <div class="split-more">+ <?= number_format($split_result['total'] - $split_max_subnets) ?> more</div>
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>
