@@ -1118,12 +1118,16 @@ autoFocusActive();
 // ── iframe: report height to parent via postMessage ──────────────────────────
 (function () {
     function postHeight() {
-        var h = Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
+        var card = document.querySelector('.card');
+        if (!card) return;
+        var rect  = card.getBoundingClientRect();
+        var style = window.getComputedStyle(card);
+        var h = Math.ceil(rect.bottom + parseFloat(style.marginBottom || 0));
         window.parent.postMessage({ type: 'sc-resize', height: h }, '*');
     }
     postHeight();
     if (window.ResizeObserver) {
-        new ResizeObserver(postHeight).observe(document.documentElement);
+        new ResizeObserver(postHeight).observe(document.querySelector('.card') || document.documentElement);
     }
 })();
 <?php endif; ?>
