@@ -809,7 +809,7 @@ if ($result) {
             .split-list { grid-template-columns: 1fr; }
         }
     </style>
-    <?php if ($bg_override_style): ?><style><?= $bg_override_style ?></style><?php endif; ?>
+    <?php if ($bg_override_style) echo '<style>' . $bg_override_style . '</style>'; ?>
 </head>
 <body>
 <div class="card">
