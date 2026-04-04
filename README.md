@@ -61,6 +61,8 @@ All tuneable values with their defaults:
 | `$form_protection` | `'none'` | Form protection mode: `'none'`, `'honeypot'`, or `'turnstile'`. |
 | `$turnstile_site_key` | `''` | Cloudflare Turnstile site key (required when `$form_protection = 'turnstile'`). |
 | `$turnstile_secret_key` | `''` | Cloudflare Turnstile secret key — **never exposed in HTML**. |
+| `$page_title` | `'Subnet Calculator'` | Page title shown in the browser tab and `<h1>` heading. |
+| `$show_share_bar` | `true` | Show or hide the shareable URL bar below results. Set to `false` when embedding in an iframe. |
 
 ## Downloads
 
@@ -68,6 +70,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File |
 |---------|------|
+| 0.10.0 | `releases/subnet-calculator-0.10.0.tar.gz` |
 | 0.9.0 | `releases/subnet-calculator-0.9.0.tar.gz` |
 | 0.8.0 | `releases/subnet-calculator-0.8.0.tar.gz` |
 
@@ -190,6 +193,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 | Version | Notes |
 |---------|-------|
+| 0.10 | Nonce-based CSP (removes `unsafe-inline`), `$page_title`, `$show_share_bar`, missing IPv4 address types (Benchmarking, IETF Reserved) |
 | 0.9 | Tab bug fix (`$default_tab=ipv6`), share URL pinning, Turnstile curl fix, CSP `base-uri`, iframe bg postMessage |
 | 0.8 | IPv6 splitter, form protection, CGNAT, external config.php, subfolder layout, security headers, clipboard fallback, release bundle |
 | 0.7 | Config consolidation, `'null'`-safe bg color, iframe mode with postMessage |
