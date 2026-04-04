@@ -10,6 +10,8 @@ $split_max_subnets    = 16;
 $form_protection      = 'none';
 $turnstile_site_key   = '';
 $turnstile_secret_key = '';
+$page_title           = 'Subnet Calculator';
+$show_share_bar       = true;
 
 if (file_exists(__DIR__ . '/config.php')) {
     require __DIR__ . '/config.php';
@@ -22,14 +24,16 @@ $split_max_subnets = max(1, min((int)$split_max_subnets, 256));
 
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
+$csp_nonce    = base64_encode(random_bytes(16));
 $turnstile_active = ($form_protection === 'turnstile' && $turnstile_site_key !== '' && $turnstile_secret_key !== '');
 $csp_script = $turnstile_active
-    ? "'self' 'unsafe-inline' https://challenges.cloudflare.com"
-    : "'self' 'unsafe-inline'";
+    ? "'nonce-{$csp_nonce}' https://challenges.cloudflare.com"
+    : "'nonce-{$csp_nonce}'";
+$csp_style  = "'nonce-{$csp_nonce}'";
 $csp_frame = $turnstile_active
     ? "'self' https://challenges.cloudflare.com"
     : "'self'";
-header("Content-Security-Policy: default-src 'self'; base-uri 'self'; style-src 'self' 'unsafe-inline'; script-src {$csp_script}; img-src 'self' data:; frame-src {$csp_frame}; frame-ancestors *");
+header("Content-Security-Policy: default-src 'self'; base-uri 'self'; style-src {$csp_style}; script-src {$csp_script}; img-src 'self' data:; frame-src {$csp_frame}; frame-ancestors *");
 
 // ─── IPv4 ─────────────────────────────────────────────────────────────────────
 
@@ -175,6 +179,8 @@ function get_ipv4_type(string $ip): string {
     if (($n & 0xF0000000) === 0xF0000000)                          return 'Reserved';
     if (($n & 0xFF000000) === 0x00000000)                          return 'This Network';
     if (($n & 0xFFC00000) === 0x64400000)                          return 'CGNAT';
+    if (($n & 0xFFFE0000) === 0xC6120000)                          return 'Benchmarking';
+    if (($n & 0xFFFFFF00) === 0xC0000000)                          return 'IETF Reserved';
     return 'Public';
 }
 
@@ -206,6 +212,12 @@ function type_badge_class(string $type): string {
         'Global Unicast'=> 'public',
         'Unique Local'  => 'ula',
         'CGNAT'         => 'other',
+        'Reserved'      => 'other',
+        'Broadcast'     => 'loopback',
+        'Unspecified'   => 'loopback',
+        'This Network'  => 'loopback',
+        'Benchmarking'  => 'other',
+        'IETF Reserved' => 'other',
     ];
     return $map[$type] ?? 'other';
 }
@@ -429,10 +441,10 @@ if ($result) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Subnet Calculator</title>
+    <title><?= htmlspecialchars($page_title) ?></title>
     <link rel="icon" type="image/svg+xml" href="logo.svg">
-    <script>(function(){var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
-    <style>
+    <script nonce="<?= htmlspecialchars($csp_nonce) ?>">(function(){var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
+    <style nonce="<?= htmlspecialchars($csp_nonce) ?>">
         :root {
             /* Page background */
             --color-bg:           #0f172a;
@@ -727,6 +739,15 @@ if ($result) {
             transition: background 0.15s, color 0.15s;
         }
         .theme-toggle:hover { background: var(--color-border); color: var(--color-text); }
+        .icon-moon { display: none; }
+        html[data-theme="light"] .icon-moon { display: block; }
+        html[data-theme="light"] .icon-sun  { display: none; }
+
+        /* Honeypot — always hidden regardless of CSS cascade */
+        .sc-honeypot { display: none !important; }
+
+        /* Turnstile container */
+        .cf-turnstile { margin-top: 0.75rem; }
 
         footer {
             margin-top: 1.25rem;
@@ -866,6 +887,8 @@ if ($result) {
         }
 
         .splitter-btn:hover { background: var(--color-border); color: var(--color-text); }
+        .splitter .error { margin: 0.75rem 1rem; }
+        .form-group-narrow { max-width: 120px; }
 
         .split-list {
             display: grid;
@@ -915,7 +938,7 @@ if ($result) {
             align-items: flex-start;
         }
     </style>
-    <?php if ($bg_override_style) echo '<style>' . $bg_override_style . '</style>'; ?>
+    <?php if ($bg_override_style) echo '<style nonce="' . htmlspecialchars($csp_nonce) . '">' . $bg_override_style . '</style>'; ?>
     <?php if ($turnstile_active): ?>
         <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <?php endif; ?>
@@ -924,11 +947,11 @@ if ($result) {
 <div class="card">
     <div class="title-row">
         <img src="logo.svg" alt="Subnet Calculator logo" class="logo">
-        <h1>Subnet Calculator</h1>
-        <span class="version">v0.9</span>
+        <h1><?= htmlspecialchars($page_title) ?></h1>
+        <span class="version">v0.10</span>
         <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode">
             <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-            <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         </button>
     </div>
 
@@ -961,11 +984,11 @@ if ($result) {
                 <button type="submit">Calculate</button>
                 <a href="?" class="btn reset">Reset</a>
             </div>
-            <?php if ($form_protection !== 'none'): ?>
-                <input type="text" name="url" style="display:none" tabindex="-1" autocomplete="off" value="">
+            <?php if ($form_protection === 'honeypot'): ?>
+                <input type="text" name="url" class="sc-honeypot" tabindex="-1" autocomplete="off" value="">
             <?php endif; ?>
             <?php if ($turnstile_active): ?>
-                <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars($turnstile_site_key) ?>" style="margin-top:0.75rem"></div>
+                <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars($turnstile_site_key) ?>"></div>
             <?php endif; ?>
         </form>
 
@@ -1014,11 +1037,13 @@ if ($result) {
                     <span class="result-value"><span class="badge badge-<?= type_badge_class($ip4type) ?>"><?= htmlspecialchars($ip4type) ?></span></span>
                 </div>
             </div>
+            <?php if ($show_share_bar): ?>
             <div class="share-bar">
                 <span class="share-label">Share</span>
                 <code class="share-url"><?= htmlspecialchars($share_url) ?></code>
                 <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
             </div>
+            <?php endif; ?>
             <div class="splitter">
                 <div class="splitter-title">Split Subnet</div>
                 <form method="post" class="splitter-form">
@@ -1034,7 +1059,7 @@ if ($result) {
                     </div>
                 </form>
                 <?php if ($split_error): ?>
-                    <div class="error" style="margin:0.75rem 1rem"><?= htmlspecialchars($split_error) ?></div>
+                    <div class="error"><?= htmlspecialchars($split_error) ?></div>
                 <?php elseif ($split_result && $split_result['showing'] > 0): ?>
                     <div class="split-list">
                         <?php foreach ($split_result['subnets'] as $s): ?>
@@ -1061,7 +1086,7 @@ if ($result) {
                            value="<?= htmlspecialchars($input_ipv6) ?>"
                            autocomplete="off" spellcheck="false">
                 </div>
-                <div class="form-group" style="max-width:120px">
+                <div class="form-group form-group-narrow">
                     <label for="prefix">Prefix</label>
                     <input type="text" id="prefix" name="prefix"
                            placeholder="/64"
@@ -1073,11 +1098,11 @@ if ($result) {
                 <button type="submit">Calculate</button>
                 <a href="?tab=ipv6" class="btn reset">Reset</a>
             </div>
-            <?php if ($form_protection !== 'none'): ?>
-                <input type="text" name="url" style="display:none" tabindex="-1" autocomplete="off" value="">
+            <?php if ($form_protection === 'honeypot'): ?>
+                <input type="text" name="url" class="sc-honeypot" tabindex="-1" autocomplete="off" value="">
             <?php endif; ?>
             <?php if ($turnstile_active): ?>
-                <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars($turnstile_site_key) ?>" style="margin-top:0.75rem"></div>
+                <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars($turnstile_site_key) ?>"></div>
             <?php endif; ?>
         </form>
 
@@ -1114,11 +1139,13 @@ if ($result) {
                     <span class="result-value"><span class="badge badge-<?= type_badge_class($ip6type) ?>"><?= htmlspecialchars($ip6type) ?></span></span>
                 </div>
             </div>
+            <?php if ($show_share_bar): ?>
             <div class="share-bar">
                 <span class="share-label">Share</span>
                 <code class="share-url"><?= htmlspecialchars($share_url) ?></code>
                 <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
             </div>
+            <?php endif; ?>
         <?php endif; ?>
         <?php if ($result6): ?>
             <div class="splitter">
@@ -1136,7 +1163,7 @@ if ($result) {
                     </div>
                 </form>
                 <?php if ($split_error6): ?>
-                    <div class="error" style="margin:0.75rem 1rem"><?= htmlspecialchars($split_error6) ?></div>
+                    <div class="error"><?= htmlspecialchars($split_error6) ?></div>
                 <?php elseif ($split_result6 && $split_result6['showing'] > 0): ?>
                     <div class="split-list">
                         <?php foreach ($split_result6['subnets'] as $s): ?>
@@ -1164,22 +1191,14 @@ if ($result) {
 
 <div id="toast" class="toast">Copied!</div>
 
-<script>
+<script nonce="<?= htmlspecialchars($csp_nonce) ?>">
 // ── Theme toggle ─────────────────────────────────────────────────────────────
-function syncThemeIcon() {
-    const light = document.documentElement.getAttribute('data-theme') === 'light';
-    document.querySelector('#theme-toggle .icon-sun').style.display  = light ? 'none' : '';
-    document.querySelector('#theme-toggle .icon-moon').style.display = light ? '' : 'none';
-}
-
+// Icon visibility is driven by CSS html[data-theme="light"] selectors — no JS needed.
 document.getElementById('theme-toggle').addEventListener('click', () => {
     const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
-    syncThemeIcon();
 });
-
-syncThemeIcon();
 
 // ── Tab switcher ─────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach(btn => {
