@@ -1276,18 +1276,13 @@ if (window.self !== window.top) {
             window.parent.postMessage({ type: 'sc-resize', height: h }, targetOrigin);
         }
         postHeight();
-        // Observe .card (not body) — body height is clamped to iframe viewport in overflow:hidden
-        var card = document.querySelector('.card');
-        if (card && window.ResizeObserver) {
-            new ResizeObserver(postHeight).observe(card);
-        }
-        // Catch Turnstile widget rendering: Cloudflare injects its iframe asynchronously
-        if (window.MutationObserver) {
+        if (window.ResizeObserver) {
+            // Observe .card for general content changes (results, errors, splitter)
+            var card = document.querySelector('.card');
+            if (card) new ResizeObserver(postHeight).observe(card);
+            // Observe each Turnstile widget div: fires when Cloudflare sets its dimensions
             document.querySelectorAll('.cf-turnstile').forEach(function (el) {
-                new MutationObserver(function (mutations, obs) {
-                    setTimeout(postHeight, 50);
-                    obs.disconnect();
-                }).observe(el, { childList: true, subtree: true });
+                new ResizeObserver(postHeight).observe(el);
             });
         }
     })();
