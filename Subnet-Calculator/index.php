@@ -1,16 +1,35 @@
 <?php
 
-// ─── Configuration ────────────────────────────────────────────────────────────
+// ─── Configuration defaults ───────────────────────────────────────────────────
+// These are the built-in defaults. To override, copy config.php.example to
+// config.php alongside this file — config.php is never overwritten by upgrades.
 
-// Optional: set to a hex colour (e.g. '#1a1a2e') to pin the page background
-// regardless of light/dark mode. Leave as 'null' to use the theme default.
-$fixed_bg_color = 'null';
+$fixed_bg_color       = 'null';
+$default_tab          = 'ipv4';
+$split_max_subnets    = 16;
+$form_protection      = 'none';
+$turnstile_site_key   = '';
+$turnstile_secret_key = '';
 
-// Default active tab on page load: 'ipv4' or 'ipv6'.
-$default_tab = 'ipv4';
+if (file_exists(__DIR__ . '/config.php')) {
+    require __DIR__ . '/config.php';
+}
 
-// Maximum number of subnets shown in the subnet splitter results list.
-$split_max_subnets = 16;
+// Sanitise config values
+$split_max_subnets = max(1, min((int)$split_max_subnets, 256));
+
+// ─── Security headers ─────────────────────────────────────────────────────────
+
+header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+$turnstile_active = ($form_protection === 'turnstile' && $turnstile_site_key !== '' && $turnstile_secret_key !== '');
+$csp_script = $turnstile_active
+    ? "'self' 'unsafe-inline' https://challenges.cloudflare.com"
+    : "'self' 'unsafe-inline'";
+$csp_frame = $turnstile_active
+    ? "'self' https://challenges.cloudflare.com"
+    : "'self'";
+header("Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src {$csp_script}; img-src 'self' data:; frame-src {$csp_frame}; frame-ancestors *");
 
 // ─── IPv4 ─────────────────────────────────────────────────────────────────────
 
@@ -121,6 +140,23 @@ function split_subnet(string $network_ip, int $cidr, int $new_prefix, int $max =
     return ['subnets' => $subnets, 'total' => $count, 'showing' => $showing];
 }
 
+function split_subnet6(string $network_ip, int $prefix, int $new_prefix, int $max = 16): array {
+    if ($new_prefix <= $prefix || $new_prefix > 128) {
+        return ['subnets' => [], 'total' => '0', 'showing' => 0];
+    }
+    $diff       = $new_prefix - $prefix;
+    $total_str  = $diff >= 63 ? '2^' . $diff : (string)(1 << $diff);
+    $showing    = $diff >= 63 ? $max : min(1 << $diff, $max);
+    $base       = ipv6_to_gmp($network_ip);
+    $block_size = gmp_pow(2, 128 - $new_prefix);
+    $subnets    = [];
+    for ($i = 0; $i < $showing; $i++) {
+        $start     = gmp_add($base, gmp_mul($block_size, gmp_init($i)));
+        $subnets[] = gmp_to_ipv6($start) . '/' . $new_prefix;
+    }
+    return ['subnets' => $subnets, 'total' => $total_str, 'showing' => $showing];
+}
+
 // ─── Address type detection ───────────────────────────────────────────────────
 
 function get_ipv4_type(string $ip): string {
@@ -138,6 +174,7 @@ function get_ipv4_type(string $ip): string {
     if (($n & 0xFFFFFF00) === 0xCB007100)                          return 'Documentation';
     if (($n & 0xF0000000) === 0xF0000000)                          return 'Reserved';
     if (($n & 0xFF000000) === 0x00000000)                          return 'This Network';
+    if (($n & 0xFFC00000) === 0x64400000)                          return 'CGNAT';
     return 'Public';
 }
 
@@ -168,8 +205,67 @@ function type_badge_class(string $type): string {
         'Documentation' => 'doc',
         'Global Unicast'=> 'public',
         'Unique Local'  => 'ula',
+        'CGNAT'         => 'other',
     ];
     return $map[$type] ?? 'other';
+}
+
+// ─── Input resolvers (shared by GET and POST handlers) ────────────────────────
+
+function resolve_ipv4_input(string $ip, string $mask): array {
+    // CIDR auto-detection: "192.168.1.0/24" typed into IP field (#27)
+    if (strpos($ip, '/') !== false && $mask === '') {
+        [$ip, $mask] = array_pad(explode('/', $ip, 2), 2, '');
+        $ip   = trim($ip);
+        $mask = trim($mask);
+    }
+    $result = $error = null;
+    if (!is_valid_ipv4($ip)) {
+        $error = 'Invalid IPv4 address.';
+    } else {
+        $mask_clean = ltrim($mask, '/');
+        if (ctype_digit($mask_clean)) {
+            $cidr = (int)$mask_clean;
+            if ($cidr < 0 || $cidr > 32) {
+                $error = 'CIDR prefix must be between 0 and 32.';
+            } else {
+                $result = calculate_subnet($ip, $cidr);
+            }
+        } elseif (is_valid_mask_octet($mask_clean)) {
+            $result = calculate_subnet($ip, mask_to_cidr($mask_clean));
+        } else {
+            $error = 'Invalid netmask. Use CIDR (e.g. /24) or dotted-decimal (e.g. 255.255.255.0).';
+        }
+    }
+    return ['result' => $result, 'error' => $error, 'ip' => $ip, 'mask' => $mask];
+}
+
+function resolve_ipv6_input(string $ip, string $prefix): array {
+    // CIDR auto-detection: "2001:db8::/32" typed into IPv6 field (#27)
+    if (strpos($ip, '/') !== false && $prefix === '') {
+        [$ip, $prefix] = array_pad(explode('/', $ip, 2), 2, '');
+        $ip     = trim($ip);
+        $prefix = trim($prefix);
+    }
+    $result6 = $error6 = null;
+    if (!extension_loaded('gmp')) {
+        $error6 = 'IPv6 calculation requires the PHP GMP extension.';
+    } elseif (!is_valid_ipv6($ip)) {
+        $error6 = 'Invalid IPv6 address.';
+    } else {
+        $pfx = ltrim($prefix, '/');
+        if (!ctype_digit($pfx) || (int)$pfx < 0 || (int)$pfx > 128) {
+            $error6 = 'Prefix must be between 0 and 128.';
+        } else {
+            try {
+                $result6 = calculate_subnet6($ip, (int)$pfx);
+            } catch (\Exception $e) {
+                error_log('sc IPv6 error: ' . $e->getMessage());
+                $error6 = 'An error occurred during calculation. Please check your input.';
+            }
+        }
+    }
+    return ['result6' => $result6, 'error6' => $error6, 'ip' => $ip, 'prefix' => $prefix];
 }
 
 // ─── Request handling ─────────────────────────────────────────────────────────
@@ -182,42 +278,61 @@ $input_ip = $input_mask = '';
 $result6 = $error6 = null;
 $input_ipv6 = $input_prefix = '';
 
-$split_result = $split_error = null;
-$input_split_prefix = '';
+$split_result  = $split_error  = null;
+$split_result6 = $split_error6 = null;
+$input_split_prefix  = '';
+$input_split_prefix6 = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $active_tab = ($_POST['tab'] ?? $default_tab) === 'ipv6' ? 'ipv6' : $default_tab;
 
-    if ($active_tab === 'ipv4') {
-        $input_ip   = trim((string)($_POST['ip']   ?? ''));
-        $input_mask = trim((string)($_POST['mask'] ?? ''));
+    // ─── Form protection ─────────────────────────────────────────────────────────
+    $form_blocked = false;
+    $is_splitter  = isset($_POST['split_prefix']) || isset($_POST['split_prefix6']);
 
-        // Server-side CIDR auto-detection: handle "192.168.1.0/24" typed in IP field (#27)
-        if (strpos($input_ip, '/') !== false && $input_mask === '') {
-            [$input_ip, $input_mask] = array_pad(explode('/', $input_ip, 2), 2, '');
-            $input_ip   = trim($input_ip);
-            $input_mask = trim($input_mask);
+    if (!$is_splitter && $form_protection === 'honeypot') {
+        // Honeypot: silently ignore submissions where the hidden field is non-empty
+        if (trim((string)($_POST['url'] ?? '')) !== '') {
+            $form_blocked = true;
         }
-
-        if (!is_valid_ipv4($input_ip)) {
-            $error = 'Invalid IPv4 address.';
+    } elseif (!$is_splitter && $turnstile_active) {
+        $token = trim((string)($_POST['cf-turnstile-response'] ?? ''));
+        if ($token === '') {
+            $form_blocked = true;
+            if ($active_tab === 'ipv6') { $error6 = 'Please complete the CAPTCHA.'; }
+            else { $error = 'Please complete the CAPTCHA.'; }
         } else {
-            $mask_clean = ltrim($input_mask, '/');
-            if (ctype_digit($mask_clean)) {
-                $cidr = (int)$mask_clean;
-                if ($cidr < 0 || $cidr > 32) {
-                    $error = 'CIDR prefix must be between 0 and 32.';
-                } else {
-                    $result = calculate_subnet($input_ip, $cidr);
-                }
-            } elseif (is_valid_mask_octet($mask_clean)) {
-                $result = calculate_subnet($input_ip, mask_to_cidr($mask_clean));
-            } else {
-                $error = 'Invalid netmask. Use CIDR (e.g. /24) or dotted-decimal (e.g. 255.255.255.0).';
+            $ctx = stream_context_create(['http' => [
+                'method'  => 'POST',
+                'header'  => 'Content-Type: application/x-www-form-urlencoded',
+                'content' => http_build_query([
+                    'secret'   => $turnstile_secret_key,
+                    'response' => $token,
+                    'remoteip' => $_SERVER['REMOTE_ADDR'] ?? '',
+                ]),
+                'timeout' => 5,
+            ]]);
+            $raw = @file_get_contents('https://challenges.cloudflare.com/turnstile/v0/siteverify', false, $ctx);
+            $json = $raw !== false ? json_decode($raw, true) : null;
+            if (!($json['success'] ?? false)) {
+                $form_blocked = true;
+                if ($active_tab === 'ipv6') { $error6 = 'CAPTCHA verification failed. Please try again.'; }
+                else { $error = 'CAPTCHA verification failed. Please try again.'; }
             }
         }
+    }
 
-        // Subnet splitter
+    if (!$form_blocked && $active_tab === 'ipv4') {
+        $r = resolve_ipv4_input(
+            trim((string)($_POST['ip']   ?? '')),
+            trim((string)($_POST['mask'] ?? ''))
+        );
+        $result     = $r['result'];
+        $error      = $r['error'];
+        $input_ip   = $r['ip'];
+        $input_mask = $r['mask'];
+
+        // IPv4 subnet splitter (POST only)
         if ($result && isset($_POST['split_prefix'])) {
             $input_split_prefix = trim((string)($_POST['split_prefix'] ?? ''));
             $sp = ltrim($input_split_prefix, '/');
@@ -234,30 +349,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
-    } else {
-        $input_ipv6   = trim((string)($_POST['ipv6']   ?? ''));
-        $input_prefix = trim((string)($_POST['prefix'] ?? ''));
+    } elseif (!$form_blocked) {
+        $r = resolve_ipv6_input(
+            trim((string)($_POST['ipv6']   ?? '')),
+            trim((string)($_POST['prefix'] ?? ''))
+        );
+        $result6      = $r['result6'];
+        $error6       = $r['error6'];
+        $input_ipv6   = $r['ip'];
+        $input_prefix = $r['prefix'];
 
-        // Server-side CIDR auto-detection for IPv6 (#27)
-        if (strpos($input_ipv6, '/') !== false && $input_prefix === '') {
-            [$input_ipv6, $input_prefix] = array_pad(explode('/', $input_ipv6, 2), 2, '');
-            $input_ipv6   = trim($input_ipv6);
-            $input_prefix = trim($input_prefix);
-        }
-
-        if (!extension_loaded('gmp')) {
-            $error6 = 'IPv6 calculation requires the PHP GMP extension.';
-        } elseif (!is_valid_ipv6($input_ipv6)) {
-            $error6 = 'Invalid IPv6 address.';
-        } else {
-            $pfx = ltrim($input_prefix, '/');
-            if (!ctype_digit($pfx) || (int)$pfx < 0 || (int)$pfx > 128) {
-                $error6 = 'Prefix must be between 0 and 128.';
+        // IPv6 subnet splitter (POST only)
+        if ($result6 && isset($_POST['split_prefix6'])) {
+            $input_split_prefix6 = trim((string)($_POST['split_prefix6'] ?? ''));
+            $sp6 = ltrim($input_split_prefix6, '/');
+            if (!ctype_digit($sp6) || (int)$sp6 < 0 || (int)$sp6 > 128) {
+                $split_error6 = 'New prefix must be between 0 and 128.';
             } else {
-                try {
-                    $result6 = calculate_subnet6($input_ipv6, (int)$pfx);
-                } catch (\Exception $e) {
-                    $error6 = 'Calculation error: ' . $e->getMessage();
+                $new_pfx6     = (int)$sp6;
+                $current_pfx6 = (int)ltrim($result6['prefix'], '/');
+                $network_ipv6 = explode('/', $result6['network_cidr'])[0];
+                if ($new_pfx6 <= $current_pfx6) {
+                    $split_error6 = 'New prefix must be larger than /' . $current_pfx6 . '.';
+                } else {
+                    $split_result6 = split_subnet6($network_ipv6, $current_pfx6, $new_pfx6, $split_max_subnets);
                 }
             }
         }
@@ -267,63 +382,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $get_ip   = trim((string)($_GET['ip']   ?? ''));
         $get_mask = trim((string)($_GET['mask'] ?? ''));
         if ($get_ip !== '' && $get_mask !== '') {
-            $input_ip = $get_ip; $input_mask = $get_mask;
-            // Server-side CIDR auto-detection (#27)
-            if (strpos($input_ip, '/') !== false && $input_mask === '') {
-                [$input_ip, $input_mask] = array_pad(explode('/', $input_ip, 2), 2, '');
-                $input_ip = trim($input_ip); $input_mask = trim($input_mask);
-            }
-            if (!is_valid_ipv4($input_ip)) {
-                $error = 'Invalid IPv4 address.';
-            } else {
-                $mask_clean = ltrim($input_mask, '/');
-                if (ctype_digit($mask_clean)) {
-                    $cidr = (int)$mask_clean;
-                    if ($cidr < 0 || $cidr > 32) {
-                        $error = 'CIDR prefix must be between 0 and 32.';
-                    } else {
-                        $result = calculate_subnet($input_ip, $cidr);
-                    }
-                } elseif (is_valid_mask_octet($mask_clean)) {
-                    $result = calculate_subnet($input_ip, mask_to_cidr($mask_clean));
-                } else {
-                    $error = 'Invalid netmask. Use CIDR (e.g. /24) or dotted-decimal (e.g. 255.255.255.0).';
-                }
-            }
+            $r = resolve_ipv4_input($get_ip, $get_mask);
+            $result     = $r['result'];
+            $error      = $r['error'];
+            $input_ip   = $r['ip'];
+            $input_mask = $r['mask'];
         }
     } else {
         $get_ipv6   = trim((string)($_GET['ipv6']   ?? ''));
         $get_prefix = trim((string)($_GET['prefix'] ?? ''));
         if ($get_ipv6 !== '' && $get_prefix !== '') {
-            $input_ipv6 = $get_ipv6; $input_prefix = $get_prefix;
-            // Server-side CIDR auto-detection for IPv6 (#27)
-            if (strpos($input_ipv6, '/') !== false && $input_prefix === '') {
-                [$input_ipv6, $input_prefix] = array_pad(explode('/', $input_ipv6, 2), 2, '');
-                $input_ipv6 = trim($input_ipv6); $input_prefix = trim($input_prefix);
-            }
-            if (!extension_loaded('gmp')) {
-                $error6 = 'IPv6 calculation requires the PHP GMP extension.';
-            } elseif (!is_valid_ipv6($input_ipv6)) {
-                $error6 = 'Invalid IPv6 address.';
-            } else {
-                $pfx = ltrim($input_prefix, '/');
-                if (!ctype_digit($pfx) || (int)$pfx < 0 || (int)$pfx > 128) {
-                    $error6 = 'Prefix must be between 0 and 128.';
-                } else {
-                    try {
-                        $result6 = calculate_subnet6($input_ipv6, (int)$pfx);
-                    } catch (\Exception $e) {
-                        $error6 = 'Calculation error: ' . $e->getMessage();
-                    }
-                }
-            }
+            $r = resolve_ipv6_input($get_ipv6, $get_prefix);
+            $result6      = $r['result6'];
+            $error6       = $r['error6'];
+            $input_ipv6   = $r['ip'];
+            $input_prefix = $r['prefix'];
         }
     }
 }
 
 // Build fixed background override style (avoids inline PHP inside CSS block — #32)
 $bg_override_style = '';
-if ($fixed_bg_color !== 'null' && $fixed_bg_color !== '' && preg_match('/^#[0-9a-fA-F]{3,8}$/', (string)$fixed_bg_color)) {
+if ($fixed_bg_color !== 'null' && $fixed_bg_color !== '' && preg_match('/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/', (string)$fixed_bg_color)) {
     $bg_override_style = ':root,html[data-theme="light"]{--color-bg:' . htmlspecialchars((string)$fixed_bg_color) . '}';
 }
 
@@ -679,9 +759,9 @@ if ($result) {
             font-family: 'Courier New', monospace;
             font-size: 0.75rem;
             flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            word-break: break-all;
+            overflow-wrap: anywhere;
+            user-select: all;
         }
 
         .share-copy {
@@ -827,13 +907,16 @@ if ($result) {
         }
     </style>
     <?php if ($bg_override_style) echo '<style>' . $bg_override_style . '</style>'; ?>
+    <?php if ($turnstile_active): ?>
+        <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <?php endif; ?>
 </head>
 <body>
 <div class="card">
     <div class="title-row">
         <img src="logo.svg" alt="Subnet Calculator logo" class="logo">
         <h1>Subnet Calculator</h1>
-        <span class="version">v0.7</span>
+        <span class="version">v0.8</span>
         <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode">
             <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
             <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -869,6 +952,12 @@ if ($result) {
                 <button type="submit">Calculate</button>
                 <a href="?" class="btn reset">Reset</a>
             </div>
+            <?php if ($form_protection !== 'none'): ?>
+                <input type="text" name="url" style="display:none" tabindex="-1" autocomplete="off" value="">
+            <?php endif; ?>
+            <?php if ($turnstile_active): ?>
+                <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars($turnstile_site_key) ?>" style="margin-top:0.75rem"></div>
+            <?php endif; ?>
         </form>
 
         <?php if ($error): ?>
@@ -975,6 +1064,12 @@ if ($result) {
                 <button type="submit">Calculate</button>
                 <a href="?tab=ipv6" class="btn reset">Reset</a>
             </div>
+            <?php if ($form_protection !== 'none'): ?>
+                <input type="text" name="url" style="display:none" tabindex="-1" autocomplete="off" value="">
+            <?php endif; ?>
+            <?php if ($turnstile_active): ?>
+                <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars($turnstile_site_key) ?>" style="margin-top:0.75rem"></div>
+            <?php endif; ?>
         </form>
 
         <?php if ($error6): ?>
@@ -1016,10 +1111,45 @@ if ($result) {
                 <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
             </div>
         <?php endif; ?>
+        <?php if ($result6): ?>
+            <div class="splitter">
+                <div class="splitter-title">Split Subnet</div>
+                <form method="post" class="splitter-form">
+                    <input type="hidden" name="tab" value="ipv6">
+                    <input type="hidden" name="ipv6" value="<?= htmlspecialchars($input_ipv6) ?>">
+                    <input type="hidden" name="prefix" value="<?= htmlspecialchars($input_prefix) ?>">
+                    <div class="splitter-row">
+                        <span class="splitter-label">Split into</span>
+                        <input type="text" name="split_prefix6" class="splitter-input"
+                               placeholder="/65" value="<?= htmlspecialchars($input_split_prefix6) ?>"
+                               autocomplete="off" spellcheck="false">
+                        <button type="submit" class="splitter-btn">Split</button>
+                    </div>
+                </form>
+                <?php if ($split_error6): ?>
+                    <div class="error" style="margin:0.75rem 1rem"><?= htmlspecialchars($split_error6) ?></div>
+                <?php elseif ($split_result6 && $split_result6['showing'] > 0): ?>
+                    <div class="split-list">
+                        <?php foreach ($split_result6['subnets'] as $s): ?>
+                            <div class="split-item" data-copy="<?= htmlspecialchars($s) ?>"><?= htmlspecialchars($s) ?></div>
+                        <?php endforeach; ?>
+                        <?php
+                            $total6   = $split_result6['total'];
+                            $showing6 = $split_result6['showing'];
+                            $has_more6 = is_numeric($total6) ? ($showing6 < (int)$total6) : true;
+                            $more_label6 = is_numeric($total6) ? number_format((int)$total6 - $showing6) : $total6 . ' total';
+                        ?>
+                        <?php if ($has_more6): ?>
+                            <div class="split-more">+&nbsp;<?= $more_label6 ?> more</div>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
     </div>
 
     <footer>
-        <a href="https://github.com/seanmousseau/Subnet-Calculator" target="_blank" rel="noopener">github.com/seanmousseau/Subnet-Calculator</a>
+        <a href="https://github.com/seanmousseau/Subnet-Calculator" target="_blank" rel="noopener noreferrer">github.com/seanmousseau/Subnet-Calculator</a>
     </footer>
 </div>
 
@@ -1052,7 +1182,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     });
 });
 
-// ── Copy to clipboard ────────────────────────────────────────────────────────
+// ── Copy to clipboard (with execCommand fallback for cross-origin iframes) ───
 function showToast(msg) {
     const t = document.getElementById('toast');
     t.textContent = msg;
@@ -1061,13 +1191,33 @@ function showToast(msg) {
     window._toastTimer = setTimeout(() => t.classList.remove('show'), 1500);
 }
 
+function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try { document.execCommand('copy'); showToast('Copied!'); } catch (e) { showToast('Copy failed'); }
+    document.body.removeChild(ta);
+}
+
+function copyText(text, successMsg) {
+    successMsg = successMsg || 'Copied!';
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => showToast(successMsg)).catch(() => fallbackCopy(text));
+    } else {
+        fallbackCopy(text);
+    }
+}
+
 document.querySelectorAll('.results').forEach(results => {
     results.addEventListener('click', e => {
         const row = e.target.closest('.result-row');
         if (!row) return;
         const val = row.querySelector('.result-value');
-        if (!val || !navigator.clipboard) return;
-        navigator.clipboard.writeText(val.textContent.trim()).then(() => showToast('Copied!'));
+        if (!val) return;
+        copyText(val.textContent.trim());
     });
 });
 
@@ -1078,16 +1228,13 @@ document.querySelectorAll('.share-url').forEach(el => {
 });
 document.querySelectorAll('.share-copy').forEach(btn => {
     btn.addEventListener('click', () => {
-        const url = _base + btn.dataset.copy;
-        if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => showToast('Link copied!'));
+        copyText(_base + btn.dataset.copy, 'Link copied!');
     });
 });
 
 // ── Subnet splitter: click to copy ──────────────────────────────────────────
 document.querySelectorAll('.split-item').forEach(item => {
-    item.addEventListener('click', () => {
-        if (navigator.clipboard) navigator.clipboard.writeText(item.dataset.copy).then(() => showToast('Copied!'));
-    });
+    item.addEventListener('click', () => copyText(item.dataset.copy));
 });
 
 // ── Input auto-detection (paste "192.168.1.0/24" into IP field) ──────────────
@@ -1121,13 +1268,25 @@ if (window.self !== window.top) {
     document.documentElement.classList.add('in-iframe');
     (function () {
         function postHeight() {
-            var h = Math.ceil(document.body.getBoundingClientRect().height);
+            var card = document.querySelector('.card');
+            var h = Math.ceil(Math.max(
+                card ? card.getBoundingClientRect().height : 0,
+                document.body.scrollHeight,
+                document.documentElement.scrollHeight
+            ));
             window.parent.postMessage({ type: 'sc-resize', height: h }, '*');
         }
         postHeight();
         if (window.ResizeObserver) {
-            new ResizeObserver(postHeight).observe(document.body);
+            var card = document.querySelector('.card');
+            if (card) new ResizeObserver(postHeight).observe(card);
+            document.querySelectorAll('.cf-turnstile').forEach(function (el) {
+                new ResizeObserver(postHeight).observe(el);
+            });
         }
+        // Timed safety-net: poll every 300 ms for 6 s to catch async widget renders
+        var polls = 0;
+        var timer = setInterval(function () { postHeight(); if (++polls >= 20) clearInterval(timer); }, 300);
     })();
 }
 </script>

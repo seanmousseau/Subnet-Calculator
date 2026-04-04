@@ -1,0 +1,10 @@
+# Deny direct HTTP access to config.php
+<Files "config.php">
+    Require all denied
+</Files>
+
+# OpenLiteSpeed / LiteSpeed fallback
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^config\.php$ - [F,L]
+</IfModule>
