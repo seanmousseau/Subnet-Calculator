@@ -75,13 +75,9 @@ The archive contains the contents of `Subnet-Calculator/` (i.e., `index.php`, `l
 
 ## Embedding
 
-The calculator automatically detects when it is running inside an iframe. No configuration is required — just embed it and add the host-side resize listener.
+The calculator automatically detects when it is running inside an iframe — no configuration is required. When embedded it removes body margins and padding, and reports its height to the parent page via `postMessage` so the iframe can resize to fit its content without scrollbars.
 
-When loaded in an iframe the page:
-- Removes body margins, padding, and overflow
-- Broadcasts its height to the parent window via `postMessage` whenever the content changes (form submit, tab switch, results shown/cleared)
-
-**Add this to your host page:**
+### Basic embed (auto-resize only)
 
 ```html
 <div style="width:100%; max-width:1200px; margin:0 auto;">
@@ -104,29 +100,54 @@ window.addEventListener('message', function (e) {
 </script>
 ```
 
-The `allow="clipboard-write"` attribute grants clipboard access inside the iframe. The calculator also includes an `execCommand` fallback for browsers that block clipboard access regardless.
+- Start the iframe at `height:0` — the calculator sends its real height as soon as it loads and on every content change (form submit, tab switch, results shown/cleared).
+- `allow="clipboard-write"` grants clipboard access inside the iframe. An `execCommand` fallback is included for browsers that block this.
+- The resize listener handles all subsequent height changes automatically — no polling or manual measurement needed.
 
-The iframe resizes automatically on load, form submission, tab switches, and any other content change — no polling or manual measurement required.
+### Embed with custom background colour
 
-### Setting the background colour from the parent page
+The parent page can set the calculator's background colour at runtime by sending a `sc-set-bg` postMessage **after** the iframe has finished loading. Sending the message before the iframe loads means the calculator's listener isn't running yet and the message is silently dropped — use the `load` event to guarantee timing.
 
-When the calculator is embedded in an iframe, the parent page can set the background colour at any time — without a server-side config change — by posting a `sc-set-bg` message to the iframe:
+```html
+<div style="width:100%; max-width:1200px; margin:0 auto;">
+  <iframe
+    id="scFrame"
+    src="https://your-domain.com/sc/index.php"
+    width="100%"
+    scrolling="no"
+    allow="clipboard-write"
+    style="border:none; display:block; height:0;"
+    loading="lazy">
+  </iframe>
+</div>
+<script>
+var scFrame = document.getElementById('scFrame');
 
-```javascript
-// Set a custom background colour
-document.getElementById('scFrame').contentWindow.postMessage({
+// Auto-resize: update iframe height whenever the calculator reports a change
+window.addEventListener('message', function (e) {
+  if (e.data && e.data.type === 'sc-resize') {
+    scFrame.style.height = e.data.height + 'px';
+  }
+});
+
+// Set background colour AFTER the iframe has fully loaded.
+// Do not call postMessage here — the iframe's listener isn't running yet.
+scFrame.addEventListener('load', function () {
+  scFrame.contentWindow.postMessage({
     type: 'sc-set-bg',
-    color: '#1a1a2e'   // any valid 3/4/6/8-digit hex colour
-}, '*');
-
-// Revert to the theme default (dark or light)
-document.getElementById('scFrame').contentWindow.postMessage({
-    type: 'sc-set-bg',
-    color: null
-}, '*');
+    color: '#ffffff'  // any 3, 4, 6, or 8-digit CSS hex colour
+  }, '*');
+});
+</script>
 ```
 
-Only valid CSS hex colours (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`) are accepted; invalid values are silently ignored.
+To revert to the calculator's default theme background (dark or light depending on the visitor's preference), pass `null` as the colour:
+
+```javascript
+scFrame.contentWindow.postMessage({ type: 'sc-set-bg', color: null }, '*');
+```
+
+Only valid CSS hex colours (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`) are accepted. Invalid values are silently ignored. This works independently of the server-side `$fixed_bg_color` config option.
 
 ## Example
 
