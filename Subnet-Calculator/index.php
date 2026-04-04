@@ -984,7 +984,7 @@ if ($result) {
                 <button type="submit">Calculate</button>
                 <a href="?" class="btn reset">Reset</a>
             </div>
-            <?php if ($form_protection !== 'none'): ?>
+            <?php if ($form_protection === 'honeypot'): ?>
                 <input type="text" name="url" class="sc-honeypot" tabindex="-1" autocomplete="off" value="">
             <?php endif; ?>
             <?php if ($turnstile_active): ?>
@@ -1098,7 +1098,7 @@ if ($result) {
                 <button type="submit">Calculate</button>
                 <a href="?tab=ipv6" class="btn reset">Reset</a>
             </div>
-            <?php if ($form_protection !== 'none'): ?>
+            <?php if ($form_protection === 'honeypot'): ?>
                 <input type="text" name="url" class="sc-honeypot" tabindex="-1" autocomplete="off" value="">
             <?php endif; ?>
             <?php if ($turnstile_active): ?>
