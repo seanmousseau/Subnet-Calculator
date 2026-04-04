@@ -1269,22 +1269,25 @@ if (window.self !== window.top) {
     (function () {
         function postHeight() {
             var card = document.querySelector('.card');
-            var h = card
-                ? Math.ceil(card.getBoundingClientRect().height)
-                : Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+            var cardH  = card ? card.getBoundingClientRect().height : 0;
+            var bodyH  = document.body.scrollHeight;
+            var docH   = document.documentElement.scrollHeight;
+            var h = Math.ceil(Math.max(cardH, bodyH, docH));
+            console.log('[sc-iframe] postHeight h=' + h + ' card=' + cardH + ' body=' + bodyH + ' doc=' + docH);
             var targetOrigin = document.referrer ? new URL(document.referrer).origin : '*';
             window.parent.postMessage({ type: 'sc-resize', height: h }, targetOrigin);
         }
         postHeight();
         if (window.ResizeObserver) {
-            // Observe .card for general content changes (results, errors, splitter)
             var card = document.querySelector('.card');
             if (card) new ResizeObserver(postHeight).observe(card);
-            // Observe each Turnstile widget div: fires when Cloudflare sets its dimensions
             document.querySelectorAll('.cf-turnstile').forEach(function (el) {
                 new ResizeObserver(postHeight).observe(el);
             });
         }
+        // Timed safety-net: poll every 300 ms for 6 s to catch async widget renders
+        var polls = 0;
+        var timer = setInterval(function () { postHeight(); if (++polls >= 20) clearInterval(timer); }, 300);
     })();
 }
 </script>
