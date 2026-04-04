@@ -1268,7 +1268,10 @@ if (window.self !== window.top) {
     document.documentElement.classList.add('in-iframe');
     (function () {
         function postHeight() {
-            var h = Math.ceil(document.body.getBoundingClientRect().height);
+            var h = Math.max(
+                document.body.scrollHeight,
+                document.documentElement.scrollHeight
+            );
             var targetOrigin = document.referrer ? new URL(document.referrer).origin : '*';
             window.parent.postMessage({ type: 'sc-resize', height: h }, targetOrigin);
         }
