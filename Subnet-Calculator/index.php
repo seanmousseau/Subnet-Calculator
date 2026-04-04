@@ -739,6 +739,15 @@ if ($result) {
             transition: background 0.15s, color 0.15s;
         }
         .theme-toggle:hover { background: var(--color-border); color: var(--color-text); }
+        .icon-moon { display: none; }
+        html[data-theme="light"] .icon-moon { display: block; }
+        html[data-theme="light"] .icon-sun  { display: none; }
+
+        /* Honeypot — always hidden regardless of CSS cascade */
+        .sc-honeypot { display: none !important; }
+
+        /* Turnstile container */
+        .cf-turnstile { margin-top: 0.75rem; }
 
         footer {
             margin-top: 1.25rem;
@@ -878,6 +887,8 @@ if ($result) {
         }
 
         .splitter-btn:hover { background: var(--color-border); color: var(--color-text); }
+        .splitter .error { margin: 0.75rem 1rem; }
+        .form-group-narrow { max-width: 120px; }
 
         .split-list {
             display: grid;
@@ -940,7 +951,7 @@ if ($result) {
         <span class="version">v0.10</span>
         <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode">
             <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-            <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         </button>
     </div>
 
@@ -974,10 +985,10 @@ if ($result) {
                 <a href="?" class="btn reset">Reset</a>
             </div>
             <?php if ($form_protection !== 'none'): ?>
-                <input type="text" name="url" style="display:none" tabindex="-1" autocomplete="off" value="">
+                <input type="text" name="url" class="sc-honeypot" tabindex="-1" autocomplete="off" value="">
             <?php endif; ?>
             <?php if ($turnstile_active): ?>
-                <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars($turnstile_site_key) ?>" style="margin-top:0.75rem"></div>
+                <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars($turnstile_site_key) ?>"></div>
             <?php endif; ?>
         </form>
 
@@ -1048,7 +1059,7 @@ if ($result) {
                     </div>
                 </form>
                 <?php if ($split_error): ?>
-                    <div class="error" style="margin:0.75rem 1rem"><?= htmlspecialchars($split_error) ?></div>
+                    <div class="error"><?= htmlspecialchars($split_error) ?></div>
                 <?php elseif ($split_result && $split_result['showing'] > 0): ?>
                     <div class="split-list">
                         <?php foreach ($split_result['subnets'] as $s): ?>
@@ -1075,7 +1086,7 @@ if ($result) {
                            value="<?= htmlspecialchars($input_ipv6) ?>"
                            autocomplete="off" spellcheck="false">
                 </div>
-                <div class="form-group" style="max-width:120px">
+                <div class="form-group form-group-narrow">
                     <label for="prefix">Prefix</label>
                     <input type="text" id="prefix" name="prefix"
                            placeholder="/64"
@@ -1088,10 +1099,10 @@ if ($result) {
                 <a href="?tab=ipv6" class="btn reset">Reset</a>
             </div>
             <?php if ($form_protection !== 'none'): ?>
-                <input type="text" name="url" style="display:none" tabindex="-1" autocomplete="off" value="">
+                <input type="text" name="url" class="sc-honeypot" tabindex="-1" autocomplete="off" value="">
             <?php endif; ?>
             <?php if ($turnstile_active): ?>
-                <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars($turnstile_site_key) ?>" style="margin-top:0.75rem"></div>
+                <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars($turnstile_site_key) ?>"></div>
             <?php endif; ?>
         </form>
 
@@ -1152,7 +1163,7 @@ if ($result) {
                     </div>
                 </form>
                 <?php if ($split_error6): ?>
-                    <div class="error" style="margin:0.75rem 1rem"><?= htmlspecialchars($split_error6) ?></div>
+                    <div class="error"><?= htmlspecialchars($split_error6) ?></div>
                 <?php elseif ($split_result6 && $split_result6['showing'] > 0): ?>
                     <div class="split-list">
                         <?php foreach ($split_result6['subnets'] as $s): ?>
@@ -1182,20 +1193,12 @@ if ($result) {
 
 <script nonce="<?= htmlspecialchars($csp_nonce) ?>">
 // ── Theme toggle ─────────────────────────────────────────────────────────────
-function syncThemeIcon() {
-    const light = document.documentElement.getAttribute('data-theme') === 'light';
-    document.querySelector('#theme-toggle .icon-sun').style.display  = light ? 'none' : '';
-    document.querySelector('#theme-toggle .icon-moon').style.display = light ? '' : 'none';
-}
-
+// Icon visibility is driven by CSS html[data-theme="light"] selectors — no JS needed.
 document.getElementById('theme-toggle').addEventListener('click', () => {
     const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
-    syncThemeIcon();
 });
-
-syncThemeIcon();
 
 // ── Tab switcher ─────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach(btn => {
