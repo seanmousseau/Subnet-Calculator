@@ -283,7 +283,6 @@ function turnstile_verify(string $token, string $secret, string $remoteip): bool
         CURLOPT_TIMEOUT        => 5,
     ]);
     $raw = curl_exec($ch);
-    curl_close($ch);
     $json = $raw ? json_decode($raw, true) : null;
     return (bool)($json['success'] ?? false);
 }
