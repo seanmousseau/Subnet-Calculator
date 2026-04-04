@@ -11,7 +11,9 @@ $form_protection      = 'none';
 $turnstile_site_key   = '';
 $turnstile_secret_key = '';
 $page_title           = 'Subnet Calculator';
+$page_description     = 'Free online subnet calculator for IPv4 and IPv6. Calculate network address, broadcast, netmask, host range, and split subnets.';
 $show_share_bar       = true;
+$frame_ancestors      = '*';
 
 if (file_exists(__DIR__ . '/config.php')) {
     require __DIR__ . '/config.php';
@@ -19,6 +21,7 @@ if (file_exists(__DIR__ . '/config.php')) {
 
 // Sanitise config values
 $split_max_subnets = max(1, min((int)$split_max_subnets, 256));
+$frame_ancestors   = preg_replace('/[\r\n]/', '', (string)$frame_ancestors);
 
 // ─── Security headers ─────────────────────────────────────────────────────────
 
@@ -33,7 +36,7 @@ $csp_style  = "'nonce-{$csp_nonce}'";
 $csp_frame = $turnstile_active
     ? "'self' https://challenges.cloudflare.com"
     : "'self'";
-header("Content-Security-Policy: default-src 'self'; base-uri 'self'; style-src {$csp_style}; script-src {$csp_script}; img-src 'self' data:; frame-src {$csp_frame}; frame-ancestors *");
+header("Content-Security-Policy: default-src 'self'; base-uri 'self'; style-src {$csp_style}; script-src {$csp_script}; img-src 'self' data:; frame-src {$csp_frame}; frame-ancestors {$frame_ancestors}");
 
 // ─── IPv4 ─────────────────────────────────────────────────────────────────────
 
@@ -441,6 +444,10 @@ if ($result) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="<?= htmlspecialchars($page_description) ?>">
+    <meta property="og:title"       content="<?= htmlspecialchars($page_title) ?>">
+    <meta property="og:description" content="<?= htmlspecialchars($page_description) ?>">
+    <meta property="og:type"        content="website">
     <title><?= htmlspecialchars($page_title) ?></title>
     <link rel="icon" type="image/svg+xml" href="logo.svg">
     <script nonce="<?= htmlspecialchars($csp_nonce) ?>">(function(){var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
@@ -525,7 +532,7 @@ if ($result) {
             margin-bottom: 1.25rem;
         }
 
-        .logo { width: 32px; height: 32px; flex-shrink: 0; }
+        .logo { width: 48px; height: 48px; flex-shrink: 0; }
 
         h1 { font-size: 1.5rem; font-weight: 700; color: var(--color-text-heading); }
 
@@ -927,6 +934,23 @@ if ($result) {
             .split-list { grid-template-columns: 1fr; }
         }
 
+        @media print {
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            html, body, .card {
+                background: #fff !important;
+                color: #000 !important;
+                box-shadow: none !important;
+                border: none !important;
+            }
+            .tab-row, .btn-row, .share-bar, .splitter-form,
+            .theme-toggle, .version, footer, .toast { display: none !important; }
+            .panel { display: block !important; }
+            .card { padding: 0; max-width: 100%; }
+            .result-row { border-bottom: 1px solid #ccc; }
+            .badge { border: 1px solid #999; }
+            .split-list { columns: 2; display: block; }
+        }
+
         html.in-iframe,
         html.in-iframe body {
             margin: 0;
@@ -948,7 +972,7 @@ if ($result) {
     <div class="title-row">
         <img src="logo.svg" alt="Subnet Calculator logo" class="logo">
         <h1><?= htmlspecialchars($page_title) ?></h1>
-        <span class="version">v0.10</span>
+        <span class="version">v0.11</span>
         <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode">
             <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
             <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -1297,14 +1321,14 @@ if (window.self !== window.top) {
     (function () {
         function postHeight() {
             var card = document.querySelector('.card');
-            var h = Math.ceil(Math.max(
-                card ? card.getBoundingClientRect().height : 0,
-                document.body.scrollHeight,
-                document.documentElement.scrollHeight
-            ));
+            // Use only the card's own height — body/document scrollHeight reflects
+            // the iframe's current (parent-set) height and never shrinks on Reset.
+            var h = card ? Math.ceil(card.getBoundingClientRect().height) : 0;
             window.parent.postMessage({ type: 'sc-resize', height: h }, '*');
         }
         postHeight();
+        requestAnimationFrame(function () { postHeight(); });
+        window.addEventListener('load', postHeight);
         if (window.ResizeObserver) {
             var card = document.querySelector('.card');
             if (card) new ResizeObserver(postHeight).observe(card);
