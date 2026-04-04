@@ -1268,16 +1268,27 @@ if (window.self !== window.top) {
     document.documentElement.classList.add('in-iframe');
     (function () {
         function postHeight() {
-            var h = Math.max(
-                document.body.scrollHeight,
-                document.documentElement.scrollHeight
-            );
+            var card = document.querySelector('.card');
+            var h = card
+                ? Math.ceil(card.getBoundingClientRect().height)
+                : Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
             var targetOrigin = document.referrer ? new URL(document.referrer).origin : '*';
             window.parent.postMessage({ type: 'sc-resize', height: h }, targetOrigin);
         }
         postHeight();
-        if (window.ResizeObserver) {
-            new ResizeObserver(postHeight).observe(document.body);
+        // Observe .card (not body) — body height is clamped to iframe viewport in overflow:hidden
+        var card = document.querySelector('.card');
+        if (card && window.ResizeObserver) {
+            new ResizeObserver(postHeight).observe(card);
+        }
+        // Catch Turnstile widget rendering: Cloudflare injects its iframe asynchronously
+        if (window.MutationObserver) {
+            document.querySelectorAll('.cf-turnstile').forEach(function (el) {
+                new MutationObserver(function (mutations, obs) {
+                    setTimeout(postHeight, 50);
+                    obs.disconnect();
+                }).observe(el, { childList: true, subtree: true });
+            });
         }
     })();
 }
