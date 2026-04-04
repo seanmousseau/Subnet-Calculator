@@ -284,13 +284,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ─── Form protection ─────────────────────────────────────────────────────────
     $form_blocked = false;
+    $is_splitter  = isset($_POST['split_prefix']) || isset($_POST['split_prefix6']);
 
-    if ($form_protection === 'honeypot') {
+    if (!$is_splitter && $form_protection === 'honeypot') {
         // Honeypot: silently ignore submissions where the hidden field is non-empty
         if (trim((string)($_POST['url'] ?? '')) !== '') {
             $form_blocked = true;
         }
-    } elseif ($form_protection === 'turnstile' && $turnstile_site_key !== '' && $turnstile_secret_key !== '') {
+    } elseif (!$is_splitter && $form_protection === 'turnstile' && $turnstile_site_key !== '' && $turnstile_secret_key !== '') {
         $token = trim((string)($_POST['cf-turnstile-response'] ?? ''));
         if ($token === '') {
             $form_blocked = true;
