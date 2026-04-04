@@ -1269,13 +1269,12 @@ if (window.self !== window.top) {
     (function () {
         function postHeight() {
             var card = document.querySelector('.card');
-            var cardH  = card ? card.getBoundingClientRect().height : 0;
-            var bodyH  = document.body.scrollHeight;
-            var docH   = document.documentElement.scrollHeight;
-            var h = Math.ceil(Math.max(cardH, bodyH, docH));
-            console.log('[sc-iframe] postHeight h=' + h + ' card=' + cardH + ' body=' + bodyH + ' doc=' + docH);
-            var targetOrigin = document.referrer ? new URL(document.referrer).origin : '*';
-            window.parent.postMessage({ type: 'sc-resize', height: h }, targetOrigin);
+            var h = Math.ceil(Math.max(
+                card ? card.getBoundingClientRect().height : 0,
+                document.body.scrollHeight,
+                document.documentElement.scrollHeight
+            ));
+            window.parent.postMessage({ type: 'sc-resize', height: h }, '*');
         }
         postHeight();
         if (window.ResizeObserver) {
