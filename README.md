@@ -18,13 +18,14 @@ A lightweight, web-based subnet calculator written in PHP supporting both IPv4 a
 **General**
 - IPv4 / IPv6 tab switcher
 - Reset button to clear inputs and results
-- Click any result row to copy the value to clipboard
+- Click any result row to copy the value to clipboard (with `execCommand` fallback for cross-origin iframes)
 - Light/dark mode toggle with `localStorage` persistence
 - Shareable URL bar — copy a link that auto-populates and calculates on load
-- Subnet splitter — split an IPv4 subnet into equal smaller subnets (configurable limit)
+- Subnet splitter — split an IPv4 **or** IPv6 subnet into equal smaller subnets (configurable limit)
+- Form protection: honeypot or Cloudflare Turnstile (configurable)
 - All colours configured via CSS custom properties; optional `$fixed_bg_color` override
 - iframe-friendly mode with automatic height reporting via `postMessage`
-- Single-file, minimal dependencies
+- Single-file app (`index.php`), minimal dependencies, external config via `config.php`
 
 ## Requirements
 
@@ -33,26 +34,41 @@ A lightweight, web-based subnet calculator written in PHP supporting both IPv4 a
 
 ## Usage
 
-Serve `index.php` with any PHP-capable web server:
+The application lives in the `Subnet-Calculator/` subfolder. Serve that directory with any PHP-capable web server:
 
 ```bash
 # Built-in PHP server
-php -S localhost:8080
+php -S localhost:8080 -t Subnet-Calculator/
 
-# Or drop into any Apache/Nginx/Caddy docroot
+# Or point Apache/Nginx/Caddy docroot at Subnet-Calculator/
 ```
 
 Then open `http://localhost:8080` in your browser.
 
 ## Configuration
 
-All tuneable values are declared at the top of `index.php` under the `// ─── Configuration ───` block:
+Copy `Subnet-Calculator/config.php.example` to `Subnet-Calculator/config.php` and edit as needed. `config.php` is excluded from git and is never overwritten by upgrades.
+
+All tuneable values with their defaults:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `$fixed_bg_color` | `'null'` | Pin the page background to a hex colour (e.g. `'#1a1a2e'`) regardless of light/dark mode. Leave as `'null'` to use the theme default. |
 | `$default_tab` | `'ipv4'` | Active tab on page load: `'ipv4'` or `'ipv6'`. |
-| `$split_max_subnets` | `16` | Maximum number of subnets shown in the subnet splitter results list. |
+| `$split_max_subnets` | `16` | Maximum number of subnets shown in the subnet splitter results list (1–256). |
+| `$form_protection` | `'none'` | Form protection mode: `'none'`, `'honeypot'`, or `'turnstile'`. |
+| `$turnstile_site_key` | `''` | Cloudflare Turnstile site key (required when `$form_protection = 'turnstile'`). |
+| `$turnstile_secret_key` | `''` | Cloudflare Turnstile secret key — **never exposed in HTML**. |
+
+## Downloads
+
+Pre-built release archives are available in `releases/`:
+
+| Version | File |
+|---------|------|
+| 0.8.0 | `releases/subnet-calculator-0.8.0.tar.gz` |
+
+The archive contains the contents of `Subnet-Calculator/` (i.e., `index.php`, `logo.svg`, `.htaccess`, `config.php.example`). Extract and deploy the app files directly to your docroot.
 
 ## Embedding
 
@@ -71,6 +87,7 @@ When loaded in an iframe the page:
     src="https://your-domain.com/sc/index.php"
     width="100%"
     scrolling="no"
+    allow="clipboard-write"
     style="border:none; display:block; height:0;"
     loading="lazy">
   </iframe>
@@ -83,6 +100,8 @@ window.addEventListener('message', function (e) {
 });
 </script>
 ```
+
+The `allow="clipboard-write"` attribute grants clipboard access inside the iframe. The calculator also includes an `execCommand` fallback for browsers that block clipboard access regardless.
 
 The iframe resizes automatically on load, form submission, tab switches, and any other content change — no polling or manual measurement required.
 
@@ -127,6 +146,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 | Version | Notes |
 |---------|-------|
+| 0.8 | IPv6 splitter, form protection, CGNAT, external config.php, subfolder layout, security headers, clipboard fallback, release bundle |
 | 0.7 | Config consolidation, `'null'`-safe bg color, iframe mode with postMessage |
 | 0.6 | Subnet splitter, fixed bg override, full share URL, CIDR-on-submit fix |
 | 0.5 | Light/dark mode toggle, address type badges, shareable URL |
