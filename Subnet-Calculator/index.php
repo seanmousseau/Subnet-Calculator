@@ -22,10 +22,14 @@ $split_max_subnets = max(1, min((int)$split_max_subnets, 256));
 
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
-$csp_script = ($form_protection === 'turnstile' && $turnstile_site_key !== '')
+$turnstile_active = ($turnstile_active && $turnstile_secret_key !== '');
+$csp_script = $turnstile_active
     ? "'self' 'unsafe-inline' https://challenges.cloudflare.com"
     : "'self' 'unsafe-inline'";
-header("Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src {$csp_script}; img-src 'self' data:; frame-ancestors *");
+$csp_frame = $turnstile_active
+    ? "'self' https://challenges.cloudflare.com"
+    : "'self'";
+header("Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src {$csp_script}; img-src 'self' data:; frame-src {$csp_frame}; frame-ancestors *");
 
 // ─── IPv4 ─────────────────────────────────────────────────────────────────────
 
@@ -291,7 +295,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
             $form_blocked = true;
         }
-    } elseif (!$is_splitter && $form_protection === 'turnstile' && $turnstile_site_key !== '' && $turnstile_secret_key !== '') {
+    } elseif (!$is_splitter && $turnstile_active) {
         $token = trim((string)($_POST['cf-turnstile-response'] ?? ''));
         if ($token === '') {
             $form_blocked = true;
@@ -903,7 +907,7 @@ if ($result) {
         }
     </style>
     <?php if ($bg_override_style) echo '<style>' . $bg_override_style . '</style>'; ?>
-    <?php if ($form_protection === 'turnstile' && $turnstile_site_key !== ''): ?>
+    <?php if ($turnstile_active): ?>
         <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <?php endif; ?>
 </head>
@@ -951,7 +955,7 @@ if ($result) {
             <?php if ($form_protection !== 'none'): ?>
                 <input type="text" name="url" style="display:none" tabindex="-1" autocomplete="off" value="">
             <?php endif; ?>
-            <?php if ($form_protection === 'turnstile' && $turnstile_site_key !== ''): ?>
+            <?php if ($turnstile_active): ?>
                 <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars($turnstile_site_key) ?>" style="margin-top:0.75rem"></div>
             <?php endif; ?>
         </form>
@@ -1063,7 +1067,7 @@ if ($result) {
             <?php if ($form_protection !== 'none'): ?>
                 <input type="text" name="url" style="display:none" tabindex="-1" autocomplete="off" value="">
             <?php endif; ?>
-            <?php if ($form_protection === 'turnstile' && $turnstile_site_key !== ''): ?>
+            <?php if ($turnstile_active): ?>
                 <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars($turnstile_site_key) ?>" style="margin-top:0.75rem"></div>
             <?php endif; ?>
         </form>
