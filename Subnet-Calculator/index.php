@@ -290,7 +290,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
             $form_blocked = true;
         }
-    } elseif ($form_protection === 'turnstile' && $turnstile_secret_key !== '') {
+    } elseif ($form_protection === 'turnstile' && $turnstile_site_key !== '' && $turnstile_secret_key !== '') {
         $token = trim((string)($_POST['cf-turnstile-response'] ?? ''));
         if ($token === '') {
             $form_blocked = true;
