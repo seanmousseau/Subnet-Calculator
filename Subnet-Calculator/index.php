@@ -22,7 +22,7 @@ $split_max_subnets = max(1, min((int)$split_max_subnets, 256));
 
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
-$turnstile_active = ($turnstile_active && $turnstile_secret_key !== '');
+$turnstile_active = ($form_protection === 'turnstile' && $turnstile_site_key !== '' && $turnstile_secret_key !== '');
 $csp_script = $turnstile_active
     ? "'self' 'unsafe-inline' https://challenges.cloudflare.com"
     : "'self' 'unsafe-inline'";
