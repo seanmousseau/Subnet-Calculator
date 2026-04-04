@@ -23,6 +23,14 @@ $turnstile_secret_key = '';
 // Page title shown in the browser tab and <h1> heading.
 $page_title = 'Subnet Calculator';
 
+// Meta description and Open Graph description for share URL previews.
+$page_description = 'Free online subnet calculator for IPv4 and IPv6. Calculate network address, broadcast, netmask, host range, and split subnets.';
+
 // Show the shareable URL bar below results.
 // Set to false to hide it (useful when embedded in an iframe).
 $show_share_bar = true;
+
+// Which origins may embed this page in an iframe (frame-ancestors CSP directive).
+// '*' = any origin (default); "'none'" = block all embedding;
+// or a space-separated list of origins, e.g. 'https://mysite.com'.
+$frame_ancestors = '*';

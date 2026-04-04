@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11] - 2026-04-04
+
+### Added
+- `$frame_ancestors` config variable: control which origins may embed the page in an iframe via the `frame-ancestors` CSP directive (default `*`); useful to lock down embedding to specific domains — closes #73
+- `$page_description` config variable: sets `<meta name="description">`, `og:description`, and `og:title` Open Graph tags for richer share previews — closes #75
+- Print stylesheet: hides navigation, buttons, share bar, and splitter form; forces white background and black text; preserves badge colours via `print-color-adjust: exact`; splits subnet list into 2 columns — closes #74
+
+### Changed
+- Logo size increased from 32 × 32 px to 48 × 48 px for better visibility alongside the app title — closes #72
+
+### Fixed
+- iframe height now correctly shrinks after the Reset button is pressed: `postHeight()` is now called via `requestAnimationFrame` (after first paint) and again on `window.load` (after all resources), ensuring the measurement reflects the settled post-reset layout — closes #71
+
 ## [0.10] - 2026-04-04
 
 ### Added
