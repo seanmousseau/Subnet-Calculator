@@ -1321,11 +1321,9 @@ if (window.self !== window.top) {
     (function () {
         function postHeight() {
             var card = document.querySelector('.card');
-            var h = Math.ceil(Math.max(
-                card ? card.getBoundingClientRect().height : 0,
-                document.body.scrollHeight,
-                document.documentElement.scrollHeight
-            ));
+            // Use only the card's own height — body/document scrollHeight reflects
+            // the iframe's current (parent-set) height and never shrinks on Reset.
+            var h = card ? Math.ceil(card.getBoundingClientRect().height) : 0;
             window.parent.postMessage({ type: 'sc-resize', height: h }, '*');
         }
         postHeight();
