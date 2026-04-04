@@ -29,7 +29,7 @@ $csp_script = $turnstile_active
 $csp_frame = $turnstile_active
     ? "'self' https://challenges.cloudflare.com"
     : "'self'";
-header("Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src {$csp_script}; img-src 'self' data:; frame-src {$csp_frame}; frame-ancestors *");
+header("Content-Security-Policy: default-src 'self'; base-uri 'self'; style-src 'self' 'unsafe-inline'; script-src {$csp_script}; img-src 'self' data:; frame-src {$csp_frame}; frame-ancestors *");
 
 // ─── IPv4 ─────────────────────────────────────────────────────────────────────
 
@@ -268,9 +268,30 @@ function resolve_ipv6_input(string $ip, string $prefix): array {
     return ['result6' => $result6, 'error6' => $error6, 'ip' => $ip, 'prefix' => $prefix];
 }
 
+// ─── Turnstile verification ───────────────────────────────────────────────────
+
+function turnstile_verify(string $token, string $secret, string $remoteip): bool {
+    if (!function_exists('curl_init')) {
+        error_log('sc Turnstile: curl extension not available — verification skipped');
+        return true; // fail open: better than silently blocking all users
+    }
+    $ch = curl_init('https://challenges.cloudflare.com/turnstile/v0/siteverify');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => http_build_query(['secret' => $secret, 'response' => $token, 'remoteip' => $remoteip]),
+        CURLOPT_TIMEOUT        => 5,
+    ]);
+    $raw = curl_exec($ch);
+    curl_close($ch);
+    $json = $raw ? json_decode($raw, true) : null;
+    return (bool)($json['success'] ?? false);
+}
+
 // ─── Request handling ─────────────────────────────────────────────────────────
 
-$active_tab = ($_GET['tab'] ?? '') === 'ipv6' ? 'ipv6' : $default_tab;
+$get_tab    = $_GET['tab'] ?? $default_tab;
+$active_tab = $get_tab === 'ipv6' ? 'ipv6' : 'ipv4';
 
 $result = $error = null;
 $input_ip = $input_mask = '';
@@ -284,7 +305,8 @@ $input_split_prefix  = '';
 $input_split_prefix6 = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $active_tab = ($_POST['tab'] ?? $default_tab) === 'ipv6' ? 'ipv6' : $default_tab;
+    $post_tab   = $_POST['tab'] ?? $default_tab;
+    $active_tab = $post_tab === 'ipv6' ? 'ipv6' : 'ipv4';
 
     // ─── Form protection ─────────────────────────────────────────────────────────
     $form_blocked = false;
@@ -302,19 +324,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($active_tab === 'ipv6') { $error6 = 'Please complete the CAPTCHA.'; }
             else { $error = 'Please complete the CAPTCHA.'; }
         } else {
-            $ctx = stream_context_create(['http' => [
-                'method'  => 'POST',
-                'header'  => 'Content-Type: application/x-www-form-urlencoded',
-                'content' => http_build_query([
-                    'secret'   => $turnstile_secret_key,
-                    'response' => $token,
-                    'remoteip' => $_SERVER['REMOTE_ADDR'] ?? '',
-                ]),
-                'timeout' => 5,
-            ]]);
-            $raw = @file_get_contents('https://challenges.cloudflare.com/turnstile/v0/siteverify', false, $ctx);
-            $json = $raw !== false ? json_decode($raw, true) : null;
-            if (!($json['success'] ?? false)) {
+            if (!turnstile_verify($token, $turnstile_secret_key, $_SERVER['REMOTE_ADDR'] ?? '')) {
                 $form_blocked = true;
                 if ($active_tab === 'ipv6') { $error6 = 'CAPTCHA verification failed. Please try again.'; }
                 else { $error = 'CAPTCHA verification failed. Please try again.'; }
@@ -410,7 +420,7 @@ if ($fixed_bg_color !== 'null' && $fixed_bg_color !== '' && preg_match('/^#([0-9
 // Build shareable URL
 $share_url = '';
 if ($result) {
-    $share_url = '?' . http_build_query(['ip' => $input_ip, 'mask' => ltrim($result['netmask_cidr'], '/')]);
+    $share_url = '?' . http_build_query(['tab' => 'ipv4', 'ip' => $input_ip, 'mask' => ltrim($result['netmask_cidr'], '/')]);
 } elseif ($result6) {
     $share_url = '?' . http_build_query(['tab' => 'ipv6', 'ipv6' => $input_ipv6, 'prefix' => ltrim($result6['prefix'], '/')]);
 }
@@ -916,7 +926,7 @@ if ($result) {
     <div class="title-row">
         <img src="logo.svg" alt="Subnet Calculator logo" class="logo">
         <h1>Subnet Calculator</h1>
-        <span class="version">v0.8</span>
+        <span class="version">v0.9</span>
         <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode">
             <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
             <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -1283,11 +1293,24 @@ if (window.self !== window.top) {
             document.querySelectorAll('.cf-turnstile').forEach(function (el) {
                 new ResizeObserver(postHeight).observe(el);
             });
+        } else {
+            // Fallback for browsers without ResizeObserver: poll 300 ms × 20 = 6 s
+            var polls = 0;
+            var timer = setInterval(function () { postHeight(); if (++polls >= 20) clearInterval(timer); }, 300);
         }
-        // Timed safety-net: poll every 300 ms for 6 s to catch async widget renders
-        var polls = 0;
-        var timer = setInterval(function () { postHeight(); if (++polls >= 20) clearInterval(timer); }, 300);
     })();
+    // Listen for background colour commands from the parent page
+    window.addEventListener('message', function (e) {
+        if (!e.data || e.data.type !== 'sc-set-bg') return;
+        var color = e.data.color;
+        if (color && color !== 'null' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color)) {
+            document.documentElement.style.setProperty('--color-bg', color);
+            document.body.style.backgroundColor = color;
+        } else {
+            document.documentElement.style.removeProperty('--color-bg');
+            document.body.style.backgroundColor = '';
+        }
+    });
 }
 </script>
 </body>

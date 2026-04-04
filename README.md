@@ -68,6 +68,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File |
 |---------|------|
+| 0.9.0 | `releases/subnet-calculator-0.9.0.tar.gz` |
 | 0.8.0 | `releases/subnet-calculator-0.8.0.tar.gz` |
 
 The archive contains the contents of `Subnet-Calculator/` (i.e., `index.php`, `logo.svg`, `.htaccess`, `config.php.example`). Extract and deploy the app files directly to your docroot.
@@ -106,6 +107,26 @@ window.addEventListener('message', function (e) {
 The `allow="clipboard-write"` attribute grants clipboard access inside the iframe. The calculator also includes an `execCommand` fallback for browsers that block clipboard access regardless.
 
 The iframe resizes automatically on load, form submission, tab switches, and any other content change — no polling or manual measurement required.
+
+### Setting the background colour from the parent page
+
+When the calculator is embedded in an iframe, the parent page can set the background colour at any time — without a server-side config change — by posting a `sc-set-bg` message to the iframe:
+
+```javascript
+// Set a custom background colour
+document.getElementById('scFrame').contentWindow.postMessage({
+    type: 'sc-set-bg',
+    color: '#1a1a2e'   // any valid 3/4/6/8-digit hex colour
+}, '*');
+
+// Revert to the theme default (dark or light)
+document.getElementById('scFrame').contentWindow.postMessage({
+    type: 'sc-set-bg',
+    color: null
+}, '*');
+```
+
+Only valid CSS hex colours (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`) are accepted; invalid values are silently ignored.
 
 ## Example
 
@@ -148,6 +169,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 | Version | Notes |
 |---------|-------|
+| 0.9 | Tab bug fix (`$default_tab=ipv6`), share URL pinning, Turnstile curl fix, CSP `base-uri`, iframe bg postMessage |
 | 0.8 | IPv6 splitter, form protection, CGNAT, external config.php, subfolder layout, security headers, clipboard fallback, release bundle |
 | 0.7 | Config consolidation, `'null'`-safe bg color, iframe mode with postMessage |
 | 0.6 | Subnet splitter, fixed bg override, full share URL, CIDR-on-submit fix |
