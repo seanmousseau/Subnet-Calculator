@@ -14,25 +14,6 @@ php -l Subnet-Calculator/index.php
 
 The entire application is `Subnet-Calculator/index.php`.
 
-## Testing
-
-```bash
-# Install dependencies (first time)
-npm install
-npx playwright install --with-deps chromium
-
-# Run all tests (starts PHP dev server automatically)
-npm test
-
-# Run tests with browser visible
-npm run test:headed
-
-# Run specific test file
-npx playwright test tests/ipv4-calculation.spec.js
-```
-
-Playwright tests live in `tests/` and run against a PHP dev server on localhost:8080 (auto-started by Playwright config).
-
 ## Repository layout
 
 ```
@@ -42,9 +23,6 @@ Subnet-Calculator/      ← docroot (serve this directory)
   .htaccess             ← blocks direct access to config.php
   config.php.example    ← copy to config.php to override defaults
   config.php            ← local overrides (git-ignored)
-tests/                  ← Playwright end-to-end tests
-playwright.config.js    ← Playwright configuration
-package.json            ← Node.js deps (Playwright)
 releases/               ← versioned release tarballs
 README.md
 CHANGELOG.md
@@ -52,8 +30,6 @@ CONTRIBUTING.md
 SECURITY.md
 LICENSE
 .github/
-  workflows/
-    playwright.yml      ← CI workflow for Playwright tests
 .claude/
 ```
 
