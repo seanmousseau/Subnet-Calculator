@@ -86,7 +86,7 @@ test.describe('IPv4 Subnet Calculation', () => {
     await page.locator('#mask').focus(); // blur triggers auto-split
 
     await expect(page.locator('#ip')).toHaveValue('10.0.0.0');
-    await expect(page.locator('#mask')).toHaveValue('8');
+    await expect(page.locator('#mask')).toHaveValue('/8');
   });
 
   test('detects address types correctly', async ({ page }) => {

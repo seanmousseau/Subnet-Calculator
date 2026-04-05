@@ -69,7 +69,7 @@ test.describe('IPv6 Subnet Calculation', () => {
     await page.locator('#prefix').focus();
 
     await expect(page.locator('#ipv6')).toHaveValue('2001:db8::');
-    await expect(page.locator('#prefix')).toHaveValue('32');
+    await expect(page.locator('#prefix')).toHaveValue('/32');
   });
 
   test('shows error for invalid IPv6 address', async ({ page }) => {

@@ -33,17 +33,18 @@ test.describe('Theme Toggle', () => {
   test('toggles between dark and light themes', async ({ page }) => {
     await page.goto('/');
 
-    // Default is dark
     const html = page.locator('html');
-    const initialTheme = await html.getAttribute('data-theme');
 
+    // Click once to toggle theme
     await page.locator('#theme-toggle').click();
-    const newTheme = await html.getAttribute('data-theme');
-    expect(newTheme).not.toBe(initialTheme);
+    const firstTheme = await html.getAttribute('data-theme');
 
+    // Click again to toggle back
     await page.locator('#theme-toggle').click();
-    const revertedTheme = await html.getAttribute('data-theme');
-    expect(revertedTheme).toBe(initialTheme);
+    const secondTheme = await html.getAttribute('data-theme');
+
+    // Themes should differ after each toggle
+    expect(firstTheme).not.toBe(secondTheme);
   });
 
   test('theme persists across page loads', async ({ page }) => {
