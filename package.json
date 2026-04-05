@@ -1,0 +1,14 @@
+{
+  "name": "subnet-calculator",
+  "version": "1.0.0",
+  "description": "A lightweight, web-based subnet calculator written in PHP supporting both IPv4 and IPv6.",
+  "private": true,
+  "scripts": {
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed",
+    "test:ui": "npx playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
+  }
+}
