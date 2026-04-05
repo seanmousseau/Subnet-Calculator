@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12] - 2026-04-05
+
+### Added
+- `X-Frame-Options` fallback header: emits `DENY` or `SAMEORIGIN` when `$frame_ancestors` is set to `'none'` or `'self'` respectively, providing iframe embedding protection for browsers that don't support CSP `frame-ancestors` (e.g. IE11) — closes #83
+- Keyboard accessibility for copy targets: result rows and split items now have `tabindex="0"`, `role="button"`, and respond to Enter/Space keydown events, making copy-to-clipboard available to keyboard-only and assistive technology users — closes #81
+
+### Changed
+- IPv6 panel HTML consolidated into a single `if ($result6)` block, matching the structure of the IPv4 panel — closes #82
+
+### Fixed
+- Print stylesheet: `.tab-row` corrected to `.tabs`; `.panel` changed to `.panel.active` so only the active panel prints; `body { min-height: 0 }` added to prevent excess whitespace — closes #77
+- IPv6 transition mechanism badge types (`IPv4-mapped`, `Teredo`, `6to4`) now correctly map to the blue `doc` badge class instead of falling through to generic grey — closes #78
+
+### Security
+- `$frame_ancestors` config value is now validated against a whitelist pattern (origins, `*`, `'none'`, `'self'`); invalid values are rejected and reset to `*` with an error_log warning, preventing CSP header injection — closes #79
+- `$form_protection` and `$default_tab` config values are now validated; invalid values are reset to safe defaults with an error_log warning — closes #80
+
 ## [0.11] - 2026-04-04
 
 ### Added

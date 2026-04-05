@@ -72,6 +72,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File |
 |---------|------|
+| 0.12.0 | `releases/subnet-calculator-0.12.0.tar.gz` |
 | 0.11.0 | `releases/subnet-calculator-0.11.0.tar.gz` |
 | 0.10.0 | `releases/subnet-calculator-0.10.0.tar.gz` |
 | 0.9.0 | `releases/subnet-calculator-0.9.0.tar.gz` |
@@ -196,6 +197,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 | Version | Notes |
 |---------|-------|
+| 0.12 | Print stylesheet fixes, IPv6 badge types, `$frame_ancestors` validation, config validation, `X-Frame-Options` header, keyboard accessibility, IPv6 panel consolidation |
 | 0.11 | `$frame_ancestors`, Open Graph tags, larger logo (48 px), print stylesheet, iframe height shrink fix |
 | 0.10 | Nonce-based CSP (removes `unsafe-inline`), `$page_title`, `$show_share_bar`, missing IPv4 address types (Benchmarking, IETF Reserved) |
 | 0.9 | Tab bug fix (`$default_tab=ipv6`), share URL pinning, Turnstile curl fix, CSP `base-uri`, iframe bg postMessage |

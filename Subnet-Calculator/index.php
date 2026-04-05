@@ -21,12 +21,31 @@ if (file_exists(__DIR__ . '/config.php')) {
 
 // Sanitise config values
 $split_max_subnets = max(1, min((int)$split_max_subnets, 256));
-$frame_ancestors   = preg_replace('/[\r\n]/', '', (string)$frame_ancestors);
+$fa = trim(preg_replace('/[\r\n]/', '', (string)$frame_ancestors));
+if (!preg_match('/^(\*|\'none\'|\'self\'|(\s*(https?:\/\/[^\s;,]+))+)$/', $fa)) {
+    error_log('sc: invalid $frame_ancestors value — reset to *');
+    $frame_ancestors = '*';
+} else {
+    $frame_ancestors = $fa;
+}
+if (!in_array($form_protection, ['none', 'honeypot', 'turnstile'], true)) {
+    error_log('sc: invalid $form_protection "' . $form_protection . '" — reset to "none"');
+    $form_protection = 'none';
+}
+if (!in_array($default_tab, ['ipv4', 'ipv6'], true)) {
+    error_log('sc: invalid $default_tab "' . $default_tab . '" — reset to "ipv4"');
+    $default_tab = 'ipv4';
+}
 
 // ─── Security headers ─────────────────────────────────────────────────────────
 
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
+if ($frame_ancestors === "'none'") {
+    header('X-Frame-Options: DENY');
+} elseif ($frame_ancestors === "'self'") {
+    header('X-Frame-Options: SAMEORIGIN');
+}
 $csp_nonce    = base64_encode(random_bytes(16));
 $turnstile_active = ($form_protection === 'turnstile' && $turnstile_site_key !== '' && $turnstile_secret_key !== '');
 $csp_script = $turnstile_active
@@ -221,6 +240,9 @@ function type_badge_class(string $type): string {
         'This Network'  => 'loopback',
         'Benchmarking'  => 'other',
         'IETF Reserved' => 'other',
+        'IPv4-mapped'   => 'doc',
+        'Teredo'        => 'doc',
+        '6to4'          => 'doc',
     ];
     return $map[$type] ?? 'other';
 }
@@ -942,9 +964,10 @@ if ($result) {
                 box-shadow: none !important;
                 border: none !important;
             }
-            .tab-row, .btn-row, .share-bar, .splitter-form,
+            body { min-height: 0; }
+            .tabs, .btn-row, .share-bar, .splitter-form,
             .theme-toggle, .version, footer, .toast { display: none !important; }
-            .panel { display: block !important; }
+            .panel.active { display: block !important; }
             .card { padding: 0; max-width: 100%; }
             .result-row { border-bottom: 1px solid #ccc; }
             .badge { border: 1px solid #999; }
@@ -972,7 +995,7 @@ if ($result) {
     <div class="title-row">
         <img src="logo.svg" alt="Subnet Calculator logo" class="logo">
         <h1><?= htmlspecialchars($page_title) ?></h1>
-        <span class="version">v0.11</span>
+        <span class="version">v0.12</span>
         <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode">
             <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
             <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -1023,35 +1046,35 @@ if ($result) {
         <?php if ($result): ?>
             <div class="results">
                 <div class="results-header">Results</div>
-                <div class="result-row" title="Click to copy">
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Subnet (CIDR)</span>
                     <span class="result-value"><?= htmlspecialchars($result['network_cidr']) ?></span>
                 </div>
-                <div class="result-row" title="Click to copy">
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Netmask (CIDR)</span>
                     <span class="result-value"><?= htmlspecialchars($result['netmask_cidr']) ?></span>
                 </div>
-                <div class="result-row" title="Click to copy">
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Netmask (Octet)</span>
                     <span class="result-value"><?= htmlspecialchars($result['netmask_octet']) ?></span>
                 </div>
-                <div class="result-row" title="Click to copy">
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Wildcard Mask</span>
                     <span class="result-value"><?= htmlspecialchars($result['wildcard']) ?></span>
                 </div>
-                <div class="result-row" title="Click to copy">
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">First Usable IP</span>
                     <span class="result-value"><?= htmlspecialchars($result['first_usable']) ?></span>
                 </div>
-                <div class="result-row" title="Click to copy">
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Last Usable IP</span>
                     <span class="result-value"><?= htmlspecialchars($result['last_usable']) ?></span>
                 </div>
-                <div class="result-row" title="Click to copy">
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Broadcast IP</span>
                     <span class="result-value"><?= htmlspecialchars($result['broadcast']) ?></span>
                 </div>
-                <div class="result-row hosts-row" title="Click to copy">
+                <div class="result-row hosts-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Usable IPs</span>
                     <span class="result-value"><?= number_format($result['usable_hosts']) ?></span>
                 </div>
@@ -1087,7 +1110,7 @@ if ($result) {
                 <?php elseif ($split_result && $split_result['showing'] > 0): ?>
                     <div class="split-list">
                         <?php foreach ($split_result['subnets'] as $s): ?>
-                            <div class="split-item" data-copy="<?= htmlspecialchars($s) ?>"><?= htmlspecialchars($s) ?></div>
+                            <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>"><?= htmlspecialchars($s) ?></div>
                         <?php endforeach; ?>
                         <?php if ($split_result['total'] > $split_max_subnets): ?>
                             <div class="split-more">+ <?= number_format($split_result['total'] - $split_max_subnets) ?> more</div>
@@ -1137,23 +1160,23 @@ if ($result) {
         <?php if ($result6): ?>
             <div class="results">
                 <div class="results-header">Results</div>
-                <div class="result-row" title="Click to copy">
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Network (CIDR)</span>
                     <span class="result-value"><?= htmlspecialchars($result6['network_cidr']) ?></span>
                 </div>
-                <div class="result-row" title="Click to copy">
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Prefix Length</span>
                     <span class="result-value"><?= htmlspecialchars($result6['prefix']) ?></span>
                 </div>
-                <div class="result-row" title="Click to copy">
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">First IP</span>
                     <span class="result-value"><?= htmlspecialchars($result6['first_ip']) ?></span>
                 </div>
-                <div class="result-row" title="Click to copy">
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Last IP</span>
                     <span class="result-value"><?= htmlspecialchars($result6['last_ip']) ?></span>
                 </div>
-                <div class="result-row hosts-row" title="Click to copy">
+                <div class="result-row hosts-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Total Addresses</span>
                     <span class="result-value"><?= htmlspecialchars($result6['total']) ?></span>
                 </div>
@@ -1170,8 +1193,6 @@ if ($result) {
                 <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
             </div>
             <?php endif; ?>
-        <?php endif; ?>
-        <?php if ($result6): ?>
             <div class="splitter">
                 <div class="splitter-title">Split Subnet</div>
                 <form method="post" class="splitter-form">
@@ -1191,7 +1212,7 @@ if ($result) {
                 <?php elseif ($split_result6 && $split_result6['showing'] > 0): ?>
                     <div class="split-list">
                         <?php foreach ($split_result6['subnets'] as $s): ?>
-                            <div class="split-item" data-copy="<?= htmlspecialchars($s) ?>"><?= htmlspecialchars($s) ?></div>
+                            <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>"><?= htmlspecialchars($s) ?></div>
                         <?php endforeach; ?>
                         <?php
                             $total6   = $split_result6['total'];
@@ -1287,6 +1308,16 @@ document.querySelectorAll('.share-copy').forEach(btn => {
 // ── Subnet splitter: click to copy ──────────────────────────────────────────
 document.querySelectorAll('.split-item').forEach(item => {
     item.addEventListener('click', () => copyText(item.dataset.copy));
+});
+
+// ── Keyboard activation for copy targets (result rows + split items) ─────────
+document.querySelectorAll('.result-row[tabindex], .split-item').forEach(function (el) {
+    el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            el.click();
+        }
+    });
 });
 
 // ── Input auto-detection (paste "192.168.1.0/24" into IP field) ──────────────
