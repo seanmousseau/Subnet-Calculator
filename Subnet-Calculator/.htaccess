@@ -41,9 +41,9 @@
     # Deployment artefacts
     RewriteRule \.(tar\.gz|tar|gz|zip)$ - [F,L]
 
-    # Protect subdirectories added in v1.1.0 (includes/, templates/, assets/)
+    # Protect PHP source subdirectories — assets/ is intentionally public
     # Belt-and-suspenders: each subdirectory also has its own .htaccess
-    RewriteRule ^(includes|templates|assets)/ - [F,L]
+    RewriteRule ^(includes|templates)/ - [F,L]
 </IfModule>
 
 # -----------------------------------------------------------------------
