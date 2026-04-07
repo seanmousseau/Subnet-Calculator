@@ -1426,7 +1426,24 @@ autoFocusActive();
 if (window.self !== window.top) {
     document.documentElement.classList.add('in-iframe');
     var _parentOrigin = (function () {
-        try { return new URL(document.referrer).origin; } catch (e) { return null; }
+        // ancestorOrigins is always accurate (Chrome/Edge); unaffected by navigation
+        if (window.location.ancestorOrigins && window.location.ancestorOrigins.length) {
+            return window.location.ancestorOrigins[0];
+        }
+        // Firefox: persist the parent origin in sessionStorage so it
+        // survives same-origin form-submit navigations within the iframe
+        try {
+            var stored = sessionStorage.getItem('_sc_parent_origin');
+            if (stored) return stored;
+        } catch (e) {}
+        try {
+            var o = new URL(document.referrer).origin;
+            if (o !== window.location.origin) {
+                try { sessionStorage.setItem('_sc_parent_origin', o); } catch (e) {}
+                return o;
+            }
+        } catch (e) {}
+        return null;
     })();
     (function () {
         function postHeight() {
