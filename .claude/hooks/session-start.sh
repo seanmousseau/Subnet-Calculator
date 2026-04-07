@@ -33,6 +33,14 @@ if php -r "exit(extension_loaded('gmp') ? 0 : 1);" 2>/dev/null; then
   echo "PHP GMP extension already loaded."
 else
   echo "Installing PHP GMP extension..."
+  # ppa.launchpadcontent.net (the PPA CDN) is blocked in Claude Code remote sessions.
+  # ppa.launchpad.net (the PPA metadata/origin server) is accessible.
+  # Rewrite the ondrej apt source URI before installing so apt can reach the packages.
+  ONDREJ_SOURCE="/etc/apt/sources.list.d/ondrej-ubuntu-php-noble.sources"
+  if [ -f "$ONDREJ_SOURCE" ]; then
+    sed -i 's|ppa\.launchpadcontent\.net|ppa.launchpad.net|g' "$ONDREJ_SOURCE" 2>/dev/null || true
+    apt-get update -qq 2>/dev/null || true
+  fi
   apt-get install -y php-gmp 2>/dev/null || true
 fi
 
