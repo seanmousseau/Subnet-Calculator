@@ -14,13 +14,31 @@ Thank you for your interest in contributing to Subnet Calculator!
 No build step required. Just PHP 7.4+:
 
 ```bash
-php -S localhost:8080
+# Serve the app
+php -S localhost:8080 -t Subnet-Calculator/
+
+# Syntax check
+php -l Subnet-Calculator/index.php
+for f in Subnet-Calculator/includes/*.php Subnet-Calculator/templates/layout.php; do php -l "$f"; done
+```
+
+## Project structure
+
+```
+Subnet-Calculator/
+  index.php             ← entry point (bootstrap only)
+  includes/             ← config, functions, request handling (web-blocked)
+  templates/layout.php  ← HTML template (web-blocked)
+  assets/               ← app.css, app.js, logo.webp, favicon-32.webp (public)
 ```
 
 ## Guidelines
 
-- Keep dependencies to zero — this is intentionally a single-file application
-- All logic should be in `index.php`
+- Keep dependencies to zero
+- New utility functions go in the appropriate `includes/functions-*.php` file
+- Request/input logic goes in `includes/request.php`
+- HTML changes go in `templates/layout.php`
+- CSS changes go in `assets/app.css`; JS changes go in `assets/app.js`
 - Maintain support for both CIDR and dotted-decimal netmask input
 - Test edge cases: `/0`, `/31`, `/32`
 - Validate all user input server-side; use `htmlspecialchars()` on all output

@@ -27,7 +27,7 @@ https://dev.seanmousseau.com/subnet-calculator/
 - Form protection: honeypot or Cloudflare Turnstile (configurable)
 - All colours configured via CSS custom properties; optional `$fixed_bg_color` override
 - iframe-friendly mode with automatic height reporting via `postMessage`
-- Single-file app (`index.php`), minimal dependencies, external config via `config.php`
+- External CSS (`assets/app.css`) and JS (`assets/app.js`); modular PHP structure (`includes/`, `templates/`); external config via `config.php`
 
 ## Requirements
 
@@ -72,6 +72,8 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File |
 |---------|------|
+| 1.1.0 | `releases/subnet-calculator-1.1.0.tar.gz` |
+| 1.0.1 | `releases/subnet-calculator-1.0.1.tar.gz` |
 | 1.0.0 | `releases/subnet-calculator-1.0.0.tar.gz` |
 | 0.12.0 | `releases/subnet-calculator-0.12.0.tar.gz` |
 | 0.11.0 | `releases/subnet-calculator-0.11.0.tar.gz` |
@@ -79,7 +81,11 @@ Pre-built release archives are available in `releases/`:
 | 0.9.0 | `releases/subnet-calculator-0.9.0.tar.gz` |
 | 0.8.0 | `releases/subnet-calculator-0.8.0.tar.gz` |
 
-The archive contains the contents of `Subnet-Calculator/` (i.e., `index.php`, `logo.svg`, `.htaccess`, `config.php.example`). Extract and deploy the app files directly to your docroot.
+Each archive contains the app files at the root level. Extract directly into your webroot to install or upgrade in place:
+
+```bash
+tar -xzf subnet-calculator-1.1.0.tar.gz -C /var/www/html/subnet-calculator/
+```
 
 ## Embedding
 
@@ -198,6 +204,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 | Version | Notes |
 |---------|-------|
+| 1.1 | WebP logo/favicon, modular file structure (`includes/`, `templates/`, `assets/`), PHP type declarations, `.htaccess` hardening (Apache + OLS), cache headers, `robots.txt`, CSP `unsafe-inline` removed |
 | 1.0 | Full ARIA tab pattern, accessible toast/errors/focus, NAT64 detection, canonical URL, share URL no-JS fallback, postMessage origin scoping, `$canonical_url` |
 | 0.12 | Print stylesheet fixes, IPv6 badge types, `$frame_ancestors` validation, config validation, `X-Frame-Options` header, keyboard accessibility, IPv6 panel consolidation |
 | 0.11 | `$frame_ancestors`, Open Graph tags, larger logo (48 px), print stylesheet, iframe height shrink fix |
