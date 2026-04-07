@@ -14,6 +14,7 @@ $page_title           = 'Subnet Calculator';
 $page_description     = 'Free online subnet calculator for IPv4 and IPv6. Calculate network address, broadcast, netmask, host range, and split subnets.';
 $show_share_bar       = true;
 $frame_ancestors      = '*';
+$canonical_url        = '';
 
 if (file_exists(__DIR__ . '/config.php')) {
     require __DIR__ . '/config.php';
@@ -37,6 +38,13 @@ if (!in_array($default_tab, ['ipv4', 'ipv6'], true)) {
     $default_tab = 'ipv4';
 }
 
+if ($canonical_url === '') {
+    $proto = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+    $canonical_url = $proto . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
+        . strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
+}
+$canonical_url = htmlspecialchars((string)$canonical_url);
+
 // ─── Security headers ─────────────────────────────────────────────────────────
 
 header('X-Content-Type-Options: nosniff');
@@ -56,6 +64,7 @@ $csp_frame = $turnstile_active
     ? "'self' https://challenges.cloudflare.com"
     : "'self'";
 header("Content-Security-Policy: default-src 'self'; base-uri 'self'; style-src {$csp_style}; script-src {$csp_script}; img-src 'self' data:; frame-src {$csp_frame}; frame-ancestors {$frame_ancestors}");
+$turnstile_curl_missing = $turnstile_active && !function_exists('curl_init');
 
 // ─── IPv4 ─────────────────────────────────────────────────────────────────────
 
@@ -219,6 +228,10 @@ function get_ipv6_type(string $ip): string {
     if ($b[0]===0x20 && $b[1]===0x01 && $b[2]===0x0D && $b[3]===0xB8) return 'Documentation';
     if ($b[0]===0x20 && $b[1]===0x01 && $b[2]===0x00 && $b[3]===0x00) return 'Teredo';
     if ($b[0] === 0x20 && $b[1] === 0x02)                     return '6to4';
+    if ($b[0]===0x00 && $b[1]===0x64 && $b[2]===0xFF && $b[3]===0x9B) {
+        if ($b[4]===0x00 && $b[5]===0x01)                     return 'NAT64 (local)';
+                                                               return 'NAT64';
+    }
     if (($b[0] & 0xE0) === 0x20)                              return 'Global Unicast';
     return 'Unknown';
 }
@@ -243,6 +256,8 @@ function type_badge_class(string $type): string {
         'IPv4-mapped'   => 'doc',
         'Teredo'        => 'doc',
         '6to4'          => 'doc',
+        'NAT64'         => 'doc',
+        'NAT64 (local)' => 'doc',
     ];
     return $map[$type] ?? 'other';
 }
@@ -460,6 +475,11 @@ if ($result) {
 } elseif ($result6) {
     $share_url = '?' . http_build_query(['tab' => 'ipv6', 'ipv6' => $input_ipv6, 'prefix' => ltrim($result6['prefix'], '/')]);
 }
+// Absolute fallback for no-JS users — JS overrides with window.location for accuracy
+$share_proto = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+$share_base_server = $share_proto . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
+    . strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
+$share_url_abs = $share_url !== '' ? $share_base_server . $share_url : '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -470,8 +490,14 @@ if ($result) {
     <meta property="og:title"       content="<?= htmlspecialchars($page_title) ?>">
     <meta property="og:description" content="<?= htmlspecialchars($page_description) ?>">
     <meta property="og:type"        content="website">
+    <meta property="og:url"         content="<?= $canonical_url ?>">
+    <link rel="canonical" href="<?= $canonical_url ?>">
     <title><?= htmlspecialchars($page_title) ?></title>
     <link rel="icon" type="image/svg+xml" href="logo.svg">
+    <?php if ($turnstile_curl_missing): ?>
+    <!-- sc-warning: Turnstile is configured but the PHP cURL extension is not loaded.
+         Captcha verification is being skipped. Install php-curl to enable it. -->
+    <?php endif; ?>
     <script nonce="<?= htmlspecialchars($csp_nonce) ?>">(function(){var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
     <style nonce="<?= htmlspecialchars($csp_nonce) ?>">
         :root {
@@ -943,6 +969,17 @@ if ($result) {
 
         .split-item:hover { background: var(--color-border); }
 
+        .result-row:focus-visible {
+            outline: 2px solid var(--color-accent);
+            outline-offset: -2px;
+            background: var(--color-border) !important;
+        }
+
+        .split-item:focus-visible {
+            outline: 2px solid var(--color-accent);
+            outline-offset: -1px;
+        }
+
         .split-more {
             color: var(--color-text-faint);
             font-size: 0.75rem;
@@ -995,20 +1032,29 @@ if ($result) {
     <div class="title-row">
         <img src="logo.svg" alt="Subnet Calculator logo" class="logo">
         <h1><?= htmlspecialchars($page_title) ?></h1>
-        <span class="version">v0.12</span>
-        <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode">
+        <span class="version">v1.0</span>
+        <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode" aria-label="Switch to light mode">
             <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
             <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         </button>
     </div>
 
-    <div class="tabs">
-        <button class="tab-btn<?= $active_tab === 'ipv4' ? ' active' : '' ?>" data-tab="ipv4">IPv4</button>
-        <button class="tab-btn<?= $active_tab === 'ipv6' ? ' active' : '' ?>" data-tab="ipv6">IPv6</button>
+    <div class="tabs" role="tablist" aria-label="IP version">
+        <button class="tab-btn<?= $active_tab === 'ipv4' ? ' active' : '' ?>"
+                role="tab" id="tab-ipv4"
+                aria-selected="<?= $active_tab === 'ipv4' ? 'true' : 'false' ?>"
+                aria-controls="panel-ipv4"
+                data-tab="ipv4">IPv4</button>
+        <button class="tab-btn<?= $active_tab === 'ipv6' ? ' active' : '' ?>"
+                role="tab" id="tab-ipv6"
+                aria-selected="<?= $active_tab === 'ipv6' ? 'true' : 'false' ?>"
+                aria-controls="panel-ipv6"
+                data-tab="ipv6">IPv6</button>
     </div>
 
     <!-- IPv4 Panel -->
-    <div id="panel-ipv4" class="panel<?= $active_tab === 'ipv4' ? ' active' : '' ?>">
+    <div id="panel-ipv4" class="panel<?= $active_tab === 'ipv4' ? ' active' : '' ?>"
+         role="tabpanel" aria-labelledby="tab-ipv4" tabindex="-1">
         <form method="post" novalidate>
             <input type="hidden" name="tab" value="ipv4">
             <div class="form-row">
@@ -1017,14 +1063,16 @@ if ($result) {
                     <input type="text" id="ip" name="ip"
                            placeholder="192.168.1.0 or 192.168.1.0/24"
                            value="<?= htmlspecialchars($input_ip) ?>"
-                           autocomplete="off" spellcheck="false">
+                           autocomplete="off" spellcheck="false"
+                           <?= $error ? 'aria-invalid="true" aria-describedby="ipv4-error"' : '' ?>>
                 </div>
                 <div class="form-group">
                     <label for="mask">Netmask</label>
                     <input type="text" id="mask" name="mask"
                            placeholder="/24 or 255.255.255.0"
                            value="<?= htmlspecialchars($input_mask) ?>"
-                           autocomplete="off" spellcheck="false">
+                           autocomplete="off" spellcheck="false"
+                           <?= $error ? 'aria-invalid="true" aria-describedby="ipv4-error"' : '' ?>>
                 </div>
             </div>
             <div class="btn-row">
@@ -1040,7 +1088,7 @@ if ($result) {
         </form>
 
         <?php if ($error): ?>
-            <div class="error"><?= htmlspecialchars($error) ?></div>
+            <div class="error" id="ipv4-error"><?= htmlspecialchars($error) ?></div>
         <?php endif; ?>
 
         <?php if ($result): ?>
@@ -1087,7 +1135,7 @@ if ($result) {
             <?php if ($show_share_bar): ?>
             <div class="share-bar">
                 <span class="share-label">Share</span>
-                <code class="share-url"><?= htmlspecialchars($share_url) ?></code>
+                <code class="share-url"><?= htmlspecialchars($share_url_abs) ?></code>
                 <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
             </div>
             <?php endif; ?>
@@ -1101,19 +1149,20 @@ if ($result) {
                         <span class="splitter-label">Split into</span>
                         <input type="text" name="split_prefix" class="splitter-input"
                                placeholder="/25" value="<?= htmlspecialchars($input_split_prefix) ?>"
-                               autocomplete="off" spellcheck="false">
+                               autocomplete="off" spellcheck="false"
+                               <?= $split_error ? 'aria-invalid="true" aria-describedby="split-error-ipv4"' : '' ?>>
                         <button type="submit" class="splitter-btn">Split</button>
                     </div>
                 </form>
                 <?php if ($split_error): ?>
-                    <div class="error"><?= htmlspecialchars($split_error) ?></div>
+                    <div class="error" id="split-error-ipv4"><?= htmlspecialchars($split_error) ?></div>
                 <?php elseif ($split_result && $split_result['showing'] > 0): ?>
                     <div class="split-list">
                         <?php foreach ($split_result['subnets'] as $s): ?>
                             <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>"><?= htmlspecialchars($s) ?></div>
                         <?php endforeach; ?>
-                        <?php if ($split_result['total'] > $split_max_subnets): ?>
-                            <div class="split-more">+ <?= number_format($split_result['total'] - $split_max_subnets) ?> more</div>
+                        <?php if ($split_result['total'] > $split_result['showing']): ?>
+                            <div class="split-more">+&nbsp;<?= number_format($split_result['total'] - $split_result['showing']) ?> more</div>
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>
@@ -1122,7 +1171,8 @@ if ($result) {
     </div>
 
     <!-- IPv6 Panel -->
-    <div id="panel-ipv6" class="panel<?= $active_tab === 'ipv6' ? ' active' : '' ?>">
+    <div id="panel-ipv6" class="panel<?= $active_tab === 'ipv6' ? ' active' : '' ?>"
+         role="tabpanel" aria-labelledby="tab-ipv6" tabindex="-1">
         <form method="post" novalidate>
             <input type="hidden" name="tab" value="ipv6">
             <div class="form-row">
@@ -1131,14 +1181,16 @@ if ($result) {
                     <input type="text" id="ipv6" name="ipv6"
                            placeholder="2001:db8::1 or 2001:db8::/32"
                            value="<?= htmlspecialchars($input_ipv6) ?>"
-                           autocomplete="off" spellcheck="false">
+                           autocomplete="off" spellcheck="false"
+                           <?= $error6 ? 'aria-invalid="true" aria-describedby="ipv6-error"' : '' ?>>
                 </div>
                 <div class="form-group form-group-narrow">
                     <label for="prefix">Prefix</label>
                     <input type="text" id="prefix" name="prefix"
                            placeholder="/64"
                            value="<?= htmlspecialchars($input_prefix) ?>"
-                           autocomplete="off" spellcheck="false">
+                           autocomplete="off" spellcheck="false"
+                           <?= $error6 ? 'aria-invalid="true" aria-describedby="ipv6-error"' : '' ?>>
                 </div>
             </div>
             <div class="btn-row">
@@ -1154,7 +1206,7 @@ if ($result) {
         </form>
 
         <?php if ($error6): ?>
-            <div class="error"><?= htmlspecialchars($error6) ?></div>
+            <div class="error" id="ipv6-error"><?= htmlspecialchars($error6) ?></div>
         <?php endif; ?>
 
         <?php if ($result6): ?>
@@ -1189,7 +1241,7 @@ if ($result) {
             <?php if ($show_share_bar): ?>
             <div class="share-bar">
                 <span class="share-label">Share</span>
-                <code class="share-url"><?= htmlspecialchars($share_url) ?></code>
+                <code class="share-url"><?= htmlspecialchars($share_url_abs) ?></code>
                 <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
             </div>
             <?php endif; ?>
@@ -1203,12 +1255,13 @@ if ($result) {
                         <span class="splitter-label">Split into</span>
                         <input type="text" name="split_prefix6" class="splitter-input"
                                placeholder="/65" value="<?= htmlspecialchars($input_split_prefix6) ?>"
-                               autocomplete="off" spellcheck="false">
+                               autocomplete="off" spellcheck="false"
+                               <?= $split_error6 ? 'aria-invalid="true" aria-describedby="split-error-ipv6"' : '' ?>>
                         <button type="submit" class="splitter-btn">Split</button>
                     </div>
                 </form>
                 <?php if ($split_error6): ?>
-                    <div class="error"><?= htmlspecialchars($split_error6) ?></div>
+                    <div class="error" id="split-error-ipv6"><?= htmlspecialchars($split_error6) ?></div>
                 <?php elseif ($split_result6 && $split_result6['showing'] > 0): ?>
                     <div class="split-list">
                         <?php foreach ($split_result6['subnets'] as $s): ?>
@@ -1234,24 +1287,45 @@ if ($result) {
     </footer>
 </div>
 
-<div id="toast" class="toast">Copied!</div>
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">Copied!</div>
 
 <script nonce="<?= htmlspecialchars($csp_nonce) ?>">
 // ── Theme toggle ─────────────────────────────────────────────────────────────
 // Icon visibility is driven by CSS html[data-theme="light"] selectors — no JS needed.
+function updateThemeToggleLabel() {
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    document.getElementById('theme-toggle')
+        .setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+}
 document.getElementById('theme-toggle').addEventListener('click', () => {
     const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
+    updateThemeToggleLabel();
 });
+updateThemeToggleLabel();
 
 // ── Tab switcher ─────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn, .panel').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => {
+            b.classList.remove('active');
+            b.setAttribute('aria-selected', 'false');
+        });
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
         document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
         autoFocusActive();
+    });
+
+    btn.addEventListener('keydown', e => {
+        const tabs = [...document.querySelectorAll('.tab-btn')];
+        const idx = tabs.indexOf(e.currentTarget);
+        let next = null;
+        if (e.key === 'ArrowRight') next = tabs[(idx + 1) % tabs.length];
+        if (e.key === 'ArrowLeft')  next = tabs[(idx - 1 + tabs.length) % tabs.length];
+        if (next) { e.preventDefault(); next.focus(); next.click(); }
     });
 });
 
@@ -1297,7 +1371,9 @@ document.querySelectorAll('.results').forEach(results => {
 // ── Share URL: show full URL and copy it ─────────────────────────────────────
 const _base = window.location.origin + window.location.pathname;
 document.querySelectorAll('.share-url').forEach(el => {
-    el.textContent = _base + el.textContent.trim();
+    // Override server-provided absolute URL with window.location for reverse-proxy accuracy
+    const btn = el.closest('.share-bar')?.querySelector('.share-copy');
+    if (btn) el.textContent = _base + btn.dataset.copy;
 });
 document.querySelectorAll('.share-copy').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1349,13 +1425,16 @@ autoFocusActive();
 // ── iframe: auto-detect and report height to parent via postMessage ───────────
 if (window.self !== window.top) {
     document.documentElement.classList.add('in-iframe');
+    var _parentOrigin = (function () {
+        try { return new URL(document.referrer).origin; } catch (e) { return null; }
+    })();
     (function () {
         function postHeight() {
             var card = document.querySelector('.card');
             // Use only the card's own height — body/document scrollHeight reflects
             // the iframe's current (parent-set) height and never shrinks on Reset.
             var h = card ? Math.ceil(card.getBoundingClientRect().height) : 0;
-            window.parent.postMessage({ type: 'sc-resize', height: h }, '*');
+            window.parent.postMessage({ type: 'sc-resize', height: h }, _parentOrigin || '*');
         }
         postHeight();
         requestAnimationFrame(function () { postHeight(); });
@@ -1374,6 +1453,7 @@ if (window.self !== window.top) {
     })();
     // Listen for background colour commands from the parent page
     window.addEventListener('message', function (e) {
+        if (_parentOrigin && e.origin !== _parentOrigin) return;
         if (!e.data || e.data.type !== 'sc-set-bg') return;
         var color = e.data.color;
         if (color && color !== 'null' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color)) {

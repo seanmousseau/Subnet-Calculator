@@ -16,6 +16,7 @@ $split_max_subnets = 16;
 $form_protection = 'none';
 
 // Cloudflare Turnstile keys (required when $form_protection = 'turnstile').
+// Requires: PHP cURL extension (php-curl). Without it, verification is skipped.
 // WARNING: never expose $turnstile_secret_key in HTML or client-side code.
 $turnstile_site_key   = '';
 $turnstile_secret_key = '';
@@ -34,3 +35,8 @@ $show_share_bar = true;
 // '*' = any origin (default); "'none'" = block all embedding;
 // or a space-separated list of origins, e.g. 'https://mysite.com'.
 $frame_ancestors = '*';
+
+// Canonical URL emitted in <link rel="canonical"> and og:url.
+// Leave empty to auto-detect from $_SERVER (suitable for most deployments).
+// Set explicitly if behind a reverse proxy that mangles REQUEST_URI or HTTP_HOST.
+$canonical_url = '';

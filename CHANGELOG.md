@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-04-07
+
+### Added
+- Full ARIA tab semantics: `role="tablist"`, `role="tab"`, `role="tabpanel"`, `aria-selected`, `aria-controls`, `aria-labelledby`; Left/Right arrow key navigation between tabs — closes #86
+- `aria-label` on theme toggle button (dynamic: describes next action); updates on each toggle — closes #88
+- `role="status"`, `aria-live="polite"`, `aria-atomic="true"` on the copy-confirmation toast so screen readers announce copy actions — closes #87
+- `:focus-visible` outline ring on result rows and split items for keyboard navigation — closes #89
+- `aria-invalid="true"` and `aria-describedby` on form inputs when validation fails; error `<div>` elements given unique `id`s — closes #90
+- NAT64 well-known prefix (`64:ff9b::/96`) and local-use NAT64 (`64:ff9b:1::/48`) now identified as distinct IPv6 address types with blue badge — closes #93
+- `<link rel="canonical">` and `og:url` meta tag auto-detected from `$_SERVER`; overridable via new `$canonical_url` config variable — closes #94
+- Server-side absolute share URL fallback for no-JS users; JS continues to override with `window.location` for reverse-proxy accuracy — closes #91
+- Turnstile cURL availability check: when `$form_protection = 'turnstile'` but `curl_init` is not available, an HTML comment warning is emitted; `config.php.example` documents the requirement — closes #95
+
+### Changed
+- iframe `postMessage` now targets `document.referrer`'s origin instead of `'*'`; `sc-set-bg` message listener validates sender origin — closes #85
+- IPv4 split "more" counter now uses `$split_result['showing']` instead of `$split_max_subnets` for semantic correctness and consistency with IPv6 splitter; formatting fixed to `+&nbsp;` — closes #92
+
 ## [0.12] - 2026-04-05
 
 ### Added
