@@ -493,7 +493,10 @@ $share_url_abs = $share_url !== '' ? $share_base_server . $share_url : '';
     <meta property="og:url"         content="<?= $canonical_url ?>">
     <link rel="canonical" href="<?= $canonical_url ?>">
     <title><?= htmlspecialchars($page_title) ?></title>
-    <link rel="icon" type="image/svg+xml" href="logo.svg">
+    <link rel="icon" type="image/webp" href="logo/favicon-32.webp">
+    <link rel="icon" type="image/png"  href="logo/favicon-32.png">
+    <meta property="og:image" content="<?= $canonical_url ?>/logo/logo.webp">
+    <meta name="twitter:card" content="summary">
     <?php if ($turnstile_curl_missing): ?>
     <!-- sc-warning: Turnstile is configured but the PHP cURL extension is not loaded.
          Captcha verification is being skipped. Install php-curl to enable it. -->
@@ -1030,7 +1033,10 @@ $share_url_abs = $share_url !== '' ? $share_base_server . $share_url : '';
 <body>
 <div class="card">
     <div class="title-row">
-        <img src="logo.svg" alt="Subnet Calculator logo" class="logo">
+        <picture>
+            <source srcset="logo/logo.webp" type="image/webp">
+            <img src="logo/logo.png" alt="Subnet Calculator logo" class="logo">
+        </picture>
         <h1><?= htmlspecialchars($page_title) ?></h1>
         <span class="version">v1.0.1</span>
         <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode" aria-label="Switch to light mode">
