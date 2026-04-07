@@ -18,10 +18,11 @@ if ($frame_ancestors === "'none'") {
 }
 $csp_nonce    = base64_encode(random_bytes(16));
 $turnstile_active = ($form_protection === 'turnstile' && $turnstile_site_key !== '' && $turnstile_secret_key !== '');
+// 'self' allows assets/app.css and assets/app.js; nonce covers remaining inline blocks
 $csp_script = $turnstile_active
-    ? "'nonce-{$csp_nonce}' https://challenges.cloudflare.com"
-    : "'nonce-{$csp_nonce}'";
-$csp_style  = "'nonce-{$csp_nonce}'";
+    ? "'self' 'nonce-{$csp_nonce}' https://challenges.cloudflare.com"
+    : "'self' 'nonce-{$csp_nonce}'";
+$csp_style  = "'self' 'nonce-{$csp_nonce}'";
 $csp_frame = $turnstile_active
     ? "'self' https://challenges.cloudflare.com"
     : "'self'";
