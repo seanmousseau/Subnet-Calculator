@@ -1,10 +1,68 @@
-# Deny direct HTTP access to config.php
+# -----------------------------------------------------------------------
+# Subnet Calculator — .htaccess
+# Compatible with: Apache 2.4+, OpenLiteSpeed
+#
+# Apache 2.4 uses mod_authz_core (<Files> + Require all denied).
+# OpenLiteSpeed honours RewriteRule [F] but has incomplete support for
+# mod_authz_core directives, so both mechanisms are always present.
+# -----------------------------------------------------------------------
+
+# -----------------------------------------------------------------------
+# Block sensitive files
+# config.php          — live config with operator secrets
+# config.php.example  — reveals configuration surface
+# -----------------------------------------------------------------------
 <Files "config.php">
     Require all denied
 </Files>
 
-# OpenLiteSpeed / LiteSpeed fallback
+<Files "config.php.example">
+    Require all denied
+</Files>
+
+# -----------------------------------------------------------------------
+# Block deployment artefacts that a user might leave in the docroot
+# after extracting a release tarball.
+# -----------------------------------------------------------------------
+<FilesMatch "\.(tar\.gz|tar|gz|zip)$">
+    Require all denied
+</FilesMatch>
+
+# -----------------------------------------------------------------------
+# OpenLiteSpeed / LiteSpeed fallback (RewriteRule [F] is widely supported)
+# -----------------------------------------------------------------------
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteRule ^config\.php$ - [F,L]
+
+    # Sensitive config files
+    RewriteRule ^config\.php$         - [F,L]
+    RewriteRule ^config\.php\.example$ - [F,L]
+
+    # Deployment artefacts
+    RewriteRule \.(tar\.gz|tar|gz|zip)$ - [F,L]
+
+    # Protect subdirectories added in v1.1.0 (includes/, templates/, assets/)
+    # Belt-and-suspenders: each subdirectory also has its own .htaccess
+    RewriteRule ^(includes|templates|assets)/ - [F,L]
+</IfModule>
+
+# -----------------------------------------------------------------------
+# Cache-control for static assets
+# Apache: mod_expires + mod_headers
+# OLS:    honours Expires/Cache-Control headers from mod_expires/mod_headers
+# -----------------------------------------------------------------------
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/webp               "access plus 1 year"
+    ExpiresByType image/png                "access plus 1 year"
+    ExpiresByType image/svg+xml            "access plus 1 year"
+    ExpiresByType text/css                 "access plus 1 year"
+    ExpiresByType application/javascript   "access plus 1 year"
+    ExpiresByType text/javascript          "access plus 1 year"
+</IfModule>
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(webp|png|svg|css|js)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
 </IfModule>

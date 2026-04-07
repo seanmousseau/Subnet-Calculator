@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /includes/
+Disallow: /templates/
+Disallow: /assets/
+Disallow: /config.php
+Disallow: /config.php.example
+Allow: /
