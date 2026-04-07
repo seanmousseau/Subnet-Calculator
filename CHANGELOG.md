@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-04-07
+
+### Added
+- Optimized WebP logo (`logo/logo.webp`) replaces the embedded-PNG SVG (`logo.svg`), significantly reducing page weight; served via `<picture>` element with `logo/logo.png` fallback for Safari <14 — closes #104, #111
+- Dedicated favicon: `logo/favicon-32.webp` (primary) + `logo/favicon-32.png` fallback — closes #106
+- `og:image` and `twitter:card` meta tags complete Open Graph support — closes #109
+- Cache-control headers for static assets (WebP, PNG, CSS, JS) via `.htaccess` `mod_expires` + `mod_headers`; `max-age=31536000, immutable` — closes #110
+- `robots.txt` disallowing `includes/`, `templates/`, `assets/`, and config files from crawlers — closes #113
+- `assets/app.css` and `assets/app.js` extracted from inline template; CSP `style-src` and `script-src` updated to `'self' 'nonce-...'`, removing `unsafe-inline` — closes #114
+
+### Changed
+- Application split from a single `index.php` into `includes/` (config, functions, request handling) and `templates/layout.php`; all include files use `declare(strict_types=1)` and full parameter/return type declarations — closes #107, #112
+- `.htaccess` hardened: blocks `config.php.example` and deployment tarballs (`.tar.gz`, `.zip`, etc.); subdirectory `.htaccess` files added to `includes/`, `templates/`; Apache 2.4+ and OpenLiteSpeed compatibility ensured via dual `<FilesMatch>`/`RewriteRule [F]` approach — closes #108
+
 ## [1.0.1] - 2026-04-07
 
 ### Fixed

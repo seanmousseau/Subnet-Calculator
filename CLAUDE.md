@@ -8,19 +8,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Run the app locally (serve the Subnet-Calculator/ subfolder)
 php -S localhost:8080 -t Subnet-Calculator/
 
-# Syntax check
+# Syntax check all PHP files
 php -l Subnet-Calculator/index.php
+for f in Subnet-Calculator/includes/*.php Subnet-Calculator/templates/layout.php; do php -l "$f"; done
+
+# Build a release tarball (files at root level — untar directly in webroot to install/upgrade)
+tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
 ```
 
-The entire application is `Subnet-Calculator/index.php`.
+There are no build steps, test suites, or package managers.
 
 ## Repository layout
 
 ```
 Subnet-Calculator/      ← docroot (serve this directory)
-  index.php             ← single-file PHP app
-  logo.svg
-  .htaccess             ← blocks direct access to config.php
+  index.php             ← entry point (bootstrap only)
+  includes/             ← PHP includes (blocked from direct web access)
+    config.php          ← config defaults + optional config.php override
+    functions-ipv4.php  ← IPv4 utility functions
+    functions-ipv6.php  ← IPv6 utility functions
+    functions-split.php ← subnet splitter functions
+    functions-util.php  ← address type detection + badge helpers
+    request.php         ← input resolvers, Turnstile verify, GET/POST handling
+  templates/            ← HTML template (blocked from direct web access)
+    layout.php
+  assets/               ← compiled CSS + JS (publicly served, long-cached)
+    app.css
+    app.js
+  logo/                 ← optimized logo assets
+    logo.webp
+    logo.png
+    favicon-32.webp
+    favicon-32.png
+  .htaccess             ← blocks config files, tarballs, subdirs; cache headers
+  robots.txt
   config.php.example    ← copy to config.php to override defaults
   config.php            ← local overrides (git-ignored)
 releases/               ← versioned release tarballs
@@ -35,14 +56,13 @@ LICENSE
 
 ## Architecture
 
-Single-file PHP application (`Subnet-Calculator/index.php`). The file is structured top-to-bottom in this order:
+PHP application with a slim entry point (`index.php`) that bootstraps includes and renders a template. Execution order:
 
-1. **Configuration defaults** — all operator-tunable `$variables` (`$fixed_bg_color`, `$default_tab`, `$split_max_subnets`, `$form_protection`, `$turnstile_site_key`, `$turnstile_secret_key`). If `config.php` exists in the same directory it is `require`d here to allow overrides without touching `index.php`.
-2. **Security headers** — sent before any output; CSP is conditionally extended for Cloudflare Turnstile.
-3. **PHP functions** — pure utility functions: IPv4 (`cidr_to_mask`, `calculate_subnet`, etc.), IPv6 (`ipv6_to_gmp`, `calculate_subnet6`, etc.), address type detection (`get_ipv4_type`, `get_ipv6_type`), subnet splitters (`split_subnet`, `split_subnet6`), input resolvers (`resolve_ipv4_input`, `resolve_ipv6_input`).
-4. **Request handling** — reads `$_GET`/`$_POST`, populates `$result`/`$result6`/`$error`/`$split_result`/`$split_result6`; GET triggers auto-calculation for shareable URLs. Form protection (honeypot / Turnstile) is checked before calculation.
-5. **Pre-HTML computed values** — `$bg_override_style`, `$share_url`.
-6. **HTML/CSS/JS template** — single `?>` exits PHP; inline `<style>` block; `<?= ?>` for output; inline `<script>` at end of body.
+1. **`index.php`** — requires all includes in order, sends security headers (CSP nonce, `X-Content-Type-Options`, etc.), then requires the template.
+2. **`includes/config.php`** — all operator-tunable `$variables` (`$fixed_bg_color`, `$default_tab`, `$split_max_subnets`, `$form_protection`, `$turnstile_site_key`, `$turnstile_secret_key`, `$canonical_url`, etc.). If `config.php` exists in the docroot it is `require`d here to allow overrides without touching source files.
+3. **`includes/functions-*.php`** — pure utility functions, all typed with `declare(strict_types=1)`: IPv4 (`cidr_to_mask`, `calculate_subnet`, etc.), IPv6 (`ipv6_to_gmp`, `calculate_subnet6`, etc.), splitters (`split_subnet`, `split_subnet6`), type detection (`get_ipv4_type`, `get_ipv6_type`), input resolvers (`resolve_ipv4_input`, `resolve_ipv6_input`).
+4. **`includes/request.php`** — reads `$_GET`/`$_POST`, populates `$result`/`$result6`/`$error`/`$split_result`/`$split_result6`; GET triggers auto-calculation for shareable URLs. Form protection (honeypot / Turnstile) is checked before calculation. Also computes `$bg_override_style`, `$share_url`, `$canonical_url`.
+5. **`templates/layout.php`** — full HTML output; references `assets/app.css` (external stylesheet) and `assets/app.js` (external script); theme-init `<script>` stays inline (prevents FOUC); conditional `bg_override_style` `<style>` stays inline with nonce.
 
 ### Key implementation details
 

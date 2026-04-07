@@ -1,0 +1,8 @@
+# Deny all direct HTTP access to files in this directory.
+# PHP includes are loaded server-side via require — never via URL.
+Require all denied
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule .* - [F,L]
+</IfModule>
