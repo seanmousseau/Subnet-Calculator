@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-04-07
+
+### Fixed
+- iframe auto-sizing: `postMessage` target origin derived from `document.referrer` was corrupted after same-origin form navigation inside the iframe, causing a `DOMException` and breaking height reporting. Fix uses `window.location.ancestorOrigins` (Chrome/Edge) and a `sessionStorage` fallback (Firefox) to reliably track the parent frame's origin across navigations — closes #102
+
 ## [1.0.0] - 2026-04-07
 
 ### Added
