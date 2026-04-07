@@ -11,6 +11,9 @@ php -S localhost:8080 -t Subnet-Calculator/
 # Syntax check all PHP files
 php -l Subnet-Calculator/index.php
 for f in Subnet-Calculator/includes/*.php Subnet-Calculator/templates/layout.php; do php -l "$f"; done
+
+# Build a release tarball (files at root level — untar directly in webroot to install/upgrade)
+tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
 ```
 
 There are no build steps, test suites, or package managers.
