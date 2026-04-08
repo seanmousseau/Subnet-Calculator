@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-04-08
+
+### Added
+- **Reverse DNS zone** display for both IPv4 (RFC 2317 classless delegation for prefixes > /24) and IPv6 (nibble-based ip6.arpa) — closes #122
+- **VLSM planner** — new third tab that allocates variable-length subnets from a parent network; sorts requirements largest-first, shows name, hosts needed, allocated subnet, usable, and waste — closes #128
+- **Subnet overlap checker** — panel inside VLSM tab; compares two CIDRs and reports none / identical / a contains b / b contains a — closes #126
+- **Binary representation** — collapsible `<details>` section under IPv4 results showing network/host bits with colour coding — closes #127
+- **Per-row copy buttons** in subnet splitter results for both IPv4 and IPv6 — closes #124
+- **Splitter URL sharing** — `split_prefix`/`split_prefix6` parameters included in shareable URLs and processed on GET, so split results auto-appear on page load — closes #135
+- **`prefers-color-scheme`** — theme initialisation now falls back to the OS setting when no `localStorage` preference is stored (light preference activates light theme) — closes #130
+- **ARIA live regions** — IPv4 and IPv6 result containers now have `aria-live="polite" aria-atomic="false"` for screen reader announcements — closes #134
+- **Asset cache-busting** — `$app_version` variable added to `config.php`; CSS/JS links append `?v=1.2.0` — closes #133
+- **CI GitHub Actions workflow** (`.github/workflows/php.yml`) — syntax check, PHPStan, and PHPUnit on push/PR — closes #131
+- **PHPUnit test infrastructure** — `composer.json`, `phpunit.xml`, and 61 unit tests across `testing/unit/` (IPv4, IPv6, Split, Util, VLSM) — closes #132
+- **Permissions-Policy header** — closes #136
+
+### Changed
+- IPv6 `calculate_subnet6()` now returns a numeric string for total addresses when `host_bits ≤ 20` (e.g. `/127` → `"2"`, `/108` → `"1,048,576"` after formatting); larger prefixes retain `2^N` notation — closes #123
+- PHPStan analysis level raised from 5 to 9 — closes #125
+
 ## [1.1.1] - 2026-04-08
 
 ### Fixed

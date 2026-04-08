@@ -5,6 +5,7 @@ declare(strict_types=1);
 // These are the built-in defaults. To override, copy config.php.example to
 // config.php alongside this file — config.php is never overwritten by upgrades.
 
+$app_version          = '1.2.0';
 $fixed_bg_color       = 'null';
 $default_tab          = 'ipv4';
 $split_max_subnets    = 16;

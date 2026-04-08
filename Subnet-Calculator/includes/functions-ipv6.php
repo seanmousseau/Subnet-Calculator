@@ -27,6 +27,16 @@ function gmp_to_ipv6(\GMP $n): string {
     return $result;
 }
 
+function ipv6_ptr_zone(string $network_cidr): string {
+    [$ip, $prefix] = explode('/', $network_cidr);
+    $prefix = (int)$prefix;
+    $hex    = bin2hex(inet_pton($ip));                   // 32 lowercase hex chars
+    $nibble_count = (int)floor($prefix / 4);             // significant nibbles
+    $significant  = array_slice(str_split($hex), 0, $nibble_count);
+    if ($significant === []) return 'ip6.arpa';
+    return implode('.', array_reverse($significant)) . '.ip6.arpa';
+}
+
 function calculate_subnet6(string $ip, int $prefix): array {
     $ip_int    = ipv6_to_gmp($ip);
     $host_bits = 128 - $prefix;
@@ -34,13 +44,16 @@ function calculate_subnet6(string $ip, int $prefix): array {
     $net_mask  = gmp_xor(gmp_sub(gmp_pow(2, 128), 1), $host_mask);
     $network   = gmp_and($ip_int, $net_mask);
     $last      = gmp_or($network, $host_mask);
-    $total     = $host_bits === 0 ? '1' : '2^' . $host_bits;
+    $total     = $host_bits === 0 ? '1'
+        : ($host_bits <= 20 ? (string)(1 << $host_bits) : '2^' . $host_bits);
+    $network_cidr = gmp_to_ipv6($network) . '/' . $prefix;
 
     return [
-        'network_cidr' => gmp_to_ipv6($network) . '/' . $prefix,
+        'network_cidr' => $network_cidr,
         'prefix'       => '/' . $prefix,
         'first_ip'     => gmp_to_ipv6($network),
         'last_ip'      => gmp_to_ipv6($last),
         'total'        => $total,
+        'ptr_zone'     => ipv6_ptr_zone($network_cidr),
     ];
 }

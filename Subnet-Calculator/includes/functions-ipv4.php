@@ -28,6 +28,30 @@ function cidr_to_wildcard(int $cidr): string {
     return long2ip(~$mask_long & 0xFFFFFFFF);
 }
 
+function cidrs_overlap(string $cidr_a, string $cidr_b): string {
+    [$ip_a, $px_a] = explode('/', $cidr_a);
+    [$ip_b, $px_b] = explode('/', $cidr_b);
+    $px_a  = (int)$px_a;
+    $px_b  = (int)$px_b;
+    $net_a = ip2long($ip_a) & 0xFFFFFFFF;
+    $net_b = ip2long($ip_b) & 0xFFFFFFFF;
+    $test_px = max($px_a, $px_b);
+    $mask    = $test_px === 0 ? 0 : ((~0 << (32 - $test_px)) & 0xFFFFFFFF);
+    if (($net_a & $mask) !== ($net_b & $mask)) return 'none';
+    if ($px_a === $px_b) return 'identical';
+    return $px_a < $px_b ? 'a_contains_b' : 'b_contains_a';
+}
+
+function ipv4_ptr_zone(string $network_cidr): string {
+    [$ip, $cidr] = explode('/', $network_cidr);
+    $cidr = (int)$cidr;
+    $o = explode('.', $ip);
+    if ($cidr <= 8)  return "{$o[0]}.in-addr.arpa";
+    if ($cidr <= 16) return "{$o[1]}.{$o[0]}.in-addr.arpa";
+    if ($cidr <= 24) return "{$o[2]}.{$o[1]}.{$o[0]}.in-addr.arpa";
+    return "{$o[3]}/{$cidr}.{$o[2]}.{$o[1]}.{$o[0]}.in-addr.arpa"; // RFC 2317
+}
+
 function calculate_subnet(string $ip, int $cidr): array {
     $ip_long      = ip2long($ip);
     $mask_long    = $cidr === 0 ? 0 : (~0 << (32 - $cidr));
@@ -37,8 +61,9 @@ function calculate_subnet(string $ip, int $cidr): array {
     $last         = $cidr >= 31 ? $broadcast    : $broadcast - 1;
     $usable       = $cidr >= 31 ? (1 << (32 - $cidr)) : max(0, (1 << (32 - $cidr)) - 2);
 
+    $network_cidr = long2ip($network_long) . '/' . $cidr;
     return [
-        'network_cidr'  => long2ip($network_long) . '/' . $cidr,
+        'network_cidr'  => $network_cidr,
         'netmask_cidr'  => '/' . $cidr,
         'netmask_octet' => cidr_to_mask($cidr),
         'wildcard'      => cidr_to_wildcard($cidr),
@@ -46,5 +71,6 @@ function calculate_subnet(string $ip, int $cidr): array {
         'last_usable'   => long2ip($last),
         'broadcast'     => long2ip($broadcast),
         'usable_hosts'  => $usable,
+        'ptr_zone'      => ipv4_ptr_zone($network_cidr),
     ];
 }

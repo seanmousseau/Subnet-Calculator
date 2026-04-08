@@ -8,22 +8,34 @@ https://dev.seanmousseau.com/subnet-calculator/
 
 **IPv4**
 - Accepts netmask in **CIDR** (`/24`, `24`) or **dotted-decimal** (`255.255.255.0`) notation
-- Outputs: Subnet CIDR, Netmask (CIDR & Octet), Wildcard Mask, First/Last Usable IP, Broadcast IP, Usable IPs, Address Type badge
+- Outputs: Subnet CIDR, Netmask (CIDR & Octet), Wildcard Mask, First/Last Usable IP, Broadcast IP, Usable IPs, Address Type badge, Reverse DNS Zone
 - Handles edge cases: `/0`, `/31` (point-to-point), `/32` (host route)
 - Paste a full CIDR string (e.g. `192.168.1.0/24`) into the IP field — it auto-splits on blur
+- Binary representation — collapsible section showing network and host bits with colour coding
+- Subnet splitter — split into equal smaller subnets; per-row copy buttons; split prefix included in shareable URL
 
 **IPv6**
 - CIDR prefix input (`/64`, `64`)
-- Outputs: Network CIDR, Prefix Length, First IP, Last IP, Total Addresses
+- Outputs: Network CIDR, Prefix Length, First IP, Last IP, Total Addresses, Reverse DNS Zone
+- Total Addresses shown as a number for small prefixes (≤ /108) and as `2^N` for larger ones
 - Uses PHP GMP extension for 128-bit arithmetic
+- Subnet splitter with per-row copy buttons
+
+**VLSM**
+- Allocate variable-length subnets from a parent network to meet named host requirements
+- Requirements sorted largest-first automatically; subnets allocated contiguously with block-boundary alignment
+- Results table shows: Name, Hosts Needed, Allocated Subnet (click to copy), Usable IPs, Waste
+- Add or remove requirement rows dynamically; supports any number of subnets
+
+**Subnet Overlap Checker**
+- Compare any two IPv4 CIDRs and report their relationship: no overlap, identical, or containment (A contains B / B contains A)
 
 **General**
-- IPv4 / IPv6 tab switcher
+- IPv4 / IPv6 / VLSM tab switcher
 - Reset button to clear inputs and results
-- Click any result row to copy the value to clipboard (with `execCommand` fallback for cross-origin iframes)
-- Light/dark mode toggle with `localStorage` persistence
-- Shareable URL bar — copy a link that auto-populates and calculates on load
-- Subnet splitter — split an IPv4 **or** IPv6 subnet into equal smaller subnets (configurable limit)
+- Click any result row or subnet to copy to clipboard (with `execCommand` fallback for cross-origin iframes)
+- Light/dark mode toggle with `localStorage` persistence; defaults to OS `prefers-color-scheme`
+- Shareable URL bar — copy a link that auto-populates and calculates on load; splitter state included
 - Form protection: honeypot or Cloudflare Turnstile (configurable)
 - All colours configured via CSS custom properties; optional `$fixed_bg_color` override
 - iframe-friendly mode with automatic height reporting via `postMessage`
@@ -72,6 +84,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File |
 |---------|------|
+| 1.2.0 | `releases/subnet-calculator-1.2.0.tar.gz` |
 | 1.1.1 | `releases/subnet-calculator-1.1.1.tar.gz` |
 | 1.1.0 | `releases/subnet-calculator-1.1.0.tar.gz` |
 | 1.0.1 | `releases/subnet-calculator-1.0.1.tar.gz` |

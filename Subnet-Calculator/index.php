@@ -6,11 +6,13 @@ require __DIR__ . '/includes/functions-ipv4.php';
 require __DIR__ . '/includes/functions-ipv6.php';
 require __DIR__ . '/includes/functions-split.php';
 require __DIR__ . '/includes/functions-util.php';
+require __DIR__ . '/includes/functions-vlsm.php';
 
 // ─── Security headers ─────────────────────────────────────────────────────────
 
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
+header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()');
 if ($frame_ancestors === "'none'") {
     header('X-Frame-Options: DENY');
 } elseif ($frame_ancestors === "'self'") {

@@ -12,20 +12,34 @@ php -S localhost:8080 -t Subnet-Calculator/
 php -l Subnet-Calculator/index.php
 for f in Subnet-Calculator/includes/*.php Subnet-Calculator/templates/layout.php; do php -l "$f"; done
 
-# Static analysis (PHPStan level 5, configured in phpstan.neon)
+# Static analysis (PHPStan level 9, configured in phpstan.neon)
 phpstan analyse --no-progress
 
-# Deploy to dev server, then run the end-to-end browser test suite (96 tests)
+# Unit tests (PHPUnit 11, requires: composer install)
+composer install --no-interaction --prefer-dist
+vendor/bin/phpunit
+
+# Deploy to dev server, then run the end-to-end browser test suite (125 tests)
 # Requires: dev server running, Chrome CDP container at 192.168.80.15:9224
 rsync -a --delete Subnet-Calculator/ root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
 scp testing/fixtures/iframe-test.html root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
 bash -c 'set -a; source ~/.claude/dev-secrets.env; set +a; python3 testing/scripts/cdp_test.py'
 
 # Build a release tarball (files at root level — untar directly in webroot to install/upgrade)
+# Also bump $app_version in Subnet-Calculator/includes/config.php before building
 tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
 ```
 
-There are no build steps or package managers. Test suite: `testing/scripts/cdp_test.py` (18 test groups, 96 assertions) covers page load, security headers, CSP nonce integrity, IPv4/IPv6 calculation, edge cases, address type badges, subnet splitters, shareable GET URLs, iframe integration, and UI interactions.
+**Release checklist:**
+1. Bump `$app_version` in `Subnet-Calculator/includes/config.php`
+2. Update version string in `Subnet-Calculator/templates/layout.php`
+3. Update `CHANGELOG.md` with new release section
+4. Add row to `README.md` downloads table
+5. Build tarball: `tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .`
+6. Commit, push, verify on GitHub
+7. Create PR `dev → main`
+
+PHP unit tests: `testing/unit/` (61 tests, 87 assertions on platforms without GMP; 15 additional IPv6/split tests on platforms with GMP). CDP browser tests: `testing/scripts/cdp_test.py` (28 test groups, 125 assertions) covers page load, security headers, Permissions-Policy, CSP nonce integrity, IPv4/IPv6 calculation, reverse DNS zones, edge cases, address type badges, subnet splitters, copy buttons, splitter shareable URLs, binary representation, VLSM planner, overlap checker, shareable GET URLs, iframe integration, and UI interactions.
 
 ## Repository layout
 
@@ -38,6 +52,7 @@ Subnet-Calculator/      ← docroot (serve this directory)
     functions-ipv6.php  ← IPv6 utility functions
     functions-split.php ← subnet splitter functions
     functions-util.php  ← address type detection + badge helpers
+    functions-vlsm.php  ← VLSM planner function
     request.php         ← input resolvers, Turnstile verify, GET/POST handling
   templates/            ← HTML template (blocked from direct web access)
     layout.php

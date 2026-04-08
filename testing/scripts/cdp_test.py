@@ -801,6 +801,201 @@ async def test_tab_switch(tab: CDPSession) -> None:
     assert_true("IPv6 panel has active class", "active" in panel_class)
 
 
+async def test_permissions_policy(_tab: CDPSession) -> None:
+    section("security headers — Permissions-Policy")
+    _, hdrs, _ = _http_get()
+    pp = hdrs.get("permissions-policy", "")
+    assert_true("Permissions-Policy header present", pp != "", pp)
+    for directive in ("camera=()", "microphone=()", "geolocation=()"):
+        assert_contains(f"Permissions-Policy contains {directive}", pp, directive)
+
+
+async def test_reverse_dns_ipv4(tab: CDPSession) -> None:
+    section("IPv4 — reverse DNS zone")
+
+    cases = [
+        ("192.168.1.0", "24", "1.168.192.in-addr.arpa"),
+        ("10.0.0.0",    "8",  "10.in-addr.arpa"),
+        ("172.16.0.0",  "16", "16.172.in-addr.arpa"),
+        ("192.168.1.0", "25", "0/25.1.168.192.in-addr.arpa"),
+    ]
+    for ip, mask, expected in cases:
+        await tab.navigate(BASE_URL)
+        await tab.fill("#ip",   ip)
+        await tab.fill("#mask", mask)
+        await tab.submit_form("#panel-ipv4 form")
+        assert_eq(f"{ip}/{mask} PTR zone", await tab.result_value("Reverse DNS Zone"), expected)
+
+
+async def test_reverse_dns_ipv6(tab: CDPSession) -> None:
+    section("IPv6 — reverse DNS zone")
+    await tab.navigate(BASE_URL)
+    await tab.click("#tab-ipv6")
+    await asyncio.sleep(0.1)
+    await tab.fill("#ipv6",   "2001:db8::")
+    await tab.fill("#prefix", "32")
+    await tab.submit_form("#panel-ipv6 form")
+    ptr = await tab.result_value("Reverse DNS Zone") or ""
+    assert_true("IPv6 PTR zone present", ptr != "", ptr)
+    assert_contains("IPv6 PTR zone ends in ip6.arpa", ptr, "ip6.arpa")
+    assert_contains("IPv6 PTR zone contains 2001:db8 nibbles", ptr, "8.b.d.0.1.0.0.2")
+
+
+async def test_ipv6_small_count(tab: CDPSession) -> None:
+    section("IPv6 — small total address count")
+
+    await tab.navigate(BASE_URL)
+    await tab.click("#tab-ipv6")
+    await asyncio.sleep(0.1)
+    await tab.fill("#ipv6",   "2001:db8::")
+    await tab.fill("#prefix", "127")
+    await tab.submit_form("#panel-ipv6 form")
+    total = await tab.result_value("Total Addresses") or ""
+    assert_eq("/127 total = 2", total.replace(",", ""), "2")
+
+    await tab.navigate(BASE_URL)
+    await tab.click("#tab-ipv6")
+    await asyncio.sleep(0.1)
+    await tab.fill("#ipv6",   "2001:db8::")
+    await tab.fill("#prefix", "64")
+    await tab.submit_form("#panel-ipv6 form")
+    total64 = await tab.result_value("Total Addresses") or ""
+    assert_contains("/64 total is exponential", total64, "2^64")
+
+
+async def test_binary_repr(tab: CDPSession) -> None:
+    section("IPv4 — binary representation")
+    await tab.navigate(BASE_URL)
+    await tab.fill("#ip",   "192.168.1.0")
+    await tab.fill("#mask", "24")
+    await tab.submit_form("#panel-ipv4 form")
+
+    assert_true("binary-details element exists", await tab.exists(".binary-details"))
+
+    # Open the details element
+    await tab.eval("document.querySelector('.binary-details').setAttribute('open', '')")
+    await asyncio.sleep(0.1)
+
+    net_code = await tab.text(".binary-details .bin-value")
+    assert_true("binary network contains dots", net_code and "." in (net_code or ""), net_code)
+    assert_contains("binary: first octet 11000000", net_code or "", "11000000")
+
+    boundary = await tab.text(".bin-boundary")
+    assert_contains("boundary shows 24 network bits", boundary or "", "24")
+    assert_contains("boundary shows 8 host bits",     boundary or "", "8")
+
+
+async def test_overlap_checker(tab: CDPSession) -> None:
+    section("VLSM tab — overlap checker")
+    await tab.navigate(BASE_URL)
+    await tab.click("#tab-vlsm")
+    await asyncio.sleep(0.1)
+
+    # No overlap
+    await tab.fill("input[name='overlap_cidr_a']", "10.0.0.0/24")
+    await tab.fill("input[name='overlap_cidr_b']", "10.0.1.0/24")
+    await tab.submit_form(".overlap-form")
+    result = await tab.text(".overlap-result") or ""
+    assert_contains("no overlap detected", result.lower(), "no overlap")
+
+    # a contains b
+    await tab.navigate(BASE_URL)
+    await tab.click("#tab-vlsm")
+    await asyncio.sleep(0.1)
+    await tab.fill("input[name='overlap_cidr_a']", "10.0.0.0/23")
+    await tab.fill("input[name='overlap_cidr_b']", "10.0.0.0/24")
+    await tab.submit_form(".overlap-form")
+    result2 = await tab.text(".overlap-result") or ""
+    assert_contains("a contains b", result2.lower(), "contains")
+
+    # Identical
+    await tab.navigate(BASE_URL)
+    await tab.click("#tab-vlsm")
+    await asyncio.sleep(0.1)
+    await tab.fill("input[name='overlap_cidr_a']", "192.168.0.0/24")
+    await tab.fill("input[name='overlap_cidr_b']", "192.168.0.0/24")
+    await tab.submit_form(".overlap-form")
+    result3 = await tab.text(".overlap-result") or ""
+    assert_contains("identical subnets", result3.lower(), "identical")
+
+
+async def test_vlsm(tab: CDPSession) -> None:
+    section("VLSM — planner")
+    await tab.navigate(BASE_URL)
+    await tab.click("#tab-vlsm")
+    await asyncio.sleep(0.1)
+
+    await tab.fill("#vlsm_network", "192.168.1.0")
+    await tab.fill("#vlsm_cidr",    "24")
+
+    # Fill in one row (the default row that's already there)
+    await tab.eval("document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN A'")
+    await tab.eval("document.querySelectorAll('.vlsm-hosts-input')[0].value = '50'")
+
+    await tab.submit_form(".vlsm-form")
+
+    assert_true("VLSM results table exists", await tab.exists(".vlsm-table"))
+    first_subnet = await tab.text(".vlsm-subnet-cell code") or ""
+    assert_true("VLSM allocated a subnet", "/" in first_subnet, first_subnet)
+
+    # Over-capacity error
+    await tab.navigate(BASE_URL)
+    await tab.click("#tab-vlsm")
+    await asyncio.sleep(0.1)
+    await tab.fill("#vlsm_network", "192.168.1.0")
+    await tab.fill("#vlsm_cidr",    "30")
+    await tab.eval("document.querySelectorAll('.vlsm-name-input')[0].value = 'BigLAN'")
+    await tab.eval("document.querySelectorAll('.vlsm-hosts-input')[0].value = '200'")
+    await tab.submit_form(".vlsm-form")
+    err = await tab.text(".error") or ""
+    assert_true("VLSM shows error when over-capacity", len(err) > 0, err)
+
+
+async def test_splitter_copy_buttons(tab: CDPSession) -> None:
+    section("IPv4 splitter — copy buttons")
+    await tab.navigate(BASE_URL)
+    await tab.fill("#ip",   "192.168.0.0")
+    await tab.fill("#mask", "24")
+    await tab.submit_form("#panel-ipv4 form")
+    await tab.fill("input[name='split_prefix']", "/26")
+    await tab.submit_form(".splitter-form")
+
+    assert_true("subnet-copy buttons present",
+                await tab.js_bool("document.querySelectorAll('.subnet-copy').length > 0"))
+    first_copy_attr = await tab.attr(".subnet-copy", "data-copy")
+    assert_true("first copy button has data-copy attribute",
+                first_copy_attr and "/" in first_copy_attr, str(first_copy_attr))
+    assert_contains("data-copy looks like a CIDR", first_copy_attr or "", "192.168.0.0")
+
+
+async def test_splitter_shareable_url(tab: CDPSession) -> None:
+    section("IPv4 splitter — shareable URL includes split_prefix")
+
+    # Submit a calculation + split to generate the share URL
+    await tab.navigate(BASE_URL)
+    await tab.fill("#ip",   "10.0.0.0")
+    await tab.fill("#mask", "24")
+    await tab.submit_form("#panel-ipv4 form")
+    await tab.fill("input[name='split_prefix']", "/26")
+    await tab.submit_form(".splitter-form")
+
+    share = await tab.text(".share-url") or ""
+    assert_contains("share URL includes split_prefix", share, "split_prefix=26")
+
+    # Load the share URL and verify split results auto-appear
+    share_path = await tab.js_str(
+        "document.querySelector('.share-url') && "
+        "document.querySelector('.share-url').textContent.trim()"
+    )
+    if share_path:
+        # The share URL is absolute; navigate directly
+        await tab.navigate(share_path)
+        split_count = await tab.js_str(
+            "document.querySelectorAll('.split-item').length.toString()"
+        )
+        assert_eq("GET with split_prefix auto-shows split results", split_count, "4")
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -854,6 +1049,15 @@ async def main() -> None:
             await test_iframe(tab)
             await test_theme_toggle(tab)
             await test_tab_switch(tab)
+            await test_permissions_policy(tab)
+            await test_reverse_dns_ipv4(tab)
+            await test_reverse_dns_ipv6(tab)
+            await test_ipv6_small_count(tab)
+            await test_binary_repr(tab)
+            await test_overlap_checker(tab)
+            await test_vlsm(tab)
+            await test_splitter_copy_buttons(tab)
+            await test_splitter_shareable_url(tab)
         finally:
             await b.call("Target.closeTarget", {"targetId": target_id})
             await browser.stop()

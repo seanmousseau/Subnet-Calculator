@@ -91,7 +91,15 @@ document.querySelectorAll('.share-copy').forEach(btn => {
 
 // ── Subnet splitter: click to copy ──────────────────────────────────────────
 document.querySelectorAll('.split-item').forEach(item => {
-    item.addEventListener('click', () => copyText(item.dataset.copy));
+    item.addEventListener('click', e => {
+        if (e.target.closest('.subnet-copy')) return; // handled by button handler
+        copyText(item.dataset.copy);
+    });
+});
+
+document.addEventListener('click', e => {
+    const btn = e.target.closest('.subnet-copy');
+    if (btn) { e.stopPropagation(); copyText(btn.dataset.copy, 'Copied!'); }
 });
 
 // ── Keyboard activation for copy targets (result rows + split items) ─────────
@@ -129,6 +137,41 @@ function autoFocusActive() {
 }
 
 autoFocusActive();
+
+// ── VLSM: dynamic requirement rows ──────────────────────────────────────────
+(function () {
+    const reqs = document.getElementById('vlsm-reqs');
+    if (!reqs) return;
+
+    function makeRow() {
+        const row = document.createElement('div');
+        row.className = 'vlsm-req-row';
+        row.innerHTML =
+            '<input type="text" name="vlsm_name[]" class="vlsm-name-input" placeholder="e.g. LAN A" autocomplete="off">' +
+            '<input type="number" name="vlsm_hosts[]" class="vlsm-hosts-input" min="1" placeholder="e.g. 50">' +
+            '<button type="button" class="vlsm-remove-row" aria-label="Remove row">\u00d7</button>';
+        return row;
+    }
+
+    document.querySelector('.vlsm-add-row')?.addEventListener('click', () => {
+        reqs.appendChild(makeRow());
+    });
+
+    reqs.addEventListener('click', e => {
+        const btn = e.target.closest('.vlsm-remove-row');
+        if (!btn) return;
+        const rows = reqs.querySelectorAll('.vlsm-req-row');
+        if (rows.length > 1) btn.closest('.vlsm-req-row').remove();
+    });
+})();
+
+// ── VLSM result cells: click to copy subnet ───────────────────────────────────
+document.querySelectorAll('.vlsm-subnet-cell').forEach(cell => {
+    cell.addEventListener('click', () => copyText(cell.dataset.copy));
+    cell.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cell.click(); }
+    });
+});
 
 // ── iframe: auto-detect and report height to parent via postMessage ───────────
 if (window.self !== window.top) {
