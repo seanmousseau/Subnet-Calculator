@@ -45,7 +45,7 @@ function resolve_ipv6_input(string $ip, string $prefix): array {
         $error6 = 'Invalid IPv6 address.';
     } else {
         $pfx = ltrim($prefix, '/');
-        if (!ctype_digit($pfx) || (int)$pfx < 0 || (int)$pfx > 128) {
+        if (!ctype_digit($pfx) || (int)$pfx > 128) {
             $error6 = 'Prefix must be between 0 and 128.';
         } else {
             try {
@@ -74,6 +74,7 @@ function turnstile_verify(string $token, string $secret, string $remoteip): bool
         CURLOPT_TIMEOUT        => 5,
     ]);
     $raw = curl_exec($ch);
+    curl_close($ch);
     $json = $raw ? json_decode($raw, true) : null;
     return (bool)($json['success'] ?? false);
 }
@@ -159,8 +160,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($result6 && isset($_POST['split_prefix6'])) {
             $input_split_prefix6 = trim((string)$_POST['split_prefix6']);
             $sp6 = ltrim($input_split_prefix6, '/');
-            if (!ctype_digit($sp6) || (int)$sp6 < 0 || (int)$sp6 > 128) {
-                $split_error6 = 'New prefix must be between 0 and 128.';
+            if (!ctype_digit($sp6) || (int)$sp6 < 1 || (int)$sp6 > 128) {
+                $split_error6 = 'New prefix must be between 1 and 128.';
             } else {
                 $new_pfx6     = (int)$sp6;
                 $current_pfx6 = (int)ltrim($result6['prefix'], '/');
@@ -177,7 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($active_tab === 'ipv4') {
         $get_ip   = trim((string)($_GET['ip']   ?? ''));
         $get_mask = trim((string)($_GET['mask'] ?? ''));
-        if ($get_ip !== '' && $get_mask !== '') {
+        if ($get_ip !== '') {
             $r = resolve_ipv4_input($get_ip, $get_mask);
             $result     = $r['result'];
             $error      = $r['error'];
@@ -187,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $get_ipv6   = trim((string)($_GET['ipv6']   ?? ''));
         $get_prefix = trim((string)($_GET['prefix'] ?? ''));
-        if ($get_ipv6 !== '' && $get_prefix !== '') {
+        if ($get_ipv6 !== '') {
             $r = resolve_ipv6_input($get_ipv6, $get_prefix);
             $result6      = $r['result6'];
             $error6       = $r['error6'];

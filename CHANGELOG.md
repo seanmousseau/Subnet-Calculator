@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-04-08
+
+### Fixed
+- IPv6 subnet splitter: new-prefix validation now enforces a minimum of `/1` (was incorrectly allowing `/0`, unlike the IPv4 path) — closes #116
+- GET requests with CIDR notation in the IP/address field (e.g. `?ip=192.168.1.0/24`) now trigger CIDR auto-detection correctly; previously a missing `mask` or `prefix` parameter silently produced a blank form — closes #117
+- IPv6 split results: `$more_label6` now wrapped in `htmlspecialchars()` for defensive output consistency — closes #118
+
+### Security
+- Fallback canonical URL: `HTTP_HOST` header is now validated against `[a-zA-Z0-9.\-]+(:\d+)?` before use, preventing host-header injection into `<link rel="canonical">` and Open Graph meta tags — closes #119
+
+### Changed
+- PHP static-analysis review (PHPStan L9, PHPCS, PHPMD, PHP Depend): `curl_close()` added after Turnstile verification, unreachable `< 0` guard removed from IPv6 prefix validation, `$canonical_url` annotated as pre-encoded for template authors — closes #120
+- Logo served via `<picture>` element with `assets/logo.png` PNG fallback for Safari <14 (`assets/logo.png` added) — closes #111
+- Favicon PNG fallback added (`assets/favicon-32.png`, `<link rel="icon" type="image/png">`) for browsers without WebP favicon support — closes #106
+
 ## [1.1.0] - 2026-04-07
 
 ### Added

@@ -12,11 +12,20 @@ php -S localhost:8080 -t Subnet-Calculator/
 php -l Subnet-Calculator/index.php
 for f in Subnet-Calculator/includes/*.php Subnet-Calculator/templates/layout.php; do php -l "$f"; done
 
+# Static analysis (PHPStan level 5, configured in phpstan.neon)
+phpstan analyse --no-progress
+
+# Deploy to dev server, then run the end-to-end browser test suite (96 tests)
+# Requires: dev server running, Chrome CDP container at 192.168.80.15:9224
+rsync -a --delete Subnet-Calculator/ root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
+scp testing/fixtures/iframe-test.html root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
+bash -c 'set -a; source ~/.claude/dev-secrets.env; set +a; python3 testing/scripts/cdp_test.py'
+
 # Build a release tarball (files at root level — untar directly in webroot to install/upgrade)
 tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
 ```
 
-There are no build steps, test suites, or package managers.
+There are no build steps or package managers. Test suite: `testing/scripts/cdp_test.py` (18 test groups, 96 assertions) covers page load, security headers, CSP nonce integrity, IPv4/IPv6 calculation, edge cases, address type badges, subnet splitters, shareable GET URLs, iframe integration, and UI interactions.
 
 ## Repository layout
 
@@ -32,14 +41,13 @@ Subnet-Calculator/      ← docroot (serve this directory)
     request.php         ← input resolvers, Turnstile verify, GET/POST handling
   templates/            ← HTML template (blocked from direct web access)
     layout.php
-  assets/               ← compiled CSS + JS (publicly served, long-cached)
+  assets/               ← CSS, JS, and image assets (publicly served, long-cached)
     app.css
     app.js
-  logo/                 ← optimized logo assets
     logo.webp
-    logo.png
+    logo.png            ← PNG fallback for Safari <14
     favicon-32.webp
-    favicon-32.png
+    favicon-32.png      ← PNG fallback for browsers without WebP favicon support
   .htaccess             ← blocks config files, tarballs, subdirs; cache headers
   robots.txt
   config.php.example    ← copy to config.php to override defaults
