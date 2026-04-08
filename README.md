@@ -72,6 +72,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File |
 |---------|------|
+| 1.2.0 | `releases/subnet-calculator-1.2.0.tar.gz` |
 | 1.1.1 | `releases/subnet-calculator-1.1.1.tar.gz` |
 | 1.1.0 | `releases/subnet-calculator-1.1.0.tar.gz` |
 | 1.0.1 | `releases/subnet-calculator-1.0.1.tar.gz` |

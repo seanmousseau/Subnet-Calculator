@@ -82,7 +82,7 @@ function turnstile_verify(string $token, string $secret, string $remoteip): bool
 // ─── Request handling ─────────────────────────────────────────────────────────
 
 $get_tab    = $_GET['tab'] ?? $default_tab;
-$active_tab = $get_tab === 'ipv6' ? 'ipv6' : 'ipv4';
+$active_tab = in_array($get_tab, ['ipv4', 'ipv6', 'vlsm'], true) ? $get_tab : 'ipv4';
 
 $result = $error = null;
 $input_ip = $input_mask = '';
@@ -95,18 +95,30 @@ $split_result6 = $split_error6 = null;
 $input_split_prefix  = '';
 $input_split_prefix6 = '';
 
+$overlap_result = $overlap_error = null;
+$overlap_cidr_a = $overlap_cidr_b = '';
+
+$vlsm_result = $vlsm_error = null;
+$vlsm_network = $vlsm_cidr_input = '';
+/** @var array<array{name: string, hosts: int}> $vlsm_requirements */
+$vlsm_requirements = [];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $post_tab   = $_POST['tab'] ?? $default_tab;
-    $active_tab = $post_tab === 'ipv6' ? 'ipv6' : 'ipv4';
+    $active_tab = in_array($post_tab, ['ipv4', 'ipv6', 'vlsm'], true) ? $post_tab : 'ipv4';
 
     $form_blocked = false;
     $is_splitter  = isset($_POST['split_prefix']) || isset($_POST['split_prefix6']);
+    $is_overlap   = isset($_POST['overlap_cidr_a']) || isset($_POST['overlap_cidr_b']);
+    $is_vlsm      = isset($_POST['vlsm_network']);
 
-    if (!$is_splitter && $form_protection === 'honeypot') {
+    $is_tool = $is_splitter || $is_overlap || $is_vlsm;
+
+    if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
             $form_blocked = true;
         }
-    } elseif (!$is_splitter && $turnstile_active) {
+    } elseif (!$is_tool && $turnstile_active) {
         $token = trim((string)($_POST['cf-turnstile-response'] ?? ''));
         if ($token === '') {
             $form_blocked = true;
@@ -174,6 +186,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
+
+    if ($is_overlap && !$form_blocked) {
+        $overlap_cidr_a = trim((string)($_POST['overlap_cidr_a'] ?? ''));
+        $overlap_cidr_b = trim((string)($_POST['overlap_cidr_b'] ?? ''));
+        $ra = resolve_ipv4_input($overlap_cidr_a, '');
+        $rb = resolve_ipv4_input($overlap_cidr_b, '');
+        if (!$ra['result']) {
+            $overlap_error = 'First subnet: ' . ($ra['error'] ?? 'Invalid CIDR.');
+        } elseif (!$rb['result']) {
+            $overlap_error = 'Second subnet: ' . ($rb['error'] ?? 'Invalid CIDR.');
+        } else {
+            $overlap_result = cidrs_overlap($ra['result']['network_cidr'], $rb['result']['network_cidr']);
+        }
+    }
+
+    if ($is_vlsm && !$form_blocked) {
+        $vlsm_network   = trim((string)($_POST['vlsm_network'] ?? ''));
+        $vlsm_cidr_input = trim((string)($_POST['vlsm_cidr']   ?? ''));
+        $rv = resolve_ipv4_input($vlsm_network, $vlsm_cidr_input);
+        if (!$rv['result']) {
+            $vlsm_error = 'Parent network: ' . ($rv['error'] ?? 'Invalid input.');
+        } else {
+            $names  = $_POST['vlsm_name']  ?? [];
+            $hosts  = $_POST['vlsm_hosts'] ?? [];
+            if (!is_array($names) || !is_array($hosts) || count($names) === 0) {
+                $vlsm_error = 'Add at least one requirement.';
+            } else {
+                $reqs = [];
+                foreach ($names as $i => $name) {
+                    $name  = trim((string)$name);
+                    $hval  = trim((string)($hosts[$i] ?? ''));
+                    if ($name === '' || !ctype_digit($hval) || (int)$hval < 1) continue;
+                    $reqs[] = ['name' => $name, 'hosts' => (int)$hval];
+                }
+                if ($reqs === []) {
+                    $vlsm_error = 'Add at least one valid requirement.';
+                } else {
+                    $vlsm_cidr_int   = (int)ltrim($rv['result']['netmask_cidr'], '/');
+                    $vlsm_network_ip = explode('/', $rv['result']['network_cidr'])[0];
+                    $vlsm_requirements = $reqs;
+                    $vr = vlsm_allocate($vlsm_network_ip, $vlsm_cidr_int, $reqs);
+                    if (isset($vr['error'])) {
+                        $vlsm_error = $vr['error'];
+                    } else {
+                        $vlsm_result = $vr['allocations'] ?? [];
+                    }
+                }
+            }
+        }
+    }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if ($active_tab === 'ipv4') {
         $get_ip   = trim((string)($_GET['ip']   ?? ''));
@@ -196,6 +258,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $input_prefix = $r['prefix'];
         }
     }
+
+    // GET-based splitter (for shareable URLs that include split_prefix)
+    if ($result && isset($_GET['split_prefix'])) {
+        $input_split_prefix = trim((string)$_GET['split_prefix']);
+        $sp = ltrim($input_split_prefix, '/');
+        if (ctype_digit($sp) && (int)$sp >= 1 && (int)$sp <= 32) {
+            $new_pfx      = (int)$sp;
+            $current_cidr = (int)ltrim($result['netmask_cidr'], '/');
+            $network_ip   = explode('/', $result['network_cidr'])[0];
+            if ($new_pfx > $current_cidr) {
+                $split_result = split_subnet($network_ip, $current_cidr, $new_pfx, $split_max_subnets);
+            }
+        }
+    } elseif ($result6 && isset($_GET['split_prefix6'])) {
+        $input_split_prefix6 = trim((string)$_GET['split_prefix6']);
+        $sp6 = ltrim($input_split_prefix6, '/');
+        if (ctype_digit($sp6) && (int)$sp6 >= 1 && (int)$sp6 <= 128) {
+            $new_pfx6     = (int)$sp6;
+            $current_pfx6 = (int)ltrim($result6['prefix'], '/');
+            $network_ipv6 = explode('/', $result6['network_cidr'])[0];
+            if ($new_pfx6 > $current_pfx6) {
+                $split_result6 = split_subnet6($network_ipv6, $current_pfx6, $new_pfx6, $split_max_subnets);
+            }
+        }
+    }
 }
 
 // Build fixed background override style
@@ -207,9 +294,11 @@ if ($fixed_bg_color !== 'null' && $fixed_bg_color !== '' && preg_match('/^#([0-9
 // Build shareable URL
 $share_url = '';
 if ($result) {
-    $share_url = '?' . http_build_query(['tab' => 'ipv4', 'ip' => $input_ip, 'mask' => ltrim($result['netmask_cidr'], '/')]);
+    $sp = $split_result ? ['split_prefix' => ltrim($input_split_prefix, '/')] : [];
+    $share_url = '?' . http_build_query(['tab' => 'ipv4', 'ip' => $input_ip, 'mask' => ltrim($result['netmask_cidr'], '/')] + $sp);
 } elseif ($result6) {
-    $share_url = '?' . http_build_query(['tab' => 'ipv6', 'ipv6' => $input_ipv6, 'prefix' => ltrim($result6['prefix'], '/')]);
+    $sp6 = $split_result6 ? ['split_prefix6' => ltrim($input_split_prefix6, '/')] : [];
+    $share_url = '?' . http_build_query(['tab' => 'ipv6', 'ipv6' => $input_ipv6, 'prefix' => ltrim($result6['prefix'], '/')] + $sp6);
 }
 $share_proto = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
 $share_base_server = $share_proto . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')

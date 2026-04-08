@@ -386,6 +386,56 @@
             transform: translateX(-50%) translateY(0);
         }
 
+        /* Binary representation */
+        .binary-details {
+            margin-top: 0.75rem;
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            padding: 0 0.75rem;
+        }
+
+        .binary-details summary {
+            cursor: pointer;
+            font-size: 0.78rem;
+            color: var(--color-text-faint);
+            padding: 0.45rem 0;
+            user-select: none;
+        }
+
+        .binary-details summary:hover { color: var(--color-text); }
+
+        .binary-details[open] summary { border-bottom: 1px solid var(--color-border); margin-bottom: 0.5rem; }
+
+        .binary-grid {
+            display: grid;
+            grid-template-columns: max-content 1fr;
+            gap: 0.25rem 0.75rem;
+            align-items: center;
+            margin-bottom: 0.4rem;
+        }
+
+        .bin-label {
+            font-size: 0.72rem;
+            color: var(--color-text-faint);
+        }
+
+        .bin-value {
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            letter-spacing: 0.02em;
+            word-break: break-all;
+        }
+
+        .bin-net  { color: var(--color-accent-light); }
+        .bin-host { color: var(--color-text-faint); }
+
+        .bin-boundary {
+            font-size: 0.72rem;
+            color: var(--color-text-faint);
+            text-align: center;
+            padding-bottom: 0.5rem;
+        }
+
         /* Subnet splitter */
         .splitter {
             margin-top: 1rem;
@@ -453,17 +503,38 @@
         }
 
         .split-item {
+            align-items: center;
             background: var(--color-surface);
             border: 1px solid var(--color-border);
             border-radius: 4px;
             color: var(--color-accent-light);
             cursor: pointer;
+            display: flex;
             font-family: 'Courier New', monospace;
             font-size: 0.78rem;
-            padding: 0.3rem 0.5rem;
-            text-align: center;
+            justify-content: space-between;
+            padding: 0.3rem 0.4rem 0.3rem 0.5rem;
             transition: background 0.1s;
         }
+
+        .split-subnet-text { flex: 1; text-align: center; }
+
+        .subnet-copy {
+            background: none;
+            border: none;
+            color: var(--color-text-faint);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            padding: 0 0 0 0.3rem;
+            opacity: 0.5;
+            transition: opacity 0.15s, color 0.15s;
+        }
+
+        .split-item:hover .subnet-copy,
+        .subnet-copy:focus-visible { opacity: 1; color: var(--color-accent); }
+
+        .subnet-copy:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; border-radius: 2px; }
 
         .split-item:hover { background: var(--color-border); }
 
@@ -485,6 +556,137 @@
             text-align: center;
             padding: 0.15rem 0;
         }
+
+        /* VLSM planner */
+        .vlsm-form { margin-bottom: 0.75rem; }
+
+        .vlsm-reqs { margin-bottom: 0.5rem; }
+
+        .vlsm-reqs-header {
+            display: flex;
+            gap: 0.5rem;
+            font-size: 0.72rem;
+            color: var(--color-text-faint);
+            padding: 0 2rem 0.2rem 0;
+        }
+
+        .vlsm-col-name  { flex: 1.5; }
+        .vlsm-col-hosts { flex: 1; }
+
+        .vlsm-req-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            margin-bottom: 0.35rem;
+        }
+
+        .vlsm-name-input  { flex: 1.5; }
+        .vlsm-hosts-input { flex: 1; }
+
+        .vlsm-remove-row {
+            background: none;
+            border: none;
+            color: var(--color-text-faint);
+            cursor: pointer;
+            font-size: 1.1rem;
+            padding: 0 0.2rem;
+            line-height: 1;
+        }
+
+        .vlsm-remove-row:hover { color: var(--color-text); }
+
+        .vlsm-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .vlsm-add-row {
+            background: none;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            color: var(--color-accent);
+            cursor: pointer;
+            font-size: 0.78rem;
+            padding: 0.3rem 0.65rem;
+            transition: background 0.1s;
+        }
+
+        .vlsm-add-row:hover { background: var(--color-border); }
+
+        .vlsm-results { margin-top: 0.75rem; overflow-x: auto; }
+
+        .vlsm-table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.8rem;
+        }
+
+        .vlsm-table th {
+            text-align: left;
+            padding: 0.3rem 0.5rem;
+            border-bottom: 1px solid var(--color-border);
+            color: var(--color-text-faint);
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .vlsm-table td {
+            padding: 0.3rem 0.5rem;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .vlsm-subnet-cell {
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+        }
+
+        .vlsm-subnet-cell:hover { background: var(--color-border); }
+
+        .vlsm-waste { color: var(--color-text-faint); }
+
+        /* Overlap checker */
+        .overlap-panel {
+            margin-top: 1rem;
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            padding: 0.65rem 0.75rem;
+        }
+
+        .overlap-title {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--color-text-faint);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .overlap-inputs {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .overlap-inputs input { flex: 1; min-width: 8rem; }
+
+        .overlap-vs {
+            font-size: 0.78rem;
+            color: var(--color-text-faint);
+            white-space: nowrap;
+        }
+
+        .overlap-result {
+            margin-top: 0.5rem;
+            font-size: 0.82rem;
+            padding: 0.3rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        .overlap-none     { color: var(--color-text-faint); }
+        .overlap-identical { color: var(--color-accent); font-weight: 600; }
+        .overlap-contains { color: #e5a23a; font-weight: 600; }
 
         @media (max-width: 480px) {
             .form-row { flex-direction: column; }

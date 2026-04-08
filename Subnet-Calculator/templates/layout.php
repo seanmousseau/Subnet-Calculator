@@ -18,8 +18,8 @@
     <!-- sc-warning: Turnstile is configured but the PHP cURL extension is not loaded.
          Captcha verification is being skipped. Install php-curl to enable it. -->
     <?php endif; ?>
-    <script nonce="<?= htmlspecialchars($csp_nonce) ?>">(function(){var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
-    <link rel="stylesheet" href="assets/app.css">
+    <script nonce="<?= htmlspecialchars($csp_nonce) ?>">(function(){var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme: light)').matches?'light':null);if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
+    <link rel="stylesheet" href="assets/app.css?v=<?= $app_version ?>">
     <?php if ($bg_override_style) echo '<style nonce="' . htmlspecialchars($csp_nonce) . '">' . $bg_override_style . '</style>'; ?>
     <?php if ($turnstile_active): ?>
         <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
@@ -33,7 +33,7 @@
             <img src="assets/logo.png" alt="Subnet Calculator logo" class="logo">
         </picture>
         <h1><?= htmlspecialchars($page_title) ?></h1>
-        <span class="version">v1.1.1</span>
+        <span class="version">v1.2.0</span>
         <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode" aria-label="Switch to light mode">
             <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
             <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -51,6 +51,11 @@
                 aria-selected="<?= $active_tab === 'ipv6' ? 'true' : 'false' ?>"
                 aria-controls="panel-ipv6"
                 data-tab="ipv6">IPv6</button>
+        <button class="tab-btn<?= $active_tab === 'vlsm' ? ' active' : '' ?>"
+                role="tab" id="tab-vlsm"
+                aria-selected="<?= $active_tab === 'vlsm' ? 'true' : 'false' ?>"
+                aria-controls="panel-vlsm"
+                data-tab="vlsm">VLSM</button>
     </div>
 
     <!-- IPv4 Panel -->
@@ -93,7 +98,7 @@
         <?php endif; ?>
 
         <?php if ($result): ?>
-            <div class="results">
+            <div class="results" aria-live="polite" aria-atomic="false">
                 <div class="results-header">Results</div>
                 <div class="result-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Subnet (CIDR)</span>
@@ -132,7 +137,32 @@
                     <span class="result-label">Address Type</span>
                     <span class="result-value"><span class="badge badge-<?= type_badge_class($ip4type) ?>"><?= htmlspecialchars($ip4type) ?></span></span>
                 </div>
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
+                    <span class="result-label">Reverse DNS Zone</span>
+                    <span class="result-value"><?= htmlspecialchars($result['ptr_zone']) ?></span>
+                </div>
             </div>
+            <?php
+            $bin_cidr  = (int)ltrim($result['netmask_cidr'], '/');
+            $bin_net   = array_map(fn($o) => sprintf('%08b', (int)$o), explode('.', explode('/', $result['network_cidr'])[0]));
+            $bin_mask  = array_map(fn($o) => sprintf('%08b', (int)$o), explode('.', $result['netmask_octet']));
+            ?>
+            <details class="binary-details">
+                <summary>Binary Representation</summary>
+                <div class="binary-grid">
+                    <span class="bin-label">Network</span>
+                    <code class="bin-value"><?php
+                        foreach ($bin_net as $i => $octet):
+                            $net_bits = max(0, min(8, $bin_cidr - $i * 8));
+                            ?><span class="bin-net"><?= substr($octet, 0, $net_bits) ?></span><span class="bin-host"><?= substr($octet, $net_bits) ?></span><?php
+                            if ($i < 3) echo '.';
+                        endforeach;
+                    ?></code>
+                    <span class="bin-label">Mask</span>
+                    <code class="bin-value"><?= implode('.', $bin_mask) ?></code>
+                </div>
+                <div class="bin-boundary">Network: <?= $bin_cidr ?> bits &nbsp;|&nbsp; Host: <?= 32 - $bin_cidr ?> bits</div>
+            </details>
             <?php if ($show_share_bar): ?>
             <div class="share-bar">
                 <span class="share-label">Share</span>
@@ -160,7 +190,12 @@
                 <?php elseif ($split_result && $split_result['showing'] > 0): ?>
                     <div class="split-list">
                         <?php foreach ($split_result['subnets'] as $s): ?>
-                            <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>"><?= htmlspecialchars($s) ?></div>
+                            <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
+                                <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
+                                <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s) ?>" aria-label="Copy <?= htmlspecialchars($s) ?>">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                </button>
+                            </div>
                         <?php endforeach; ?>
                         <?php if ($split_result['total'] > $split_result['showing']): ?>
                             <div class="split-more">+&nbsp;<?= number_format($split_result['total'] - $split_result['showing']) ?> more</div>
@@ -211,7 +246,7 @@
         <?php endif; ?>
 
         <?php if ($result6): ?>
-            <div class="results">
+            <div class="results" aria-live="polite" aria-atomic="false">
                 <div class="results-header">Results</div>
                 <div class="result-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Network (CIDR)</span>
@@ -231,12 +266,16 @@
                 </div>
                 <div class="result-row hosts-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Total Addresses</span>
-                    <span class="result-value"><?= htmlspecialchars($result6['total']) ?></span>
+                    <span class="result-value"><?= htmlspecialchars(is_numeric($result6['total']) ? number_format((int)$result6['total']) : $result6['total']) ?></span>
                 </div>
                 <?php $ip6type = get_ipv6_type($input_ipv6); ?>
                 <div class="result-row">
                     <span class="result-label">Address Type</span>
                     <span class="result-value"><span class="badge badge-<?= type_badge_class($ip6type) ?>"><?= htmlspecialchars($ip6type) ?></span></span>
+                </div>
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
+                    <span class="result-label">Reverse DNS Zone</span>
+                    <span class="result-value"><?= htmlspecialchars($result6['ptr_zone']) ?></span>
                 </div>
             </div>
             <?php if ($show_share_bar): ?>
@@ -266,7 +305,12 @@
                 <?php elseif ($split_result6 && $split_result6['showing'] > 0): ?>
                     <div class="split-list">
                         <?php foreach ($split_result6['subnets'] as $s): ?>
-                            <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>"><?= htmlspecialchars($s) ?></div>
+                            <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
+                                <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
+                                <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s) ?>" aria-label="Copy <?= htmlspecialchars($s) ?>">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                </button>
+                            </div>
                         <?php endforeach; ?>
                         <?php
                             $total6   = $split_result6['total'];
@@ -283,6 +327,120 @@
         <?php endif; ?>
     </div>
 
+    <!-- VLSM Panel -->
+    <div id="panel-vlsm" class="panel<?= $active_tab === 'vlsm' ? ' active' : '' ?>"
+         role="tabpanel" aria-labelledby="tab-vlsm" tabindex="-1">
+        <form method="post" class="vlsm-form" novalidate>
+            <input type="hidden" name="tab" value="vlsm">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="vlsm_network">Parent Network</label>
+                    <input type="text" id="vlsm_network" name="vlsm_network"
+                           value="<?= htmlspecialchars($vlsm_network) ?>"
+                           placeholder="10.0.0.0" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="form-group form-group--mask">
+                    <label for="vlsm_cidr">Prefix</label>
+                    <input type="text" id="vlsm_cidr" name="vlsm_cidr"
+                           value="<?= htmlspecialchars($vlsm_cidr_input) ?>"
+                           placeholder="/24" autocomplete="off" spellcheck="false">
+                </div>
+            </div>
+            <div class="vlsm-reqs" id="vlsm-reqs">
+                <div class="vlsm-reqs-header">
+                    <span class="vlsm-col-name">Name</span>
+                    <span class="vlsm-col-hosts">Hosts Needed</span>
+                </div>
+                <?php if ($vlsm_requirements): ?>
+                    <?php foreach ($vlsm_requirements as $req): ?>
+                    <div class="vlsm-req-row">
+                        <input type="text" name="vlsm_name[]" class="vlsm-name-input"
+                               value="<?= htmlspecialchars($req['name']) ?>" placeholder="e.g. LAN A" autocomplete="off">
+                        <input type="number" name="vlsm_hosts[]" class="vlsm-hosts-input"
+                               value="<?= $req['hosts'] ?>" min="1" placeholder="e.g. 50">
+                        <button type="button" class="vlsm-remove-row" aria-label="Remove row">&times;</button>
+                    </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="vlsm-req-row">
+                        <input type="text" name="vlsm_name[]" class="vlsm-name-input" placeholder="e.g. LAN A" autocomplete="off">
+                        <input type="number" name="vlsm_hosts[]" class="vlsm-hosts-input" min="1" placeholder="e.g. 50">
+                        <button type="button" class="vlsm-remove-row" aria-label="Remove row">&times;</button>
+                    </div>
+                <?php endif; ?>
+            </div>
+            <div class="vlsm-actions">
+                <button type="button" class="vlsm-add-row">+ Add Subnet</button>
+                <button type="submit" class="btn">Calculate</button>
+            </div>
+        </form>
+        <?php if ($vlsm_error): ?>
+            <div class="error"><?= htmlspecialchars($vlsm_error) ?></div>
+        <?php elseif ($vlsm_result !== null): ?>
+            <div class="vlsm-results">
+                <table class="vlsm-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Hosts Needed</th>
+                            <th>Allocated Subnet</th>
+                            <th>Usable</th>
+                            <th>Waste</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($vlsm_result as $alloc): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($alloc['name']) ?></td>
+                            <td><?= number_format($alloc['hosts_needed']) ?></td>
+                            <td class="vlsm-subnet-cell" tabindex="0" role="button"
+                                title="Click to copy" data-copy="<?= htmlspecialchars($alloc['subnet']) ?>">
+                                <code><?= htmlspecialchars($alloc['subnet']) ?></code>
+                            </td>
+                            <td><?= number_format($alloc['usable']) ?></td>
+                            <td class="vlsm-waste"><?= number_format($alloc['waste']) ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+
+        <!-- Overlap Checker -->
+        <div class="overlap-panel">
+            <div class="overlap-title">Subnet Overlap Checker</div>
+            <form method="post" class="overlap-form" novalidate>
+                <input type="hidden" name="tab" value="vlsm">
+                <div class="overlap-inputs">
+                    <input type="text" name="overlap_cidr_a"
+                           value="<?= htmlspecialchars($overlap_cidr_a) ?>"
+                           placeholder="10.0.0.0/24" autocomplete="off" spellcheck="false"
+                           aria-label="First subnet CIDR">
+                    <span class="overlap-vs">vs</span>
+                    <input type="text" name="overlap_cidr_b"
+                           value="<?= htmlspecialchars($overlap_cidr_b) ?>"
+                           placeholder="10.0.0.128/25" autocomplete="off" spellcheck="false"
+                           aria-label="Second subnet CIDR">
+                    <button type="submit" class="splitter-btn">Check</button>
+                </div>
+            </form>
+            <?php if ($overlap_error): ?>
+                <div class="error"><?= htmlspecialchars($overlap_error) ?></div>
+            <?php elseif ($overlap_result !== null): ?>
+                <?php
+                $overlap_labels = [
+                    'none'        => ['No overlap', 'overlap-none'],
+                    'identical'   => ['Identical subnets', 'overlap-identical'],
+                    'a_contains_b'=> [htmlspecialchars($overlap_cidr_a) . ' contains ' . htmlspecialchars($overlap_cidr_b), 'overlap-contains'],
+                    'b_contains_a'=> [htmlspecialchars($overlap_cidr_b) . ' contains ' . htmlspecialchars($overlap_cidr_a), 'overlap-contains'],
+                ];
+                [$label, $cls] = $overlap_labels[$overlap_result] ?? ['Unknown', ''];
+                ?>
+                <div class="overlap-result <?= $cls ?>"><?= $label ?></div>
+            <?php endif; ?>
+        </div>
+    </div>
+
     <footer>
         <a href="https://github.com/seanmousseau/Subnet-Calculator" target="_blank" rel="noopener noreferrer">github.com/seanmousseau/Subnet-Calculator</a>
     </footer>
@@ -290,6 +448,6 @@
 
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">Copied!</div>
 
-<script src="assets/app.js"></script>
+<script src="assets/app.js?v=<?= $app_version ?>"></script>
 </body>
 </html>

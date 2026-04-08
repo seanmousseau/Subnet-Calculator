@@ -1,0 +1,38 @@
+name: PHP
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+jobs:
+  analyse:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: gmp
+          tools: phpstan
+
+      - name: Install dependencies
+        if: hashFiles('composer.json') != ''
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Syntax check
+        run: |
+          php -l Subnet-Calculator/index.php
+          for f in Subnet-Calculator/includes/*.php Subnet-Calculator/templates/layout.php; do
+            php -l "$f"
+          done
+
+      - name: PHPStan
+        run: phpstan analyse --no-progress
+
+      - name: PHPUnit
+        if: hashFiles('composer.json') != ''
+        run: vendor/bin/phpunit

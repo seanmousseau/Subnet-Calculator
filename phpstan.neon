@@ -1,5 +1,5 @@
 parameters:
-    level: 5
+    level: 9
     # Analyse only the entry point so PHPStan follows the require chain in the
     # same order the app uses, giving it full context for every global variable.
     paths:
