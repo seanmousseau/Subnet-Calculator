@@ -131,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $input_mask = $r['mask'];
 
         if ($result && isset($_POST['split_prefix'])) {
-            $input_split_prefix = trim((string)($_POST['split_prefix'] ?? ''));
+            $input_split_prefix = trim((string)$_POST['split_prefix']);
             $sp = ltrim($input_split_prefix, '/');
             if (!ctype_digit($sp) || (int)$sp < 1 || (int)$sp > 32) {
                 $split_error = 'New prefix must be between 1 and 32.';
@@ -157,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $input_prefix = $r['prefix'];
 
         if ($result6 && isset($_POST['split_prefix6'])) {
-            $input_split_prefix6 = trim((string)($_POST['split_prefix6'] ?? ''));
+            $input_split_prefix6 = trim((string)$_POST['split_prefix6']);
             $sp6 = ltrim($input_split_prefix6, '/');
             if (!ctype_digit($sp6) || (int)$sp6 < 0 || (int)$sp6 > 128) {
                 $split_error6 = 'New prefix must be between 0 and 128.';

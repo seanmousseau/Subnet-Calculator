@@ -1,0 +1,23 @@
+parameters:
+    level: 5
+    # Analyse only the entry point so PHPStan follows the require chain in the
+    # same order the app uses, giving it full context for every global variable.
+    paths:
+        - Subnet-Calculator/index.php
+    # config.php is gitignored (user override) — skip if absent
+    excludePaths:
+        - Subnet-Calculator/config.php (?)
+    ignoreErrors:
+        # PHPStan does not propagate global variables through PHP's require
+        # chain. These 4 variables are always set by includes/config.php
+        # (required unconditionally at index.php:4), but PHPStan can't see
+        # that because it doesn't track globals across included files.
+        - message: '#Variable \$(frame_ancestors|form_protection|turnstile_site_key|turnstile_secret_key) might not be defined\.#'
+          path: Subnet-Calculator/index.php
+
+        # The config-default-vs-sanitise checks in includes/config.php look
+        # like always-true/false to PHPStan because it sees the defaults set
+        # just above. The optional user config.php override (required between
+        # defaults and sanitisation) can change those values at runtime.
+        - '#^Call to function in_array\(\) with arguments .+ will always evaluate to (true|false)\.$#'
+        - '#^Strict comparison using === between .+ will always evaluate to (true|false)\.$#'
