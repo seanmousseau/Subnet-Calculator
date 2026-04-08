@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Subnet Calculator — iframe test harness</title>
+  <style>
+    body { margin: 0; padding: 20px; background: #f0f0f0; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+
+  <!-- CDP-queryable state elements -->
+  <div id="resize-log" data-height="0" data-count="0">Waiting for sc-resize...</div>
+  <div id="bg-log"     data-sent="0"   data-color="">sc-set-bg not sent yet</div>
+
+  <iframe
+    id="scFrame"
+    src="./"
+    width="800"
+    scrolling="no"
+    allow="clipboard-write"
+    style="border:none; display:block; height:0;"
+    loading="eager">
+  </iframe>
+
+  <script>
+    var scFrame  = document.getElementById('scFrame');
+    var resizeLog = document.getElementById('resize-log');
+    var bgLog    = document.getElementById('bg-log');
+
+    // Track sc-resize messages from the embedded calculator
+    window.addEventListener('message', function (e) {
+      if (!e.data || e.data.type !== 'sc-resize') return;
+      var count = parseInt(resizeLog.getAttribute('data-count') || '0', 10) + 1;
+      resizeLog.setAttribute('data-height', e.data.height);
+      resizeLog.setAttribute('data-count',  count);
+      resizeLog.textContent = 'sc-resize: h=' + e.data.height + ' n=' + count;
+      scFrame.style.height  = e.data.height + 'px';
+    });
+
+    // Forward background colour to the iframe on every load (covers initial load + navigations)
+    scFrame.addEventListener('load', function () {
+      var color = '#f0f0f0';
+      scFrame.contentWindow.postMessage({ type: 'sc-set-bg', color: color }, '*');
+      bgLog.setAttribute('data-sent',  '1');
+      bgLog.setAttribute('data-color', color);
+      bgLog.textContent = 'sc-set-bg sent: ' + color;
+    });
+  </script>
+
+</body>
+</html>

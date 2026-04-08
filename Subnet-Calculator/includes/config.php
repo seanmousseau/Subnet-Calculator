@@ -41,7 +41,12 @@ if (!in_array($default_tab, ['ipv4', 'ipv6'], true)) {
 
 if ($canonical_url === '') {
     $proto = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
-    $canonical_url = $proto . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
+    $_host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    if (!preg_match('/^[a-zA-Z0-9.\-]+(:\d+)?$/', $_host)) {
+        $_host = 'localhost';
+    }
+    $canonical_url = $proto . '://' . $_host
         . strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
+    unset($_host);
 }
-$canonical_url = htmlspecialchars((string)$canonical_url);
+$canonical_url = htmlspecialchars((string)$canonical_url); // pre-encoded; output raw in template
