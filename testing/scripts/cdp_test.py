@@ -7,9 +7,13 @@ Usage:
 """
 
 import asyncio
+import base64
 import json
 import os
+import re
+import ssl
 import sys
+import urllib.error
 import urllib.request
 import websockets
 
@@ -267,6 +271,33 @@ class CDPSession:
 
 
 # ---------------------------------------------------------------------------
+# HTTP helper (used by header / CSP tests — no CDP required)
+# ---------------------------------------------------------------------------
+
+_SSL_CTX = ssl.create_default_context()
+_BASIC_HDR = "Basic " + base64.b64encode(
+    f"{BASIC_USER}:{BASIC_PASS}".encode()
+).decode()
+_APP_BASE = "https://dev-direct.seanmousseau.com:8343/claude/subnet-calculator/"
+
+
+def _http_get(path: str = "") -> tuple[int, dict[str, str], str]:
+    """
+    Return (status, lowercase_headers, body) for a path under the app root.
+    Non-2xx responses are caught and returned as (status, {}, "").
+    """
+    url = _APP_BASE + path
+    req = urllib.request.Request(url, headers={"Authorization": _BASIC_HDR})
+    try:
+        with urllib.request.urlopen(req, context=_SSL_CTX, timeout=10) as resp:
+            hdrs = {k.lower(): v for k, v in resp.headers.items()}
+            body = resp.read().decode("utf-8", errors="replace")
+            return resp.status, hdrs, body
+    except urllib.error.HTTPError as e:
+        return e.code, {}, ""
+
+
+# ---------------------------------------------------------------------------
 # Test suites
 # ---------------------------------------------------------------------------
 
@@ -280,6 +311,84 @@ async def test_page_load(tab: CDPSession) -> None:
     assert_true("IPv6 tab exists", await tab.exists("#tab-ipv6"))
     assert_eq("IPv4 tab active by default", await tab.attr("#tab-ipv4", "aria-selected"), "true")
     assert_true("logo present", await tab.exists("img.logo"))
+
+
+async def test_headers_and_csp(_tab: CDPSession) -> None:
+    # ── main page response headers ─────────────────────────────────────────
+    section("security headers — main page")
+    status, hdrs, body = _http_get()
+
+    assert_eq("HTTP 200",                          status, 200)
+    assert_eq("X-Content-Type-Options: nosniff",
+              hdrs.get("x-content-type-options"), "nosniff")
+    assert_eq("Referrer-Policy",
+              hdrs.get("referrer-policy"),         "strict-origin-when-cross-origin")
+    assert_true("Content-Security-Policy present",
+                "content-security-policy" in hdrs)
+    assert_true("no X-Frame-Options (frame-ancestors * default)",
+                "x-frame-options" not in hdrs)
+    assert_contains("Content-Type text/html",
+                    hdrs.get("content-type", ""), "text/html")
+
+    # ── CSP directive structure ────────────────────────────────────────────
+    section("CSP — directives")
+    csp = hdrs.get("content-security-policy", "")
+
+    assert_contains("default-src 'self'",   csp, "default-src 'self'")
+    assert_contains("base-uri 'self'",      csp, "base-uri 'self'")
+    assert_contains("script-src 'self'",    csp, "script-src 'self'")
+    assert_contains("style-src 'self'",     csp, "style-src 'self'")
+    assert_contains("img-src 'self' data:", csp, "img-src 'self' data:")
+    assert_contains("frame-src 'self'",     csp, "frame-src 'self'")
+    assert_contains("frame-ancestors *",    csp, "frame-ancestors *")
+
+    def _directive(csp_str: str, name: str) -> str:
+        """Extract the value of a CSP directive."""
+        m = re.search(rf'{re.escape(name)}\s+([^;]*)', csp_str)
+        return m.group(1) if m else ""
+
+    script_src = _directive(csp, "script-src")
+    assert_true("script-src no 'unsafe-inline'",
+                "'unsafe-inline'" not in script_src, script_src)
+    assert_true("script-src no 'unsafe-eval'",
+                "'unsafe-eval'" not in script_src, script_src)
+
+    # ── CSP nonce integrity ────────────────────────────────────────────────
+    section("CSP — nonce integrity")
+    nonce_m = re.search(r"'nonce-([^']+)'", csp)
+    assert_true("nonce present in CSP", nonce_m is not None, csp)
+
+    nonce = nonce_m.group(1) if nonce_m else ""
+    assert_eq("nonce is 24 chars (16 random bytes base64-encoded)", len(nonce), 24)
+
+    try:
+        base64.b64decode(nonce)
+        ok("nonce is valid base64")
+    except Exception as exc:
+        fail("nonce is valid base64", str(exc))
+
+    assert_contains("nonce on inline <script> in HTML",
+                    body, f'nonce="{nonce}"')
+
+    _, hdrs2, _ = _http_get()
+    nonce_m2 = re.search(r"'nonce-([^']+)'", hdrs2.get("content-security-policy", ""))
+    nonce2 = nonce_m2.group(1) if nonce_m2 else ""
+    assert_true("nonce is unique per request", nonce != nonce2,
+                f"both requests returned nonce={nonce!r}")
+
+    # ── static asset cache headers ─────────────────────────────────────────
+    section("static assets — cache headers")
+    for asset in ("assets/app.js", "assets/app.css"):
+        _, ahdrs, _ = _http_get(asset)
+        cc = ahdrs.get("cache-control", "")
+        assert_contains(f"{asset} max-age=31536000", cc, "max-age=31536000")
+        assert_contains(f"{asset} immutable",        cc, "immutable")
+
+    # ── blocked paths ──────────────────────────────────────────────────────
+    section("protected paths — 403")
+    for path in ("includes/config.php", "config.php", "templates/layout.php"):
+        code, _, _ = _http_get(path)
+        assert_eq(f"{path} → 403", code, 403)
 
 
 async def test_ipv4_basic(tab: CDPSession) -> None:
@@ -526,6 +635,142 @@ async def test_ipv6_shareable_url(tab: CDPSession) -> None:
     assert_eq("GET auto-calc IPv6: prefix length", await tab.result_value("Prefix Length"), "/8")
 
 
+async def _poll_resize_count(tab: CDPSession, min_count: int,
+                             timeout: float = 5.0) -> int:
+    """Return when resize-log data-count >= min_count, else return whatever we got."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        raw = await tab.js_str(
+            "document.getElementById('resize-log').getAttribute('data-count')"
+        )
+        count = int(raw or "0")
+        if count >= min_count:
+            return count
+        await asyncio.sleep(0.2)
+    raw = await tab.js_str(
+        "document.getElementById('resize-log').getAttribute('data-count')"
+    )
+    return int(raw or "0")
+
+
+async def test_iframe(tab: CDPSession) -> None:
+    IFRAME_HARNESS = BASE_URL + "iframe-test.html"
+
+    # ── setup ──────────────────────────────────────────────────────────────
+    section("iframe — setup")
+    await tab.navigate(IFRAME_HARNESS)
+    # Wait for the embedded calculator to load and send its first sc-resize
+    await _poll_resize_count(tab, 1, timeout=8.0)
+
+    assert_true("harness page loaded", await tab.exists("#scFrame"))
+    assert_true("iframe element present", await tab.exists("#scFrame"))
+
+    # ── in-iframe detection ────────────────────────────────────────────────
+    section("iframe — in-iframe detection")
+    has_class = await tab.js_bool(
+        "document.getElementById('scFrame').contentDocument"
+        ".documentElement.classList.contains('in-iframe')"
+    )
+    assert_true("html has in-iframe class", has_class)
+
+    # ── height reporting ───────────────────────────────────────────────────
+    section("iframe — height reporting")
+    height_str = await tab.js_str(
+        "document.getElementById('resize-log').getAttribute('data-height')"
+    )
+    height = int(height_str or "0")
+    assert_true("sc-resize received with height > 0", height > 0, f"height={height}")
+
+    frame_h = await tab.js_str("document.getElementById('scFrame').style.height")
+    assert_true("iframe element height auto-set", frame_h not in (None, "", "0px"),
+                f"style.height={frame_h!r}")
+
+    # ── background colour ──────────────────────────────────────────────────
+    section("iframe — background colour (sc-set-bg)")
+    sent = await tab.js_str(
+        "document.getElementById('bg-log').getAttribute('data-sent')"
+    )
+    assert_eq("sc-set-bg forwarded to iframe on load", sent, "1")
+
+    bg = await tab.js_str(
+        "document.getElementById('scFrame').contentDocument"
+        ".body.style.backgroundColor"
+    )
+    assert_true("sc-set-bg applied to iframe body", bg and len(bg) > 0,
+                f"backgroundColor={bg!r}")
+
+    # ── GET-based calculation inside iframe ────────────────────────────────
+    section("iframe — calculation via GET URL")
+    count_before = int(
+        (await tab.js_str(
+            "document.getElementById('resize-log').getAttribute('data-count')"
+        )) or "0"
+    )
+    # Navigate the iframe to a shareable URL
+    await tab.eval(
+        "document.getElementById('scFrame').src = './?tab=ipv4&ip=10.0.0.0&mask=8'"
+    )
+    await _poll_resize_count(tab, count_before + 1, timeout=8.0)
+
+    subnet_in_iframe = await tab.js_str(
+        """(function(){
+            var doc = document.getElementById('scFrame').contentDocument;
+            var rows = doc.querySelectorAll('.result-row');
+            for (var i = 0; i < rows.length; i++) {
+                var l = rows[i].querySelector('.result-label');
+                if (l && l.textContent.trim() === 'Subnet (CIDR)') {
+                    var v = rows[i].querySelector('.result-value');
+                    return v ? v.textContent.trim() : null;
+                }
+            }
+            return null;
+        })()"""
+    )
+    assert_eq("IPv4 GET calc renders in iframe", subnet_in_iframe, "10.0.0.0/8")
+
+    count_after_get = int(
+        (await tab.js_str(
+            "document.getElementById('resize-log').getAttribute('data-count')"
+        )) or "0"
+    )
+    assert_true("sc-resize fires after GET calculation",
+                count_after_get > count_before, f"count {count_before}→{count_after_get}")
+
+    # ── form submission inside iframe ──────────────────────────────────────
+    section("iframe — form submission")
+    count_before_submit = count_after_get
+    iframe_doc = "document.getElementById('scFrame').contentDocument"
+    await tab.eval(f"{iframe_doc}.querySelector('#ip').value = '192.168.50.0'")
+    await tab.eval(f"{iframe_doc}.querySelector('#mask').value = '26'")
+    await tab.eval(f"{iframe_doc}.querySelector('#panel-ipv4 form').submit()")
+    await _poll_resize_count(tab, count_before_submit + 1, timeout=8.0)
+
+    usable = await tab.js_str(
+        """(function(){
+            var doc = document.getElementById('scFrame').contentDocument;
+            var rows = doc.querySelectorAll('.result-row');
+            for (var i = 0; i < rows.length; i++) {
+                var l = rows[i].querySelector('.result-label');
+                if (l && l.textContent.trim() === 'Usable IPs') {
+                    var v = rows[i].querySelector('.result-value');
+                    return v ? v.textContent.trim() : null;
+                }
+            }
+            return null;
+        })()"""
+    )
+    assert_eq("form submit in iframe: results render", usable, "62")
+
+    count_after_submit = int(
+        (await tab.js_str(
+            "document.getElementById('resize-log').getAttribute('data-count')"
+        )) or "0"
+    )
+    assert_true("sc-resize fires after form submit",
+                count_after_submit > count_before_submit,
+                f"count {count_before_submit}→{count_after_submit}")
+
+
 async def test_theme_toggle(tab: CDPSession) -> None:
     section("UI — theme toggle")
     await tab.navigate(BASE_URL)
@@ -590,6 +835,7 @@ async def main() -> None:
 
         try:
             await test_page_load(tab)
+            await test_headers_and_csp(tab)
             await test_ipv4_basic(tab)
             await test_ipv4_dotted_mask(tab)
             await test_ipv4_cidr_paste(tab)
@@ -605,6 +851,7 @@ async def main() -> None:
             await test_ipv6_errors(tab)
             await test_ipv6_splitter(tab)
             await test_ipv6_shareable_url(tab)
+            await test_iframe(tab)
             await test_theme_toggle(tab)
             await test_tab_switch(tab)
         finally:
