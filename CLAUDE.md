@@ -35,9 +35,11 @@ tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
 2. Update version string in `Subnet-Calculator/templates/layout.php`
 3. Update `CHANGELOG.md` with new release section
 4. Add row to `README.md` downloads table
-5. Build tarball: `tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .`
+5. Build tarball (see Development block above)
 6. Commit, push, verify on GitHub
 7. Create PR `dev → main`
+
+(Or run `/release` to automate steps 1–7.)
 
 PHP unit tests: `testing/unit/` (61 tests, 87 assertions on platforms without GMP; 15 additional IPv6/split tests on platforms with GMP). CDP browser tests: `testing/scripts/cdp_test.py` (28 test groups, 125 assertions) covers page load, security headers, Permissions-Policy, CSP nonce integrity, IPv4/IPv6 calculation, reverse DNS zones, edge cases, address type badges, subnet splitters, copy buttons, splitter shareable URLs, binary representation, VLSM planner, overlap checker, shareable GET URLs, iframe integration, and UI interactions.
 
@@ -110,6 +112,14 @@ The local git remote (`origin`) points to a session-scoped proxy at `127.0.0.1`.
 
 To write files to GitHub from a Claude Code session, prefer `mcp__github__push_files` for small files (works up to ~20 KB per file). For larger files (e.g. `index.php` at ~64 KB, release tarballs at ~600 KB), instruct the user to push from their own machine.
 
-## Session start hook
+## Claude automations
 
-`.claude/hooks/session-start.sh` runs automatically in remote Claude Code sessions. It installs `php-gmp` if the GMP extension is not loaded (required for IPv6 calculation).
+**Skills** (invoke with `/skill-name`):
+- `/deploy-test` — rsync to dev server + run CDP browser suite
+- `/release` — full release checklist (bump version, changelog, tarball, PR)
+
+**Hooks** (PostToolUse, auto-run on every PHP edit):
+- `php -l` — syntax check (~50ms)
+- `phpstan analyse` — level 9 static analysis (~2s)
+
+**Session start hook**: `.claude/hooks/session-start.sh` — installs `php-gmp` in remote sessions if missing.
