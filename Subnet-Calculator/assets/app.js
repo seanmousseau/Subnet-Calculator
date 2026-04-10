@@ -165,12 +165,88 @@ autoFocusActive();
     });
 })();
 
+// ── VLSM: submit validation + loading state ──────────────────────────────────
+(function () {
+    const form = document.querySelector('.vlsm-form');
+    if (!form) return;
+    form.addEventListener('submit', function (e) {
+        form.querySelectorAll('.vlsm-inline-error').forEach(function (el) { el.remove(); });
+        var hasError = false;
+        form.querySelectorAll('.vlsm-req-row').forEach(function (row) {
+            var hostsInput = row.querySelector('.vlsm-hosts-input');
+            if (!hostsInput) return;
+            var val = parseInt(hostsInput.value, 10);
+            if (!hostsInput.value || isNaN(val) || val < 1) {
+                hasError = true;
+                var msg = document.createElement('span');
+                msg.className = 'vlsm-inline-error';
+                msg.textContent = 'Must be \u2265 1';
+                hostsInput.after(msg);
+            }
+        });
+        if (hasError) { e.preventDefault(); return; }
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Calculating\u2026'; }
+    });
+})();
+
 // ── VLSM result cells: click to copy subnet ───────────────────────────────────
 document.querySelectorAll('.vlsm-subnet-cell').forEach(cell => {
     cell.addEventListener('click', () => copyText(cell.dataset.copy));
     cell.addEventListener('keydown', e => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cell.click(); }
     });
+});
+
+// ── Copy All ──────────────────────────────────────────────────────────────────
+document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.copy-all-btn');
+    if (!btn) return;
+    var target = btn.dataset.target;
+    var texts = [];
+    if (target === 'split') {
+        var list = btn.closest('.split-list');
+        if (list) {
+            list.querySelectorAll('.split-item[data-copy]').forEach(function (item) {
+                texts.push(item.dataset.copy);
+            });
+        }
+    } else if (target === 'vlsm') {
+        document.querySelectorAll('.vlsm-subnet-cell[data-copy]').forEach(function (cell) {
+            texts.push(cell.dataset.copy);
+        });
+    }
+    if (texts.length > 0) copyText(texts.join('\n'), 'All copied!');
+});
+
+// ── VLSM: CSV export ──────────────────────────────────────────────────────────
+document.getElementById('vlsm-export-csv')?.addEventListener('click', function () {
+    var table = document.querySelector('.vlsm-table');
+    if (!table) return;
+    var rows = table.querySelectorAll('tbody tr');
+    var networkVal = (document.getElementById('vlsm_network')?.value || 'network').replace(/[^0-9.]/g, '');
+    var cidrVal    = (document.getElementById('vlsm_cidr')?.value    || '0').replace(/[^0-9]/g, '');
+    var filename = 'vlsm-' + networkVal + '-' + cidrVal + '.csv';
+    var headers = ['Name', 'Hosts Needed', 'Allocated Subnet', 'First Usable', 'Last Usable', 'Usable IPs', 'Waste'];
+    var lines = [headers.join(',')];
+    rows.forEach(function (tr) {
+        var cells = tr.querySelectorAll('td');
+        var name      = (cells[0]?.textContent || '').trim().replace(/,/g, ' ');
+        var hostsNeed = (cells[1]?.textContent || '').trim().replace(/,/g, '');
+        var subnet    = (tr.querySelector('.vlsm-subnet-cell code')?.textContent || '').trim();
+        var first     = (tr.dataset.first || '').trim();
+        var last      = (tr.dataset.last  || '').trim();
+        var usable    = (cells[3]?.textContent || '').trim().replace(/,/g, '');
+        var waste     = (cells[4]?.textContent || '').trim().replace(/,/g, '');
+        lines.push([name, hostsNeed, subnet, first, last, usable, waste].join(','));
+    });
+    var csv = lines.join('\r\n');
+    var blob = new Blob([csv], {type: 'text/csv'});
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = filename; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
 });
 
 // ── iframe: auto-detect and report height to parent via postMessage ───────────

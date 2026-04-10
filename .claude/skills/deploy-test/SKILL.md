@@ -11,8 +11,8 @@ Deploy and test the Subnet Calculator on the dev server:
    rsync -a --delete Subnet-Calculator/ root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
    scp testing/fixtures/iframe-test.html root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
    ```
-2. Run the CDP browser test suite:
+2. Run the Playwright browser test suite:
    ```
-   bash -c 'set -a; source ~/.claude/dev-secrets.env; set +a; python3 testing/scripts/cdp_test.py'
+   bash -c 'set -a; source ~/.claude/dev-secrets.env; set +a; python3 testing/scripts/playwright_test.py'
    ```
 3. Report results: total pass/fail count and details of any failed assertions.

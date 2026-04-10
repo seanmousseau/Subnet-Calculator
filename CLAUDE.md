@@ -23,7 +23,7 @@ vendor/bin/phpunit
 # Requires: dev server running, Chrome CDP container at 192.168.80.15:9224
 rsync -a --delete Subnet-Calculator/ root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
 scp testing/fixtures/iframe-test.html root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
-bash -c 'set -a; source ~/.claude/dev-secrets.env; set +a; python3 testing/scripts/cdp_test.py'
+bash -c 'set -a; source ~/.claude/dev-secrets.env; set +a; python3 testing/scripts/playwright_test.py'
 
 # Build a release tarball (files at root level — untar directly in webroot to install/upgrade)
 # Also bump $app_version in Subnet-Calculator/includes/config.php before building
@@ -32,16 +32,15 @@ tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
 
 **Release checklist:**
 1. Bump `$app_version` in `Subnet-Calculator/includes/config.php`
-2. Update version string in `Subnet-Calculator/templates/layout.php`
-3. Update `CHANGELOG.md` with new release section
-4. Add row to `README.md` downloads table
-5. Build tarball (see Development block above)
-6. Commit, push, verify on GitHub
-7. Create PR `dev → main`
+2. Update `CHANGELOG.md` with new release section
+3. Add row to `README.md` downloads table
+4. Build tarball (see Development block above)
+5. Commit, push, verify on GitHub
+6. Create PR `dev → main`
 
 (Or run `/release` to automate steps 1–7.)
 
-PHP unit tests: `testing/unit/` (61 tests, 87 assertions on platforms without GMP; 15 additional IPv6/split tests on platforms with GMP). CDP browser tests: `testing/scripts/cdp_test.py` (28 test groups, 125 assertions) covers page load, security headers, Permissions-Policy, CSP nonce integrity, IPv4/IPv6 calculation, reverse DNS zones, edge cases, address type badges, subnet splitters, copy buttons, splitter shareable URLs, binary representation, VLSM planner, overlap checker, shareable GET URLs, iframe integration, and UI interactions.
+PHP unit tests: `testing/unit/` (61 tests, 87 assertions on platforms without GMP; 15 additional IPv6/split tests on platforms with GMP). Playwright browser tests: `testing/scripts/playwright_test.py` (41 test groups, ~148 assertions) covers page load, security headers, Permissions-Policy, CSP nonce integrity, IPv4/IPv6 calculation, reverse DNS zones, edge cases, address type badges, subnet splitters, copy buttons, splitter shareable URLs, binary representation, VLSM planner, overlap checker, shareable GET URLs, iframe integration, UI interactions, VLSM shareable URL, VLSM CSV export, VLSM reset/validation, Copy All buttons, VLSM utilisation summary, IPv6 overlap, multi-CIDR overlap, IPv6 binary/hex, and v1.3.0 regression tests.
 
 ## Repository layout
 

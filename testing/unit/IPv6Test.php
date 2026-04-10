@@ -101,4 +101,39 @@ class IPv6Test extends TestCase
         $r = calculate_subnet6('2001:db8::', 108);
         $this->assertSame((string)(1 << 20), $r['total']);
     }
+
+    // ── cidrs_overlap6 ────────────────────────────────────────────────────────
+
+    public function testCidrsOverlap6None(): void
+    {
+        $this->assertSame('none', cidrs_overlap6('2001:db8::/32', '2001:db9::/32'));
+    }
+
+    public function testCidrsOverlap6Identical(): void
+    {
+        $this->assertSame('identical', cidrs_overlap6('2001:db8::/32', '2001:db8::/32'));
+    }
+
+    public function testCidrsOverlap6AContainsB(): void
+    {
+        $this->assertSame('a_contains_b', cidrs_overlap6('2001:db8::/32', '2001:db8:1::/48'));
+    }
+
+    public function testCidrsOverlap6BContainsA(): void
+    {
+        $this->assertSame('b_contains_a', cidrs_overlap6('2001:db8:1::/48', '2001:db8::/32'));
+    }
+
+    public function testCidrsOverlap6SlashZero(): void
+    {
+        // /0 covers everything — exercises the $host_bits = 128 branch of the mask
+        $this->assertSame('a_contains_b', cidrs_overlap6('::/0', '2001:db8::/32'));
+    }
+
+    public function testCidrsOverlap6SlashOneTwentyEight(): void
+    {
+        // Two identical /128 host routes — exercises $host_bits = 0 branch (host_mask = 0)
+        $this->assertSame('identical', cidrs_overlap6('::1/128', '::1/128'));
+        $this->assertSame('none', cidrs_overlap6('::1/128', '::2/128'));
+    }
 }
