@@ -522,12 +522,12 @@ if ($i < 3) {
                 $overlap_labels = [
                     'none'        => ['No overlap', 'overlap-none'],
                     'identical'   => ['Identical subnets', 'overlap-identical'],
-                    'a_contains_b' => [htmlspecialchars($overlap_cidr_a) . ' contains ' . htmlspecialchars($overlap_cidr_b), 'overlap-contains'],
-                    'b_contains_a' => [htmlspecialchars($overlap_cidr_b) . ' contains ' . htmlspecialchars($overlap_cidr_a), 'overlap-contains'],
+                    'a_contains_b' => [$overlap_cidr_a . ' contains ' . $overlap_cidr_b, 'overlap-contains'],
+                    'b_contains_a' => [$overlap_cidr_b . ' contains ' . $overlap_cidr_a, 'overlap-contains'],
                 ];
                 [$label, $cls] = $overlap_labels[$overlap_result] ?? ['Unknown', ''];
                 ?>
-                <div class="overlap-result <?= $cls ?>"><?= $label ?></div>
+                <div class="overlap-result <?= htmlspecialchars($cls) ?>"><?= htmlspecialchars($label) ?></div>
             <?php endif; ?>
         </div>
 
@@ -552,15 +552,15 @@ if ($i < 3) {
                             if ($conflict['relation'] === 'identical') {
                                 $rel_label = 'Identical';
                             } elseif ($conflict['relation'] === 'a_contains_b') {
-                                $rel_label = htmlspecialchars($conflict['a']) . ' contains ' . htmlspecialchars($conflict['b']);
+                                $rel_label = $conflict['a'] . ' contains ' . $conflict['b'];
                             } elseif ($conflict['relation'] === 'b_contains_a') {
-                                $rel_label = htmlspecialchars($conflict['b']) . ' contains ' . htmlspecialchars($conflict['a']);
+                                $rel_label = $conflict['b'] . ' contains ' . $conflict['a'];
                             } else {
                                 $rel_label = 'Overlap';
                             }
                             ?>
                         <li class="overlap-contains">
-                            <code><?= htmlspecialchars($conflict['a']) ?></code> / <code><?= htmlspecialchars($conflict['b']) ?></code>: <?= $rel_label ?>
+                            <code><?= htmlspecialchars($conflict['a']) ?></code> / <code><?= htmlspecialchars($conflict['b']) ?></code>: <?= htmlspecialchars($rel_label) ?>
                         </li>
                         <?php endforeach; ?>
                     </ul>

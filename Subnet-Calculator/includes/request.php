@@ -230,7 +230,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $r6b = calculate_subnet6($b_ip, (int)$b_pfx);
                         $overlap_result = cidrs_overlap6($r6a['network_cidr'], $r6b['network_cidr']);
                     } catch (\Exception $e) {
-                        $overlap_error = 'An error occurred: ' . $e->getMessage();
+                        error_log('sc IPv6 overlap error: ' . $e->getMessage());
+                        $overlap_error = 'An error occurred during calculation. Please check your input.';
                     }
                 }
             }
@@ -339,7 +340,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $reqs = [];
                 foreach ($names as $i => $name) {
-                    $name  = trim((string)$name);
+                    $name  = mb_substr(trim((string)$name), 0, 100);
                     $hval  = trim((string)($hosts[$i] ?? ''));
                     if ($name === '' || !ctype_digit($hval) || (int)$hval < 1) {
                         continue;
@@ -398,7 +399,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (is_array($get_names) && is_array($get_hosts) && count($get_names) > 0) {
                     $reqs = [];
                     foreach ($get_names as $i => $name) {
-                        $name = trim((string)$name);
+                        $name = mb_substr(trim((string)$name), 0, 100);
                         $hval = trim((string)($get_hosts[$i] ?? ''));
                         if ($name !== '' && ctype_digit($hval) && (int)$hval >= 1) {
                             $reqs[] = ['name' => $name, 'hosts' => (int)$hval];
