@@ -269,20 +269,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $m_ip  = trim($m_ip);
                     $m_pfx = trim($m_pfx);
                     if (!is_valid_ipv6($m_ip) || !ctype_digit($m_pfx) || (int)$m_pfx > 128) {
-                        $multi_err = 'Invalid CIDR: ' . htmlspecialchars($line);
+                        $multi_err = 'Invalid CIDR: ' . $line;
                         break;
                     }
                     try {
                         $r6m = calculate_subnet6($m_ip, (int)$m_pfx);
                         $normalised[] = ['cidr' => $r6m['network_cidr'], 'v6' => true];
                     } catch (\Exception $e) {
-                        $multi_err = 'Invalid CIDR: ' . htmlspecialchars($line);
+                        $multi_err = 'Invalid CIDR: ' . $line;
                         break;
                     }
                 } else {
                     $rm = resolve_ipv4_input($line, '');
                     if (!$rm['result']) {
-                        $multi_err = 'Invalid CIDR: ' . htmlspecialchars($line);
+                        $multi_err = 'Invalid CIDR: ' . $line;
                         break;
                     }
                     $normalised[] = ['cidr' => $rm['result']['network_cidr'], 'v6' => false];
