@@ -1,51 +1,111 @@
 <?php
+
 declare(strict_types=1);
 
 // ─── Address type detection ───────────────────────────────────────────────────
 
-function get_ipv4_type(string $ip): string {
+function get_ipv4_type(string $ip): string
+{
     $n = ip2long($ip) & 0xFFFFFFFF;
-    if ($n === 0)                                                  return 'Unspecified';
-    if ($n === 0xFFFFFFFF)                                         return 'Broadcast';
-    if (($n & 0xFF000000) === 0x7F000000)                          return 'Loopback';
-    if (($n & 0xFF000000) === 0x0A000000)                          return 'Private';
-    if (($n & 0xFFF00000) === 0xAC100000)                          return 'Private';
-    if (($n & 0xFFFF0000) === 0xC0A80000)                          return 'Private';
-    if (($n & 0xFFFF0000) === 0xA9FE0000)                          return 'Link-local';
-    if (($n & 0xF0000000) === 0xE0000000)                          return 'Multicast';
-    if (($n & 0xFFFFFF00) === 0xC0000200)                          return 'Documentation';
-    if (($n & 0xFFFFFF00) === 0xC6336400)                          return 'Documentation';
-    if (($n & 0xFFFFFF00) === 0xCB007100)                          return 'Documentation';
-    if (($n & 0xF0000000) === 0xF0000000)                          return 'Reserved';
-    if (($n & 0xFF000000) === 0x00000000)                          return 'This Network';
-    if (($n & 0xFFC00000) === 0x64400000)                          return 'CGNAT';
-    if (($n & 0xFFFE0000) === 0xC6120000)                          return 'Benchmarking';
-    if (($n & 0xFFFFFF00) === 0xC0000000)                          return 'IETF Reserved';
+    if ($n === 0) {
+        return 'Unspecified';
+    }
+    if ($n === 0xFFFFFFFF) {
+        return 'Broadcast';
+    }
+    if (($n & 0xFF000000) === 0x7F000000) {
+        return 'Loopback';
+    }
+    if (($n & 0xFF000000) === 0x0A000000) {
+        return 'Private';
+    }
+    if (($n & 0xFFF00000) === 0xAC100000) {
+        return 'Private';
+    }
+    if (($n & 0xFFFF0000) === 0xC0A80000) {
+        return 'Private';
+    }
+    if (($n & 0xFFFF0000) === 0xA9FE0000) {
+        return 'Link-local';
+    }
+    if (($n & 0xF0000000) === 0xE0000000) {
+        return 'Multicast';
+    }
+    if (($n & 0xFFFFFF00) === 0xC0000200) {
+        return 'Documentation';
+    }
+    if (($n & 0xFFFFFF00) === 0xC6336400) {
+        return 'Documentation';
+    }
+    if (($n & 0xFFFFFF00) === 0xCB007100) {
+        return 'Documentation';
+    }
+    if (($n & 0xF0000000) === 0xF0000000) {
+        return 'Reserved';
+    }
+    if (($n & 0xFF000000) === 0x00000000) {
+        return 'This Network';
+    }
+    if (($n & 0xFFC00000) === 0x64400000) {
+        return 'CGNAT';
+    }
+    if (($n & 0xFFFE0000) === 0xC6120000) {
+        return 'Benchmarking';
+    }
+    if (($n & 0xFFFFFF00) === 0xC0000000) {
+        return 'IETF Reserved';
+    }
     return 'Public';
 }
 
-function get_ipv6_type(string $ip): string {
+function get_ipv6_type(string $ip): string
+{
     $bin = inet_pton($ip);
-    if ($bin === false) return 'Unknown';
+    if ($bin === false) {
+        return 'Unknown';
+    }
     $b = array_values(unpack('C*', $bin));
-    if ($bin === str_repeat("\x00", 15) . "\x01")              return 'Loopback';
-    if ($bin === str_repeat("\x00", 16))                       return 'Unspecified';
-    if (substr($bin,0,10)===str_repeat("\x00",10) && substr($bin,10,2)==="\xff\xff") return 'IPv4-mapped';
-    if ($b[0] === 0xFF)                                        return 'Multicast';
-    if ($b[0] === 0xFE && ($b[1] & 0xC0) === 0x80)            return 'Link-local';
-    if (($b[0] & 0xFE) === 0xFC)                              return 'Unique Local';
-    if ($b[0]===0x20 && $b[1]===0x01 && $b[2]===0x0D && $b[3]===0xB8) return 'Documentation';
-    if ($b[0]===0x20 && $b[1]===0x01 && $b[2]===0x00 && $b[3]===0x00) return 'Teredo';
-    if ($b[0] === 0x20 && $b[1] === 0x02)                     return '6to4';
-    if ($b[0]===0x00 && $b[1]===0x64 && $b[2]===0xFF && $b[3]===0x9B) {
-        if ($b[4]===0x00 && $b[5]===0x01)                     return 'NAT64 (local)';
+    if ($bin === str_repeat("\x00", 15) . "\x01") {
+        return 'Loopback';
+    }
+    if ($bin === str_repeat("\x00", 16)) {
+        return 'Unspecified';
+    }
+    if (substr($bin, 0, 10) === str_repeat("\x00", 10) && substr($bin, 10, 2) === "\xff\xff") {
+        return 'IPv4-mapped';
+    }
+    if ($b[0] === 0xFF) {
+        return 'Multicast';
+    }
+    if ($b[0] === 0xFE && ($b[1] & 0xC0) === 0x80) {
+        return 'Link-local';
+    }
+    if (($b[0] & 0xFE) === 0xFC) {
+        return 'Unique Local';
+    }
+    if ($b[0] === 0x20 && $b[1] === 0x01 && $b[2] === 0x0D && $b[3] === 0xB8) {
+        return 'Documentation';
+    }
+    if ($b[0] === 0x20 && $b[1] === 0x01 && $b[2] === 0x00 && $b[3] === 0x00) {
+        return 'Teredo';
+    }
+    if ($b[0] === 0x20 && $b[1] === 0x02) {
+        return '6to4';
+    }
+    if ($b[0] === 0x00 && $b[1] === 0x64 && $b[2] === 0xFF && $b[3] === 0x9B) {
+        if ($b[4] === 0x00 && $b[5] === 0x01) {
+            return 'NAT64 (local)';
+        }
                                                                return 'NAT64';
     }
-    if (($b[0] & 0xE0) === 0x20)                              return 'Global Unicast';
+    if (($b[0] & 0xE0) === 0x20) {
+        return 'Global Unicast';
+    }
     return 'Unknown';
 }
 
-function type_badge_class(string $type): string {
+function type_badge_class(string $type): string
+{
     $map = [
         'Private'       => 'private',
         'Public'        => 'public',
@@ -53,7 +113,7 @@ function type_badge_class(string $type): string {
         'Link-local'    => 'link-local',
         'Multicast'     => 'multicast',
         'Documentation' => 'doc',
-        'Global Unicast'=> 'public',
+        'Global Unicast' => 'public',
         'Unique Local'  => 'ula',
         'CGNAT'         => 'other',
         'Reserved'      => 'other',

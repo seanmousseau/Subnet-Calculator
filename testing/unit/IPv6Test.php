@@ -101,4 +101,26 @@ class IPv6Test extends TestCase
         $r = calculate_subnet6('2001:db8::', 108);
         $this->assertSame((string)(1 << 20), $r['total']);
     }
+
+    // ── cidrs_overlap6 ────────────────────────────────────────────────────────
+
+    public function testCidrsOverlap6None(): void
+    {
+        $this->assertSame('none', cidrs_overlap6('2001:db8::/32', '2001:db9::/32'));
+    }
+
+    public function testCidrsOverlap6Identical(): void
+    {
+        $this->assertSame('identical', cidrs_overlap6('2001:db8::/32', '2001:db8::/32'));
+    }
+
+    public function testCidrsOverlap6AContainsB(): void
+    {
+        $this->assertSame('a_contains_b', cidrs_overlap6('2001:db8::/32', '2001:db8:1::/48'));
+    }
+
+    public function testCidrsOverlap6BContainsA(): void
+    {
+        $this->assertSame('b_contains_a', cidrs_overlap6('2001:db8:1::/48', '2001:db8::/32'));
+    }
 }

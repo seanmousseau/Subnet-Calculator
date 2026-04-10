@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 // ─── VLSM ─────────────────────────────────────────────────────────────────────
@@ -12,7 +13,8 @@ declare(strict_types=1);
  * @param  array<array{name: string, hosts: int}> $requirements
  * @return array{allocations?: list<array{name: string, hosts_needed: int, subnet: string, usable: int, waste: int}>, error?: string}
  */
-function vlsm_allocate(string $network_ip, int $cidr, array $requirements): array {
+function vlsm_allocate(string $network_ip, int $cidr, array $requirements): array
+{
     if ($requirements === []) {
         return ['error' => 'No requirements provided.'];
     }
@@ -38,13 +40,18 @@ function vlsm_allocate(string $network_ip, int $cidr, array $requirements): arra
         $prefix = 32;
         for ($p = 30; $p >= $cidr; $p--) {
             $usable = (1 << (32 - $p)) - 2;
-            if ($usable >= $hosts_needed) { $prefix = $p; break; }
+            if ($usable >= $hosts_needed) {
+                $prefix = $p;
+                break;
+            }
         }
         if ($prefix === 32) {
             // Check /31 (2 usable for point-to-point) and /32 (loopback)
-            if ($hosts_needed <= 2) { $prefix = 31; }
-            elseif ($hosts_needed === 1) { $prefix = 32; }
-            else {
+            if ($hosts_needed <= 2) {
+                $prefix = 31;
+            } elseif ($hosts_needed === 1) {
+                $prefix = 32;
+            } else {
                 return ['error' => "Requirement \"{$req['name']}\" needs {$hosts_needed} hosts but no prefix fits within /{$cidr}."];
             }
         }
@@ -64,7 +71,7 @@ function vlsm_allocate(string $network_ip, int $cidr, array $requirements): arra
         $usable = $prefix >= 31 ? $block_size : $block_size - 2;
         $allocations[] = [
             'name'        => $req['name'],
-            'hosts_needed'=> $hosts_needed,
+            'hosts_needed' => $hosts_needed,
             'subnet'      => long2ip($current) . '/' . $prefix,
             'usable'      => $usable,
             'waste'       => $usable - $hosts_needed,

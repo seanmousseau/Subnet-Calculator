@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-04-10
+
+### Added
+- **VLSM shareable URL** — GET parameters (`vlsm_network`, `vlsm_cidr`, `vlsm_name[]`, `vlsm_hosts[]`) auto-populate and calculate the VLSM planner on page load; share bar appears below results — closes #138
+- **VLSM CSV export** — Export CSV button downloads a CSV file of VLSM results (Name, Hosts Needed, Allocated Subnet, First Usable, Last Usable, Usable IPs, Waste) — closes #139
+- **VLSM Reset button** — Reset link in the VLSM actions bar clears inputs and results — closes #153
+- **IPv6 binary/hex representation** — collapsible section under IPv6 results showing 128-bit binary (network/host bit colour coding) and hex views at nibble boundary — closes #154
+- **VLSM client-side validation + loading state** — inline error shown when hosts field is < 1; submit button disabled with "Calculating…" text during server round-trip — closes #155
+- **Copy All buttons** — in IPv4/IPv6 subnet splitter lists and VLSM results table; copies all subnets as newline-separated text — closes #156
+- **VLSM utilisation summary** — row below VLSM results showing Hosts Requested, Allocated addresses, Remaining, and Utilisation % — closes #157
+- **VLSM sort order note** — small label above VLSM results indicating requirements were sorted largest-first — closes #158
+- **IPv6 overlap checker** — the subnet overlap checker now accepts IPv6 CIDRs in addition to IPv4; mixed-family pairs return an error — closes #159
+- **Multi-CIDR pairwise overlap** — new panel accepts up to 50 CIDRs (one per line) and reports all overlapping pairs — closes #160
+
+### Fixed
+- **Version badge hardcoded** — `<span class="version">` in `layout.php` now renders `$app_version` dynamically instead of a hardcoded `v1.2.0` — closes #149
+- **Address Type row not copyable** — Address Type result rows now have `tabindex="0"`, `role="button"`, and `title="Click to copy"` to match other copyable rows — closes #150
+- **`$default_tab` rejects `'vlsm'`** — `'vlsm'` is now a valid value for `$default_tab` in `config.php` — closes #151
+- **iOS Safari zoom on input focus** — input `font-size` raised to `1rem` (≥ 16 px) to prevent iOS Safari from zooming in on focus — closes #152
+
+### Changed
+- Release checklist step 2 removed (version badge in `layout.php` is now driven by `$app_version` automatically)
+
 ## [1.2.0] - 2026-04-08
 
 ### Added

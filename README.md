@@ -19,16 +19,22 @@ https://dev.seanmousseau.com/subnet-calculator/
 - Outputs: Network CIDR, Prefix Length, First IP, Last IP, Total Addresses, Reverse DNS Zone
 - Total Addresses shown as a number for small prefixes (≤ /108) and as `2^N` for larger ones
 - Uses PHP GMP extension for 128-bit arithmetic
-- Subnet splitter with per-row copy buttons
+- Subnet splitter with per-row copy buttons; Copy All button
+- Binary/hex representation — collapsible 128-bit view with network/host bit colour coding at nibble boundary
 
 **VLSM**
 - Allocate variable-length subnets from a parent network to meet named host requirements
 - Requirements sorted largest-first automatically; subnets allocated contiguously with block-boundary alignment
 - Results table shows: Name, Hosts Needed, Allocated Subnet (click to copy), Usable IPs, Waste
+- Utilisation summary: Hosts Requested, Allocated, Remaining, Utilisation %
 - Add or remove requirement rows dynamically; supports any number of subnets
+- Shareable URL — GET parameters auto-populate and run the planner on page load
+- Export CSV — download full results as a CSV file
+- Client-side validation with inline errors; loading state on submit
 
 **Subnet Overlap Checker**
-- Compare any two IPv4 CIDRs and report their relationship: no overlap, identical, or containment (A contains B / B contains A)
+- Compare any two IPv4 or IPv6 CIDRs and report their relationship: no overlap, identical, or containment (A contains B / B contains A)
+- Multi-CIDR pairwise overlap — paste up to 50 CIDRs and get a list of all conflicting pairs
 
 **General**
 - IPv4 / IPv6 / VLSM tab switcher
@@ -68,7 +74,7 @@ All tuneable values with their defaults:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `$fixed_bg_color` | `'null'` | Pin the page background to a hex colour (e.g. `'#1a1a2e'`) regardless of light/dark mode. Leave as `'null'` to use the theme default. |
-| `$default_tab` | `'ipv4'` | Active tab on page load: `'ipv4'` or `'ipv6'`. |
+| `$default_tab` | `'ipv4'` | Active tab on page load: `'ipv4'`, `'ipv6'`, or `'vlsm'`. |
 | `$split_max_subnets` | `16` | Maximum number of subnets shown in the subnet splitter results list (1–256). |
 | `$form_protection` | `'none'` | Form protection mode: `'none'`, `'honeypot'`, or `'turnstile'`. |
 | `$turnstile_site_key` | `''` | Cloudflare Turnstile site key (required when `$form_protection = 'turnstile'`). |
@@ -84,6 +90,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File |
 |---------|------|
+| 1.3.0 | `releases/subnet-calculator-1.3.0.tar.gz` |
 | 1.2.0 | `releases/subnet-calculator-1.2.0.tar.gz` |
 | 1.1.1 | `releases/subnet-calculator-1.1.1.tar.gz` |
 | 1.1.0 | `releases/subnet-calculator-1.1.0.tar.gz` |

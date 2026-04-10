@@ -146,11 +146,13 @@
             border-radius: 6px;
             color: var(--color-input-text);
             font-family: 'Courier New', monospace;
-            font-size: 0.95rem;
+            font-size: 1rem;
             padding: 0.55rem 0.75rem;
             transition: border-color 0.15s;
             width: 100%;
         }
+
+        input[type="number"] { font-size: 1rem; }
 
         input[type="text"]:focus { outline: none; border-color: var(--color-accent); }
         input[type="text"]::placeholder { color: var(--color-text-faint); }
@@ -429,6 +431,8 @@
         .bin-net  { color: var(--color-accent-light); }
         .bin-host { color: var(--color-text-faint); }
 
+        .bin-v6 { font-size: 0.65rem; letter-spacing: 0; }
+
         .bin-boundary {
             font-size: 0.72rem;
             color: var(--color-text-faint);
@@ -616,6 +620,12 @@
 
         .vlsm-results { margin-top: 0.75rem; overflow-x: auto; }
 
+        .vlsm-sort-note {
+            font-size: 0.75rem;
+            color: var(--color-text-faint);
+            margin-bottom: 0.4rem;
+        }
+
         .vlsm-table {
             border-collapse: collapse;
             width: 100%;
@@ -644,6 +654,52 @@
         .vlsm-subnet-cell:hover { background: var(--color-border); }
 
         .vlsm-waste { color: var(--color-text-faint); }
+
+        .copy-all-btn {
+            background: none;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            color: var(--color-text-subtle);
+            cursor: pointer;
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            margin: 0.3rem 0;
+            grid-column: 1 / -1;
+            transition: background 0.15s, color 0.15s;
+        }
+        .copy-all-btn:hover { background: var(--color-border); color: var(--color-text); }
+
+        .vlsm-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem 1rem;
+            margin-top: 0.5rem;
+            font-size: 0.78rem;
+            color: var(--color-text-subtle);
+        }
+        .vlsm-summary strong { color: var(--color-accent-light); }
+
+        #vlsm-export-csv {
+            background: none;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            color: var(--color-text-subtle);
+            cursor: pointer;
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            margin-top: 0.4rem;
+            transition: background 0.15s, color 0.15s;
+        }
+        #vlsm-export-csv:hover { background: var(--color-border); color: var(--color-text); }
+
+        .vlsm-inline-error {
+            color: var(--color-error-text, #e05252);
+            font-size: 0.72rem;
+            display: block;
+            margin-top: 0.15rem;
+        }
 
         /* Overlap checker */
         .overlap-panel {
@@ -687,6 +743,34 @@
         .overlap-none     { color: var(--color-text-faint); }
         .overlap-identical { color: var(--color-accent); font-weight: 600; }
         .overlap-contains { color: #e5a23a; font-weight: 600; }
+
+        .multi-overlap-panel { margin-top: 0.75rem; }
+
+        .multi-overlap-input {
+            width: 100%;
+            background: var(--color-input-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            color: var(--color-input-text);
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            padding: 0.5rem 0.75rem;
+            resize: vertical;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .multi-overlap-list {
+            list-style: none;
+            margin-top: 0.5rem;
+            padding: 0;
+            font-size: 0.82rem;
+        }
+        .multi-overlap-list li {
+            padding: 0.25rem 0;
+            border-bottom: 1px solid var(--color-border);
+        }
+        .multi-overlap-list li:last-child { border-bottom: none; }
 
         @media (max-width: 480px) {
             .form-row { flex-direction: column; }

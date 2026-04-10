@@ -770,6 +770,266 @@ async def test_splitter_shareable_url(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# v1.3.0 — new feature tests
+# ---------------------------------------------------------------------------
+
+async def test_vlsm_shareable_url(page: Page) -> None:
+    section("VLSM — shareable URL auto-populates and calculates")
+
+    url = (APP_URL + "?tab=vlsm&vlsm_network=10.0.0.0&vlsm_cidr=24"
+           "&vlsm_name%5B0%5D=LAN+A&vlsm_hosts%5B0%5D=50")
+    await navigate(page, url)
+    assert_true("VLSM results table present after GET",
+                await page.locator(".vlsm-table").count() > 0)
+    subnet = await page.text_content(".vlsm-subnet-cell code") or ""
+    assert_true("VLSM auto-calc subnet present", "/" in subnet, subnet)
+    share = await page.text_content(".share-url") or ""
+    assert_true("VLSM share bar shown with vlsm_network param",
+                "vlsm_network" in share, share)
+    network_val = await page.input_value("#vlsm_network")
+    assert_eq("Network field pre-filled from GET", network_val, "10.0.0.0")
+
+
+async def test_vlsm_csv_export(page: Page) -> None:
+    section("VLSM — CSV export button and data attributes")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "192.168.1.0")
+    await page.fill("#vlsm_cidr",    "24")
+    await page.evaluate("document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN A'")
+    await page.evaluate("document.querySelectorAll('.vlsm-hosts-input')[0].value = '50'")
+    await submit_form(page, ".vlsm-form")
+    assert_true("Export CSV button present",
+                await page.locator("#vlsm-export-csv").count() > 0)
+    first_attr = await page.get_attribute(".vlsm-table tbody tr", "data-first")
+    assert_true("data-first attribute present on result row",
+                first_attr is not None and "." in (first_attr or ""), str(first_attr))
+
+
+async def test_vlsm_reset(page: Page) -> None:
+    section("VLSM — Reset button clears form and results")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr",    "24")
+    await page.evaluate("document.querySelectorAll('.vlsm-name-input')[0].value = 'Test'")
+    await page.evaluate("document.querySelectorAll('.vlsm-hosts-input')[0].value = '10'")
+    await submit_form(page, ".vlsm-form")
+    assert_true("VLSM table shown before reset",
+                await page.locator(".vlsm-table").count() > 0)
+    async with page.expect_navigation(wait_until="load"):
+        await page.click("#panel-vlsm a.reset")
+    assert_true("VLSM table gone after reset",
+                await page.locator(".vlsm-table").count() == 0)
+    assert_eq("Network field cleared", await page.input_value("#vlsm_network"), "")
+
+
+async def test_vlsm_validation(page: Page) -> None:
+    section("VLSM — client-side validation rejects empty hosts")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr",    "24")
+    await page.evaluate("document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN A'")
+    await page.evaluate("document.querySelectorAll('.vlsm-hosts-input')[0].value = ''")
+    await page.click(".vlsm-form button[type='submit']")
+    await page.wait_for_timeout(200)
+    inline_err = await page.text_content(".vlsm-inline-error") or ""
+    assert_true("Inline validation error shown for empty hosts",
+                len(inline_err) > 0, inline_err)
+    assert_true("No server round-trip (table absent)",
+                await page.locator(".vlsm-table").count() == 0)
+
+
+async def test_vlsm_copy_all(page: Page) -> None:
+    section("VLSM — Copy All subnets button")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr",    "24")
+    await page.evaluate("document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN A'")
+    await page.evaluate("document.querySelectorAll('.vlsm-hosts-input')[0].value = '50'")
+    await submit_form(page, ".vlsm-form")
+    assert_true("Copy All button present for VLSM results",
+                await page.locator(".copy-all-btn[data-target='vlsm']").count() > 0)
+
+
+async def test_ipv4_copy_all(page: Page) -> None:
+    section("IPv4 splitter — Copy All button")
+
+    await navigate(page, APP_URL)
+    await page.fill("#ip",   "192.168.0.0")
+    await page.fill("#mask", "24")
+    await submit_form(page, "#panel-ipv4 form")
+    await page.fill("input[name='split_prefix']", "/26")
+    await submit_form(page, ".splitter-form")
+    assert_true("Copy All button present in IPv4 split list",
+                await page.locator("#panel-ipv4 .copy-all-btn[data-target='split']").count() > 0)
+
+
+async def test_ipv6_copy_all(page: Page) -> None:
+    section("IPv6 splitter — Copy All button")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.fill("#ipv6",   "2001:db8::")
+    await page.fill("#prefix", "32")
+    await submit_form(page, "#panel-ipv6 form")
+    await page.fill("input[name='split_prefix6']", "/34")
+    await submit_form(page, ".splitter-form")
+    assert_true("Copy All button present in IPv6 split list",
+                await page.locator("#panel-ipv6 .copy-all-btn[data-target='split']").count() > 0)
+
+
+async def test_vlsm_utilisation_summary(page: Page) -> None:
+    section("VLSM — utilisation summary")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "192.168.1.0")
+    await page.fill("#vlsm_cidr",    "24")
+    await page.evaluate("document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN A'")
+    await page.evaluate("document.querySelectorAll('.vlsm-hosts-input')[0].value = '50'")
+    await submit_form(page, ".vlsm-form")
+    assert_true("Utilisation summary present",
+                await page.locator(".vlsm-summary").count() > 0)
+    summary = await page.text_content(".vlsm-summary") or ""
+    assert_contains("Summary shows Hosts requested", summary, "Hosts requested")
+    assert_contains("Summary shows utilisation %",   summary, "%")
+
+
+async def test_vlsm_sort_note(page: Page) -> None:
+    section("VLSM — sort order note")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr",    "24")
+    await page.evaluate("document.querySelectorAll('.vlsm-name-input')[0].value = 'X'")
+    await page.evaluate("document.querySelectorAll('.vlsm-hosts-input')[0].value = '10'")
+    await submit_form(page, ".vlsm-form")
+    note = await page.text_content(".vlsm-sort-note") or ""
+    assert_contains("Sort note mentions largest-first", note.lower(), "largest")
+
+
+async def test_ipv6_overlap(page: Page) -> None:
+    section("VLSM tab — IPv6 overlap checker")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("input[name='overlap_cidr_a']", "2001:db8::/32")
+    await page.fill("input[name='overlap_cidr_b']", "2001:db8:1::/48")
+    await submit_form(page, ".overlap-form")
+    result = await page.text_content(".overlap-result") or ""
+    assert_contains("IPv6 a_contains_b detected", result.lower(), "contains")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("input[name='overlap_cidr_a']", "2001:db8::/32")
+    await page.fill("input[name='overlap_cidr_b']", "2001:db9::/32")
+    await submit_form(page, ".overlap-form")
+    result2 = await page.text_content(".overlap-result") or ""
+    assert_contains("IPv6 no overlap detected", result2.lower(), "no overlap")
+
+
+async def test_multi_cidr_overlap(page: Page) -> None:
+    section("VLSM tab — multi-CIDR pairwise overlap check")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("textarea[name='multi_overlap_input']",
+                    "10.0.0.0/23\n10.0.0.0/24\n192.168.1.0/24")
+    await submit_form(page, ".multi-overlap-panel form")
+    assert_true("Conflict list present",
+                await page.locator(".multi-overlap-list").count() > 0)
+    conflicts = await page.text_content(".multi-overlap-list") or ""
+    assert_contains("Conflict shows 10.0.0.0/23", conflicts, "10.0.0.0/23")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("textarea[name='multi_overlap_input']",
+                    "10.0.0.0/24\n10.0.1.0/24\n10.0.2.0/24")
+    await submit_form(page, ".multi-overlap-panel form")
+    no_conflict = await page.text_content(".overlap-none") or ""
+    assert_contains("No overlaps message shown", no_conflict.lower(), "no overlaps")
+
+
+async def test_ipv6_binary_repr(page: Page) -> None:
+    section("IPv6 — binary/hex representation block")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.fill("#ipv6",   "2001:db8::")
+    await page.fill("#prefix", "32")
+    await submit_form(page, "#panel-ipv6 form")
+    assert_true("IPv6 binary-details element present",
+                await page.locator("#panel-ipv6 .binary-details").count() > 0)
+    await page.evaluate(
+        "document.querySelector('#panel-ipv6 .binary-details').setAttribute('open', '')"
+    )
+    boundary = await page.text_content("#panel-ipv6 .bin-boundary") or ""
+    assert_contains("IPv6 boundary shows 32 network bits", boundary, "32")
+    assert_contains("IPv6 boundary shows 96 host bits",    boundary, "96")
+
+
+async def test_regression_bugs_v130(page: Page) -> None:
+    section("Regression — v1.3.0 bug fixes (#149 #150 #151 #152)")
+
+    # #149: version badge is dynamic (not hardcoded v1.2.0)
+    await navigate(page, APP_URL)
+    version_text = await page.text_content(".version") or ""
+    assert_true("#149: version badge not empty", len(version_text) > 0, version_text)
+    assert_true("#149: version badge starts with v",
+                version_text.strip().startswith("v"), version_text)
+
+    # #150: IPv4 Address Type row has tabindex=0
+    await page.fill("#ip",   "192.168.1.0")
+    await page.fill("#mask", "24")
+    await submit_form(page, "#panel-ipv4 form")
+    tabindex_v4 = await page.evaluate("""() => {
+        var rows = document.querySelectorAll('.result-row');
+        for (var r of rows) {
+            var l = r.querySelector('.result-label');
+            if (l && l.textContent.trim() === 'Address Type') {
+                return r.getAttribute('tabindex');
+            }
+        }
+        return null;
+    }""")
+    assert_eq("#150: IPv4 Address Type row has tabindex='0'", tabindex_v4, "0")
+
+    # #150: IPv6 Address Type row has tabindex=0
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.fill("#ipv6",   "2001:db8::")
+    await page.fill("#prefix", "32")
+    await submit_form(page, "#panel-ipv6 form")
+    tabindex_v6 = await page.evaluate("""() => {
+        var rows = document.querySelectorAll('#panel-ipv6 .result-row');
+        for (var r of rows) {
+            var l = r.querySelector('.result-label');
+            if (l && l.textContent.trim() === 'Address Type') {
+                return r.getAttribute('tabindex');
+            }
+        }
+        return null;
+    }""")
+    assert_eq("#150: IPv6 Address Type row has tabindex='0'", tabindex_v6, "0")
+
+    # #152: input font-size is 16px (prevents iOS Safari zoom)
+    await navigate(page, APP_URL)
+    font_size = await page.evaluate("""() => {
+        var el = document.querySelector('input[type="text"]');
+        return el ? window.getComputedStyle(el).fontSize : '';
+    }""")
+    assert_eq("#152: input font-size is 16px (1rem)", font_size, "16px")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -820,6 +1080,19 @@ async def main() -> None:
             await test_vlsm(page)
             await test_splitter_copy_buttons(page)
             await test_splitter_shareable_url(page)
+            await test_vlsm_shareable_url(page)
+            await test_vlsm_csv_export(page)
+            await test_vlsm_reset(page)
+            await test_vlsm_validation(page)
+            await test_vlsm_copy_all(page)
+            await test_ipv4_copy_all(page)
+            await test_ipv6_copy_all(page)
+            await test_vlsm_utilisation_summary(page)
+            await test_vlsm_sort_note(page)
+            await test_ipv6_overlap(page)
+            await test_multi_cidr_overlap(page)
+            await test_ipv6_binary_repr(page)
+            await test_regression_bugs_v130(page)
         finally:
             await context.close()
             await browser.close()

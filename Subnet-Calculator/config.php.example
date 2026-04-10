@@ -6,7 +6,7 @@
 // Leave as 'null' to use the theme default.
 $fixed_bg_color = 'null';
 
-// Default active tab on page load: 'ipv4' or 'ipv6'.
+// Default active tab on page load: 'ipv4', 'ipv6', or 'vlsm'.
 $default_tab = 'ipv4';
 
 // Maximum number of subnets shown in the subnet splitter results list (1–256).
