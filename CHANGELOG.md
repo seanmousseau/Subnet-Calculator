@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-04-11
+
+### Fixed
+- **VLSM planner**: single-host requirements (`hosts_needed=1`) were allocated `/31` instead of `/32`; reordered `=== 1` check before `<= 2` so the dead branch is reached
+- **API supernet handler**: all-whitespace CIDR entries produced an empty array after `array_filter` without error; added an explicit guard that returns HTTP 400
+- **API router**: bare `GET /api/v1/sessions` (no ID) was routed to the sessions handler and returned 400 instead of the correct 404; removed the dead `case 'GET /sessions'` from the switch
+
 ## [2.0.0] - 2026-04-11
 
 ### Added
