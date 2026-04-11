@@ -718,6 +718,8 @@
             letter-spacing: 0.04em;
         }
 
+        .session-ttl-notice { font-size: 0.8rem; color: var(--color-text-muted); margin: 0.25rem 0 0.5rem; }
+
         .overlap-inputs {
             display: flex;
             align-items: center;
