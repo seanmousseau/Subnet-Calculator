@@ -10,7 +10,8 @@ php -S localhost:8080 -t Subnet-Calculator/
 
 # Syntax check all PHP files
 php -l Subnet-Calculator/index.php
-for f in Subnet-Calculator/includes/*.php Subnet-Calculator/templates/layout.php; do php -l "$f"; done
+for f in Subnet-Calculator/includes/*.php Subnet-Calculator/templates/layout.php \
+         Subnet-Calculator/api/v1/*.php Subnet-Calculator/api/v1/handlers/*.php; do php -l "$f"; done
 
 # Static analysis (PHPStan level 9, configured in phpstan.neon)
 phpstan analyse --no-progress
@@ -19,7 +20,10 @@ phpstan analyse --no-progress
 composer install --no-interaction --prefer-dist
 vendor/bin/phpunit
 
-# Deploy to dev server, then run the end-to-end browser test suite (125 tests)
+# PHPCS (PSR-12) — use .phpcs.xml for config
+vendor/bin/phpcs --standard=PSR12 Subnet-Calculator/includes/ Subnet-Calculator/api/
+
+# Deploy to dev server, then run the end-to-end browser test suite (205 tests)
 # Requires: dev server running, Chrome CDP container at 192.168.80.15:9224
 rsync -a --delete Subnet-Calculator/ root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
 scp testing/fixtures/iframe-test.html root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
@@ -40,7 +44,7 @@ tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
 
 (Or run `/release` to automate steps 1–7.)
 
-PHP unit tests: `testing/unit/` (61 tests, 87 assertions on platforms without GMP; 15 additional IPv6/split tests on platforms with GMP). Playwright browser tests: `testing/scripts/playwright_test.py` (41 test groups, ~148 assertions) covers page load, security headers, Permissions-Policy, CSP nonce integrity, IPv4/IPv6 calculation, reverse DNS zones, edge cases, address type badges, subnet splitters, copy buttons, splitter shareable URLs, binary representation, VLSM planner, overlap checker, shareable GET URLs, iframe integration, UI interactions, VLSM shareable URL, VLSM CSV export, VLSM reset/validation, Copy All buttons, VLSM utilisation summary, IPv6 overlap, multi-CIDR overlap, IPv6 binary/hex, and v1.3.0 regression tests.
+PHP unit tests: `testing/unit/` (61 tests, 87 assertions on platforms without GMP; 15 additional IPv6/split tests on platforms with GMP). Also `ApiTest.php` (11 HTTP-level smoke tests). Playwright browser tests: `testing/scripts/playwright_test.py` (53 test groups, 205 assertions) covers page load, security headers, Permissions-Policy, CSP nonce integrity, IPv4/IPv6 calculation, reverse DNS zones, edge cases, address type badges, subnet splitters, copy buttons, splitter shareable URLs, binary representation, VLSM planner, overlap checker, shareable GET URLs, iframe integration, UI interactions, VLSM shareable URL, VLSM CSV export, VLSM reset/validation, Copy All buttons, VLSM utilisation summary, IPv6 overlap, multi-CIDR overlap, IPv6 binary/hex, v1.3.0 regression tests, supernet/summarise UI, ULA generator UI, and REST API endpoints (meta, IPv4, IPv6, VLSM, overlap, split, supernet, ULA, OpenAPI spec).
 
 ## Repository layout
 
@@ -51,10 +55,15 @@ Subnet-Calculator/      ← docroot (serve this directory)
     config.php          ← config defaults + optional config.php override
     functions-ipv4.php  ← IPv4 utility functions
     functions-ipv6.php  ← IPv6 utility functions
+    functions-ipv6.php  ← IPv6 utility functions
     functions-split.php ← subnet splitter functions
     functions-util.php  ← address type detection + badge helpers
     functions-vlsm.php  ← VLSM planner function
-    request.php         ← input resolvers, Turnstile verify, GET/POST handling
+    functions-supernet.php ← supernet_find(), summarise_cidrs()
+    functions-ula.php   ← generate_ula_prefix() (RFC 4193)
+    functions-session.php ← SQLite session CRUD
+    functions-resolve.php ← resolve_ipv4_input(), resolve_ipv6_input() (shared by web + API)
+    request.php         ← Turnstile verify, GET/POST handling; requires functions-resolve.php
   templates/            ← HTML template (blocked from direct web access)
     layout.php
   assets/               ← CSS, JS, and image assets (publicly served, long-cached)
@@ -64,6 +73,16 @@ Subnet-Calculator/      ← docroot (serve this directory)
     logo.png            ← PNG fallback for Safari <14
     favicon-32.webp
     favicon-32.png      ← PNG fallback for browsers without WebP favicon support
+  api/
+    openapi.yaml        ← OpenAPI 3.1 specification for all REST endpoints
+    v1/
+      index.php         ← API router + bootstrap
+      helpers.php       ← json_ok/json_err, auth, rate limit, CORS (blocked from web)
+      .htaccess         ← front-controller rewrite; blocks helpers.php
+      handlers/         ← one file per endpoint (blocked from direct web access)
+        ipv4.php, ipv6.php, vlsm.php, overlap.php, split.php,
+        supernet.php, ula.php, sessions.php
+  data/                 ← SQLite DB location (blocked from web; git-ignored)
   .htaccess             ← blocks config files, tarballs, subdirs; cache headers
   robots.txt
   config.php.example    ← copy to config.php to override defaults
@@ -74,6 +93,7 @@ CHANGELOG.md
 CONTRIBUTING.md
 SECURITY.md
 LICENSE
+.phpcs.xml             ← PHPCS PSR-12 config (excludes test-file naming rules)
 .github/
 .claude/
 ```
@@ -84,7 +104,7 @@ PHP application with a slim entry point (`index.php`) that bootstraps includes a
 
 1. **`index.php`** — requires all includes in order, sends security headers (CSP nonce, `X-Content-Type-Options`, etc.), then requires the template.
 2. **`includes/config.php`** — all operator-tunable `$variables` (`$fixed_bg_color`, `$default_tab`, `$split_max_subnets`, `$form_protection`, `$turnstile_site_key`, `$turnstile_secret_key`, `$canonical_url`, etc.). If `config.php` exists in the docroot it is `require`d here to allow overrides without touching source files.
-3. **`includes/functions-*.php`** — pure utility functions, all typed with `declare(strict_types=1)`: IPv4 (`cidr_to_mask`, `calculate_subnet`, etc.), IPv6 (`ipv6_to_gmp`, `calculate_subnet6`, etc.), splitters (`split_subnet`, `split_subnet6`), type detection (`get_ipv4_type`, `get_ipv6_type`), input resolvers (`resolve_ipv4_input`, `resolve_ipv6_input`).
+3. **`includes/functions-*.php`** — pure utility functions, all typed with `declare(strict_types=1)`: IPv4 (`cidr_to_mask`, `calculate_subnet`, etc.), IPv6 (`ipv6_to_gmp`, `calculate_subnet6`, etc.), splitters (`split_subnet`, `split_subnet6`), type detection (`get_ipv4_type`, `get_ipv6_type`), supernet (`supernet_find`, `summarise_cidrs`), ULA (`generate_ula_prefix`), session (`session_db_open`, `session_create`, `session_load`, `session_purge`), input resolvers (`resolve_ipv4_input`, `resolve_ipv6_input` — in `functions-resolve.php`, shared by web and API).
 4. **`includes/request.php`** — reads `$_GET`/`$_POST`, populates `$result`/`$result6`/`$error`/`$split_result`/`$split_result6`; GET triggers auto-calculation for shareable URLs. Form protection (honeypot / Turnstile) is checked before calculation. Also computes `$bg_override_style`, `$share_url`, `$canonical_url`.
 5. **`templates/layout.php`** — full HTML output; references `assets/app.css` (external stylesheet) and `assets/app.js` (external script); theme-init `<script>` stays inline (prevents FOUC); conditional `bg_override_style` `<style>` stays inline with nonce.
 

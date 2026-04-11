@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
@@ -77,9 +78,14 @@ class VlsmTest extends TestCase
         $ranges = array_map(fn($a) => $a['subnet'], $r['allocations']);
         foreach ($ranges as $i => $a) {
             foreach ($ranges as $j => $b) {
-                if ($i >= $j) continue;
-                $this->assertSame('none', cidrs_overlap($a, $b),
-                    "Subnets {$a} and {$b} should not overlap");
+                if ($i >= $j) {
+                    continue;
+                }
+                $this->assertSame(
+                    'none',
+                    cidrs_overlap($a, $b),
+                    "Subnets {$a} and {$b} should not overlap"
+                );
             }
         }
     }

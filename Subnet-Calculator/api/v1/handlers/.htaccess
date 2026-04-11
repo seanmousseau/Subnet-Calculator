@@ -1,0 +1,3 @@
+# Belt-and-suspenders: block direct web access to handler files.
+# The parent .htaccess RewriteRule already covers this for Apache/OLS.
+Require all denied

@@ -772,6 +772,16 @@
         }
         .multi-overlap-list li:last-child { border-bottom: none; }
 
+        .ula-meta {
+            margin-top: 0.35rem;
+            font-size: 0.82rem;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            color: var(--color-text-faint);
+        }
+        .ula-meta code { font-family: 'Courier New', monospace; color: var(--color-text); }
+
         @media (max-width: 480px) {
             .form-row { flex-direction: column; }
             .split-list { grid-template-columns: 1fr; }

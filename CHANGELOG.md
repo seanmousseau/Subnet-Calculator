@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-04-11
+
+### Added
+- **JSON REST API** (`/api/v1/`) — endpoints for IPv4, IPv6, VLSM, overlap, split, supernet, ULA, and session persistence; optional Bearer-token auth, SQLite-backed rate limiting (sliding window, configurable RPM), and CORS headers — closes #141
+- **OpenAPI 3.1 specification** (`api/openapi.yaml`) — full schema definitions for all 11 API endpoints; CI step runs `spectral lint` on every push — closes #142
+- **Supernet / route summarisation tool** — IPv4 "Find Supernet" finds the smallest enclosing prefix for a set of CIDRs; "Summarise Routes" removes contained prefixes and merges adjacent ones to a minimal covering set; UI panel in the IPv4 tab, plus API endpoint `POST /api/v1/supernet` — closes #144
+- **IPv6 ULA prefix generator (RFC 4193)** — generates a random `/48` ULA prefix from a 40-bit global ID (random or operator-supplied); shows global ID, 5 example `/64` subnets, and total `/64` count; UI panel in the IPv6 tab, plus API endpoint `POST /api/v1/ula` — closes #145
+- **Session persistence** (opt-in, off by default) — VLSM planner can save its state to SQLite and restore via a short 8-character ID in the URL; `POST /api/v1/sessions` creates a session, `GET /api/v1/sessions/{id}` retrieves it — closes #140
+- **`includes/functions-resolve.php`** — `resolve_ipv4_input()` and `resolve_ipv6_input()` extracted from `request.php` into a standalone file shared by both the web stack and API handlers
+
+### Changed
+- **PHP 8.1 minimum** — dropped PHP 7.4 support; `composer.json` requires `>=8.1`; CI matrix updated; `config.php.example` notes PHP 8.1 minimum — closes #143
+- **PHPStan** — `phpstan.neon` now sets `phpVersion: 80100`; new paths added (`functions-resolve.php`, `api/v1/helpers.php`)
+- **PHPCS** — `.phpcs.xml` added; test files excluded from namespace/method-name PSR-12 rules; scope extended to cover `Subnet-Calculator/api/`
+
 ## [1.3.0] - 2026-04-10
 
 ### Added

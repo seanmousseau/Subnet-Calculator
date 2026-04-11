@@ -1,9 +1,15 @@
 parameters:
     level: 9
+    phpVersion: 80100
     # Analyse only the entry point so PHPStan follows the require chain in the
     # same order the app uses, giving it full context for every global variable.
     paths:
         - Subnet-Calculator/index.php
+        - Subnet-Calculator/includes/functions-supernet.php
+        - Subnet-Calculator/includes/functions-ula.php
+        - Subnet-Calculator/includes/functions-session.php
+        - Subnet-Calculator/includes/functions-resolve.php
+        - Subnet-Calculator/api/v1/helpers.php
     # config.php is gitignored (user override) — skip if absent
     excludePaths:
         - Subnet-Calculator/config.php (?)

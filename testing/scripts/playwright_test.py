@@ -1030,6 +1030,279 @@ async def test_regression_bugs_v130(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Supernet / Route Summarisation UI
+# ---------------------------------------------------------------------------
+
+async def test_supernet_ui(page: Page) -> None:
+    section("Supernet / Route Summarisation UI")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv4")
+
+    # Find supernet of two adjacent /24s — should be /23
+    await page.fill("textarea[name='supernet_input']", "10.0.0.0/24\n10.0.1.0/24")
+    await page.click("button[name='supernet_action'][value='find']")
+    await page.wait_for_load_state("load")
+
+    supernet_text = await page.text_content(".overlap-panel .overlap-result")
+    assert_contains("supernet: two /24s → /23 result shown", supernet_text or "", "10.0.0.0/23")
+
+    # Summarise routes — 3 inputs: /25 contained in /24, two /24s merge to /23
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv4")
+    await page.fill("textarea[name='supernet_input']", "10.0.0.0/24\n10.0.0.0/25\n10.0.1.0/24")
+    await page.click("button[name='supernet_action'][value='summarise']")
+    await page.wait_for_load_state("load")
+
+    items = await page.query_selector_all(".overlap-panel .split-item")
+    assert_true("summarise: /25 removed, two /24s merge → 1 result (/23)", len(items) == 1,
+                f"got {len(items)} items")
+
+    copy_all = await page.query_selector(".overlap-panel .copy-all-btn[data-target='supernet']")
+    assert_true("summarise: Copy All button with data-target=supernet present", copy_all is not None)
+
+    # Error case
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv4")
+    await page.fill("textarea[name='supernet_input']", "not-a-cidr")
+    await page.click("button[name='supernet_action'][value='find']")
+    await page.wait_for_load_state("load")
+    err = await page.text_content(".overlap-panel .error")
+    assert_true("supernet: invalid CIDR shows error", err and len(err) > 0)
+
+
+# ---------------------------------------------------------------------------
+# ULA Generator UI
+# ---------------------------------------------------------------------------
+
+async def test_ula_generator_ui(page: Page) -> None:
+    section("ULA Generator UI")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+
+    # Generate with random global ID
+    await page.click("button[name='ula_generate']")
+    await page.wait_for_load_state("load")
+
+    prefix_text = await page.text_content("#panel-ipv6 .ula-result .overlap-result")
+    assert_true("ula: generated /48 shown", prefix_text and "/48" in (prefix_text or ""),
+                f"prefix text: {prefix_text!r}")
+
+    # Starts with fd (ULA range)
+    assert_true("ula: prefix starts with fd", (prefix_text or "").lower().startswith("fd"),
+                f"got {prefix_text!r}")
+
+    # Example /64 subnets shown
+    example_items = await page.query_selector_all("#panel-ipv6 .ula-result .split-item")
+    assert_true("ula: at least 5 example /64s shown", len(example_items) >= 5,
+                f"got {len(example_items)} items")
+
+    # Copy All button present
+    copy_all = await page.query_selector("#panel-ipv6 .copy-all-btn[data-target='ula']")
+    assert_true("ula: Copy All button with data-target=ula present", copy_all is not None)
+
+    # Fixed global ID is deterministic
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.fill("#ula_global_id", "aabbccddee")
+    await page.click("button[name='ula_generate']")
+    await page.wait_for_load_state("load")
+    prefix1 = await page.text_content("#panel-ipv6 .ula-result .overlap-result")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.fill("#ula_global_id", "aabbccddee")
+    await page.click("button[name='ula_generate']")
+    await page.wait_for_load_state("load")
+    prefix2 = await page.text_content("#panel-ipv6 .ula-result .overlap-result")
+
+    assert_eq("ula: same global_id produces same prefix", prefix1, prefix2)
+
+    # Invalid global ID shows error
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.fill("#ula_global_id", "ZZZZ")
+    await page.click("button[name='ula_generate']")
+    await page.wait_for_load_state("load")
+    err = await page.query_selector("#panel-ipv6 .overlap-panel .error")
+    assert_true("ula: non-hex global ID shows error", err is not None)
+
+
+# ---------------------------------------------------------------------------
+# REST API — direct HTTP tests
+# ---------------------------------------------------------------------------
+
+_API_BASE = "https://dev-direct.seanmousseau.com:8343/claude/subnet-calculator/api/v1/"
+
+
+def _api_post(path: str, body: dict) -> tuple[int, dict]:
+    resp = _SESSION.post(_API_BASE + path, json=body, timeout=10)
+    try:
+        data = resp.json()
+    except Exception:
+        data = {}
+    return resp.status_code, data
+
+
+def _api_get(path: str) -> tuple[int, dict]:
+    resp = _SESSION.get(_API_BASE + path, timeout=10)
+    try:
+        data = resp.json()
+    except Exception:
+        data = {}
+    return resp.status_code, data
+
+
+async def test_api_meta(page: Page) -> None:
+    section("API — meta endpoint")
+    status, data = _api_get("")
+    assert_eq("api meta: HTTP 200", status, 200)
+    assert_eq("api meta: ok=true", data.get("ok"), True)
+    assert_true("api meta: endpoints list present",
+                isinstance(data.get("data", {}).get("endpoints"), list))
+
+
+async def test_api_ipv4(page: Page) -> None:
+    section("API — IPv4")
+    status, data = _api_post("ipv4", {"ip": "10.0.0.1", "mask": "24"})
+    assert_eq("api ipv4: HTTP 200", status, 200)
+    assert_eq("api ipv4: ok=true", data.get("ok"), True)
+    assert_eq("api ipv4: network_cidr", data.get("data", {}).get("network_cidr"), "10.0.0.0/24")
+
+    # Missing ip field → 400
+    status2, data2 = _api_post("ipv4", {})
+    assert_eq("api ipv4: missing ip → 400", status2, 400)
+    assert_eq("api ipv4: missing ip → ok=false", data2.get("ok"), False)
+
+
+async def test_api_ipv6(page: Page) -> None:
+    section("API — IPv6")
+    status, data = _api_post("ipv6", {"ipv6": "2001:db8::", "prefix": "32"})
+    assert_eq("api ipv6: HTTP 200", status, 200)
+    assert_eq("api ipv6: ok=true", data.get("ok"), True)
+    assert_eq("api ipv6: network_cidr", data.get("data", {}).get("network_cidr"), "2001:db8::/32")
+
+
+async def test_api_vlsm(page: Page) -> None:
+    section("API — VLSM")
+    status, data = _api_post("vlsm", {
+        "network": "10.0.0.0",
+        "cidr": "24",
+        "requirements": [
+            {"name": "LAN", "hosts": 50},
+            {"name": "DMZ", "hosts": 10},
+        ],
+    })
+    assert_eq("api vlsm: HTTP 200", status, 200)
+    assert_eq("api vlsm: ok=true", data.get("ok"), True)
+    allocs = data.get("data", {}).get("allocations", [])
+    assert_eq("api vlsm: 2 allocations", len(allocs), 2)
+    assert_eq("api vlsm: first allocation has subnet key",
+              "subnet" in allocs[0] if allocs else False, True)
+
+
+async def test_api_overlap(page: Page) -> None:
+    section("API — Overlap")
+    # cidr_b must be network-aligned to the inner prefix for contains to detect correctly
+    status, data = _api_post("overlap", {"cidr_a": "10.0.0.0/24", "cidr_b": "10.0.0.0/25"})
+    assert_eq("api overlap: HTTP 200", status, 200)
+    assert_eq("api overlap: relation=a_contains_b",
+              data.get("data", {}).get("relation"), "a_contains_b")
+
+    status2, data2 = _api_post("overlap", {"cidr_a": "10.0.0.0/24", "cidr_b": "192.168.1.0/24"})
+    assert_eq("api overlap: no overlap → none", data2.get("data", {}).get("relation"), "none")
+
+
+async def test_api_split(page: Page) -> None:
+    section("API — Split IPv4")
+    status, data = _api_post("split/ipv4", {"ip": "10.0.0.0", "mask": "24", "split_prefix": 26})
+    assert_eq("api split ipv4: HTTP 200", status, 200)
+    assert_eq("api split ipv4: 4 subnets", data.get("data", {}).get("total"), 4)
+    subnets = data.get("data", {}).get("subnets", [])
+    assert_eq("api split ipv4: first subnet", subnets[0] if subnets else None, "10.0.0.0/26")
+
+
+async def test_api_supernet(page: Page) -> None:
+    section("API — Supernet")
+    status, data = _api_post("supernet", {"cidrs": ["10.0.0.0/24", "10.0.1.0/24"], "action": "find"})
+    assert_eq("api supernet find: HTTP 200", status, 200)
+    assert_eq("api supernet find: result", data.get("data", {}).get("supernet"), "10.0.0.0/23")
+
+    # /25 contained in /24 → removed; two /24s are siblings → merge to /23 → 1 result
+    status2, data2 = _api_post("supernet", {
+        "cidrs": ["10.0.0.0/24", "10.0.0.0/25", "10.0.1.0/24"],
+        "action": "summarise",
+    })
+    assert_eq("api supernet summarise: HTTP 200", status2, 200)
+    summaries = data2.get("data", {}).get("summaries", [])
+    assert_eq("api supernet summarise: 1 result (merged to /23)", len(summaries), 1)
+
+
+async def test_api_ula(page: Page) -> None:
+    section("API — ULA")
+    status, data = _api_post("ula", {"global_id": "aabbccddee"})
+    assert_eq("api ula: HTTP 200", status, 200)
+    assert_eq("api ula: ok=true", data.get("ok"), True)
+    prefix = data.get("data", {}).get("prefix", "")
+    assert_true("api ula: prefix is /48", prefix.endswith("/48"), f"got {prefix!r}")
+    assert_true("api ula: prefix starts with fd", prefix.lower().startswith("fd"),
+                f"got {prefix!r}")
+    assert_true("api ula: example_64s list",
+                len(data.get("data", {}).get("example_64s", [])) >= 5)
+
+
+async def test_api_openapi_spec(page: Page) -> None:
+    section("API — OpenAPI spec")
+    resp = _SESSION.get(
+        "https://dev-direct.seanmousseau.com:8343/claude/subnet-calculator/api/openapi.yaml",
+        timeout=10,
+    )
+    assert_eq("api openapi.yaml: HTTP 200", resp.status_code, 200)
+    assert_contains("api openapi.yaml: contains 'openapi: 3.1'", resp.text, "openapi: 3.1")
+    assert_contains("api openapi.yaml: contains /ipv4 path", resp.text, "/ipv4")
+    assert_contains("api openapi.yaml: contains /sessions path", resp.text, "/sessions")
+
+
+# ---------------------------------------------------------------------------
+# Permissions-Policy header directives (coverage gap)
+# ---------------------------------------------------------------------------
+
+async def test_permissions_policy_directives(page: Page) -> None:
+    section("Permissions-Policy directives")
+    _, hdrs, _ = _http_get()
+    pp = hdrs.get("permissions-policy", "")
+    for directive in ["camera=()", "microphone=()", "geolocation=()", "payment=()"]:
+        assert_contains(f"Permissions-Policy: {directive}", pp, directive)
+
+
+# ---------------------------------------------------------------------------
+# VLSM utilisation percentage accuracy (coverage gap)
+# ---------------------------------------------------------------------------
+
+async def test_vlsm_utilisation_accuracy(page: Page) -> None:
+    section("VLSM utilisation accuracy")
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr", "24")
+
+    # Use JS to fill the form — one subnet needing 126 hosts in a /24
+    await page.evaluate("""() => {
+        var names = document.querySelectorAll('input[name="vlsm_name[]"]');
+        var hosts = document.querySelectorAll('input[name="vlsm_hosts[]"]');
+        if (names[0]) names[0].value = 'A';
+        if (hosts[0]) hosts[0].value = '126';
+    }""")
+    await submit_form(page, ".vlsm-form")
+
+    util_text = await page.text_content(".vlsm-summary")
+    # 10.0.0.0/24 = 256 total. A /25 = 128 addresses. Utilisation = 128/256 = 50%
+    assert_true("vlsm utilisation: 50% shown for /25 in /24",
+                util_text and "50" in (util_text or ""), f"got: {util_text!r}")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1093,6 +1366,19 @@ async def main() -> None:
             await test_multi_cidr_overlap(page)
             await test_ipv6_binary_repr(page)
             await test_regression_bugs_v130(page)
+            await test_supernet_ui(page)
+            await test_ula_generator_ui(page)
+            await test_api_meta(page)
+            await test_api_ipv4(page)
+            await test_api_ipv6(page)
+            await test_api_vlsm(page)
+            await test_api_overlap(page)
+            await test_api_split(page)
+            await test_api_supernet(page)
+            await test_api_ula(page)
+            await test_api_openapi_spec(page)
+            await test_permissions_policy_directives(page)
+            await test_vlsm_utilisation_accuracy(page)
         finally:
             await context.close()
             await browser.close()

@@ -2,65 +2,8 @@
 
 declare(strict_types=1);
 
-// ─── Input resolvers (shared by GET and POST handlers) ────────────────────────
-
-function resolve_ipv4_input(string $ip, string $mask): array
-{
-    // CIDR auto-detection: "192.168.1.0/24" typed into IP field (#27)
-    if (strpos($ip, '/') !== false && $mask === '') {
-        [$ip, $mask] = array_pad(explode('/', $ip, 2), 2, '');
-        $ip   = trim($ip);
-        $mask = trim($mask);
-    }
-    $result = $error = null;
-    if (!is_valid_ipv4($ip)) {
-        $error = 'Invalid IPv4 address.';
-    } else {
-        $mask_clean = ltrim($mask, '/');
-        if (ctype_digit($mask_clean)) {
-            $cidr = (int)$mask_clean;
-            if ($cidr < 0 || $cidr > 32) {
-                $error = 'CIDR prefix must be between 0 and 32.';
-            } else {
-                $result = calculate_subnet($ip, $cidr);
-            }
-        } elseif (is_valid_mask_octet($mask_clean)) {
-            $result = calculate_subnet($ip, mask_to_cidr($mask_clean));
-        } else {
-            $error = 'Invalid netmask. Use CIDR (e.g. /24) or dotted-decimal (e.g. 255.255.255.0).';
-        }
-    }
-    return ['result' => $result, 'error' => $error, 'ip' => $ip, 'mask' => $mask];
-}
-
-function resolve_ipv6_input(string $ip, string $prefix): array
-{
-    // CIDR auto-detection: "2001:db8::/32" typed into IPv6 field (#27)
-    if (strpos($ip, '/') !== false && $prefix === '') {
-        [$ip, $prefix] = array_pad(explode('/', $ip, 2), 2, '');
-        $ip     = trim($ip);
-        $prefix = trim($prefix);
-    }
-    $result6 = $error6 = null;
-    if (!extension_loaded('gmp')) {
-        $error6 = 'IPv6 calculation requires the PHP GMP extension.';
-    } elseif (!is_valid_ipv6($ip)) {
-        $error6 = 'Invalid IPv6 address.';
-    } else {
-        $pfx = ltrim($prefix, '/');
-        if (!ctype_digit($pfx) || (int)$pfx > 128) {
-            $error6 = 'Prefix must be between 0 and 128.';
-        } else {
-            try {
-                $result6 = calculate_subnet6($ip, (int)$pfx);
-            } catch (\Exception $e) {
-                error_log('sc IPv6 error: ' . $e->getMessage());
-                $error6 = 'An error occurred during calculation. Please check your input.';
-            }
-        }
-    }
-    return ['result6' => $result6, 'error6' => $error6, 'ip' => $ip, 'prefix' => $prefix];
-}
+// ─── Input resolvers (shared by GET/POST handlers and API) ────────────────────
+require_once __DIR__ . '/functions-resolve.php';
 
 // ─── Turnstile verification ───────────────────────────────────────────────────
 
@@ -112,6 +55,21 @@ $vlsm_network = $vlsm_cidr_input = '';
 /** @var array<array{name: string, hosts: int}> $vlsm_requirements */
 $vlsm_requirements = [];
 
+$supernet_input  = '';
+$supernet_action = '';
+/** @var array{supernet?: string, summaries?: string[]}|null $supernet_result */
+$supernet_result = null;
+$supernet_error  = null;
+
+$ula_global_id_input = '';
+/** @var array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}|null $ula_result */
+$ula_result = null;
+$ula_error  = null;
+
+$session_save_id  = '';
+$session_load_id  = '';
+$session_error    = null;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $post_tab   = $_POST['tab'] ?? $default_tab;
     $active_tab = in_array($post_tab, ['ipv4', 'ipv6', 'vlsm'], true) ? $post_tab : 'ipv4';
@@ -121,8 +79,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_overlap       = isset($_POST['overlap_cidr_a']) || isset($_POST['overlap_cidr_b']);
     $is_multi_overlap = isset($_POST['multi_overlap_input']);
     $is_vlsm          = isset($_POST['vlsm_network']);
+    $is_supernet      = isset($_POST['supernet_action']);
+    $is_ula           = isset($_POST['ula_generate']);
+    $is_session_save  = isset($_POST['session_action']) && (string)($_POST['session_action'] ?? '') === 'save';
 
-    $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm;
+    $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
+        || $is_supernet || $is_ula || $is_session_save;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -149,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if (!$form_blocked && $active_tab === 'ipv4') {
+    if (!$form_blocked && $active_tab === 'ipv4' && !$is_supernet) {
         $r = resolve_ipv4_input(
             trim((string)($_POST['ip']   ?? '')),
             trim((string)($_POST['mask'] ?? ''))
@@ -175,7 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
-    } elseif (!$form_blocked) {
+    } elseif (!$form_blocked && !$is_ula) {
         $r = resolve_ipv6_input(
             trim((string)($_POST['ipv6']   ?? '')),
             trim((string)($_POST['prefix'] ?? ''))
@@ -363,7 +325,156 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
+    if ($is_supernet && !$form_blocked) {
+        $supernet_action = in_array((string)($_POST['supernet_action'] ?? ''), ['find', 'summarise'], true)
+            ? (string)$_POST['supernet_action']
+            : 'find';
+        $supernet_input  = trim((string)($_POST['supernet_input'] ?? ''));
+        $lines = array_values(array_filter(array_map('trim', explode("\n", $supernet_input))));
+        if (count($lines) < 1) {
+            $supernet_error = 'Enter at least one CIDR.';
+        } elseif (count($lines) > 50) {
+            $supernet_error = 'Maximum 50 CIDRs per check.';
+        } else {
+            $sr = $supernet_action === 'find' ? supernet_find($lines) : summarise_cidrs($lines);
+            if (isset($sr['error'])) {
+                $supernet_error = $sr['error'];
+            } else {
+                $supernet_result = $sr;
+            }
+        }
+    }
+
+    if ($is_ula && !$form_blocked) {
+        $ula_global_id_input = trim((string)($_POST['ula_global_id'] ?? ''));
+        $ur = generate_ula_prefix($ula_global_id_input);
+        if (isset($ur['error'])) {
+            $ula_error = $ur['error'];
+        } else {
+            $ula_result = $ur;
+        }
+    }
+
+    if ($is_session_save && !$form_blocked && $session_enabled) {
+        $vlsm_network    = trim((string)($_POST['vlsm_network'] ?? ''));
+        $vlsm_cidr_input = trim((string)($_POST['vlsm_cidr']   ?? ''));
+        $rv = resolve_ipv4_input($vlsm_network, $vlsm_cidr_input);
+        if (!$rv['result']) {
+            $session_error = 'Parent network: ' . ($rv['error'] ?? 'Invalid input.');
+        } else {
+            $names = $_POST['vlsm_name']  ?? [];
+            $hosts = $_POST['vlsm_hosts'] ?? [];
+            $reqs  = [];
+            if (is_array($names) && is_array($hosts)) {
+                foreach ($names as $i => $name) {
+                    $name = mb_substr(trim((string)$name), 0, 100);
+                    $hval = trim((string)($hosts[$i] ?? ''));
+                    if ($name !== '' && ctype_digit($hval) && (int)$hval >= 1) {
+                        $reqs[] = ['name' => $name, 'hosts' => (int)$hval];
+                    }
+                }
+            }
+            if ($reqs === []) {
+                $session_error = 'No valid VLSM requirements to save.';
+            } else {
+                $vlsm_cidr_int   = (int)ltrim($rv['result']['netmask_cidr'], '/');
+                $vlsm_network_ip = explode('/', $rv['result']['network_cidr'])[0];
+                $vlsm_requirements = $reqs;
+                $vr = vlsm_allocate($vlsm_network_ip, $vlsm_cidr_int, $reqs);
+                if (isset($vr['error'])) {
+                    $session_error = $vr['error'];
+                } else {
+                    $vlsm_result = $vr['allocations'] ?? [];
+                    try {
+                        $db_path = $session_db_path !== '' ? $session_db_path
+                            : dirname(__DIR__) . '/data/sessions.sqlite';
+                        $db_dir  = dirname($db_path);
+                        if (!is_dir($db_dir)) {
+                            mkdir($db_dir, 0755, true);
+                        }
+                        $sdb  = session_db_open($db_path);
+                        $session_save_id = session_create($sdb, [
+                            'network'      => $vlsm_network,
+                            'cidr'         => ltrim($vlsm_cidr_input, '/'),
+                            'requirements' => $reqs,
+                        ], $session_ttl_days);
+                        $sdb->close();
+                    } catch (\Exception $e) {
+                        error_log('sc session save error: ' . $e->getMessage());
+                        $session_error = 'Failed to save session. Please try again.';
+                    }
+                }
+            }
+        }
+    }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    // Session load: ?tab=vlsm&s=<id>
+    if ($session_enabled && $active_tab === 'vlsm' && isset($_GET['s'])) {
+        $session_load_id = trim((string)$_GET['s']);
+        if (preg_match('/^[0-9a-f]{8}$/', $session_load_id)) {
+            try {
+                $db_path = $session_db_path !== '' ? $session_db_path
+                    : dirname(__DIR__) . '/data/sessions.sqlite';
+                if (file_exists($db_path)) {
+                    $sdb     = session_db_open($db_path);
+                    $payload = session_load($sdb, $session_load_id);
+                    $sdb->close();
+                    if ($payload === null) {
+                        $session_error = 'Session not found or expired.';
+                    } else {
+                        $vlsm_network    = (string)($payload['network'] ?? '');
+                        $vlsm_cidr_input = (string)($payload['cidr']    ?? '');
+                        $raw_reqs        = $payload['requirements'] ?? [];
+                        if (is_array($raw_reqs)) {
+                            foreach ($raw_reqs as $req) {
+                                if (is_array($req) && isset($req['name'], $req['hosts'])) {
+                                    $vlsm_requirements[] = ['name' => (string)$req['name'], 'hosts' => (int)$req['hosts']];
+                                }
+                            }
+                        }
+                        if ($vlsm_requirements !== [] && $vlsm_network !== '') {
+                            $rv = resolve_ipv4_input($vlsm_network, $vlsm_cidr_input);
+                            if ($rv['result']) {
+                                $vlsm_cidr_int   = (int)ltrim($rv['result']['netmask_cidr'], '/');
+                                $vlsm_network_ip = explode('/', $rv['result']['network_cidr'])[0];
+                                $vr = vlsm_allocate($vlsm_network_ip, $vlsm_cidr_int, $vlsm_requirements);
+                                if (isset($vr['error'])) {
+                                    $vlsm_error = $vr['error'];
+                                } else {
+                                    $vlsm_result = $vr['allocations'] ?? [];
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    $session_error = 'Session storage is not initialised.';
+                }
+            } catch (\Exception $e) {
+                error_log('sc session load error: ' . $e->getMessage());
+                $session_error = 'Failed to load session.';
+            }
+        } else {
+            $session_error = 'Invalid session ID format.';
+        }
+    }
+
+    // Supernet / summarise shareable GET URL
+    if ($active_tab === 'ipv4' && isset($_GET['supernet_action'])) {
+        $supernet_action = in_array((string)($_GET['supernet_action'] ?? ''), ['find', 'summarise'], true)
+            ? (string)$_GET['supernet_action']
+            : 'find';
+        $supernet_input = trim((string)($_GET['supernet_input'] ?? ''));
+        $lines = array_values(array_filter(array_map('trim', explode("\n", $supernet_input))));
+        if (count($lines) >= 1 && count($lines) <= 50) {
+            $sr = $supernet_action === 'find' ? supernet_find($lines) : summarise_cidrs($lines);
+            if (isset($sr['error'])) {
+                $supernet_error = $sr['error'];
+            } else {
+                $supernet_result = $sr;
+            }
+        }
+    }
+
     if ($active_tab === 'ipv4') {
         $get_ip   = trim((string)($_GET['ip']   ?? ''));
         $get_mask = trim((string)($_GET['mask'] ?? ''));
@@ -476,3 +587,6 @@ $share_proto = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https
 $share_base_server = $share_proto . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
     . strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
 $share_url_abs = $share_url !== '' ? $share_base_server . $share_url : '';
+
+// Session save URL (shown after a successful session save)
+$session_save_url = $session_save_id !== '' ? '?tab=vlsm&s=' . urlencode($session_save_id) : '';

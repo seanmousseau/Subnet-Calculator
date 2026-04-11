@@ -46,11 +46,11 @@ function vlsm_allocate(string $network_ip, int $cidr, array $requirements): arra
             }
         }
         if ($prefix === 32) {
-            // Check /31 (2 usable for point-to-point) and /32 (loopback)
-            if ($hosts_needed <= 2) {
-                $prefix = 31;
-            } elseif ($hosts_needed === 1) {
+            // /31 = point-to-point (2 addresses); /32 = loopback (1 address)
+            if ($hosts_needed === 1) {
                 $prefix = 32;
+            } elseif ($hosts_needed <= 2) {
+                $prefix = 31;
             } else {
                 return ['error' => "Requirement \"{$req['name']}\" needs {$hosts_needed} hosts but no prefix fits within /{$cidr}."];
             }

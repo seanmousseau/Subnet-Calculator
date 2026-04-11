@@ -6,7 +6,7 @@ declare(strict_types=1);
 // These are the built-in defaults. To override, copy config.php.example to
 // config.php alongside this file — config.php is never overwritten by upgrades.
 
-$app_version          = '1.3.0';
+$app_version          = '2.0.0';
 $fixed_bg_color       = 'null';
 $default_tab          = 'ipv4'; // 'ipv4', 'ipv6', or 'vlsm'
 $split_max_subnets    = 16;
@@ -18,6 +18,16 @@ $page_description     = 'Free online subnet calculator for IPv4 and IPv6. Calcul
 $show_share_bar       = true;
 $frame_ancestors      = '*';
 $canonical_url        = '';
+
+// REST API (v2.0.0)
+$api_tokens         = [];   // [] = open; ['token1'] = auth required
+$api_rate_limit_rpm = 60;   // requests/minute per IP (0 = disabled)
+$api_cors_origins   = '*';  // CORS Access-Control-Allow-Origin
+
+// Session persistence (v2.0.0)
+$session_enabled    = false;  // Enable SQLite-backed VLSM session save/restore
+$session_db_path    = '';     // Absolute path to SQLite file (auto if empty)
+$session_ttl_days   = 30;     // Days before a saved session expires
 
 if (file_exists(__DIR__ . '/../config.php')) {
     require __DIR__ . '/../config.php';
@@ -52,3 +62,15 @@ if ($canonical_url === '') {
     unset($_host);
 }
 $canonical_url = htmlspecialchars((string)$canonical_url); // pre-encoded; output raw in template
+
+// Sanitise v2.0.0 config values
+if (!is_array($api_tokens)) {
+    $api_tokens = [];
+}
+$api_rate_limit_rpm = max(0, (int)$api_rate_limit_rpm);
+if (!is_string($api_cors_origins) || $api_cors_origins === '') {
+    $api_cors_origins = '*';
+}
+$session_enabled  = (bool)$session_enabled;
+$session_db_path  = is_string($session_db_path) ? $session_db_path : '';
+$session_ttl_days = max(1, (int)$session_ttl_days);

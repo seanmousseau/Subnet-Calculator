@@ -16,8 +16,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: gmp
-          tools: phpstan
+          extensions: gmp, sqlite3
 
       - name: Install dependencies
         if: hashFiles('composer.json') != ''
@@ -29,10 +28,17 @@ jobs:
           for f in Subnet-Calculator/includes/*.php Subnet-Calculator/templates/layout.php; do
             php -l "$f"
           done
+          if [ -d Subnet-Calculator/api ]; then
+            find Subnet-Calculator/api -name '*.php' | while read f; do php -l "$f"; done
+          fi
 
       - name: PHPStan
-        run: phpstan analyse --no-progress
+        run: vendor/bin/phpstan analyse --no-progress
 
       - name: PHPUnit
         if: hashFiles('composer.json') != ''
         run: vendor/bin/phpunit
+
+      - name: Spectral — lint OpenAPI spec
+        if: hashFiles('Subnet-Calculator/api/openapi.yaml') != ''
+        run: npx --yes @stoplight/spectral-cli@6 lint Subnet-Calculator/api/openapi.yaml
