@@ -1,0 +1,13 @@
+# Route all API requests through index.php (front controller pattern).
+# Compatible with Apache 2.4+ and OpenLiteSpeed.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # Don't rewrite actual files (index.php itself)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+# Belt-and-suspenders: block direct access to handler files.
+<FilesMatch "^helpers\.php$">
+    Require all denied
+</FilesMatch>

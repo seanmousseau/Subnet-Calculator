@@ -1,0 +1,479 @@
+openapi: 3.1.0
+info:
+  title: Subnet Calculator API
+  version: "1"
+  description: |
+    JSON REST API for IPv4/IPv6 subnet calculation, VLSM allocation,
+    overlap detection, subnet splitting, route summarisation, ULA prefix
+    generation, and VLSM session persistence.
+  license:
+    name: MIT
+    identifier: MIT
+  contact:
+    name: Sean Mousseau
+    url: https://github.com/seanmousseau/Subnet-Calculator
+
+servers:
+  - url: /api/v1
+    description: Relative to the app installation root
+
+security: []   # Override per-operation when $api_tokens is configured
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    OkEnvelope:
+      type: object
+      required: [ok, data]
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+        data:
+          type: object
+
+    ErrorEnvelope:
+      type: object
+      required: [ok, error]
+      properties:
+        ok:
+          type: boolean
+          enum: [false]
+        error:
+          type: string
+
+    Ipv4Result:
+      type: object
+      required:
+        - network_cidr
+        - broadcast
+        - netmask
+        - netmask_cidr
+        - wildcard
+        - host_min
+        - host_max
+        - usable_hosts
+        - total_ips
+      properties:
+        network_cidr:   { type: string, example: "10.0.0.0/24" }
+        broadcast:      { type: string, example: "10.0.0.255" }
+        netmask:        { type: string, example: "255.255.255.0" }
+        netmask_cidr:   { type: string, example: "/24" }
+        wildcard:       { type: string, example: "0.0.0.255" }
+        host_min:       { type: string, example: "10.0.0.1" }
+        host_max:       { type: string, example: "10.0.0.254" }
+        usable_hosts:   { type: integer, example: 254 }
+        total_ips:      { type: integer, example: 256 }
+        ip_type:        { type: string, example: "Private" }
+        reverse_dns:    { type: string, example: "0.0.10.in-addr.arpa" }
+
+    Ipv6Result:
+      type: object
+      required: [network_cidr, prefix, first_addr, last_addr]
+      properties:
+        network_cidr:   { type: string, example: "2001:db8::/32" }
+        prefix:         { type: string, example: "/32" }
+        first_addr:     { type: string, example: "2001:db8::" }
+        last_addr:      { type: string, example: "2001:db8:ffff:ffff:ffff:ffff:ffff:ffff" }
+        total_addresses: { type: string, example: "79228162514264337593543950336" }
+
+    VlsmAllocation:
+      type: object
+      required: [name, hosts_needed, subnet, host_min, host_max, usable, waste]
+      properties:
+        name:         { type: string, example: "LAN" }
+        hosts_needed: { type: integer, example: 50 }
+        subnet:       { type: string, example: "10.0.0.0/26" }
+        host_min:     { type: string, example: "10.0.0.1" }
+        host_max:     { type: string, example: "10.0.0.62" }
+        usable:       { type: integer, example: 62 }
+        waste:        { type: integer, example: 12 }
+
+    SplitResult:
+      type: object
+      required: [network, split_prefix, total, showing, subnets]
+      properties:
+        network:       { type: string, example: "10.0.0.0/24" }
+        split_prefix:  { type: string, example: "/26" }
+        total:
+          oneOf:
+            - type: integer
+            - type: string
+          description: Total subnets; string like "2^N" when too large to count.
+          example: 4
+        showing:       { type: integer, example: 4 }
+        subnets:
+          type: array
+          items: { type: string }
+
+    UlaResult:
+      type: object
+      required: [prefix, global_id, example_64s, available_64s]
+      properties:
+        prefix:        { type: string, example: "fd1a:2b3c:4d5e::/48" }
+        global_id:     { type: string, example: "1a2b3c4d5e" }
+        example_64s:
+          type: array
+          items: { type: string }
+          example: ["fd1a:2b3c:4d5e:0000::/64", "fd1a:2b3c:4d5e:0001::/64"]
+        available_64s: { type: integer, example: 65536 }
+
+paths:
+  /:
+    get:
+      operationId: meta
+      summary: API metadata
+      description: Returns API version and list of available endpoints.
+      responses:
+        "200":
+          description: Metadata
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          version:   { type: string }
+                          endpoints: { type: array, items: { type: string } }
+
+  /ipv4:
+    post:
+      operationId: calcIpv4
+      summary: IPv4 subnet calculation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ip]
+              properties:
+                ip:   { type: string, description: "IP address (with or without prefix)", example: "10.0.0.1" }
+                mask: { type: string, description: "Prefix length or dotted-decimal mask", example: "24" }
+      responses:
+        "200":
+          description: Subnet details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Ipv4Result" }
+        "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Unauthorised }
+        "429": { description: Rate limit exceeded }
+
+  /ipv6:
+    post:
+      operationId: calcIpv6
+      summary: IPv6 subnet calculation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ipv6]
+              properties:
+                ipv6:   { type: string, example: "2001:db8::1" }
+                prefix: { type: string, example: "32" }
+      responses:
+        "200":
+          description: Subnet details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Ipv6Result" }
+        "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Unauthorised }
+
+  /vlsm:
+    post:
+      operationId: calcVlsm
+      summary: VLSM subnet allocation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [network, requirements]
+              properties:
+                network:
+                  type: string
+                  example: "10.0.0.0"
+                cidr:
+                  type: string
+                  example: "24"
+                requirements:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [name, hosts]
+                    properties:
+                      name:  { type: string, example: "LAN" }
+                      hosts: { type: integer, minimum: 1, example: 50 }
+      responses:
+        "200":
+          description: VLSM allocations
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          allocations:
+                            type: array
+                            items: { $ref: "#/components/schemas/VlsmAllocation" }
+        "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Unauthorised }
+
+  /overlap:
+    post:
+      operationId: checkOverlap
+      summary: Subnet overlap check (IPv4 or IPv6)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cidr_a, cidr_b]
+              properties:
+                cidr_a: { type: string, example: "10.0.0.0/24" }
+                cidr_b: { type: string, example: "10.0.0.128/25" }
+      responses:
+        "200":
+          description: Overlap relation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [cidr_a, cidr_b, relation]
+                        properties:
+                          cidr_a:    { type: string }
+                          cidr_b:    { type: string }
+                          relation:
+                            type: string
+                            enum: [none, identical, a_contains_b, b_contains_a]
+        "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+
+  /split/ipv4:
+    post:
+      operationId: splitIpv4
+      summary: Split an IPv4 subnet into smaller subnets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ip, split_prefix]
+              properties:
+                ip:           { type: string, example: "10.0.0.0" }
+                mask:         { type: string, example: "24" }
+                split_prefix: { type: integer, minimum: 1, maximum: 32, example: 26 }
+                limit:        { type: integer, minimum: 1, maximum: 256, default: 16 }
+      responses:
+        "200":
+          description: Split result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/SplitResult" }
+        "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+
+  /split/ipv6:
+    post:
+      operationId: splitIpv6
+      summary: Split an IPv6 subnet into smaller subnets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ipv6, split_prefix]
+              properties:
+                ipv6:         { type: string, example: "2001:db8::/32" }
+                prefix:       { type: string, example: "32" }
+                split_prefix: { type: integer, minimum: 1, maximum: 128, example: 48 }
+                limit:        { type: integer, minimum: 1, maximum: 256, default: 16 }
+      responses:
+        "200":
+          description: Split result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/SplitResult" }
+        "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+
+  /supernet:
+    post:
+      operationId: supernet
+      summary: Find supernet or summarise IPv4 routes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cidrs]
+              properties:
+                action:
+                  type: string
+                  enum: [find, summarise]
+                  default: find
+                  description: "`find` returns the smallest enclosing supernet; `summarise` reduces to minimal covering prefixes."
+                cidrs:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: { type: string }
+                  example: ["10.0.0.0/24", "10.0.1.0/24"]
+      responses:
+        "200":
+          description: Supernet or summarised routes
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        oneOf:
+                          - type: object
+                            properties:
+                              supernet: { type: string, example: "10.0.0.0/23" }
+                          - type: object
+                            properties:
+                              summaries:
+                                type: array
+                                items: { type: string }
+        "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+
+  /ula:
+    post:
+      operationId: generateUla
+      summary: Generate an IPv6 ULA /48 prefix (RFC 4193)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                global_id:
+                  type: string
+                  description: Optional 10 hex-char global ID. Random if omitted.
+                  example: "1a2b3c4d5e"
+      responses:
+        "200":
+          description: Generated ULA prefix
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/UlaResult" }
+        "400": { description: Invalid global_id, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+
+  /sessions:
+    post:
+      operationId: createSession
+      summary: Save a VLSM session payload
+      description: Requires `$session_enabled = true` on the server.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [payload]
+              properties:
+                payload:
+                  type: object
+                  description: Arbitrary JSON object to persist (e.g. VLSM state).
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [id]
+                        properties:
+                          id: { type: string, example: "a1b2c3d4" }
+        "400": { description: Invalid payload }
+        "501": { description: Session persistence not enabled on this server }
+
+  /sessions/{id}:
+    get:
+      operationId: loadSession
+      summary: Load a saved session by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{8}$"
+          example: a1b2c3d4
+      responses:
+        "200":
+          description: Session payload
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [id, payload]
+                        properties:
+                          id:      { type: string }
+                          payload: { type: object }
+        "400": { description: Invalid session ID format }
+        "404": { description: Session not found or expired }
+        "501": { description: Session persistence not enabled on this server }

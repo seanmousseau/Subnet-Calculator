@@ -8,6 +8,7 @@ https://dev.seanmousseau.com/subnet-calculator/
 
 **IPv4**
 - Accepts netmask in **CIDR** (`/24`, `24`) or **dotted-decimal** (`255.255.255.0`) notation
+- **Supernet / route summarisation** — find the smallest enclosing prefix for a set of CIDRs; reduce a list to its minimal covering set
 - Outputs: Subnet CIDR, Netmask (CIDR & Octet), Wildcard Mask, First/Last Usable IP, Broadcast IP, Usable IPs, Address Type badge, Reverse DNS Zone
 - Handles edge cases: `/0`, `/31` (point-to-point), `/32` (host route)
 - Paste a full CIDR string (e.g. `192.168.1.0/24`) into the IP field — it auto-splits on blur
@@ -21,6 +22,7 @@ https://dev.seanmousseau.com/subnet-calculator/
 - Uses PHP GMP extension for 128-bit arithmetic
 - Subnet splitter with per-row copy buttons; Copy All button
 - Binary/hex representation — collapsible 128-bit view with network/host bit colour coding at nibble boundary
+- **ULA prefix generator (RFC 4193)** — generate a random `/48` ULA prefix from a 40-bit global ID; shows example `/64` subnets
 
 **VLSM**
 - Allocate variable-length subnets from a parent network to meet named host requirements
@@ -31,6 +33,7 @@ https://dev.seanmousseau.com/subnet-calculator/
 - Shareable URL — GET parameters auto-populate and run the planner on page load
 - Export CSV — download full results as a CSV file
 - Client-side validation with inline errors; loading state on submit
+- **Session save/restore** (opt-in) — save VLSM state to SQLite and restore via a short shareable URL
 
 **Subnet Overlap Checker**
 - Compare any two IPv4 or IPv6 CIDRs and report their relationship: no overlap, identical, or containment (A contains B / B contains A)
@@ -49,8 +52,9 @@ https://dev.seanmousseau.com/subnet-calculator/
 
 ## Requirements
 
-- PHP 7.4+
-- PHP GMP extension (for IPv6 only — `php-gmp`)
+- PHP 8.1+
+- PHP GMP extension (for IPv6 — `php-gmp`)
+- PHP SQLite3 extension (for session persistence — `php-sqlite3`; optional)
 
 ## Usage
 
@@ -83,6 +87,41 @@ All tuneable values with their defaults:
 | `$page_description` | `'Free online…'` | Used in `<meta name="description">` and `og:description` for share previews. |
 | `$show_share_bar` | `true` | Show or hide the shareable URL bar below results. Set to `false` when embedding in an iframe. |
 | `$frame_ancestors` | `'*'` | Origins permitted to embed the page in an iframe (`frame-ancestors` CSP directive). Use `"'none'"` to block all embedding, or a space-separated list of origins. |
+| `$api_tokens` | `[]` | Bearer tokens that authorise REST API requests. Empty array = open API (no auth required). |
+| `$api_rate_limit_rpm` | `60` | Maximum API requests per IP per minute (sliding window). `0` = disabled. |
+| `$api_cors_origins` | `'*'` | `Access-Control-Allow-Origin` header value for API responses. |
+| `$session_enabled` | `false` | Enable SQLite-backed VLSM session save/restore. Requires `php-sqlite3`. |
+| `$session_db_path` | `''` | Absolute path to the SQLite database file. Leave empty to auto-place at `<docroot>/../data/sessions.sqlite`. |
+| `$session_ttl_days` | `30` | Days before a saved session expires and is purged. |
+
+## REST API
+
+The REST API is available at `/api/v1/`. A `GET /api/v1/` request returns the endpoint list.
+
+All POST endpoints accept and return JSON. Responses are enveloped:
+
+```json
+{"ok": true, "data": {...}}
+{"ok": false, "error": "..."}
+```
+
+**Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/` | Endpoint list |
+| `POST` | `/api/v1/ipv4` | IPv4 subnet calculation |
+| `POST` | `/api/v1/ipv6` | IPv6 subnet calculation |
+| `POST` | `/api/v1/vlsm` | VLSM allocation |
+| `POST` | `/api/v1/overlap` | Overlap / containment check (IPv4 or IPv6) |
+| `POST` | `/api/v1/split/ipv4` | Split an IPv4 subnet |
+| `POST` | `/api/v1/split/ipv6` | Split an IPv6 subnet |
+| `POST` | `/api/v1/supernet` | Find supernet or summarise routes |
+| `POST` | `/api/v1/ula` | Generate IPv6 ULA prefix |
+| `POST` | `/api/v1/sessions` | Save VLSM session (requires `$session_enabled = true`) |
+| `GET` | `/api/v1/sessions/{id}` | Restore VLSM session |
+
+See `api/openapi.yaml` for the full OpenAPI 3.1 specification.
 
 ## Downloads
 
@@ -90,6 +129,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File |
 |---------|------|
+| 2.0.0 | `releases/subnet-calculator-2.0.0.tar.gz` |
 | 1.3.0 | `releases/subnet-calculator-1.3.0.tar.gz` |
 | 1.2.0 | `releases/subnet-calculator-1.2.0.tar.gz` |
 | 1.1.1 | `releases/subnet-calculator-1.1.1.tar.gz` |

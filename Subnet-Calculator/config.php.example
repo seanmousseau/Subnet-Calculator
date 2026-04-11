@@ -1,6 +1,7 @@
 <?php
 // Copy this file to config.php and customise.
 // config.php is never overwritten by upgrades; it is also excluded from git.
+// Requires PHP 8.1+.
 
 // Optional: pin the page background to a hex colour regardless of light/dark mode.
 // Leave as 'null' to use the theme default.
@@ -40,3 +41,27 @@ $frame_ancestors = '*';
 // Leave empty to auto-detect from $_SERVER (suitable for most deployments).
 // Set explicitly if behind a reverse proxy that mangles REQUEST_URI or HTTP_HOST.
 $canonical_url = '';
+
+// ── REST API (v2.0.0) ──────────────────────────────────────────────────────
+// Bearer tokens that authorise API requests.
+// Empty array = open API (no auth required).
+// Add one or more tokens to restrict access, e.g.: ['secret-token-1', 'tok2']
+$api_tokens = [];
+
+// Maximum API requests per IP per minute (sliding window). 0 = disabled.
+$api_rate_limit_rpm = 60;
+
+// CORS Access-Control-Allow-Origin header value for API responses.
+// '*' = allow all origins; set to a specific origin to restrict.
+$api_cors_origins = '*';
+
+// ── Session persistence (v2.0.0) ──────────────────────────────────────────
+// Enable SQLite-backed VLSM session save/restore and short-URL sharing.
+$session_enabled = false;
+
+// Absolute path to the SQLite database file.
+// Leave empty to auto-place at <docroot>/../data/sessions.sqlite.
+$session_db_path = '';
+
+// Number of days before a saved session expires and is purged.
+$session_ttl_days = 30;

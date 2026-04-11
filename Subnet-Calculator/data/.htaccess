@@ -1,0 +1,2 @@
+# Block direct access to session database and any other files in data/
+Require all denied

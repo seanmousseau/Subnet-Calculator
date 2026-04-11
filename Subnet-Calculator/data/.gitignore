@@ -1,0 +1,4 @@
+# Ignore SQLite databases; keep this directory in git
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

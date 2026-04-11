@@ -209,6 +209,45 @@ if ($i < 3) {
                 <?php endif; ?>
             </div>
         <?php endif; ?>
+
+        <!-- Supernet / Route Summarisation Tool -->
+        <div class="overlap-panel">
+            <div class="overlap-title">Supernet &amp; Route Summarisation</div>
+            <form method="post" novalidate>
+                <input type="hidden" name="tab" value="ipv4">
+                <textarea name="supernet_input" rows="4" class="multi-overlap-input"
+                          placeholder="One IPv4 CIDR per line (max 50):&#10;10.0.0.0/24&#10;10.0.1.0/24"
+                          autocomplete="off" spellcheck="false"><?= htmlspecialchars($supernet_input) ?></textarea>
+                <div class="splitter-row" style="gap:0.5rem;margin-top:0.5rem;">
+                    <button type="submit" name="supernet_action" value="find" class="splitter-btn">Find Supernet</button>
+                    <button type="submit" name="supernet_action" value="summarise" class="splitter-btn">Summarise Routes</button>
+                </div>
+            </form>
+            <?php if ($supernet_error) : ?>
+                <div class="error"><?= htmlspecialchars($supernet_error) ?></div>
+            <?php elseif ($supernet_result !== null) : ?>
+                <?php if ($supernet_action === 'find') : ?>
+                    <div class="overlap-result overlap-contains">
+                        <?= htmlspecialchars($supernet_result['supernet'] ?? '') ?>
+                    </div>
+                <?php else : ?>
+                    <div class="split-list" style="margin-top:0.5rem;">
+                        <button type="button" class="copy-all-btn" data-target="supernet">Copy All</button>
+                        <?php foreach ($supernet_result['summaries'] ?? [] as $s) : ?>
+                            <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
+                                <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
+                                <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s) ?>" aria-label="Copy <?= htmlspecialchars($s) ?>">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                </button>
+                            </div>
+                        <?php endforeach; ?>
+                        <?php $s_count = count($supernet_result['summaries'] ?? []);
+                              $i_count = count(array_filter(explode("\n", $supernet_input))); ?>
+                        <div class="split-more"><?= $s_count ?> prefix<?= $s_count !== 1 ? 'es' : '' ?> from <?= $i_count ?> input<?= $i_count !== 1 ? 's' : '' ?></div>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
+        </div>
     </div>
 
     <!-- IPv6 Panel -->
@@ -380,6 +419,50 @@ if ($i < 3) {
                 <?php endif; ?>
             </div>
         <?php endif; ?>
+
+        <!-- ULA Generator -->
+        <div class="overlap-panel">
+            <div class="overlap-title">IPv6 ULA Prefix Generator (RFC 4193)</div>
+            <form method="post" novalidate>
+                <input type="hidden" name="tab" value="ipv6">
+                <div class="form-row" style="align-items:flex-end;gap:0.5rem;">
+                    <div class="form-group" style="flex:1;">
+                        <label for="ula_global_id">Global ID <span style="font-weight:normal;font-size:0.85em;">(optional 10 hex chars)</span></label>
+                        <input type="text" id="ula_global_id" name="ula_global_id"
+                               value="<?= htmlspecialchars($ula_global_id_input) ?>"
+                               placeholder="e.g. 1a2b3c4d5e (random if blank)"
+                               autocomplete="off" spellcheck="false" maxlength="10">
+                    </div>
+                    <div style="padding-bottom:0.1rem;">
+                        <button type="submit" name="ula_generate" value="1" class="splitter-btn">Generate</button>
+                    </div>
+                </div>
+            </form>
+            <?php if ($ula_error) : ?>
+                <div class="error"><?= htmlspecialchars($ula_error) ?></div>
+            <?php elseif ($ula_result !== null) : ?>
+                <div class="ula-result">
+                    <div class="overlap-result overlap-contains"><?= htmlspecialchars($ula_result['prefix'] ?? '') ?></div>
+                    <div class="ula-meta">
+                        <span>Global ID: <code><?= htmlspecialchars($ula_result['global_id'] ?? '') ?></code></span>
+                        <span>Available /64s: <strong><?= number_format((int)($ula_result['available_64s'] ?? 0)) ?></strong></span>
+                    </div>
+                    <?php if (!empty($ula_result['example_64s'])) : ?>
+                    <div class="split-list" style="margin-top:0.5rem;">
+                        <button type="button" class="copy-all-btn" data-target="ula">Copy All</button>
+                        <?php foreach ($ula_result['example_64s'] as $ex64) : ?>
+                            <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($ex64) ?>">
+                                <span class="split-subnet-text"><?= htmlspecialchars($ex64) ?></span>
+                                <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($ex64) ?>" aria-label="Copy <?= htmlspecialchars($ex64) ?>">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                </button>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+        </div>
     </div>
 
     <!-- VLSM Panel -->
@@ -495,6 +578,45 @@ if ($i < 3) {
                 <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
             </div>
             <?php endif; ?>
+        <?php endif; ?>
+
+        <?php if ($session_enabled) : ?>
+        <!-- Session Save / Restore -->
+        <div class="overlap-panel">
+            <div class="overlap-title">Save &amp; Restore Session</div>
+            <?php if ($session_save_id !== '') : ?>
+                <div class="overlap-result overlap-contains" style="margin-bottom:0.5rem;">
+                    Session saved. Share this link:
+                    <code class="share-url"><?= htmlspecialchars($share_base_server . $session_save_url) ?></code>
+                    <button type="button" class="share-copy"
+                            data-copy="<?= htmlspecialchars($share_base_server . $session_save_url) ?>">Copy</button>
+                </div>
+            <?php endif; ?>
+            <?php if ($session_error) : ?>
+                <div class="error"><?= htmlspecialchars($session_error) ?></div>
+            <?php endif; ?>
+            <form method="post" novalidate>
+                <input type="hidden" name="tab" value="vlsm">
+                <input type="hidden" name="vlsm_network" value="<?= htmlspecialchars($vlsm_network) ?>">
+                <input type="hidden" name="vlsm_cidr" value="<?= htmlspecialchars($vlsm_cidr_input) ?>">
+                <?php foreach ($vlsm_requirements as $req) : ?>
+                    <input type="hidden" name="vlsm_name[]" value="<?= htmlspecialchars($req['name']) ?>">
+                    <input type="hidden" name="vlsm_hosts[]" value="<?= htmlspecialchars((string)$req['hosts']) ?>">
+                <?php endforeach; ?>
+                <button type="submit" name="session_action" value="save" class="splitter-btn">Save Session</button>
+            </form>
+            <form method="get" novalidate style="margin-top:0.5rem;">
+                <div class="overlap-inputs" style="gap:0.5rem;">
+                    <input type="hidden" name="tab" value="vlsm">
+                    <input type="text" name="s"
+                           value="<?= htmlspecialchars($session_load_id) ?>"
+                           placeholder="8-char session ID"
+                           autocomplete="off" spellcheck="false" maxlength="8"
+                           aria-label="Session ID">
+                    <button type="submit" class="splitter-btn">Load</button>
+                </div>
+            </form>
+        </div>
         <?php endif; ?>
 
         <!-- Overlap Checker -->

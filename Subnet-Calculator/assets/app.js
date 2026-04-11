@@ -215,6 +215,13 @@ document.addEventListener('click', function (e) {
         document.querySelectorAll('.vlsm-subnet-cell[data-copy]').forEach(function (cell) {
             texts.push(cell.dataset.copy);
         });
+    } else if (target === 'supernet' || target === 'ula') {
+        var list2 = btn.closest('.split-list');
+        if (list2) {
+            list2.querySelectorAll('.split-item[data-copy]').forEach(function (item) {
+                texts.push(item.dataset.copy);
+            });
+        }
     }
     if (texts.length > 0) copyText(texts.join('\n'), 'All copied!');
 });

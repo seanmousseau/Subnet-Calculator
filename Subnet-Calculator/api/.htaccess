@@ -1,0 +1,2 @@
+# Allow api/ directory to be served; index.php is the entry point.
+# Direct access to handlers/ is blocked in the parent .htaccess.

@@ -44,7 +44,21 @@
     # Protect PHP source subdirectories — assets/ is intentionally public
     # Belt-and-suspenders: each subdirectory also has its own .htaccess
     RewriteRule ^(includes|templates)/ - [F,L]
+
+    # Block session database directory and API internals
+    RewriteRule ^data/ - [F,L]
+    RewriteRule ^api/v1/handlers/ - [F,L]
 </IfModule>
+
+# Block SQLite database files and API internals regardless of location
+# (FilesMatch works on Apache and OpenLiteSpeed)
+<FilesMatch "\.sqlite$">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "^helpers\.php$">
+    Require all denied
+</FilesMatch>
 
 # -----------------------------------------------------------------------
 # Cache-control for static assets
