@@ -1,6 +1,6 @@
 {
     "require-dev": {
-        "phpunit/phpunit": "^11"
+        "phpunit/phpunit": "^13"
     },
     "autoload-dev": {
         "files": ["testing/unit/bootstrap.php"]
