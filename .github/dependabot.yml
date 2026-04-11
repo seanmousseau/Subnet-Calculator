@@ -11,5 +11,3 @@ updates:
       interval: "weekly"
     ignore:
       - dependency-name: "anthropics/claude-code-action"
-        versions:
-          - "*"
