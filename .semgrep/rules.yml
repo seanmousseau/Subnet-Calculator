@@ -1,0 +1,61 @@
+rules:
+
+  # ── Path traversal ─────────────────────────────────────────────────────────
+  # API router must use literal __DIR__ . '/handlers/xxx.php' — no variables.
+  - id: php-require-variable-path
+    patterns:
+      - pattern: require $PATH;
+      - pattern-not: require __DIR__ . "...";
+      - pattern-not: require __DIR__ . '...';
+      - pattern-not: require $BASE . "...";
+      - pattern-not: require $BASE . '...';
+    message: >
+      require with a variable path can allow path traversal.
+      Use a literal path: require __DIR__ . '/handlers/foo.php';
+    languages: [php]
+    severity: ERROR
+    paths:
+      include:
+        - "**/Subnet-Calculator/api/**"
+
+  - id: php-require-once-variable-path
+    patterns:
+      - pattern: require_once $PATH;
+      - pattern-not: require_once __DIR__ . "...";
+      - pattern-not: require_once __DIR__ . '...';
+      - pattern-not: require_once $BASE . "...";
+      - pattern-not: require_once $BASE . '...';
+    message: >
+      require_once with a variable path can allow path traversal.
+      Use a literal path: require_once __DIR__ . '/foo.php';
+    languages: [php]
+    severity: ERROR
+    paths:
+      include:
+        - "**/Subnet-Calculator/api/**"
+
+  # ── SQLite prepared-statement enforcement ──────────────────────────────────
+  - id: php-sqlite-query-interpolation
+    patterns:
+      - pattern: $DB->query("...$VAR...");
+    message: >
+      SQLite query() with interpolated variable — use prepare()/bindValue() instead.
+    languages: [php]
+    severity: ERROR
+    paths:
+      include:
+        - "**/Subnet-Calculator/includes/functions-session.php"
+        - "**/Subnet-Calculator/api/**"
+
+  # ── Hardcoded API tokens ────────────────────────────────────────────────────
+  - id: php-hardcoded-api-tokens
+    pattern: |
+      $api_tokens = [$VALUE, ...];
+    message: >
+      API tokens appear to be hardcoded in a committed file.
+      Move secrets to the gitignored config.php override only.
+    languages: [php]
+    severity: WARNING
+    paths:
+      include:
+        - "**/Subnet-Calculator/includes/config.php"

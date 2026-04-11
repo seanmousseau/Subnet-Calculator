@@ -1,0 +1,5 @@
+# Semgrep — paths to exclude from scanning
+vendor/
+releases/
+.phpunit.result.cache
+testing/fixtures/
