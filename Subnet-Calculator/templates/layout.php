@@ -584,12 +584,13 @@ if ($i < 3) {
         <!-- Session Save / Restore -->
         <div class="overlap-panel">
             <div class="overlap-title">Save &amp; Restore Session</div>
+            <p class="session-ttl-notice">Saved sessions expire after <?= (int)$session_ttl_days ?> day<?= (int)$session_ttl_days === 1 ? '' : 's' ?>.</p>
             <?php if ($session_save_id !== '') : ?>
-                <div class="overlap-result overlap-contains" style="margin-bottom:0.5rem;">
-                    Session saved. Share this link:
+                <div class="overlap-result overlap-contains share-bar" style="margin-bottom:0.5rem;">
+                    <span class="share-label">Session saved. Share this link:</span>
                     <code class="share-url"><?= htmlspecialchars($share_base_server . $session_save_url) ?></code>
                     <button type="button" class="share-copy"
-                            data-copy="<?= htmlspecialchars($share_base_server . $session_save_url) ?>">Copy</button>
+                            data-copy="<?= htmlspecialchars($session_save_url) ?>">Copy</button>
                 </div>
             <?php endif; ?>
             <?php if ($session_error) : ?>

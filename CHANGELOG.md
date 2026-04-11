@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-04-11
+
+### Added
+- **API: reverse DNS zone file generator** — `POST /api/v1/rdns` accepts an IPv4 or IPv6 CIDR and returns a BIND-format PTR zone file; supports custom nameserver, hostmaster, TTL, SOA serial, and placeholder domain; uses existing `ipv4_ptr_zone()` / `ipv6_ptr_zone()` for zone name derivation (RFC 2317 for IPv4 /25–/31); IPv4 requires /16 or greater, IPv6 requires /112 or greater — closes #146
+- **API: bulk CIDR calculation** — `POST /api/v1/bulk` accepts up to 50 CIDRs in a single request and returns a per-item result array; auto-detects IPv4/IPv6 per item; individual failures do not abort the request — closes #147
+
+### Fixed
+- **VLSM session save URL** — the "Copy" button on the session save confirmation was prepending `window.location.origin + pathname` to an already-absolute URL, producing a double-prefix (e.g. `https://…/app/https://…/app/?tab=vlsm&s=id`); fixed by storing only the relative query string in `data-copy`, consistent with all other share bars — closes #172
+- **VLSM session save display** — session save block now carries the `share-bar` class so the JS display-rewrite (`_base + data-copy`) fires consistently behind a reverse proxy, keeping the displayed URL and copied URL in sync
+
+### Changed
+- **VLSM Save & Restore panel** — added a muted TTL notice ("Saved sessions expire after X days") below the panel title so users know the link lifetime upfront; value is read directly from `$session_ttl_days` and updates automatically with operator configuration — closes #173
+
 ## [2.0.1] - 2026-04-11
 
 ### Fixed

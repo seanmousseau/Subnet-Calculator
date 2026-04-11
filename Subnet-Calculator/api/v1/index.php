@@ -54,6 +54,8 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/split/ipv6',
             'POST /api/v1/supernet',
             'POST /api/v1/ula',
+            'POST /api/v1/rdns',
+            'POST /api/v1/bulk',
             'POST /api/v1/sessions',
             'GET  /api/v1/sessions/{id}',
         ],
@@ -93,6 +95,12 @@ switch ($route_key) {
         break;
     case 'POST /ula':
         require __DIR__ . '/handlers/ula.php';
+        break;
+    case 'POST /rdns':
+        require __DIR__ . '/handlers/rdns.php';
+        break;
+    case 'POST /bulk':
+        require __DIR__ . '/handlers/bulk.php';
         break;
     case 'POST /sessions':
         require __DIR__ . '/handlers/sessions.php';

@@ -1262,6 +1262,115 @@ async def test_api_openapi_spec(page: Page) -> None:
     assert_contains("api openapi.yaml: contains 'openapi: 3.1'", resp.text, "openapi: 3.1")
     assert_contains("api openapi.yaml: contains /ipv4 path", resp.text, "/ipv4")
     assert_contains("api openapi.yaml: contains /sessions path", resp.text, "/sessions")
+    assert_contains("api openapi.yaml: contains /rdns path", resp.text, "/rdns")
+    assert_contains("api openapi.yaml: contains /bulk path", resp.text, "/bulk")
+
+
+async def test_api_rdns(page: Page) -> None:
+    section("API — rdns (reverse DNS zone file)")
+    # Basic IPv4 /24
+    status, data = _api_post("rdns", {"cidr": "192.168.1.0/24"})
+    assert_eq("api rdns: HTTP 200", status, 200)
+    assert_eq("api rdns: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_contains("api rdns: zone contains in-addr.arpa", d.get("zone", ""), "in-addr.arpa")
+    assert_true("api rdns: content is string", isinstance(d.get("content"), str))
+    assert_contains("api rdns: content has $ORIGIN", d.get("content", ""), "$ORIGIN")
+    assert_contains("api rdns: content has SOA", d.get("content", ""), "SOA")
+    assert_contains("api rdns: content has PTR records", d.get("content", ""), "IN  PTR")
+    assert_eq("api rdns: record_count=256", d.get("record_count"), 256)
+
+    # IPv4 too large (< /16) → 400
+    status2, _ = _api_post("rdns", {"cidr": "10.0.0.0/8"})
+    assert_eq("api rdns: /8 too large → 400", status2, 400)
+
+    # Missing cidr → 400
+    status3, _ = _api_post("rdns", {})
+    assert_eq("api rdns: missing cidr → 400", status3, 400)
+
+    # Custom ns and ttl
+    status4, data4 = _api_post("rdns", {
+        "cidr": "10.10.0.0/24",
+        "ns": "ns1.corp.example.",
+        "ttl": 3600,
+    })
+    assert_eq("api rdns: custom params → 200", status4, 200)
+    content4 = data4.get("data", {}).get("content", "")
+    assert_contains("api rdns: custom ns in zone file", content4, "ns1.corp.example.")
+    assert_contains("api rdns: custom ttl in zone file", content4, "$TTL 3600")
+
+    # RFC 2317 — /25 gets classless zone name
+    status5, data5 = _api_post("rdns", {"cidr": "192.168.1.0/25"})
+    assert_eq("api rdns: /25 RFC 2317 → 200", status5, 200)
+    assert_contains("api rdns: /25 zone has classless format", data5.get("data", {}).get("zone", ""), "/25")
+
+
+async def test_api_bulk(page: Page) -> None:
+    section("API — bulk calculation")
+    # Two valid IPv4 CIDRs
+    status, data = _api_post("bulk", {"cidrs": ["10.0.0.0/24", "192.168.1.0/26"]})
+    assert_eq("api bulk: HTTP 200", status, 200)
+    assert_eq("api bulk: ok=true", data.get("ok"), True)
+    results = data.get("data", {}).get("results", [])
+    assert_eq("api bulk: 2 results returned", len(results), 2)
+    assert_eq("api bulk: first item ok=true", results[0].get("ok") if results else None, True)
+    assert_eq("api bulk: second item ok=true", results[1].get("ok") if len(results) > 1 else None, True)
+    assert_true("api bulk: first item has data", "data" in results[0] if results else False)
+    assert_eq("api bulk: first network_cidr",
+              results[0].get("data", {}).get("network_cidr") if results else None, "10.0.0.0/24")
+
+    # Mixed valid + invalid — never aborts
+    status2, data2 = _api_post("bulk", {"cidrs": ["10.0.0.0/24", "not-a-cidr"]})
+    assert_eq("api bulk mixed: HTTP 200", status2, 200)
+    results2 = data2.get("data", {}).get("results", [])
+    assert_eq("api bulk mixed: 2 results returned", len(results2), 2)
+    assert_eq("api bulk mixed: valid item ok=true", results2[0].get("ok") if results2 else None, True)
+    assert_eq("api bulk mixed: invalid item ok=false",
+              results2[1].get("ok") if len(results2) > 1 else None, False)
+    assert_true("api bulk mixed: invalid item has error",
+                "error" in results2[1] if len(results2) > 1 else False)
+
+    # Empty cidrs → 400
+    status3, _ = _api_post("bulk", {"cidrs": []})
+    assert_eq("api bulk: empty cidrs → 400", status3, 400)
+
+    # Exceeding 50-item cap → 400
+    status4, _ = _api_post("bulk", {"cidrs": ["10.0.0.0/24"] * 51})
+    assert_eq("api bulk: 51 cidrs → 400", status4, 400)
+
+    # CIDR notation input auto-detected
+    status5, data5 = _api_post("bulk", {"cidrs": ["172.16.0.0/12"]})
+    assert_eq("api bulk: cidr notation → 200", status5, 200)
+    r5 = data5.get("data", {}).get("results", [{}])
+    assert_eq("api bulk: cidr notation item ok=true", r5[0].get("ok") if r5 else None, True)
+
+    # Explicit type=ipv4
+    status6, data6 = _api_post("bulk", {"cidrs": ["10.0.0.0/8"], "type": "ipv4"})
+    assert_eq("api bulk: explicit type=ipv4 → 200", status6, 200)
+    r6 = data6.get("data", {}).get("results", [{}])
+    assert_eq("api bulk: explicit type=ipv4 item ok=true", r6[0].get("ok") if r6 else None, True)
+
+
+async def test_vlsm_session_ttl_notice(page: Page) -> None:
+    section("VLSM session TTL notice")
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    panel = await page.query_selector(".session-ttl-notice")
+    if panel is None:
+        ok("vlsm session ttl notice: sessions not enabled on this server (skipped)")
+        return
+    raw_text = await panel.text_content()
+    notice_text: str = raw_text if raw_text is not None else ""
+    assert_true(
+        "vlsm session ttl notice: text mentions 'expire'",
+        "expire" in notice_text.lower(),
+        f"got: {notice_text!r}",
+    )
+    assert_true(
+        "vlsm session ttl notice: text mentions 'day'",
+        "day" in notice_text.lower(),
+        f"got: {notice_text!r}",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1377,6 +1486,9 @@ async def main() -> None:
             await test_api_supernet(page)
             await test_api_ula(page)
             await test_api_openapi_spec(page)
+            await test_api_rdns(page)
+            await test_api_bulk(page)
+            await test_vlsm_session_ttl_notice(page)
             await test_permissions_policy_directives(page)
             await test_vlsm_utilisation_accuracy(page)
         finally:
