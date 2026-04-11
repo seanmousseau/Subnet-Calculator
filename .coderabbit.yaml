@@ -1,0 +1,86 @@
+# CodeRabbit configuration for Subnet Calculator
+# https://docs.coderabbit.ai/configure-coderabbit
+
+language: en-US
+
+reviews:
+  # Request changes if high-severity issues are found
+  request_changes_workflow: true
+
+  # Auto-review all PRs (not just first-time contributors)
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+      - dev
+
+  # Path-specific review instructions
+  path_instructions:
+    - path: "Subnet-Calculator/includes/functions-*.php"
+      instructions: |
+        These are pure, side-effect-free functions with declare(strict_types=1).
+        Check that: all inputs are validated before use, bitwise IPv4 operations
+        include `& 0xFFFFFFFF` to handle signed 64-bit integers, ip2long()
+        return values are checked for false, and GMP functions are used for
+        all IPv6 128-bit arithmetic. No $_GET/$_POST access belongs here.
+
+    - path: "Subnet-Calculator/api/v1/**"
+      instructions: |
+        REST API layer. Verify: all user-supplied data is validated before
+        passing to functions, json_ok()/json_err() are used for all responses,
+        no path-traversal risk in require statements (must use literal
+        __DIR__ . '/handlers/xxx.php' paths, not variables), Bearer token
+        auth and rate limiting are enforced via helpers.php, and CORS headers
+        are set. Check for SQL injection in SQLite queries (use prepared
+        statements only).
+
+    - path: "Subnet-Calculator/templates/layout.php"
+      instructions: |
+        HTML template. All user-controlled output must use htmlspecialchars().
+        Exception: $canonical_url is pre-encoded in config.php (see comment
+        "pre-encoded; output raw in template") — do not flag this as XSS.
+        CSP nonce must appear on every inline <script> and <style> block.
+        Check that no new inline scripts are added without the nonce.
+
+    - path: "Subnet-Calculator/includes/request.php"
+      instructions: |
+        Handles GET/POST input and populates template variables. Verify:
+        all inputs are sanitised before use, Turnstile verification is
+        called before any calculation when $form_protection='turnstile',
+        honeypot field is checked, and no raw user input reaches the template
+        without htmlspecialchars().
+
+    - path: "Subnet-Calculator/assets/app.js"
+      instructions: |
+        Client-side JS. Check for XSS via innerHTML/insertAdjacentHTML with
+        user-controlled content. Prefer textContent over innerHTML. Clipboard
+        operations should use navigator.clipboard with execCommand fallback.
+
+    - path: "Subnet-Calculator/.htaccess"
+      instructions: |
+        Must be compatible with both Apache 2.4+ and OpenLiteSpeed.
+        Access control must use both <FilesMatch>…Require all denied</FilesMatch>
+        AND a RewriteRule [F,L] wrapped in <IfModule mod_rewrite.c> — one
+        alone is not sufficient for both servers.
+
+    - path: "testing/unit/**"
+      instructions: |
+        PHPUnit 11 tests. Check that edge cases (empty input, boundary values,
+        invalid input) are covered. Functions under test should not access
+        globals or superglobals. ApiTest.php uses file_get_contents over HTTP —
+        verify no credentials are hardcoded.
+
+    - path: "Subnet-Calculator/api/openapi.yaml"
+      instructions: |
+        OpenAPI 3.1 specification. Verify all endpoints listed in
+        api/v1/index.php have a corresponding path entry, request bodies
+        reference defined schemas, and all error responses (400, 401, 404, 429)
+        are documented.
+
+  finishing_touches:
+    docstrings:
+      enabled: false  # PHP files use declare(strict_types=1) with type hints; no docstrings needed
+
+chat:
+  auto_reply: true
