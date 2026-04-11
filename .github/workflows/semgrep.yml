@@ -1,0 +1,36 @@
+name: Semgrep
+
+on:
+  pull_request: {}
+  push:
+    branches: [main, dev]
+
+jobs:
+  semgrep:
+    name: Semgrep scan
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Semgrep — OWASP / PHP security rulesets
+        run: |
+          semgrep scan \
+            --config p/php \
+            --config p/owasp-top-ten \
+            --config p/sql-injection \
+            --error \
+            --quiet \
+            Subnet-Calculator/includes/ \
+            Subnet-Calculator/api/ \
+            Subnet-Calculator/templates/
+
+      - name: Semgrep — custom project rules
+        run: |
+          semgrep scan \
+            --config .semgrep/rules.yml \
+            --error \
+            --quiet \
+            Subnet-Calculator/
