@@ -22,6 +22,10 @@ if (count($cidrs) > 50) {
 
 $lines = array_values(array_filter(array_map(fn($c) => trim((string)$c), $cidrs)));
 
+if (count($lines) === 0) {
+    json_err('Field "cidrs" must contain at least one non-empty entry.');
+}
+
 if ($action === 'find') {
     $r = supernet_find($lines);
     if (isset($r['error'])) {

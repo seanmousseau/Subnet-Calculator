@@ -95,7 +95,6 @@ switch ($route_key) {
         require __DIR__ . '/handlers/ula.php';
         break;
     case 'POST /sessions':
-    case 'GET /sessions':
         require __DIR__ . '/handlers/sessions.php';
         break;
 }
