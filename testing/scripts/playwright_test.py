@@ -1522,7 +1522,7 @@ async def test_api_v220_endpoint_allowlist(page: Page) -> None:
     section("API — v2.2.0 endpoint allowlist contract")
 
     # Normal endpoints must be reachable when allowlist is empty (default)
-    status, data = _api_post("ipv4", {"ip": "10.0.0.0", "mask": "24"})
+    status, _ = _api_post("ipv4", {"ip": "10.0.0.0", "mask": "24"})
     assert_eq("api allowlist: ipv4 accessible (default open)",  status, 200)
     status6, _ = _api_post("ipv6", {"ipv6": "2001:db8::", "prefix": "32"})
     assert_eq("api allowlist: ipv6 accessible (default open)", status6, 200)
