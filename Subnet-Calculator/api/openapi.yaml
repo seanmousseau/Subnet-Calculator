@@ -15,7 +15,12 @@ info:
 
 servers:
   - url: /api/v1
-    description: Relative to the app installation root
+    description: |
+      Relative to the app installation root.
+      Operators may restrict available endpoints via the `$api_allowed_endpoints`
+      configuration variable (see `config.php.example`). If an endpoint is disabled,
+      requests to it return HTTP 404 even when the server is otherwise reachable.
+      The meta endpoint (GET /) always remains accessible regardless of this setting.
 
 security: []   # Override per-operation when $api_tokens is configured
 
@@ -59,27 +64,31 @@ components:
         - usable_hosts
         - total_ips
       properties:
-        network_cidr:   { type: string, example: "10.0.0.0/24" }
-        broadcast:      { type: string, example: "10.0.0.255" }
-        netmask:        { type: string, example: "255.255.255.0" }
-        netmask_cidr:   { type: string, example: "/24" }
-        wildcard:       { type: string, example: "0.0.0.255" }
-        host_min:       { type: string, example: "10.0.0.1" }
-        host_max:       { type: string, example: "10.0.0.254" }
-        usable_hosts:   { type: integer, example: 254 }
-        total_ips:      { type: integer, example: 256 }
-        ip_type:        { type: string, example: "Private" }
-        reverse_dns:    { type: string, example: "0.0.10.in-addr.arpa" }
+        network_cidr:    { type: string,  example: "10.0.0.0/24" }
+        broadcast:       { type: string,  example: "10.0.0.255" }
+        netmask:         { type: string,  example: "255.255.255.0" }
+        netmask_cidr:    { type: string,  example: "/24" }
+        wildcard:        { type: string,  example: "0.0.0.255" }
+        host_min:        { type: string,  example: "10.0.0.1" }
+        host_max:        { type: string,  example: "10.0.0.254" }
+        usable_hosts:    { type: integer, example: 254 }
+        total_ips:       { type: integer, example: 256 }
+        ip_type:         { type: string,  example: "Private" }
+        reverse_dns:     { type: string,  example: "0.0.10.in-addr.arpa" }
+        network_hex:     { type: string,  example: "0A.00.00.00", description: "Network address in dotted-hex notation (e.g. C0.A8.01.00)" }
+        network_decimal: { type: integer, example: 167772160,    description: "Network address as unsigned 32-bit decimal integer" }
 
     Ipv6Result:
       type: object
       required: [network_cidr, prefix, first_addr, last_addr]
       properties:
-        network_cidr:   { type: string, example: "2001:db8::/32" }
-        prefix:         { type: string, example: "/32" }
-        first_addr:     { type: string, example: "2001:db8::" }
-        last_addr:      { type: string, example: "2001:db8:ffff:ffff:ffff:ffff:ffff:ffff" }
-        total_addresses: { type: string, example: "79228162514264337593543950336" }
+        network_cidr:       { type: string, example: "2001:db8::/32" }
+        prefix:             { type: string, example: "/32" }
+        first_addr:         { type: string, example: "2001:db8::" }
+        last_addr:          { type: string, example: "2001:db8:ffff:ffff:ffff:ffff:ffff:ffff" }
+        total_addresses:    { type: string, example: "79228162514264337593543950336" }
+        address_expanded:   { type: string, example: "2001:0db8:0000:0000:0000:0000:0000:0000", description: "Full 128-bit address in 8 colon-separated 4-hex groups" }
+        address_compressed: { type: string, example: "2001:db8::", description: "Address in compressed RFC 5952 notation" }
 
     VlsmAllocation:
       type: object
@@ -170,6 +179,7 @@ paths:
                     properties:
                       data: { $ref: "#/components/schemas/Ipv4Result" }
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
         "401": { description: Unauthorised }
         "429": { description: Rate limit exceeded }
 
@@ -199,6 +209,7 @@ paths:
                     properties:
                       data: { $ref: "#/components/schemas/Ipv6Result" }
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
         "401": { description: Unauthorised }
 
   /vlsm:
@@ -245,6 +256,7 @@ paths:
                             type: array
                             items: { $ref: "#/components/schemas/VlsmAllocation" }
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
         "401": { description: Unauthorised }
 
   /overlap:
@@ -281,6 +293,7 @@ paths:
                             type: string
                             enum: [none, identical, a_contains_b, b_contains_a]
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
 
   /split/ipv4:
     post:
@@ -310,6 +323,7 @@ paths:
                     properties:
                       data: { $ref: "#/components/schemas/SplitResult" }
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
 
   /split/ipv6:
     post:
@@ -339,6 +353,7 @@ paths:
                     properties:
                       data: { $ref: "#/components/schemas/SplitResult" }
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
 
   /supernet:
     post:
@@ -384,6 +399,7 @@ paths:
                                 type: array
                                 items: { type: string }
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
 
   /ula:
     post:
@@ -411,6 +427,7 @@ paths:
                     properties:
                       data: { $ref: "#/components/schemas/UlaResult" }
         "400": { description: Invalid global_id, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
 
   /sessions:
     post:
@@ -444,6 +461,7 @@ paths:
                         properties:
                           id: { type: string, example: "a1b2c3d4" }
         "400": { description: Invalid payload }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
         "501": { description: Session persistence not enabled on this server }
 
   /sessions/{id}:
@@ -543,6 +561,7 @@ paths:
                           record_count: { type: integer, example: 256 }
                           content:      { type: string, description: "Full BIND zone file text." }
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
         "500": { description: GMP extension missing (IPv6 only) }
 
   /bulk:
@@ -597,3 +616,4 @@ paths:
                                 data:  { description: "Present when ok is true. Shape matches /ipv4 or /ipv6 response data." }
                                 error: { type: string, description: "Present when ok is false." }
         "400": { description: Invalid request, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }

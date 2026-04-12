@@ -20,10 +20,68 @@ function turnstile_verify(string $token, string $secret, string $remoteip): bool
         CURLOPT_POSTFIELDS     => http_build_query(['secret' => $secret, 'response' => $token, 'remoteip' => $remoteip]),
         CURLOPT_TIMEOUT        => 5,
     ]);
-    $raw = curl_exec($ch);
+    $raw  = curl_exec($ch);
     curl_close($ch);
-    $json = $raw ? json_decode($raw, true) : null;
+    $json = $raw ? json_decode((string)$raw, true) : null;
     return (bool)($json['success'] ?? false);
+}
+
+function hcaptcha_verify(string $token, string $secret, string $remoteip): bool
+{
+    if (!function_exists('curl_init')) {
+        error_log('sc hCaptcha: curl extension not available — verification failed');
+        return false;
+    }
+    $ch = curl_init('https://api.hcaptcha.com/siteverify');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => http_build_query(['secret' => $secret, 'response' => $token, 'remoteip' => $remoteip]),
+        CURLOPT_TIMEOUT        => 5,
+    ]);
+    $raw  = curl_exec($ch);
+    curl_close($ch);
+    $json = $raw ? json_decode((string)$raw, true) : null;
+    return (bool)($json['success'] ?? false);
+}
+
+function recaptcha_enterprise_verify(
+    string $token,
+    string $api_key,
+    string $project_id,
+    string $site_key,
+    float $threshold
+): bool {
+    if (!function_exists('curl_init')) {
+        error_log('sc reCAPTCHA Enterprise: curl extension not available — verification failed');
+        return false;
+    }
+    $url  = 'https://recaptchaenterprise.googleapis.com/v1/projects/'
+        . rawurlencode($project_id) . '/assessments?key=' . rawurlencode($api_key);
+    $body = json_encode([
+        'event' => [
+            'token'          => $token,
+            'siteKey'        => $site_key,
+            'expectedAction' => 'SUBMIT',
+        ],
+    ]);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $body !== false ? $body : '{}',
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+        CURLOPT_TIMEOUT        => 5,
+    ]);
+    $raw  = curl_exec($ch);
+    curl_close($ch);
+    $json = $raw ? json_decode((string)$raw, true) : null;
+    if (!is_array($json)) {
+        return false;
+    }
+    $valid = (bool)($json['tokenProperties']['valid'] ?? false);
+    $score = (float)($json['riskAnalysis']['score'] ?? 0.0);
+    return $valid && $score >= $threshold;
 }
 
 // ─── Request handling ─────────────────────────────────────────────────────────
@@ -101,6 +159,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else {
             if (!turnstile_verify($token, $turnstile_secret_key, $_SERVER['REMOTE_ADDR'] ?? '')) {
+                $form_blocked = true;
+                if ($active_tab === 'ipv6') {
+                    $error6 = 'CAPTCHA verification failed. Please try again.';
+                } else {
+                    $error = 'CAPTCHA verification failed. Please try again.';
+                }
+            }
+        }
+    } elseif (!$is_tool && $hcaptcha_active) {
+        $token = trim((string)($_POST['h-captcha-response'] ?? ''));
+        if ($token === '') {
+            $form_blocked = true;
+            if ($active_tab === 'ipv6') {
+                $error6 = 'Please complete the CAPTCHA.';
+            } else {
+                $error = 'Please complete the CAPTCHA.';
+            }
+        } elseif (!hcaptcha_verify($token, $hcaptcha_secret_key, $_SERVER['REMOTE_ADDR'] ?? '')) {
+            $form_blocked = true;
+            if ($active_tab === 'ipv6') {
+                $error6 = 'CAPTCHA verification failed. Please try again.';
+            } else {
+                $error = 'CAPTCHA verification failed. Please try again.';
+            }
+        }
+    } elseif (!$is_tool && $recaptcha_active) {
+        $token = trim((string)($_POST['g-recaptcha-response'] ?? ''));
+        if ($token === '') {
+            $form_blocked = true;
+            if ($active_tab === 'ipv6') {
+                $error6 = 'Please complete the CAPTCHA.';
+            } else {
+                $error = 'Please complete the CAPTCHA.';
+            }
+        } else {
+            $recaptcha_ok = recaptcha_enterprise_verify(
+                $token,
+                $recaptcha_enterprise_api_key,
+                $recaptcha_enterprise_project_id,
+                $recaptcha_enterprise_site_key,
+                $recaptcha_score_threshold
+            );
+            if (!$recaptcha_ok) {
                 $form_blocked = true;
                 if ($active_tab === 'ipv6') {
                     $error6 = 'CAPTCHA verification failed. Please try again.';

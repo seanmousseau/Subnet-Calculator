@@ -46,10 +46,14 @@ reviews:
     - path: "Subnet-Calculator/includes/request.php"
       instructions: |
         Handles GET/POST input and populates template variables. Verify:
-        all inputs are sanitised before use, Turnstile verification is
-        called before any calculation when $form_protection='turnstile',
-        honeypot field is checked, and no raw user input reaches the template
-        without htmlspecialchars().
+        all inputs are sanitised before use, Turnstile/hCaptcha/reCAPTCHA
+        Enterprise verification is called before any calculation when the
+        respective $form_protection mode is active, honeypot field is checked,
+        and no raw user input reaches the template without htmlspecialchars().
+        For all external CAPTCHA verify calls (hcaptcha_verify,
+        recaptcha_enterprise_verify): ensure CURLOPT_SSL_VERIFYPEER is NOT
+        set to false, cURL failures result in verification failure (not
+        pass-through), and $form_blocked is set on any verification error.
 
     - path: "Subnet-Calculator/assets/app.js"
       instructions: |

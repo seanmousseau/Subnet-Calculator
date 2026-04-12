@@ -103,6 +103,37 @@ class IPv6Test extends TestCase
         $this->assertSame((string)(1 << 20), $r['total']);
     }
 
+    // ── address_expanded / address_compressed (v2.2.0) ───────────────────────
+
+    public function testAddressExpandedAndCompressed_48(): void
+    {
+        $r = calculate_subnet6('2001:db8::', 48);
+        $this->assertSame('2001:0db8:0000:0000:0000:0000:0000:0000', $r['address_expanded']);
+        $this->assertSame('2001:db8::', $r['address_compressed']);
+    }
+
+    public function testAddressExpandedAndCompressed_Loopback(): void
+    {
+        $r = calculate_subnet6('::1', 128);
+        $this->assertSame('0000:0000:0000:0000:0000:0000:0000:0001', $r['address_expanded']);
+        $this->assertSame('::1', $r['address_compressed']);
+    }
+
+    public function testAddressExpandedFormat(): void
+    {
+        // Expanded form must be exactly 8 groups of 4 lowercase hex digits, colon-separated
+        $r = calculate_subnet6('fe80::1', 64);
+        $this->assertMatchesRegularExpression('/^[0-9a-f]{4}(:[0-9a-f]{4}){7}$/', $r['address_expanded']);
+        $this->assertSame(39, strlen($r['address_expanded'])); // 8×4 + 7 colons
+    }
+
+    public function testAddressCompressedMatchesFirstIp(): void
+    {
+        // address_compressed should always equal first_ip (both are the network address)
+        $r = calculate_subnet6('2001:db8:1234:5678::', 64);
+        $this->assertSame($r['first_ip'], $r['address_compressed']);
+    }
+
     // ── cidrs_overlap6 ────────────────────────────────────────────────────────
 
     public function testCidrsOverlap6None(): void

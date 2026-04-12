@@ -1412,6 +1412,157 @@ async def test_vlsm_utilisation_accuracy(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# v2.2.0 — IPv4 hex/decimal in binary panel
+# ---------------------------------------------------------------------------
+
+async def test_ipv4_binary_hex_decimal(page: Page) -> None:
+    section("IPv4 — binary panel hex/decimal rows (v2.2.0)")
+    await navigate(page, APP_URL)
+    await page.fill("#ip",   "192.168.1.0")
+    await page.fill("#mask", "24")
+    await submit_form(page, "#panel-ipv4 form")
+
+    # Open the binary details panel
+    await page.evaluate("document.querySelector('.binary-details').setAttribute('open', '')")
+
+    # Collect all bin-label text values
+    labels = await page.evaluate("""() => {
+        return Array.from(document.querySelectorAll('.binary-details .bin-label'))
+               .map(el => el.textContent.trim());
+    }""")
+    assert_true("binary panel has Hex row",     "Hex" in labels,     f"labels: {labels}")
+    assert_true("binary panel has Decimal row", "Decimal" in labels, f"labels: {labels}")
+
+    # Build a label→value map so the test is resilient to row reordering
+    rows = await page.evaluate("""() => {
+        var labels = Array.from(document.querySelectorAll('.binary-details .bin-label'))
+            .map(el => el.textContent.trim());
+        var values = Array.from(document.querySelectorAll('.binary-details .bin-value'))
+            .map(el => el.textContent.trim());
+        var out = {};
+        labels.forEach(function(label, i) { out[label] = values[i] || ""; });
+        return out;
+    }""")
+    assert_eq("binary panel hex = C0.A8.01.00",  rows.get("Hex"),     "C0.A8.01.00")
+    assert_eq("binary panel decimal = 3232235776", rows.get("Decimal"), "3232235776")
+
+
+# ---------------------------------------------------------------------------
+# v2.2.0 — IPv6 expanded/compressed address forms
+# ---------------------------------------------------------------------------
+
+async def test_ipv6_address_forms(page: Page) -> None:
+    section("IPv6 — expanded/compressed address forms (v2.2.0)")
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.fill("#ipv6",   "2001:db8::")
+    await page.fill("#prefix", "32")
+    await submit_form(page, "#panel-ipv6 form")
+
+    expanded   = await result_value(page, "Address (Expanded)")
+    compressed = await result_value(page, "Address (Compressed)")
+    assert_eq(
+        "ipv6 address expanded = 2001:0db8:0000:…",
+        expanded,
+        "2001:0db8:0000:0000:0000:0000:0000:0000",
+    )
+    assert_eq("ipv6 address compressed = 2001:db8::", compressed, "2001:db8::")
+
+    # Test with a loopback address
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.fill("#ipv6",   "::1")
+    await page.fill("#prefix", "128")
+    await submit_form(page, "#panel-ipv6 form")
+
+    expanded_lo   = await result_value(page, "Address (Expanded)")
+    compressed_lo = await result_value(page, "Address (Compressed)")
+    assert_eq("::1 expanded",   expanded_lo,   "0000:0000:0000:0000:0000:0000:0000:0001")
+    assert_eq("::1 compressed", compressed_lo, "::1")
+
+
+# ---------------------------------------------------------------------------
+# v2.2.0 — API new fields
+# ---------------------------------------------------------------------------
+
+async def test_api_ipv4_v220_fields(page: Page) -> None:
+    section("API — IPv4 v2.2.0 fields (network_hex, network_decimal)")
+    status, data = _api_post("ipv4", {"ip": "192.168.1.0", "mask": "24"})
+    assert_eq("api ipv4 v2.2.0: HTTP 200", status, 200)
+    d = data.get("data", {})
+    assert_eq("api ipv4 v2.2.0: network_hex",     d.get("network_hex"),     "C0.A8.01.00")
+    assert_eq("api ipv4 v2.2.0: network_decimal", d.get("network_decimal"), 3232235776)
+
+
+async def test_api_ipv6_v220_fields(page: Page) -> None:
+    section("API — IPv6 v2.2.0 fields (address_expanded, address_compressed)")
+    status, data = _api_post("ipv6", {"ipv6": "2001:db8::", "prefix": "32"})
+    assert_eq("api ipv6 v2.2.0: HTTP 200", status, 200)
+    d = data.get("data", {})
+    assert_eq(
+        "api ipv6 v2.2.0: address_expanded",
+        d.get("address_expanded"),
+        "2001:0db8:0000:0000:0000:0000:0000:0000",
+    )
+    assert_eq("api ipv6 v2.2.0: address_compressed", d.get("address_compressed"), "2001:db8::")
+
+
+# ---------------------------------------------------------------------------
+# v2.2.0 — API: $api_allowed_endpoints and per-token rate limits
+# ---------------------------------------------------------------------------
+
+async def test_api_v220_endpoint_allowlist(page: Page) -> None:
+    """
+    Smoke tests for the $api_allowed_endpoints feature.
+    The dev server runs with $api_allowed_endpoints = [] (all endpoints open),
+    so we verify that: (a) all normal endpoints return 200, and (b) a request
+    to a non-existent path returns 404 — which is the same HTTP status that a
+    blocked endpoint returns, documenting the contract.
+    """
+    section("API — v2.2.0 endpoint allowlist contract")
+
+    # Normal endpoints must be reachable when allowlist is empty (default)
+    status, _ = _api_post("ipv4", {"ip": "10.0.0.0", "mask": "24"})
+    assert_eq("api allowlist: ipv4 accessible (default open)",  status, 200)
+    status6, _ = _api_post("ipv6", {"ipv6": "2001:db8::", "prefix": "32"})
+    assert_eq("api allowlist: ipv6 accessible (default open)", status6, 200)
+
+    # A non-existent endpoint returns 404 — same status as a blocked endpoint
+    resp = _SESSION.post(_API_BASE + "nonexistent_endpoint_xyz", json={}, timeout=10)
+    assert_eq("api allowlist: unknown endpoint → 404", resp.status_code, 404)
+
+    # Meta GET / is always reachable regardless of $api_allowed_endpoints
+    status_meta, meta = _api_get("")
+    assert_eq("api allowlist: meta GET always reachable", status_meta, 200)
+    assert_eq("api allowlist: meta ok=true",              meta.get("ok"), True)
+
+
+async def test_api_v220_rate_limit_contract(page: Page) -> None:
+    """
+    Smoke test for per-token rate limit overrides ($api_rate_limit_tokens).
+    The dev server runs open (no $api_tokens configured), so we verify the
+    unauthenticated rate-limit contract: requests succeed and the router does
+    not error on missing auth. Per-token override testing requires a server
+    configured with $api_tokens and $api_rate_limit_tokens.
+    """
+    section("API — v2.2.0 per-token rate limit contract")
+
+    # Unauthenticated requests on an open API must succeed (global RPM applies)
+    status, data = _api_post("ipv4", {"ip": "192.168.0.0", "mask": "24"})
+    assert_eq("api rate-limit: open API accepts unauthenticated request", status, 200)
+    assert_eq("api rate-limit: response ok=true", data.get("ok"), True)
+
+    # A Bearer token on an open API is harmlessly ignored (no auth required)
+    resp = _SESSION.post(
+        _API_BASE + "ipv4",
+        json={"ip": "10.0.0.0", "mask": "8"},
+        headers={"Authorization": "Bearer test-token-does-not-exist"},
+        timeout=10,
+    )
+    assert_eq("api rate-limit: unknown token on open API → 200", resp.status_code, 200)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1491,6 +1642,12 @@ async def main() -> None:
             await test_vlsm_session_ttl_notice(page)
             await test_permissions_policy_directives(page)
             await test_vlsm_utilisation_accuracy(page)
+            await test_ipv4_binary_hex_decimal(page)
+            await test_ipv6_address_forms(page)
+            await test_api_ipv4_v220_fields(page)
+            await test_api_ipv6_v220_fields(page)
+            await test_api_v220_endpoint_allowlist(page)
+            await test_api_v220_rate_limit_contract(page)
         finally:
             await context.close()
             await browser.close()

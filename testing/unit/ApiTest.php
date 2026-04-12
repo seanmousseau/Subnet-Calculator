@@ -210,4 +210,43 @@ class ApiTest extends TestCase
         $this->assertStringEndsWith('/48', $prefix);
         $this->assertStringStartsWith('fd', strtolower($prefix));
     }
+
+    // ── v2.2.0 new fields ─────────────────────────────────────────────────────
+
+    public function testIpv4ResponseIncludesNetworkHexAndDecimal(): void
+    {
+        $this->requireBase();
+        $r = $this->post('/ipv4', ['ip' => '192.168.1.0', 'mask' => '24']);
+        $this->assertSame(200, $r['status']);
+        $data = $r['data']['data'] ?? [];
+        // network_hex: dotted-hex of 192.168.1.0 = C0.A8.01.00
+        $this->assertArrayHasKey('network_hex', $data);
+        $this->assertSame('C0.A8.01.00', $data['network_hex']);
+        // network_decimal: unsigned 32-bit integer
+        $this->assertArrayHasKey('network_decimal', $data);
+        $this->assertSame(3232235776, $data['network_decimal']);
+    }
+
+    public function testIpv6ResponseIncludesAddressForms(): void
+    {
+        $this->requireBase();
+        $r = $this->post('/ipv6', ['ipv6' => '2001:db8::', 'prefix' => '32']);
+        $this->assertSame(200, $r['status']);
+        $data = $r['data']['data'] ?? [];
+        $this->assertArrayHasKey('address_expanded', $data);
+        $this->assertArrayHasKey('address_compressed', $data);
+        $this->assertSame('2001:0db8:0000:0000:0000:0000:0000:0000', $data['address_expanded']);
+        $this->assertSame('2001:db8::', $data['address_compressed']);
+    }
+
+    public function testIpv4CalculationAtClassBBoundary(): void
+    {
+        $this->requireBase();
+        // 10.0.0.0/8 — verify hex/decimal for a class A network
+        $r = $this->post('/ipv4', ['ip' => '10.5.6.7', 'mask' => '8']);
+        $this->assertSame(200, $r['status']);
+        $data = $r['data']['data'] ?? [];
+        $this->assertSame('0A.00.00.00', $data['network_hex'] ?? '');
+        $this->assertSame(167772160, $data['network_decimal'] ?? 0);
+    }
 }

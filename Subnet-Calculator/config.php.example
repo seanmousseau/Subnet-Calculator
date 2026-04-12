@@ -13,14 +13,29 @@ $default_tab = 'ipv4';
 // Maximum number of subnets shown in the subnet splitter results list (1–256).
 $split_max_subnets = 16;
 
-// Form protection: 'none', 'honeypot', or 'turnstile'.
+// Form protection mode.
+// Accepted values: 'none', 'honeypot', 'turnstile', 'hcaptcha', 'recaptcha_enterprise'.
+// All CAPTCHA modes require the PHP cURL extension (php-curl). Without it, verification
+// is skipped and a warning is emitted in the HTML source.
 $form_protection = 'none';
 
 // Cloudflare Turnstile keys (required when $form_protection = 'turnstile').
-// Requires: PHP cURL extension (php-curl). Without it, verification is skipped.
 // WARNING: never expose $turnstile_secret_key in HTML or client-side code.
 $turnstile_site_key   = '';
 $turnstile_secret_key = '';
+
+// hCaptcha keys (required when $form_protection = 'hcaptcha').
+// WARNING: never expose $hcaptcha_secret_key in HTML or client-side code.
+$hcaptcha_site_key   = '';
+$hcaptcha_secret_key = '';
+
+// Google reCAPTCHA Enterprise (required when $form_protection = 'recaptcha_enterprise').
+// Create a project at https://console.cloud.google.com/security/recaptcha.
+// WARNING: never expose $recaptcha_enterprise_api_key in HTML or client-side code.
+$recaptcha_enterprise_site_key   = '';  // Public site key (v3 Enterprise)
+$recaptcha_enterprise_api_key    = '';  // Server-side REST API key
+$recaptcha_enterprise_project_id = '';  // GCP project ID (e.g. 'my-project')
+$recaptcha_score_threshold       = 0.5; // 0.0–1.0; lower = more permissive
 
 // Page title shown in the browser tab and <h1> heading.
 $page_title = 'Subnet Calculator';
@@ -50,6 +65,20 @@ $api_tokens = [];
 
 // Maximum API requests per IP per minute (sliding window). 0 = disabled.
 $api_rate_limit_rpm = 60;
+
+// Per-token rate limit overrides (v2.2.0).
+// Map of token => requests-per-minute. Overrides $api_rate_limit_rpm for that token.
+// 0 = unlimited for that token. Tokens not listed here use the global RPM.
+// Example: ['secret-token-1' => 120, 'readonly-tok' => 30]
+$api_rate_limit_tokens = [];
+
+// Endpoint allowlist (v2.2.0).
+// Empty array = all endpoints available (default). Non-empty = allowlist.
+// Valid endpoint names: ipv4, ipv6, vlsm, overlap, split/ipv4, split/ipv6,
+//   supernet, ula, rdns, bulk, sessions.
+// The meta endpoint (GET /) is always available regardless of this setting.
+// Example: ['ipv4', 'ipv6'] — expose only the core calculation endpoints.
+$api_allowed_endpoints = [];
 
 // CORS Access-Control-Allow-Origin header value for API responses.
 // '*' = allow all origins; set to a specific origin to restrict.

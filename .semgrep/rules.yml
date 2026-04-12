@@ -59,3 +59,17 @@ rules:
     paths:
       include:
         - "**/Subnet-Calculator/includes/config.php"
+
+  # ── TLS verification must not be disabled in captcha verify calls ───────────
+  - id: php-curl-ssl-verify-peer-false
+    pattern: curl_setopt($CH, CURLOPT_SSL_VERIFYPEER, false);
+    message: >
+      CURLOPT_SSL_VERIFYPEER is set to false — this disables TLS certificate
+      validation and exposes the app to MITM attacks on external captcha
+      verification calls. Remove this option or set it to true.
+    languages: [php]
+    severity: ERROR
+    paths:
+      include:
+        - "**/Subnet-Calculator/includes/request.php"
+        - "**/Subnet-Calculator/api/**"

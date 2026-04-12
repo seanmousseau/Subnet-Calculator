@@ -62,6 +62,20 @@ if ($uri === '/' && $method === 'GET') {
     ]);
 }
 
+// ── Endpoint allowlist ────────────────────────────────────────────────────────
+// When $api_allowed_endpoints is non-empty it acts as an allowlist: requests for
+// any endpoint not in the list are rejected with 404 before dispatch.
+// The meta endpoint (GET /) is always available. Sessions/{id} maps to 'sessions'.
+if (!empty($api_allowed_endpoints) && $uri !== '/') {
+    $ep = ltrim($uri, '/');
+    if (str_starts_with($ep, 'sessions/')) {
+        $ep = 'sessions';
+    }
+    if (!in_array($ep, $api_allowed_endpoints, true)) {
+        json_err('Not found.', 404);
+    }
+}
+
 $route_key = $method . ' ' . $uri;
 
 // Sessions GET with ID: /sessions/{id}
