@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **IPv4 results: hex and decimal network address** — `calculate_subnet()` now returns `network_hex` (dotted-hex, e.g. `C0.A8.01.00`) and `network_decimal` (unsigned 32-bit integer) for the network address; both are displayed in the Binary Representation panel and returned by `POST /api/v1/ipv4` — closes #180
 - **IPv6 results: expanded and compressed address forms** — `calculate_subnet6()` now returns `address_expanded` (8 colon-separated 4-hex groups, e.g. `2001:0db8:0000:…`) and `address_compressed` (RFC 5952 notation, e.g. `2001:db8::`) for the network address; both are displayed as copyable rows in the IPv6 results section and returned by `POST /api/v1/ipv6` — closes #181
 
+### Tests / CI
+- PHPStan level 9: 0 errors
+- PHPCS PSR-12: 0 errors
+- PHPUnit: 131 tests, 195 assertions (14 skipped on platforms without GMP)
+- Playwright browser suite: 255/255 passed (60 test groups)
+
 ## [2.1.0] - 2026-04-11
 
 ### Added

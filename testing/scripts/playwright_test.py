@@ -1433,16 +1433,18 @@ async def test_ipv4_binary_hex_decimal(page: Page) -> None:
     assert_true("binary panel has Hex row",     "Hex" in labels,     f"labels: {labels}")
     assert_true("binary panel has Decimal row", "Decimal" in labels, f"labels: {labels}")
 
-    # Collect all bin-value text values (in order: Network, Mask, Hex, Decimal)
-    values = await page.evaluate("""() => {
-        return Array.from(document.querySelectorAll('.binary-details .bin-value'))
-               .map(el => el.textContent.trim());
+    # Build a label→value map so the test is resilient to row reordering
+    rows = await page.evaluate("""() => {
+        var labels = Array.from(document.querySelectorAll('.binary-details .bin-label'))
+            .map(el => el.textContent.trim());
+        var values = Array.from(document.querySelectorAll('.binary-details .bin-value'))
+            .map(el => el.textContent.trim());
+        var out = {};
+        labels.forEach(function(label, i) { out[label] = values[i] || ""; });
+        return out;
     }""")
-    # values[2] = Hex, values[3] = Decimal
-    hex_val = values[2] if len(values) > 2 else ""
-    dec_val = values[3] if len(values) > 3 else ""
-    assert_eq("binary panel hex = C0.A8.01.00",  hex_val, "C0.A8.01.00")
-    assert_eq("binary panel decimal = 3232235776", dec_val, "3232235776")
+    assert_eq("binary panel hex = C0.A8.01.00",  rows.get("Hex"),     "C0.A8.01.00")
+    assert_eq("binary panel decimal = 3232235776", rows.get("Decimal"), "3232235776")
 
 
 # ---------------------------------------------------------------------------
@@ -1503,6 +1505,61 @@ async def test_api_ipv6_v220_fields(page: Page) -> None:
         "2001:0db8:0000:0000:0000:0000:0000:0000",
     )
     assert_eq("api ipv6 v2.2.0: address_compressed", d.get("address_compressed"), "2001:db8::")
+
+
+# ---------------------------------------------------------------------------
+# v2.2.0 — API: $api_allowed_endpoints and per-token rate limits
+# ---------------------------------------------------------------------------
+
+async def test_api_v220_endpoint_allowlist(page: Page) -> None:
+    """
+    Smoke tests for the $api_allowed_endpoints feature.
+    The dev server runs with $api_allowed_endpoints = [] (all endpoints open),
+    so we verify that: (a) all normal endpoints return 200, and (b) a request
+    to a non-existent path returns 404 — which is the same HTTP status that a
+    blocked endpoint returns, documenting the contract.
+    """
+    section("API — v2.2.0 endpoint allowlist contract")
+
+    # Normal endpoints must be reachable when allowlist is empty (default)
+    status, data = _api_post("ipv4", {"ip": "10.0.0.0", "mask": "24"})
+    assert_eq("api allowlist: ipv4 accessible (default open)",  status, 200)
+    status6, _ = _api_post("ipv6", {"ipv6": "2001:db8::", "prefix": "32"})
+    assert_eq("api allowlist: ipv6 accessible (default open)", status6, 200)
+
+    # A non-existent endpoint returns 404 — same status as a blocked endpoint
+    resp = _SESSION.post(_API_BASE + "nonexistent_endpoint_xyz", json={}, timeout=10)
+    assert_eq("api allowlist: unknown endpoint → 404", resp.status_code, 404)
+
+    # Meta GET / is always reachable regardless of $api_allowed_endpoints
+    status_meta, meta = _api_get("")
+    assert_eq("api allowlist: meta GET always reachable", status_meta, 200)
+    assert_eq("api allowlist: meta ok=true",              meta.get("ok"), True)
+
+
+async def test_api_v220_rate_limit_contract(page: Page) -> None:
+    """
+    Smoke test for per-token rate limit overrides ($api_rate_limit_tokens).
+    The dev server runs open (no $api_tokens configured), so we verify the
+    unauthenticated rate-limit contract: requests succeed and the router does
+    not error on missing auth. Per-token override testing requires a server
+    configured with $api_tokens and $api_rate_limit_tokens.
+    """
+    section("API — v2.2.0 per-token rate limit contract")
+
+    # Unauthenticated requests on an open API must succeed (global RPM applies)
+    status, data = _api_post("ipv4", {"ip": "192.168.0.0", "mask": "24"})
+    assert_eq("api rate-limit: open API accepts unauthenticated request", status, 200)
+    assert_eq("api rate-limit: response ok=true", data.get("ok"), True)
+
+    # A Bearer token on an open API is harmlessly ignored (no auth required)
+    resp = _SESSION.post(
+        _API_BASE + "ipv4",
+        json={"ip": "10.0.0.0", "mask": "8"},
+        headers={"Authorization": "Bearer test-token-does-not-exist"},
+        timeout=10,
+    )
+    assert_eq("api rate-limit: unknown token on open API → 200", resp.status_code, 200)
 
 
 # ---------------------------------------------------------------------------
@@ -1589,6 +1646,8 @@ async def main() -> None:
             await test_ipv6_address_forms(page)
             await test_api_ipv4_v220_fields(page)
             await test_api_ipv6_v220_fields(page)
+            await test_api_v220_endpoint_allowlist(page)
+            await test_api_v220_rate_limit_contract(page)
         finally:
             await context.close()
             await browser.close()

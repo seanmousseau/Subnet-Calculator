@@ -75,13 +75,16 @@ function api_rate_limit(string $key): void
         if (str_starts_with($auth, 'Bearer ')) {
             $token = substr($auth, 7);
             if (in_array($token, $api_tokens, true) && array_key_exists($token, $api_rate_limit_tokens)) {
-                $raw_rpm   = $api_rate_limit_tokens[$token];
-                $token_rpm = is_numeric($raw_rpm) ? (int)$raw_rpm : 0;
-                if ($token_rpm <= 0) {
-                    return; // 0 = unlimited for this token
+                $raw_rpm = $api_rate_limit_tokens[$token];
+                if (is_numeric($raw_rpm)) {
+                    $token_rpm = (int)$raw_rpm;
+                    if ($token_rpm === 0) {
+                        return; // explicit 0 = unlimited for this token
+                    }
+                    $rpm    = $token_rpm;
+                    $rl_key = 'tok:' . hash('sha256', $token); // key by token hash, not IP
                 }
-                $rpm    = $token_rpm;
-                $rl_key = 'tok:' . hash('sha256', $token); // key by token hash, not IP
+                // non-numeric entry: ignore override, fall through to global $rpm
             }
         }
     }

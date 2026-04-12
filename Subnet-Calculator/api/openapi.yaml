@@ -20,6 +20,7 @@ servers:
       Operators may restrict available endpoints via the `$api_allowed_endpoints`
       configuration variable (see `config.php.example`). If an endpoint is disabled,
       requests to it return HTTP 404 even when the server is otherwise reachable.
+      The meta endpoint (GET /) always remains accessible regardless of this setting.
 
 security: []   # Override per-operation when $api_tokens is configured
 
@@ -178,6 +179,7 @@ paths:
                     properties:
                       data: { $ref: "#/components/schemas/Ipv4Result" }
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
         "401": { description: Unauthorised }
         "429": { description: Rate limit exceeded }
 
@@ -207,6 +209,7 @@ paths:
                     properties:
                       data: { $ref: "#/components/schemas/Ipv6Result" }
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
         "401": { description: Unauthorised }
 
   /vlsm:
@@ -253,6 +256,7 @@ paths:
                             type: array
                             items: { $ref: "#/components/schemas/VlsmAllocation" }
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
         "401": { description: Unauthorised }
 
   /overlap:
@@ -289,6 +293,7 @@ paths:
                             type: string
                             enum: [none, identical, a_contains_b, b_contains_a]
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
 
   /split/ipv4:
     post:
@@ -318,6 +323,7 @@ paths:
                     properties:
                       data: { $ref: "#/components/schemas/SplitResult" }
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
 
   /split/ipv6:
     post:
@@ -347,6 +353,7 @@ paths:
                     properties:
                       data: { $ref: "#/components/schemas/SplitResult" }
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
 
   /supernet:
     post:
@@ -392,6 +399,7 @@ paths:
                                 type: array
                                 items: { type: string }
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
 
   /ula:
     post:
@@ -419,6 +427,7 @@ paths:
                     properties:
                       data: { $ref: "#/components/schemas/UlaResult" }
         "400": { description: Invalid global_id, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
 
   /sessions:
     post:
@@ -452,6 +461,7 @@ paths:
                         properties:
                           id: { type: string, example: "a1b2c3d4" }
         "400": { description: Invalid payload }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
         "501": { description: Session persistence not enabled on this server }
 
   /sessions/{id}:
@@ -551,6 +561,7 @@ paths:
                           record_count: { type: integer, example: 256 }
                           content:      { type: string, description: "Full BIND zone file text." }
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
         "500": { description: GMP extension missing (IPv6 only) }
 
   /bulk:
@@ -605,3 +616,4 @@ paths:
                                 data:  { description: "Present when ok is true. Shape matches /ipv4 or /ipv6 response data." }
                                 error: { type: string, description: "Present when ok is false." }
         "400": { description: Invalid request, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }

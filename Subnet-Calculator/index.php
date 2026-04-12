@@ -32,8 +32,8 @@ if ($turnstile_active) {
     $csp_extra_script = ' https://challenges.cloudflare.com';
     $csp_extra_frame  = ' https://challenges.cloudflare.com';
 } elseif ($hcaptcha_active) {
-    $csp_extra_script = ' https://js.hcaptcha.com https://newassets.hcaptcha.com';
-    $csp_extra_frame  = ' https://newassets.hcaptcha.com';
+    $csp_extra_script = ' https://js.hcaptcha.com https://newassets.hcaptcha.com https://assets.hcaptcha.com';
+    $csp_extra_frame  = ' https://newassets.hcaptcha.com https://assets.hcaptcha.com';
 } elseif ($recaptcha_active) {
     $csp_extra_script = ' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/';
     $csp_extra_frame  = ' https://www.google.com/recaptcha/ https://recaptchaenterprise.googleapis.com';

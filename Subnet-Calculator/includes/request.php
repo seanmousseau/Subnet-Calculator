@@ -29,8 +29,8 @@ function turnstile_verify(string $token, string $secret, string $remoteip): bool
 function hcaptcha_verify(string $token, string $secret, string $remoteip): bool
 {
     if (!function_exists('curl_init')) {
-        error_log('sc hCaptcha: curl extension not available — verification skipped');
-        return true;
+        error_log('sc hCaptcha: curl extension not available — verification failed');
+        return false;
     }
     $ch = curl_init('https://api.hcaptcha.com/siteverify');
     curl_setopt_array($ch, [
@@ -53,8 +53,8 @@ function recaptcha_enterprise_verify(
     float $threshold
 ): bool {
     if (!function_exists('curl_init')) {
-        error_log('sc reCAPTCHA Enterprise: curl extension not available — verification skipped');
-        return true;
+        error_log('sc reCAPTCHA Enterprise: curl extension not available — verification failed');
+        return false;
     }
     $url  = 'https://recaptchaenterprise.googleapis.com/v1/projects/'
         . rawurlencode($project_id) . '/assessments?key=' . rawurlencode($api_key);

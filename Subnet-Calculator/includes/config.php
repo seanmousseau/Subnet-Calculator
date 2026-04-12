@@ -54,7 +54,12 @@ if (!in_array($form_protection, ['none', 'honeypot', 'turnstile', 'hcaptcha', 'r
     error_log('sc: invalid $form_protection "' . $form_protection . '" — reset to "none"');
     $form_protection = 'none';
 }
-$recaptcha_score_threshold = max(0.0, min(1.0, (float)$recaptcha_score_threshold));
+if (!is_numeric($recaptcha_score_threshold) || (float)$recaptcha_score_threshold < 0.0 || (float)$recaptcha_score_threshold > 1.0) {
+    error_log('sc: invalid $recaptcha_score_threshold — reset to 0.5');
+    $recaptcha_score_threshold = 0.5;
+} else {
+    $recaptcha_score_threshold = (float)$recaptcha_score_threshold;
+}
 if (!in_array($default_tab, ['ipv4', 'ipv6', 'vlsm'], true)) {
     error_log('sc: invalid $default_tab "' . $default_tab . '" — reset to "ipv4"');
     $default_tab = 'ipv4';
