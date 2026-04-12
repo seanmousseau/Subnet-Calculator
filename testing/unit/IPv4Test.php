@@ -126,6 +126,40 @@ class IPv4Test extends TestCase
         $this->assertSame('1.168.192.in-addr.arpa', $r['ptr_zone']);
     }
 
+    // ── network_hex / network_decimal (v2.2.0) ────────────────────────────────
+
+    public function testNetworkHexAndDecimal24(): void
+    {
+        // 192.168.1.0 = 0xC0.A8.01.00 = 3232235776
+        $r = calculate_subnet('192.168.1.55', 24);
+        $this->assertSame('C0.A8.01.00', $r['network_hex']);
+        $this->assertSame(3232235776, $r['network_decimal']);
+    }
+
+    public function testNetworkHexAndDecimal16(): void
+    {
+        // 10.1.2.3/16 → network 10.1.0.0 = 0A.01.00.00 = 167837696
+        $r = calculate_subnet('10.1.2.3', 16);
+        $this->assertSame('0A.01.00.00', $r['network_hex']);
+        $this->assertSame(167837696, $r['network_decimal']);
+    }
+
+    public function testNetworkHexAndDecimalAllZeroes(): void
+    {
+        // 0.0.0.0/0 — zero network address
+        $r = calculate_subnet('10.0.0.1', 0);
+        $this->assertSame('00.00.00.00', $r['network_hex']);
+        $this->assertSame(0, $r['network_decimal']);
+    }
+
+    public function testNetworkHexAndDecimalAllOnes(): void
+    {
+        // 255.255.255.0/24
+        $r = calculate_subnet('255.255.255.1', 24);
+        $this->assertSame('FF.FF.FF.00', $r['network_hex']);
+        $this->assertSame(4294967040, $r['network_decimal']);
+    }
+
     public function testCalculateSubnet31(): void
     {
         // /31 — point-to-point, no broadcast

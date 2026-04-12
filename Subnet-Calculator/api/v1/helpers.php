@@ -63,8 +63,29 @@ function api_authenticate(): void
 
 function api_rate_limit(string $key): void
 {
-    global $api_rate_limit_rpm, $session_db_path;
+    global $api_rate_limit_rpm, $api_rate_limit_tokens, $api_tokens, $session_db_path;
+
+    // Determine effective RPM: per-token override takes precedence when a valid
+    // Bearer token is present and has an entry in $api_rate_limit_tokens.
     $rpm = (int)($api_rate_limit_rpm ?? 0);
+    $rl_key = $key; // default: key by IP
+    if (is_array($api_tokens) && $api_tokens !== [] && is_array($api_rate_limit_tokens) && $api_rate_limit_tokens !== []) {
+        $authRaw = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
+        $auth    = is_string($authRaw) ? $authRaw : '';
+        if (str_starts_with($auth, 'Bearer ')) {
+            $token = substr($auth, 7);
+            if (in_array($token, $api_tokens, true) && array_key_exists($token, $api_rate_limit_tokens)) {
+                $raw_rpm   = $api_rate_limit_tokens[$token];
+                $token_rpm = is_numeric($raw_rpm) ? (int)$raw_rpm : 0;
+                if ($token_rpm <= 0) {
+                    return; // 0 = unlimited for this token
+                }
+                $rpm    = $token_rpm;
+                $rl_key = 'tok:' . hash('sha256', $token); // key by token hash, not IP
+            }
+        }
+    }
+
     if ($rpm <= 0) {
         return;
     }
@@ -97,7 +118,7 @@ function api_rate_limit(string $key): void
         if ($cnt === false) {
             throw new \RuntimeException('Failed to prepare rate_limit count.');
         }
-        $cnt->bindValue(':k', $key, SQLITE3_TEXT);
+        $cnt->bindValue(':k', $rl_key, SQLITE3_TEXT);
         $cnt->bindValue(':w', $window, SQLITE3_INTEGER);
         $res   = $cnt->execute();
         $row   = ($res !== false) ? $res->fetchArray(SQLITE3_NUM) : false;
@@ -111,7 +132,7 @@ function api_rate_limit(string $key): void
         if ($ins === false) {
             throw new \RuntimeException('Failed to prepare rate_limit insert.');
         }
-        $ins->bindValue(':k', $key, SQLITE3_TEXT);
+        $ins->bindValue(':k', $rl_key, SQLITE3_TEXT);
         $ins->bindValue(':t', $now, SQLITE3_INTEGER);
         $ins->execute();
         $db->close();

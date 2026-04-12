@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-04-12
+
+### Added
+- **Form protection: hCaptcha** — `$form_protection = 'hcaptcha'` adds hCaptcha as a third CAPTCHA option alongside honeypot and Turnstile; requires `$hcaptcha_site_key` and `$hcaptcha_secret_key`; server-side verify via `https://api.hcaptcha.com/siteverify`; CSP extended with hCaptcha domains — closes #177
+- **Form protection: Google reCAPTCHA Enterprise** — `$form_protection = 'recaptcha_enterprise'` adds score-based bot protection; requires `$recaptcha_enterprise_site_key`, `$recaptcha_enterprise_api_key`, `$recaptcha_enterprise_project_id`; configurable score threshold via `$recaptcha_score_threshold` (default 0.5); server-side verify via reCAPTCHA Enterprise Assessments API — closes #175
+- **API: per-token rate limit overrides** — `$api_rate_limit_tokens = ['token' => rpm]` allows setting a different RPM for individual Bearer tokens; rate-limit table is keyed by `tok:<sha256(token)>` instead of IP when a token-specific entry is present; `0` RPM = unlimited for that token — closes #178
+- **API: `$api_allowed_endpoints` endpoint allowlist** — non-empty array restricts the API to listed endpoint names only; requests to unlisted endpoints return 404; the meta endpoint (`GET /`) is always available; useful for operators who want UI-only deployments — closes #179
+- **IPv4 results: hex and decimal network address** — `calculate_subnet()` now returns `network_hex` (dotted-hex, e.g. `C0.A8.01.00`) and `network_decimal` (unsigned 32-bit integer) for the network address; both are displayed in the Binary Representation panel and returned by `POST /api/v1/ipv4` — closes #180
+- **IPv6 results: expanded and compressed address forms** — `calculate_subnet6()` now returns `address_expanded` (8 colon-separated 4-hex groups, e.g. `2001:0db8:0000:…`) and `address_compressed` (RFC 5952 notation, e.g. `2001:db8::`) for the network address; both are displayed as copyable rows in the IPv6 results section and returned by `POST /api/v1/ipv6` — closes #181
+
 ## [2.1.0] - 2026-04-11
 
 ### Added

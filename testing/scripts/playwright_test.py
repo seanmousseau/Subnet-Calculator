@@ -1412,6 +1412,100 @@ async def test_vlsm_utilisation_accuracy(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# v2.2.0 — IPv4 hex/decimal in binary panel
+# ---------------------------------------------------------------------------
+
+async def test_ipv4_binary_hex_decimal(page: Page) -> None:
+    section("IPv4 — binary panel hex/decimal rows (v2.2.0)")
+    await navigate(page, APP_URL)
+    await page.fill("#ip",   "192.168.1.0")
+    await page.fill("#mask", "24")
+    await submit_form(page, "#panel-ipv4 form")
+
+    # Open the binary details panel
+    await page.evaluate("document.querySelector('.binary-details').setAttribute('open', '')")
+
+    # Collect all bin-label text values
+    labels = await page.evaluate("""() => {
+        return Array.from(document.querySelectorAll('.binary-details .bin-label'))
+               .map(el => el.textContent.trim());
+    }""")
+    assert_true("binary panel has Hex row",     "Hex" in labels,     f"labels: {labels}")
+    assert_true("binary panel has Decimal row", "Decimal" in labels, f"labels: {labels}")
+
+    # Collect all bin-value text values (in order: Network, Mask, Hex, Decimal)
+    values = await page.evaluate("""() => {
+        return Array.from(document.querySelectorAll('.binary-details .bin-value'))
+               .map(el => el.textContent.trim());
+    }""")
+    # values[2] = Hex, values[3] = Decimal
+    hex_val = values[2] if len(values) > 2 else ""
+    dec_val = values[3] if len(values) > 3 else ""
+    assert_eq("binary panel hex = C0.A8.01.00",  hex_val, "C0.A8.01.00")
+    assert_eq("binary panel decimal = 3232235776", dec_val, "3232235776")
+
+
+# ---------------------------------------------------------------------------
+# v2.2.0 — IPv6 expanded/compressed address forms
+# ---------------------------------------------------------------------------
+
+async def test_ipv6_address_forms(page: Page) -> None:
+    section("IPv6 — expanded/compressed address forms (v2.2.0)")
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.fill("#ipv6",   "2001:db8::")
+    await page.fill("#prefix", "32")
+    await submit_form(page, "#panel-ipv6 form")
+
+    expanded   = await result_value(page, "Address (Expanded)")
+    compressed = await result_value(page, "Address (Compressed)")
+    assert_eq(
+        "ipv6 address expanded = 2001:0db8:0000:…",
+        expanded,
+        "2001:0db8:0000:0000:0000:0000:0000:0000",
+    )
+    assert_eq("ipv6 address compressed = 2001:db8::", compressed, "2001:db8::")
+
+    # Test with a loopback address
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.fill("#ipv6",   "::1")
+    await page.fill("#prefix", "128")
+    await submit_form(page, "#panel-ipv6 form")
+
+    expanded_lo   = await result_value(page, "Address (Expanded)")
+    compressed_lo = await result_value(page, "Address (Compressed)")
+    assert_eq("::1 expanded",   expanded_lo,   "0000:0000:0000:0000:0000:0000:0000:0001")
+    assert_eq("::1 compressed", compressed_lo, "::1")
+
+
+# ---------------------------------------------------------------------------
+# v2.2.0 — API new fields
+# ---------------------------------------------------------------------------
+
+async def test_api_ipv4_v220_fields(page: Page) -> None:
+    section("API — IPv4 v2.2.0 fields (network_hex, network_decimal)")
+    status, data = _api_post("ipv4", {"ip": "192.168.1.0", "mask": "24"})
+    assert_eq("api ipv4 v2.2.0: HTTP 200", status, 200)
+    d = data.get("data", {})
+    assert_eq("api ipv4 v2.2.0: network_hex",     d.get("network_hex"),     "C0.A8.01.00")
+    assert_eq("api ipv4 v2.2.0: network_decimal", d.get("network_decimal"), 3232235776)
+
+
+async def test_api_ipv6_v220_fields(page: Page) -> None:
+    section("API — IPv6 v2.2.0 fields (address_expanded, address_compressed)")
+    status, data = _api_post("ipv6", {"ipv6": "2001:db8::", "prefix": "32"})
+    assert_eq("api ipv6 v2.2.0: HTTP 200", status, 200)
+    d = data.get("data", {})
+    assert_eq(
+        "api ipv6 v2.2.0: address_expanded",
+        d.get("address_expanded"),
+        "2001:0db8:0000:0000:0000:0000:0000:0000",
+    )
+    assert_eq("api ipv6 v2.2.0: address_compressed", d.get("address_compressed"), "2001:db8::")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1491,6 +1585,10 @@ async def main() -> None:
             await test_vlsm_session_ttl_notice(page)
             await test_permissions_policy_directives(page)
             await test_vlsm_utilisation_accuracy(page)
+            await test_ipv4_binary_hex_decimal(page)
+            await test_ipv6_address_forms(page)
+            await test_api_ipv4_v220_fields(page)
+            await test_api_ipv6_v220_fields(page)
         finally:
             await context.close()
             await browser.close()

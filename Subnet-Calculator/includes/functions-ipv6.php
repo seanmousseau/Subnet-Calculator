@@ -83,12 +83,20 @@ function calculate_subnet6(string $ip, int $prefix): array
         : ($host_bits <= 20 ? (string)(1 << $host_bits) : '2^' . $host_bits);
     $network_cidr = gmp_to_ipv6($network) . '/' . $prefix;
 
+    // Expanded form: 8 groups of 4 hex digits (e.g. 2001:0db8:0000:…)
+    $net_hex32        = str_pad(gmp_strval($network, 16), 32, '0', STR_PAD_LEFT);
+    $address_expanded = implode(':', str_split($net_hex32, 4));
+    // Compressed form: PHP's inet_ntop normalisation (e.g. 2001:db8::)
+    $address_compressed = gmp_to_ipv6($network);
+
     return [
-        'network_cidr' => $network_cidr,
-        'prefix'       => '/' . $prefix,
-        'first_ip'     => gmp_to_ipv6($network),
-        'last_ip'      => gmp_to_ipv6($last),
-        'total'        => $total,
-        'ptr_zone'     => ipv6_ptr_zone($network_cidr),
+        'network_cidr'       => $network_cidr,
+        'prefix'             => '/' . $prefix,
+        'first_ip'           => gmp_to_ipv6($network),
+        'last_ip'            => gmp_to_ipv6($last),
+        'total'              => $total,
+        'ptr_zone'           => ipv6_ptr_zone($network_cidr),
+        'address_expanded'   => $address_expanded,
+        'address_compressed' => $address_compressed,
     ];
 }

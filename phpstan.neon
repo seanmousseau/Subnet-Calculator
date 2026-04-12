@@ -18,7 +18,7 @@ parameters:
         # chain. These 4 variables are always set by includes/config.php
         # (required unconditionally at index.php:4), but PHPStan can't see
         # that because it doesn't track globals across included files.
-        - message: '#Variable \$(frame_ancestors|form_protection|turnstile_site_key|turnstile_secret_key) might not be defined\.#'
+        - message: '#Variable \$(frame_ancestors|form_protection|turnstile_site_key|turnstile_secret_key|hcaptcha_site_key|hcaptcha_secret_key|recaptcha_enterprise_site_key|recaptcha_enterprise_api_key|recaptcha_enterprise_project_id|recaptcha_score_threshold) might not be defined\.#'
           path: Subnet-Calculator/index.php
 
         # The config-default-vs-sanitise checks in includes/config.php look

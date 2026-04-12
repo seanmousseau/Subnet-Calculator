@@ -14,12 +14,12 @@ https://dev.seanmousseau.com/subnet-calculator/
 - Outputs: Subnet CIDR, Netmask (CIDR & Octet), Wildcard Mask, First/Last Usable IP, Broadcast IP, Usable IPs, Address Type badge, Reverse DNS Zone
 - Handles edge cases: `/0`, `/31` (point-to-point), `/32` (host route)
 - Paste a full CIDR string (e.g. `192.168.1.0/24`) into the IP field — it auto-splits on blur
-- Binary representation — collapsible section showing network and host bits with colour coding
+- Binary representation — collapsible section showing network and host bits with colour coding; also displays the network address in **hex** (e.g. `C0.A8.01.00`) and **decimal** (e.g. `3232235776`)
 - Subnet splitter — split into equal smaller subnets; per-row copy buttons; split prefix included in shareable URL
 
 **IPv6**
 - CIDR prefix input (`/64`, `64`)
-- Outputs: Network CIDR, Prefix Length, First IP, Last IP, Total Addresses, Reverse DNS Zone
+- Outputs: Network CIDR, Prefix Length, First IP, Last IP, Total Addresses, Reverse DNS Zone, **expanded address** (all 8 groups, zero-padded), **compressed address** (RFC 5952 notation)
 - Total Addresses shown as a number for small prefixes (≤ /108) and as `2^N` for larger ones
 - Uses PHP GMP extension for 128-bit arithmetic
 - Subnet splitter with per-row copy buttons; Copy All button
@@ -47,7 +47,7 @@ https://dev.seanmousseau.com/subnet-calculator/
 - Click any result row or subnet to copy to clipboard (with `execCommand` fallback for cross-origin iframes)
 - Light/dark mode toggle with `localStorage` persistence; defaults to OS `prefers-color-scheme`
 - Shareable URL bar — copy a link that auto-populates and calculates on load; splitter state included
-- Form protection: honeypot or Cloudflare Turnstile (configurable)
+- Form protection: honeypot, Cloudflare Turnstile, hCaptcha, or Google reCAPTCHA Enterprise (configurable)
 - All colours configured via CSS custom properties; optional `$fixed_bg_color` override
 - iframe-friendly mode with automatic height reporting via `postMessage`
 - External CSS (`assets/app.css`) and JS (`assets/app.js`); modular PHP structure (`includes/`, `templates/`); external config via `config.php`
@@ -82,15 +82,23 @@ All tuneable values with their defaults:
 | `$fixed_bg_color` | `'null'` | Pin the page background to a hex colour (e.g. `'#1a1a2e'`) regardless of light/dark mode. Leave as `'null'` to use the theme default. |
 | `$default_tab` | `'ipv4'` | Active tab on page load: `'ipv4'`, `'ipv6'`, or `'vlsm'`. |
 | `$split_max_subnets` | `16` | Maximum number of subnets shown in the subnet splitter results list (1–256). |
-| `$form_protection` | `'none'` | Form protection mode: `'none'`, `'honeypot'`, or `'turnstile'`. |
+| `$form_protection` | `'none'` | Form protection mode: `'none'`, `'honeypot'`, `'turnstile'`, `'hcaptcha'`, or `'recaptcha_enterprise'`. |
 | `$turnstile_site_key` | `''` | Cloudflare Turnstile site key (required when `$form_protection = 'turnstile'`). |
 | `$turnstile_secret_key` | `''` | Cloudflare Turnstile secret key — **never exposed in HTML**. |
+| `$hcaptcha_site_key` | `''` | hCaptcha site key (required when `$form_protection = 'hcaptcha'`). |
+| `$hcaptcha_secret_key` | `''` | hCaptcha secret key — **never exposed in HTML**. |
+| `$recaptcha_enterprise_site_key` | `''` | reCAPTCHA Enterprise site key (required when `$form_protection = 'recaptcha_enterprise'`). |
+| `$recaptcha_enterprise_api_key` | `''` | reCAPTCHA Enterprise server API key — **never exposed in HTML**. |
+| `$recaptcha_enterprise_project_id` | `''` | GCP project ID for reCAPTCHA Enterprise. |
+| `$recaptcha_score_threshold` | `0.5` | Minimum reCAPTCHA Enterprise score to allow submission (`0.0`–`1.0`). |
 | `$page_title` | `'Subnet Calculator'` | Page title shown in the browser tab and `<h1>` heading. |
 | `$page_description` | `'Free online…'` | Used in `<meta name="description">` and `og:description` for share previews. |
 | `$show_share_bar` | `true` | Show or hide the shareable URL bar below results. Set to `false` when embedding in an iframe. |
 | `$frame_ancestors` | `'*'` | Origins permitted to embed the page in an iframe (`frame-ancestors` CSP directive). Use `"'none'"` to block all embedding, or a space-separated list of origins. |
 | `$api_tokens` | `[]` | Bearer tokens that authorise REST API requests. Empty array = open API (no auth required). |
 | `$api_rate_limit_rpm` | `60` | Maximum API requests per IP per minute (sliding window). `0` = disabled. |
+| `$api_rate_limit_tokens` | `[]` | Per-token RPM overrides: `['token' => rpm]`. `0` = unlimited for that token. |
+| `$api_allowed_endpoints` | `[]` | Endpoint allowlist. Empty = all endpoints available. Non-empty = only listed endpoints are accessible. |
 | `$api_cors_origins` | `'*'` | `Access-Control-Allow-Origin` header value for API responses. |
 | `$session_enabled` | `false` | Enable SQLite-backed VLSM session save/restore. Requires `php-sqlite3`. |
 | `$session_db_path` | `''` | Absolute path to the SQLite database file. Leave empty to auto-place at `<docroot>/../data/sessions.sqlite`. |
@@ -131,6 +139,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File |
 |---------|------|
+| 2.2.0 | `releases/subnet-calculator-2.2.0.tar.gz` |
 | 2.1.0 | `releases/subnet-calculator-2.1.0.tar.gz` |
 | 2.0.1 | `releases/subnet-calculator-2.0.1.tar.gz` |
 | 2.0.0 | `releases/subnet-calculator-2.0.0.tar.gz` |

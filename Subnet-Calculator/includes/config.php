@@ -6,13 +6,19 @@ declare(strict_types=1);
 // These are the built-in defaults. To override, copy config.php.example to
 // config.php alongside this file — config.php is never overwritten by upgrades.
 
-$app_version          = '2.1.0';
+$app_version          = '2.2.0';
 $fixed_bg_color       = 'null';
 $default_tab          = 'ipv4'; // 'ipv4', 'ipv6', or 'vlsm'
 $split_max_subnets    = 16;
 $form_protection      = 'none';
 $turnstile_site_key   = '';
 $turnstile_secret_key = '';
+$hcaptcha_site_key    = '';
+$hcaptcha_secret_key  = '';
+$recaptcha_enterprise_site_key    = '';
+$recaptcha_enterprise_api_key     = '';
+$recaptcha_enterprise_project_id  = '';
+$recaptcha_score_threshold        = 0.5;
 $page_title           = 'Subnet Calculator';
 $page_description     = 'Free online subnet calculator for IPv4 and IPv6. Calculate network address, broadcast, netmask, host range, and split subnets.';
 $show_share_bar       = true;
@@ -20,9 +26,11 @@ $frame_ancestors      = '*';
 $canonical_url        = '';
 
 // REST API (v2.0.0)
-$api_tokens         = [];   // [] = open; ['token1'] = auth required
-$api_rate_limit_rpm = 60;   // requests/minute per IP (0 = disabled)
-$api_cors_origins   = '*';  // CORS Access-Control-Allow-Origin
+$api_tokens              = [];   // [] = open; ['token1'] = auth required
+$api_rate_limit_rpm      = 60;   // requests/minute per IP (0 = disabled)
+$api_rate_limit_tokens   = [];   // per-token RPM overrides: ['token' => rpm]
+$api_allowed_endpoints   = [];   // [] = all allowed; non-empty = allowlist
+$api_cors_origins        = '*';  // CORS Access-Control-Allow-Origin
 
 // Session persistence (v2.0.0)
 $session_enabled    = false;  // Enable SQLite-backed VLSM session save/restore
@@ -42,10 +50,11 @@ if (!preg_match('/^(\*|\'none\'|\'self\'|(\s*(https?:\/\/[^\s;,]+))+)$/', $fa)) 
 } else {
     $frame_ancestors = $fa;
 }
-if (!in_array($form_protection, ['none', 'honeypot', 'turnstile'], true)) {
+if (!in_array($form_protection, ['none', 'honeypot', 'turnstile', 'hcaptcha', 'recaptcha_enterprise'], true)) {
     error_log('sc: invalid $form_protection "' . $form_protection . '" — reset to "none"');
     $form_protection = 'none';
 }
+$recaptcha_score_threshold = max(0.0, min(1.0, (float)$recaptcha_score_threshold));
 if (!in_array($default_tab, ['ipv4', 'ipv6', 'vlsm'], true)) {
     error_log('sc: invalid $default_tab "' . $default_tab . '" — reset to "ipv4"');
     $default_tab = 'ipv4';
@@ -68,6 +77,12 @@ if (!is_array($api_tokens)) {
     $api_tokens = [];
 }
 $api_rate_limit_rpm = max(0, (int)$api_rate_limit_rpm);
+if (!is_array($api_rate_limit_tokens)) {
+    $api_rate_limit_tokens = [];
+}
+if (!is_array($api_allowed_endpoints)) {
+    $api_allowed_endpoints = [];
+}
 if (!is_string($api_cors_origins) || $api_cors_origins === '') {
     $api_cors_origins = '*';
 }

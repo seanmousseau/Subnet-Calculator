@@ -82,16 +82,28 @@ function calculate_subnet(string $ip, int $cidr): array
     $last         = $cidr >= 31 ? $broadcast    : $broadcast - 1;
     $usable       = $cidr >= 31 ? (1 << (32 - $cidr)) : max(0, (1 << (32 - $cidr)) - 2);
 
+    // Unsigned 32-bit representation of the network address (PHP int is 64-bit signed,
+    // so & 0xFFFFFFFF always yields a non-negative value on 64-bit platforms).
+    $net_u32 = $network_long & 0xFFFFFFFF;
+
     $network_cidr = long2ip($network_long) . '/' . $cidr;
     return [
-        'network_cidr'  => $network_cidr,
-        'netmask_cidr'  => '/' . $cidr,
-        'netmask_octet' => cidr_to_mask($cidr),
-        'wildcard'      => cidr_to_wildcard($cidr),
-        'first_usable'  => long2ip($first),
-        'last_usable'   => long2ip($last),
-        'broadcast'     => long2ip($broadcast),
-        'usable_hosts'  => $usable,
-        'ptr_zone'      => ipv4_ptr_zone($network_cidr),
+        'network_cidr'    => $network_cidr,
+        'netmask_cidr'    => '/' . $cidr,
+        'netmask_octet'   => cidr_to_mask($cidr),
+        'wildcard'        => cidr_to_wildcard($cidr),
+        'first_usable'    => long2ip($first),
+        'last_usable'     => long2ip($last),
+        'broadcast'       => long2ip($broadcast),
+        'usable_hosts'    => $usable,
+        'ptr_zone'        => ipv4_ptr_zone($network_cidr),
+        'network_hex'     => strtoupper(sprintf(
+            '%02X.%02X.%02X.%02X',
+            ($net_u32 >> 24) & 0xFF,
+            ($net_u32 >> 16) & 0xFF,
+            ($net_u32 >>  8) & 0xFF,
+            $net_u32        & 0xFF
+        )),
+        'network_decimal' => $net_u32,
     ];
 }

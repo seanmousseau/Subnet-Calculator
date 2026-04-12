@@ -18,6 +18,14 @@
     <!-- sc-warning: Turnstile is configured but the PHP cURL extension is not loaded.
          Captcha verification is being skipped. Install php-curl to enable it. -->
     <?php endif; ?>
+    <?php if ($hcaptcha_curl_missing) : ?>
+    <!-- sc-warning: hCaptcha is configured but the PHP cURL extension is not loaded.
+         Captcha verification is being skipped. Install php-curl to enable it. -->
+    <?php endif; ?>
+    <?php if ($recaptcha_curl_missing) : ?>
+    <!-- sc-warning: reCAPTCHA Enterprise is configured but the PHP cURL extension is not loaded.
+         Captcha verification is being skipped. Install php-curl to enable it. -->
+    <?php endif; ?>
     <script nonce="<?= htmlspecialchars($csp_nonce) ?>">(function(){var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme: light)').matches?'light':null);if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
     <link rel="stylesheet" href="assets/app.css?v=<?= $app_version ?>">
     <?php if ($bg_override_style) {
@@ -25,6 +33,10 @@
     } ?>
     <?php if ($turnstile_active) : ?>
         <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <?php elseif ($hcaptcha_active) : ?>
+        <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+    <?php elseif ($recaptcha_active) : ?>
+        <script src="https://www.google.com/recaptcha/enterprise.js" async defer></script>
     <?php endif; ?>
 </head>
 <body>
@@ -92,6 +104,10 @@
             <?php endif; ?>
             <?php if ($turnstile_active) : ?>
                 <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars($turnstile_site_key) ?>"></div>
+            <?php elseif ($hcaptcha_active) : ?>
+                <div class="h-captcha" data-sitekey="<?= htmlspecialchars($hcaptcha_site_key) ?>"></div>
+            <?php elseif ($recaptcha_active) : ?>
+                <div class="g-recaptcha" data-sitekey="<?= htmlspecialchars($recaptcha_enterprise_site_key) ?>" data-action="SUBMIT"></div>
             <?php endif; ?>
         </form>
 
@@ -164,6 +180,10 @@ if ($i < 3) {
                     ?></code>
                     <span class="bin-label">Mask</span>
                     <code class="bin-value"><?= implode('.', $bin_mask) ?></code>
+                    <span class="bin-label">Hex</span>
+                    <code class="bin-value" tabindex="0" role="button" title="Click to copy"><?= htmlspecialchars($result['network_hex']) ?></code>
+                    <span class="bin-label">Decimal</span>
+                    <code class="bin-value" tabindex="0" role="button" title="Click to copy"><?= htmlspecialchars((string)$result['network_decimal']) ?></code>
                 </div>
                 <div class="bin-boundary">Network: <?= $bin_cidr ?> bits &nbsp;|&nbsp; Host: <?= 32 - $bin_cidr ?> bits</div>
             </details>
@@ -282,6 +302,10 @@ if ($i < 3) {
             <?php endif; ?>
             <?php if ($turnstile_active) : ?>
                 <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars($turnstile_site_key) ?>"></div>
+            <?php elseif ($hcaptcha_active) : ?>
+                <div class="h-captcha" data-sitekey="<?= htmlspecialchars($hcaptcha_site_key) ?>"></div>
+            <?php elseif ($recaptcha_active) : ?>
+                <div class="g-recaptcha" data-sitekey="<?= htmlspecialchars($recaptcha_enterprise_site_key) ?>" data-action="SUBMIT"></div>
             <?php endif; ?>
         </form>
 
@@ -321,6 +345,16 @@ if ($i < 3) {
                     <span class="result-label">Reverse DNS Zone</span>
                     <span class="result-value"><?= htmlspecialchars($result6['ptr_zone']) ?></span>
                 </div>
+                <?php if (isset($result6['address_expanded'])) : ?>
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
+                    <span class="result-label">Address (Expanded)</span>
+                    <span class="result-value"><?= htmlspecialchars($result6['address_expanded']) ?></span>
+                </div>
+                <div class="result-row" title="Click to copy" tabindex="0" role="button">
+                    <span class="result-label">Address (Compressed)</span>
+                    <span class="result-value"><?= htmlspecialchars($result6['address_compressed']) ?></span>
+                </div>
+                <?php endif; ?>
             </div>
             <?php
             try {
