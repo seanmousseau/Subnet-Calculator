@@ -1,3 +1,5 @@
+<img width="125" src="https://media.pupness.ca/file/seanmousseau/assets/logos/sc/logo.webp" alt="Subnet Calculator" />
+
 # Subnet Calculator
 
 A lightweight, web-based subnet calculator written in PHP supporting both IPv4 and IPv6.
