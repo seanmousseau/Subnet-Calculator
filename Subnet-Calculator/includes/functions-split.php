@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 // ─── Subnet splitter ──────────────────────────────────────────────────────────
 
+/** @return array<string, mixed> */
 function split_subnet(string $network_ip, int $cidr, int $new_prefix, int $max = 16): array
 {
     if ($new_prefix <= $cidr || $new_prefix > 32) {
@@ -20,6 +21,7 @@ function split_subnet(string $network_ip, int $cidr, int $new_prefix, int $max =
     return ['subnets' => $subnets, 'total' => $count, 'showing' => $showing];
 }
 
+/** @return array<string, mixed> */
 function split_subnet6(string $network_ip, int $prefix, int $new_prefix, int $max = 16): array
 {
     if ($new_prefix <= $prefix || $new_prefix > 128) {

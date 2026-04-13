@@ -64,7 +64,11 @@ function get_ipv6_type(string $ip): string
     if ($bin === false) {
         return 'Unknown';
     }
-    $b = array_values(unpack('C*', $bin));
+    $unpacked = unpack('C*', $bin);
+    if ($unpacked === false || count($unpacked) < 16) {
+        return 'Unknown';
+    }
+    $b = array_values($unpacked);
     if ($bin === str_repeat("\x00", 15) . "\x01") {
         return 'Loopback';
     }

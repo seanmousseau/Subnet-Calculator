@@ -28,8 +28,8 @@ npm run lint:js   # ESLint on app.js
 npm run lint:css  # Stylelint on app.css
 npm run lint      # both
 
-# Deploy to dev server, then run the end-to-end browser test suite (~306 assertions)
-# Requires: dev server running, Chrome CDP container at 192.168.80.15:9224
+# Deploy to dev server, then run the end-to-end browser test suite (~517 assertions)
+# Requires: dev server running at root@192.168.80.15
 rsync -a --delete Subnet-Calculator/ root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
 scp testing/fixtures/iframe-test.html root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
 bash -c 'set -a; source ~/.claude/dev-secrets.env; set +a; python3 testing/scripts/playwright_test.py'
@@ -49,7 +49,7 @@ tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
 
 (Or run `/release` to automate steps 1–7.)
 
-PHP unit tests: `testing/unit/` (158 tests, 243 assertions; 14 skipped on platforms without GMP). Playwright browser tests: `testing/scripts/playwright_test.py` (81 test groups, 308 assertions) covers page load, security headers, Permissions-Policy, CSP nonce integrity, IPv4/IPv6 calculation, reverse DNS zones, edge cases, address type badges, subnet splitters, copy buttons, splitter shareable URLs, binary representation, VLSM planner, overlap checker, shareable GET URLs, iframe integration, UI interactions, VLSM shareable URL, VLSM CSV/JSON/XLSX export, VLSM reset/validation, Copy All buttons, VLSM utilisation summary, IPv6 overlap, multi-CIDR overlap, IPv6 binary/hex, v1.3.0 regression tests, supernet/summarise UI, ULA generator UI, VLSM session TTL notice, REST API endpoints (meta, IPv4, IPv6, VLSM, overlap, split, supernet, ULA, rdns, bulk, OpenAPI spec, range/ipv4, tree), IPv4 binary hex/decimal rows, IPv6 address expanded/compressed forms, API v2.2.0 new fields, ASCII export, tooltips/help bubbles, visual regression, docs footer link, IP range→CIDR UI, tree view UI, API v2.3.0 endpoints, tooltip visual polish (#205), tooltip accessibility, CSP inline-style violations (#206), print stylesheet (#193), locale number format (#191), ESLint/Stylelint clean.
+PHP unit tests: `testing/unit/` (158 tests, 243 assertions; 14 skipped on platforms without GMP). Playwright browser tests: `testing/scripts/playwright_test.py` (85 test groups, 517 assertions) covers page load, security headers, Permissions-Policy, CSP nonce integrity, IPv4/IPv6 calculation, reverse DNS zones, edge cases, address type badges, subnet splitters, copy buttons, splitter shareable URLs, binary representation, VLSM planner, overlap checker, shareable GET URLs, iframe integration, UI interactions, VLSM shareable URL, VLSM CSV/JSON/XLSX export, VLSM reset/validation, Copy All buttons, VLSM utilisation summary, IPv6 overlap, multi-CIDR overlap, IPv6 binary/hex, v1.3.0 regression tests, supernet/summarise UI, ULA generator UI, VLSM session TTL notice, REST API endpoints (meta, IPv4, IPv6, VLSM, overlap, split, supernet, ULA, rdns, bulk, OpenAPI spec, range/ipv4, tree), IPv4 binary hex/decimal rows, IPv6 address expanded/compressed forms, API v2.2.0 new fields, ASCII export, tooltips/help bubbles, visual regression, docs footer link, IP range→CIDR UI, tree view UI, API v2.3.0 endpoints, tooltip visual polish (#205), tooltip accessibility, CSP inline-style violations (#206), print stylesheet (#193), locale number format (#191), ESLint/Stylelint clean, full visual inspection, all-tooltips direction, console error monitoring, light/dark theme testing.
 
 ## Repository layout
 
@@ -107,7 +107,7 @@ releases/               ← versioned release tarballs
 testing/
   snapshots/            ← Pillow visual regression baselines (committed PNGs)
   scripts/
-    playwright_test.py  ← 81 test groups, 308 assertions
+    playwright_test.py  ← 85 test groups, 517 assertions
     snapshot_utils.py   ← capture_snapshot / compare_snapshot helpers
 README.md
 CHANGELOG.md

@@ -468,6 +468,7 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            flex-wrap: wrap;
         }
 
         .splitter-label {
@@ -758,6 +759,20 @@
             left: auto;
             right: 0;
             transform: none;
+        }
+
+        /* #205: label bubbles appear below the label so they don't overlap
+           the card title / tabs above the form */
+        label .help-bubble-text {
+            bottom: auto;
+            top: calc(100% + 6px);
+        }
+
+        /* #205: section-header bubbles appear below the trigger so they don't
+           overlap the card/content immediately above the panel title */
+        .overlap-title .help-bubble-text {
+            bottom: auto;
+            top: calc(100% + 6px);
         }
 
         /* ── CSP fix: classes replacing inline style= attributes (#206) ─────── */

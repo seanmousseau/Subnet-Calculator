@@ -6,6 +6,8 @@ A lightweight, web-based subnet calculator written in PHP supporting both IPv4 a
 
 https://dev.seanmousseau.com/subnet-calculator/
 
+**[Documentation](https://seanmousseau.github.io/Subnet-Calculator/)**
+
 ## Features
 
 **IPv4**
@@ -81,6 +83,7 @@ All tuneable values with their defaults:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `$locale` | `'en'` | BCP 47 locale tag for thousands-separator formatting of host counts (e.g. `'de'`, `'fr'`). Uses PHP `intl` `NumberFormatter`; falls back to comma separators when `intl` is unavailable or locale is `'en'`. |
 | `$fixed_bg_color` | `'null'` | Pin the page background to a hex colour (e.g. `'#1a1a2e'`) regardless of light/dark mode. Leave as `'null'` to use the theme default. |
 | `$default_tab` | `'ipv4'` | Active tab on page load: `'ipv4'`, `'ipv6'`, or `'vlsm'`. |
 | `$split_max_subnets` | `16` | Maximum number of subnets shown in the subnet splitter results list (1–256). |
@@ -143,6 +146,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File |
 |---------|------|
+| 2.4.1 | `releases/subnet-calculator-2.4.1.tar.gz` |
 | 2.4.0 | `releases/subnet-calculator-2.4.0.tar.gz` |
 | 2.3.0 | `releases/subnet-calculator-2.3.0.tar.gz` |
 | 2.2.0 | `releases/subnet-calculator-2.2.0.tar.gz` |
@@ -164,7 +168,7 @@ Pre-built release archives are available in `releases/`:
 Each archive contains the app files at the root level. Extract directly into your webroot to install or upgrade in place:
 
 ```bash
-tar -xzf subnet-calculator-1.1.0.tar.gz -C /var/www/html/subnet-calculator/
+tar -xzf subnet-calculator-2.4.1.tar.gz -C /var/www/html/subnet-calculator/
 ```
 
 ## Embedding
@@ -284,20 +288,20 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 | Version | Notes |
 |---------|-------|
+| 2.4.1 | Patch: supernet tooltip fix (moved out of button elements), PHP type correctness fixes (`ip2long`/`inet_pton`/`unpack` false-return handling), PHPStan expanded to all handler and function files, Semgrep rules, 4 new Playwright test groups (517 assertions) |
+| 2.4.0 | `$locale` config for locale-aware number formatting, ESLint + Stylelint tooling, OpenAPI example responses, CSP inline-style fix, tooltip visual polish, VLSM print stylesheet, mobile overflow fix |
+| 2.3.0 | IP range → CIDR conversion, subnet allocation tree view, VLSM JSON/XLSX export, ASCII diagram export, help bubble tooltips, visual regression tests, GitHub Pages documentation site |
+| 2.2.0 | hCaptcha and reCAPTCHA Enterprise form protection, per-token API rate limit overrides, `$api_allowed_endpoints` allowlist, IPv4 hex/decimal network address, IPv6 expanded/compressed address forms |
+| 2.1.0 | API: reverse DNS zone file generator (`POST /api/v1/rdns`), bulk CIDR calculation (`POST /api/v1/bulk`), VLSM session URL fix, session TTL notice |
+| 2.0.1 | Fixes: VLSM `/31` vs `/32` single-host allocation, API supernet whitespace guard, API router bare `GET /sessions` 404 |
+| 2.0.0 | JSON REST API (`/api/v1/`), OpenAPI 3.1 spec, supernet / route summarisation, IPv6 ULA prefix generator, VLSM session persistence, PHP 8.1 minimum |
+| 1.3.0 | Multi-CIDR pairwise overlap checker, VLSM CSV export, Copy All buttons, VLSM utilisation summary, Playwright E2E test suite |
+| 1.2.0 | VLSM planner (variable-length subnet allocation), shareable VLSM URL, dynamic row management |
 | 1.1 | WebP logo/favicon, modular file structure (`includes/`, `templates/`, `assets/`), PHP type declarations, `.htaccess` hardening (Apache + OLS), cache headers, `robots.txt`, CSP `unsafe-inline` removed |
-| 1.0 | Full ARIA tab pattern, accessible toast/errors/focus, NAT64 detection, canonical URL, share URL no-JS fallback, postMessage origin scoping, `$canonical_url` |
-| 0.12 | Print stylesheet fixes, IPv6 badge types, `$frame_ancestors` validation, config validation, `X-Frame-Options` header, keyboard accessibility, IPv6 panel consolidation |
-| 0.11 | `$frame_ancestors`, Open Graph tags, larger logo (48 px), print stylesheet, iframe height shrink fix |
-| 0.10 | Nonce-based CSP (removes `unsafe-inline`), `$page_title`, `$show_share_bar`, missing IPv4 address types (Benchmarking, IETF Reserved) |
-| 0.9 | Tab bug fix (`$default_tab=ipv6`), share URL pinning, Turnstile curl fix, CSP `base-uri`, iframe bg postMessage |
-| 0.8 | IPv6 splitter, form protection, CGNAT, external config.php, subfolder layout, security headers, clipboard fallback, release bundle |
-| 0.7 | Config consolidation, `'null'`-safe bg color, iframe mode with postMessage |
-| 0.6 | Subnet splitter, fixed bg override, full share URL, CIDR-on-submit fix |
-| 0.5 | Light/dark mode toggle, address type badges, shareable URL |
-| 0.4 | Wildcard mask, copy-to-clipboard, CSS variable theming, input auto-detection |
-| 0.3 | IPv6 support with tabbed UI |
-| 0.2 | Reset button, removed Total Hosts field |
-| 0.1 | Initial release — IPv4 subnet calculations |
+| 1.0 | Full ARIA tab pattern, accessible toast/errors/focus, NAT64 detection, canonical URL, share URL no-JS fallback, postMessage origin scoping |
+| 0.12 | Print stylesheet, IPv6 badge types, `$frame_ancestors` validation, `X-Frame-Options` header, keyboard accessibility |
+| 0.8–0.11 | IPv6 splitter, form protection (Turnstile/honeypot), iframe mode, nonce-based CSP, config.php, security headers |
+| 0.1–0.7 | Initial release through subnet splitter, light/dark mode, shareable URLs, IPv6 support |
 
 ## Contributing
 

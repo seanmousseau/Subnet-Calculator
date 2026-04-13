@@ -5,14 +5,31 @@ parameters:
     # same order the app uses, giving it full context for every global variable.
     paths:
         - Subnet-Calculator/index.php
+        - Subnet-Calculator/includes/functions-ipv4.php
+        - Subnet-Calculator/includes/functions-ipv6.php
+        - Subnet-Calculator/includes/functions-split.php
+        - Subnet-Calculator/includes/functions-util.php
+        - Subnet-Calculator/includes/functions-vlsm.php
         - Subnet-Calculator/includes/functions-supernet.php
         - Subnet-Calculator/includes/functions-ula.php
         - Subnet-Calculator/includes/functions-session.php
         - Subnet-Calculator/includes/functions-resolve.php
-        - Subnet-Calculator/api/v1/helpers.php
         - Subnet-Calculator/includes/functions-range.php
         - Subnet-Calculator/includes/functions-tree.php
+        - Subnet-Calculator/api/v1/helpers.php
         - Subnet-Calculator/api/v1/index.php
+        - Subnet-Calculator/api/v1/handlers/ipv4.php
+        - Subnet-Calculator/api/v1/handlers/ipv6.php
+        - Subnet-Calculator/api/v1/handlers/vlsm.php
+        - Subnet-Calculator/api/v1/handlers/overlap.php
+        - Subnet-Calculator/api/v1/handlers/split.php
+        - Subnet-Calculator/api/v1/handlers/supernet.php
+        - Subnet-Calculator/api/v1/handlers/ula.php
+        - Subnet-Calculator/api/v1/handlers/bulk.php
+        - Subnet-Calculator/api/v1/handlers/rdns.php
+        - Subnet-Calculator/api/v1/handlers/sessions.php
+        - Subnet-Calculator/api/v1/handlers/range.php
+        - Subnet-Calculator/api/v1/handlers/tree.php
     # config.php is gitignored (user override) — skip if absent
     excludePaths:
         - Subnet-Calculator/config.php (?)
@@ -30,3 +47,28 @@ parameters:
         # defaults and sanitisation) can change those values at runtime.
         - '#^Call to function in_array\(\) with arguments .+ will always evaluate to (true|false)\.$#'
         - '#^Strict comparison using === between .+ will always evaluate to (true|false)\.$#'
+
+        # API handlers are required by api/v1/index.php after helpers.php sets
+        # up globals ($method, $uri) and after config.php sets $split_max_subnets,
+        # $session_enabled, $session_db_path, $session_ttl_days. PHPStan analyses
+        # handlers in isolation and cannot see those bootstrap globals.
+        - message: '#Variable \$(method|uri|split_max_subnets|session_enabled|session_db_path|session_ttl_days) might not be defined\.#'
+          paths:
+            - Subnet-Calculator/api/v1/handlers/
+
+        # api_body() returns array<string, mixed>; values from JSON are mixed by
+        # definition. Handlers cast to string/int at the boundary — this is the
+        # intended pattern for accepting user-supplied JSON fields.
+        - message: '#^Cannot cast mixed to (string|int)\.$#'
+          paths:
+            - Subnet-Calculator/api/v1/handlers/
+
+        # Handlers pass validated body fields (mixed from JSON) to functions
+        # expecting string. Values have been validated above the call sites.
+        - message: '#Parameter .+ of function (ltrim|explode|cidrs_overlap|cidrs_overlap6|build_subnet_tree) expects .+, (mixed|array<mixed, mixed>) given#'
+          paths:
+            - Subnet-Calculator/api/v1/handlers/
+
+        # rdns.php: inet_pton/gethostbyaddr return string|false; validated above.
+        - message: '#Parameter .+ of function (explode|str_replace) expects .+, string\|false given#'
+          path: Subnet-Calculator/api/v1/handlers/rdns.php

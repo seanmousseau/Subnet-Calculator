@@ -7,12 +7,14 @@ declare(strict_types=1);
 function cidr_to_mask(int $cidr): string
 {
     $mask = $cidr === 0 ? 0 : (~0 << (32 - $cidr));
-    return long2ip($mask);
+    $ip   = long2ip($mask);
+    return $ip !== false ? $ip : '0.0.0.0';
 }
 
 function mask_to_cidr(string $mask): int
 {
-    return strlen(str_replace('0', '', decbin(ip2long($mask))));
+    $long = ip2long($mask);
+    return strlen(str_replace('0', '', decbin($long !== false ? $long : 0)));
 }
 
 function is_valid_ipv4(string $ip): bool
@@ -25,7 +27,10 @@ function is_valid_mask_octet(string $mask): bool
     if (!is_valid_ipv4($mask)) {
         return false;
     }
-    $long     = ip2long($mask);
+    $long = ip2long($mask);
+    if ($long === false) {
+        return false;
+    }
     $inverted = ~$long & 0xFFFFFFFF;
     return ($inverted & ($inverted + 1)) === 0;
 }
@@ -33,7 +38,8 @@ function is_valid_mask_octet(string $mask): bool
 function cidr_to_wildcard(int $cidr): string
 {
     $mask_long = $cidr === 0 ? 0 : (~0 << (32 - $cidr));
-    return long2ip(~$mask_long & 0xFFFFFFFF);
+    $ip        = long2ip(~$mask_long & 0xFFFFFFFF);
+    return $ip !== false ? $ip : '0.0.0.0';
 }
 
 function cidrs_overlap(string $cidr_a, string $cidr_b): string
@@ -72,6 +78,7 @@ function ipv4_ptr_zone(string $network_cidr): string
     return "{$o[3]}/{$cidr}.{$o[2]}.{$o[1]}.{$o[0]}.in-addr.arpa"; // RFC 2317
 }
 
+/** @return array<string, mixed> */
 function calculate_subnet(string $ip, int $cidr): array
 {
     $ip_long      = ip2long($ip);

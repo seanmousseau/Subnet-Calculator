@@ -1,0 +1,56 @@
+rules:
+  # ─── PHP: unsanitised direct output ──────────────────────────────────────────
+  - id: php-echo-unsanitised-get
+    patterns:
+      - pattern: echo $_GET[...]
+      - pattern-not: echo htmlspecialchars($_GET[...], ...)
+    message: >
+      Direct echo of $_GET without htmlspecialchars() — potential XSS.
+      Use htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').
+    languages: [php]
+    severity: ERROR
+    paths:
+      include:
+        - Subnet-Calculator/
+
+  - id: php-echo-unsanitised-post
+    patterns:
+      - pattern: echo $_POST[...]
+      - pattern-not: echo htmlspecialchars($_POST[...], ...)
+    message: >
+      Direct echo of $_POST without htmlspecialchars() — potential XSS.
+      Use htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').
+    languages: [php]
+    severity: ERROR
+    paths:
+      include:
+        - Subnet-Calculator/
+
+  # ─── PHP: SQL injection via string concatenation ──────────────────────────────
+  - id: php-sql-injection-concat
+    patterns:
+      - pattern: $db->query("..." . $...)
+    message: >
+      SQL query built by string concatenation — use prepared statements with
+      $db->prepare() and bindValue()/bindParam() instead.
+    languages: [php]
+    severity: ERROR
+    paths:
+      include:
+        - Subnet-Calculator/
+
+  # ─── JS: DOM content from user input ─────────────────────────────────────────
+  - id: js-innerhtml-unsanitised
+    patterns:
+      - pattern: $EL.innerHTML = $VAL
+      - pattern-not: $EL.innerHTML = ""
+      - pattern-not: $EL.innerHTML = ''
+    message: >
+      DOM content set via innerHTML — verify the value does not contain
+      user-controlled data. Use textContent for plain text; sanitise with
+      DOMPurify if HTML is required.
+    languages: [js]
+    severity: WARNING
+    paths:
+      include:
+        - Subnet-Calculator/assets/app.js
