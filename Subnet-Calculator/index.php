@@ -10,6 +10,8 @@ require __DIR__ . '/includes/functions-vlsm.php';
 require __DIR__ . '/includes/functions-supernet.php';
 require __DIR__ . '/includes/functions-ula.php';
 require __DIR__ . '/includes/functions-session.php';
+require __DIR__ . '/includes/functions-range.php';
+require __DIR__ . '/includes/functions-tree.php';
 
 // ─── Security headers ─────────────────────────────────────────────────────────
 

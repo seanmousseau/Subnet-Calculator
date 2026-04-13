@@ -256,6 +256,100 @@ document.getElementById('vlsm-export-csv')?.addEventListener('click', function (
     setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
 });
 
+// ── VLSM: JSON export ─────────────────────────────────────────────────────────
+document.getElementById('vlsm-export-json')?.addEventListener('click', function () {
+    var table = document.querySelector('.vlsm-table');
+    if (!table) return;
+    var rows = table.querySelectorAll('tbody tr');
+    var networkVal = (document.getElementById('vlsm_network')?.value || 'network').replace(/[^0-9.]/g, '');
+    var cidrVal    = (document.getElementById('vlsm_cidr')?.value    || '0').replace(/[^0-9]/g, '');
+    var filename = 'vlsm-' + networkVal + '-' + cidrVal + '.json';
+    var data = [];
+    rows.forEach(function (tr) {
+        var cells = tr.querySelectorAll('td');
+        data.push({
+            name:            (cells[0]?.textContent || '').trim(),
+            hosts_needed:    parseInt((cells[1]?.textContent || '0').replace(/,/g, ''), 10) || 0,
+            allocated_subnet:(tr.querySelector('.vlsm-subnet-cell code')?.textContent || '').trim(),
+            first_usable:    (tr.dataset.first || '').trim(),
+            last_usable:     (tr.dataset.last  || '').trim(),
+            usable_ips:      parseInt((cells[3]?.textContent || '0').replace(/,/g, ''), 10) || 0,
+            waste:           parseInt((cells[4]?.textContent || '0').replace(/,/g, ''), 10) || 0,
+        });
+    });
+    var json = JSON.stringify(data, null, 2);
+    var blob = new Blob([json], {type: 'application/json'});
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = filename; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+});
+
+// ── VLSM: XLSX export ─────────────────────────────────────────────────────────
+document.getElementById('vlsm-export-xlsx')?.addEventListener('click', function () {
+    var table = document.querySelector('.vlsm-table');
+    if (!table) return;
+    var networkVal = (document.getElementById('vlsm_network')?.value || 'network').replace(/[^0-9.]/g, '');
+    var cidrVal    = (document.getElementById('vlsm_cidr')?.value    || '0').replace(/[^0-9]/g, '');
+    var filename = 'vlsm-' + networkVal + '-' + cidrVal + '.xlsx';
+    /* global XLSX */
+    if (typeof XLSX === 'undefined') { alert('XLSX library not loaded.'); return; }
+    var wb = XLSX.utils.table_to_book(table, {sheet: 'VLSM'});
+    XLSX.writeFile(wb, filename);
+});
+
+// ── ASCII network diagram ──────────────────────────────────────────────────────
+/**
+ * Build an ASCII tree from a parent CIDR and an array of {cidr, name?} rows.
+ * @param {string} parent
+ * @param {Array<{cidr: string, name?: string}>} rows
+ * @returns {string}
+ */
+function buildAsciiDiagram(parent, rows) {
+    var lines = [parent];
+    rows.forEach(function (row, i) {
+        var isLast  = i === rows.length - 1;
+        var prefix  = isLast ? '\u2514\u2500 ' : '\u251C\u2500 ';
+        var label   = row.cidr + (row.name ? '  ' + row.name : '');
+        lines.push(prefix + label);
+    });
+    return lines.join('\n');
+}
+
+// ASCII export for IPv4/IPv6 splitter results
+document.addEventListener('click', function (e) {
+    var btn = /** @type {HTMLElement|null} */ (e.target);
+    if (!btn || !btn.classList.contains('ascii-export-btn')) return;
+    var list   = btn.closest('.split-list');
+    if (!list) return;
+    var parent = (/** @type {HTMLElement} */ (list)).dataset.parent || '';
+    var items  = list.querySelectorAll('.split-item');
+    var rows   = Array.prototype.map.call(items, function (el) {
+        return {cidr: (/** @type {HTMLElement} */ (el)).dataset.copy || ''};
+    });
+    var diagram = buildAsciiDiagram(parent, rows);
+    copyText(diagram, 'ASCII copied!');
+});
+
+// ASCII export for VLSM results
+document.getElementById('vlsm-export-ascii')?.addEventListener('click', function () {
+    var table = document.querySelector('.vlsm-table');
+    if (!table) return;
+    var networkVal = (document.getElementById('vlsm_network')?.value || '').trim();
+    var cidrVal    = (document.getElementById('vlsm_cidr')?.value    || '').trim();
+    var parent = networkVal && cidrVal ? networkVal + '/' + cidrVal : networkVal;
+    var rows   = Array.prototype.map.call(table.querySelectorAll('tbody tr'), function (tr) {
+        var cells = tr.querySelectorAll('td');
+        return {
+            cidr: (tr.querySelector('.vlsm-subnet-cell code')?.textContent || '').trim(),
+            name: (cells[0]?.textContent || '').trim(),
+        };
+    });
+    var diagram = buildAsciiDiagram(parent, rows);
+    copyText(diagram, 'ASCII copied!');
+});
+
 // ── iframe: auto-detect and report height to parent via postMessage ───────────
 if (window.self !== window.top) {
     document.documentElement.classList.add('in-iframe');

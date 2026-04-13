@@ -1,0 +1,59 @@
+site_name: Subnet Calculator
+site_url: https://seanmousseau.github.io/Subnet-Calculator/
+site_author: Sean Mousseau
+site_description: Documentation for the Subnet Calculator — a self-hosted PHP tool for IPv4/IPv6 subnetting, VLSM planning, and network analysis.
+repo_url: https://github.com/seanmousseau/Subnet-Calculator
+repo_name: seanmousseau/Subnet-Calculator
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - IPv4 Calculator: ipv4.md
+  - IPv6 Calculator: ipv6.md
+  - VLSM Planner: vlsm.md
+  - Subnet Splitter: splitter.md
+  - Overlap Checker: overlap.md
+  - Supernet & Summarisation: supernet.md
+  - IPv6 ULA Generator: ula.md
+  - Binary / Hex Panel: binary.md
+  - Reverse DNS Zones: rdns.md
+  - VLSM Sessions: sessions.md
+  - Shareable URLs: sharing.md
+  - Allocation Tree: tree.md
+  - REST API: api.md
+  - Operator Config: config.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - tables
+  - toc:
+      permalink: true

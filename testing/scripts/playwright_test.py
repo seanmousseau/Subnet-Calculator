@@ -17,6 +17,16 @@ import sys
 import requests as _requests
 from playwright.async_api import async_playwright, Page, Frame
 
+# Visual regression utilities (optional — only used in test_visual_regression)
+try:
+    import sys as _sys
+    import os as _os
+    _sys.path.insert(0, _os.path.dirname(__file__))
+    from snapshot_utils import capture_snapshot, compare_snapshot, set_viewport as _set_viewport
+    _SNAPSHOTS_AVAILABLE = True
+except Exception:
+    _SNAPSHOTS_AVAILABLE = False
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -115,7 +125,7 @@ async def result_value(page: Page, label: str) -> str | None:
         var rows = document.querySelectorAll('.result-row');
         for (var i = 0; i < rows.length; i++) {
             var l = rows[i].querySelector('.result-label');
-            if (l && l.textContent.trim() === label) {
+            if (l && l.textContent.trim().startsWith(label)) {
                 var v = rows[i].querySelector('.result-value');
                 return v ? v.textContent.trim() : null;
             }
@@ -807,6 +817,80 @@ async def test_vlsm_csv_export(page: Page) -> None:
                 first_attr is not None and "." in (first_attr or ""), str(first_attr))
 
 
+async def test_vlsm_json_export(page: Page) -> None:
+    section("VLSM — JSON export download")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr",    "24")
+    await page.evaluate("document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN'")
+    await page.evaluate("document.querySelectorAll('.vlsm-hosts-input')[0].value = '50'")
+    await submit_form(page, ".vlsm-form")
+    assert_true("Export JSON button present",
+                await page.locator("#vlsm-export-json").count() > 0)
+    async with page.expect_download() as dl_info:
+        await page.click("#vlsm-export-json")
+    download = await dl_info.value
+    assert_true("JSON download filename ends with .json",
+                (download.suggested_filename or "").endswith(".json"),
+                download.suggested_filename)
+
+
+async def test_vlsm_xlsx_export(page: Page) -> None:
+    section("VLSM — XLSX export download")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr",    "24")
+    await page.evaluate("document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN'")
+    await page.evaluate("document.querySelectorAll('.vlsm-hosts-input')[0].value = '50'")
+    await submit_form(page, ".vlsm-form")
+    assert_true("Export XLSX button present",
+                await page.locator("#vlsm-export-xlsx").count() > 0)
+    async with page.expect_download() as dl_info:
+        await page.click("#vlsm-export-xlsx")
+    download = await dl_info.value
+    assert_true("XLSX download filename ends with .xlsx",
+                (download.suggested_filename or "").endswith(".xlsx"),
+                download.suggested_filename)
+
+
+async def test_ascii_export(page: Page) -> None:
+    section("ASCII diagram export — VLSM and splitter")
+
+    # VLSM: button present and produces ASCII output via buildAsciiDiagram
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr",    "24")
+    await page.evaluate("document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN'")
+    await page.evaluate("document.querySelectorAll('.vlsm-hosts-input')[0].value = '50'")
+    await submit_form(page, ".vlsm-form")
+    assert_true("Export ASCII button present in VLSM",
+                await page.locator("#vlsm-export-ascii").count() > 0)
+    # Verify buildAsciiDiagram is callable and produces correct output
+    diagram = await page.evaluate("""() => {
+        var rows = [{cidr: '10.0.0.0/25', name: 'LAN'}, {cidr: '10.0.0.128/25', name: 'WAN'}];
+        return buildAsciiDiagram('10.0.0.0/24', rows);
+    }""")
+    assert_true("ASCII output contains tree connector (├ or └)",
+                "\u251c" in (diagram or "") or "\u2514" in (diagram or ""), repr(diagram))
+    assert_true("ASCII output contains CIDR notation",
+                "/" in (diagram or ""), repr(diagram))
+
+    # Splitter ASCII export
+    await navigate(page, APP_URL)
+    await page.fill("#ip",   "10.0.0.0")
+    await page.fill("#mask", "24")
+    await submit_form(page, "#panel-ipv4 form")
+    await page.fill("input[name='split_prefix']", "/25")
+    await submit_form(page, ".splitter-form")
+    assert_true("ASCII export button present in splitter",
+                await page.locator("#panel-ipv4 .ascii-export-btn").count() > 0)
+
+
 async def test_vlsm_reset(page: Page) -> None:
     section("VLSM — Reset button clears form and results")
 
@@ -994,7 +1078,7 @@ async def test_regression_bugs_v130(page: Page) -> None:
         var rows = document.querySelectorAll('.result-row');
         for (var r of rows) {
             var l = r.querySelector('.result-label');
-            if (l && l.textContent.trim() === 'Address Type') {
+            if (l && l.textContent.trim().startsWith('Address Type')) {
                 return r.getAttribute('tabindex');
             }
         }
@@ -1012,7 +1096,7 @@ async def test_regression_bugs_v130(page: Page) -> None:
         var rows = document.querySelectorAll('#panel-ipv6 .result-row');
         for (var r of rows) {
             var l = r.querySelector('.result-label');
-            if (l && l.textContent.trim() === 'Address Type') {
+            if (l && l.textContent.trim().startsWith('Address Type')) {
                 return r.getAttribute('tabindex');
             }
         }
@@ -1127,6 +1211,124 @@ async def test_ula_generator_ui(page: Page) -> None:
     await page.wait_for_load_state("load")
     err = await page.query_selector("#panel-ipv6 .overlap-panel .error")
     assert_true("ula: non-hex global ID shows error", err is not None)
+
+
+async def test_tooltips_help_bubbles(page: Page) -> None:
+    section("Tooltips — help bubbles visible on hover")
+
+    await navigate(page, APP_URL)
+
+    # IPv4 IP address label bubble
+    bubble = page.locator("#hb-ipv4-ip")
+    assert_true("help bubble for IP address input exists",
+                await bubble.count() > 0)
+
+    # Hover over the icon and verify the tooltip text element becomes visible
+    icon = page.locator(".help-bubble-icon").first
+    await icon.hover()
+    await page.wait_for_timeout(200)
+    tooltip = page.locator(".help-bubble-text").first
+    box = await tooltip.bounding_box()
+    assert_true("tooltip bounding box has positive height after hover",
+                box is not None and (box.get("height") or 0) > 0, str(box))
+
+    # VLSM tab — waste header bubble (only visible after a calculation)
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr", "24")
+    await page.evaluate("document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN A'")
+    await page.evaluate("document.querySelectorAll('.vlsm-hosts-input')[0].value = '50'")
+    await submit_form(page, ".vlsm-form")
+    await page.wait_for_selector(".vlsm-table", timeout=8000)
+    vlsm_bubble = page.locator("#hb-vlsm-waste")
+    assert_true("help bubble for VLSM Waste header exists",
+                await vlsm_bubble.count() > 0)
+
+    # IPv6 tab — expanded row bubble
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.fill("#ipv6", "2001:db8::/32")
+    await page.press("#ipv6", "Enter")
+    await page.wait_for_selector(".result-row")
+    ipv6_bubble = page.locator("#hb-ipv6-expanded")
+    assert_true("help bubble for IPv6 expanded address exists",
+                await ipv6_bubble.count() > 0)
+
+
+async def test_visual_regression(page: Page) -> None:
+    section("Visual regression — pixel comparison against baselines")
+
+    if not _SNAPSHOTS_AVAILABLE:
+        ok("visual regression: snapshot_utils not available — skipped")
+        return
+
+    UPDATE = os.environ.get("UPDATE_SNAPSHOTS", "0") == "1"
+
+    async def snap(name: str) -> None:
+        if UPDATE:
+            await capture_snapshot(page, name)
+            ok(f"visual: baseline updated — {name}")
+        else:
+            try:
+                passed, diff_pct = await compare_snapshot(page, name)
+                label = f"visual: {name} diff={diff_pct:.2%}"
+                if passed:
+                    ok(label)
+                else:
+                    fail(label, f"diff {diff_pct:.2%} exceeds threshold 2%")
+            except FileNotFoundError as exc:
+                ok(f"visual: {name} — no baseline, skipped ({exc})")
+
+    # Desktop viewport
+    await _set_viewport(page, 1280)
+
+    # IPv4 result
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "192.168.1.0")
+    await page.fill("#mask", "/24")
+    await page.press("#ip", "Enter")
+    await page.wait_for_selector(".results")
+    await snap("ipv4_result_1280")
+
+    # IPv6 result
+    await page.click("#tab-ipv6")
+    await page.fill("#ipv6", "2001:db8::/32")
+    await page.press("#ipv6", "Enter")
+    await page.wait_for_selector("#panel-ipv6 .results")
+    await snap("ipv6_result_1280")
+
+    # VLSM table
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr",    "24")
+    await page.evaluate("document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN A'")
+    await page.evaluate("document.querySelectorAll('.vlsm-hosts-input')[0].value = '50'")
+    await submit_form(page, ".vlsm-form")
+    await snap("vlsm_table_1280")
+
+    # Mobile viewport — IPv4 result
+    await _set_viewport(page, 375, 812)
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "192.168.1.0/24")
+    await page.press("#ip", "Enter")
+    await page.wait_for_selector(".results")
+    await snap("ipv4_result_375")
+
+    # Restore default viewport
+    await _set_viewport(page, 1280)
+
+
+async def test_docs_footer_link(page: Page) -> None:
+    section("Docs footer link")
+
+    await navigate(page, APP_URL)
+    link = page.locator("footer a[href*='github.io/Subnet-Calculator']")
+    assert_true("Docs link present in footer",
+                await link.count() > 0)
+    target = await link.get_attribute("target")
+    assert_true("Docs link opens in new tab",
+                target == "_blank", str(target))
 
 
 # ---------------------------------------------------------------------------
@@ -1374,6 +1576,36 @@ async def test_vlsm_session_ttl_notice(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# VLSM session forms spacing (#199)
+# ---------------------------------------------------------------------------
+
+async def test_session_forms_spacing(page: Page) -> None:
+    section("VLSM session forms spacing")
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    panel = await page.query_selector(".session-ttl-notice")
+    if panel is None:
+        ok("session forms spacing: sessions not enabled on this server (skipped)")
+        return
+    save_btn = await page.query_selector("button[name='session_action'][value='save']")
+    session_input = await page.query_selector("input[name='s']")
+    if save_btn is None or session_input is None:
+        ok("session forms spacing: elements not found (skipped)")
+        return
+    save_box = await save_btn.bounding_box()
+    input_box = await session_input.bounding_box()
+    if save_box is None or input_box is None:
+        ok("session forms spacing: bounding boxes unavailable (skipped)")
+        return
+    gap = input_box["y"] - (save_box["y"] + save_box["height"])
+    assert_true(
+        "session forms spacing: gap between Save button and session ID input >= 12px",
+        gap >= 12,
+        f"got gap={gap:.1f}px",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Permissions-Policy header directives (coverage gap)
 # ---------------------------------------------------------------------------
 
@@ -1479,6 +1711,119 @@ async def test_ipv6_address_forms(page: Page) -> None:
     compressed_lo = await result_value(page, "Address (Compressed)")
     assert_eq("::1 expanded",   expanded_lo,   "0000:0000:0000:0000:0000:0000:0000:0001")
     assert_eq("::1 compressed", compressed_lo, "::1")
+
+
+# ---------------------------------------------------------------------------
+# v2.3.0 — IPv4 Range → CIDR UI (#182)
+# ---------------------------------------------------------------------------
+
+async def test_ipv4_range_to_cidr(page: Page) -> None:
+    section("IPv4 Range → CIDR UI")
+    await navigate(page, APP_URL)
+    # Fill start and end into the Range → CIDR panel
+    await page.fill("input[name='range_start']", "10.0.0.0")
+    await page.fill("input[name='range_end']",   "10.0.0.255")
+    await page.click("button.splitter-btn[type='submit']:near(input[name='range_end'])")
+    await page.wait_for_load_state("load")
+    # Expect a single CIDR result covering the full /24
+    items = await page.locator(".split-item .split-subnet-text").all_text_contents()
+    assert_true(
+        "range→cidr: 10.0.0.0–10.0.0.255 = one /24 block",
+        "10.0.0.0/24" in items,
+        f"got: {items}",
+    )
+    # Non-power-of-two range: two blocks expected
+    await navigate(page, APP_URL)
+    await page.fill("input[name='range_start']", "10.0.0.0")
+    await page.fill("input[name='range_end']",   "10.0.0.4")
+    await page.click("button.splitter-btn[type='submit']:near(input[name='range_end'])")
+    await page.wait_for_load_state("load")
+    items2 = await page.locator(".split-item .split-subnet-text").all_text_contents()
+    assert_true(
+        "range→cidr: 10.0.0.0–10.0.0.4 includes /30 block",
+        "10.0.0.0/30" in items2,
+        f"got: {items2}",
+    )
+    # Error case: end < start
+    await navigate(page, APP_URL)
+    await page.fill("input[name='range_start']", "10.0.0.10")
+    await page.fill("input[name='range_end']",   "10.0.0.1")
+    await page.click("button.splitter-btn[type='submit']:near(input[name='range_end'])")
+    await page.wait_for_load_state("load")
+    err = await page.locator(".error").first.text_content() or ""
+    assert_true("range→cidr: end<start shows error", err.strip() != "", f"got: {err!r}")
+
+
+# ---------------------------------------------------------------------------
+# v2.3.0 — Subnet Allocation Tree View UI (#183)
+# ---------------------------------------------------------------------------
+
+async def test_tree_view(page: Page) -> None:
+    section("Subnet allocation tree view UI")
+    await navigate(page, APP_URL)
+    await page.fill("#tree_parent", "10.0.0.0/24")
+    await page.fill("textarea[name='tree_children']", "10.0.0.0/25\n10.0.0.128/25")
+    await page.click("button.splitter-btn[type='submit']:near(textarea[name='tree_children'])")
+    await page.wait_for_load_state("load")
+    tree_nodes = await page.locator(".tree-node").all_text_contents()
+    assert_true(
+        "tree view: parent CIDR visible",
+        any("10.0.0.0/24" in n for n in tree_nodes),
+        f"got nodes: {tree_nodes}",
+    )
+    assert_true(
+        "tree view: child 10.0.0.0/25 visible",
+        any("10.0.0.0/25" in n for n in tree_nodes),
+        f"got nodes: {tree_nodes}",
+    )
+    # Invalid parent → error
+    await navigate(page, APP_URL)
+    await page.fill("#tree_parent", "not-a-cidr")
+    await page.fill("textarea[name='tree_children']", "10.0.0.0/25")
+    await page.click("button.splitter-btn[type='submit']:near(textarea[name='tree_children'])")
+    await page.wait_for_load_state("load")
+    err = await page.locator(".error").first.text_content() or ""
+    assert_true("tree view: invalid parent shows error", err.strip() != "", f"got: {err!r}")
+
+
+# ---------------------------------------------------------------------------
+# v2.3.0 — API: range/ipv4 and tree (#182, #183)
+# ---------------------------------------------------------------------------
+
+async def test_api_range(page: Page) -> None:
+    section("API — POST /api/v1/range/ipv4")
+    status, data = _api_post("range/ipv4", {"start": "10.0.0.0", "end": "10.0.0.255"})
+    assert_eq("api range: HTTP 200", status, 200)
+    assert_eq("api range: ok=true",  data.get("ok"), True)
+    cidrs = data.get("data", {}).get("cidrs", [])
+    assert_true("api range: cidrs is list",   isinstance(cidrs, list), f"got: {cidrs!r}")
+    assert_true("api range: first is /24",    "10.0.0.0/24" in cidrs, f"got: {cidrs}")
+
+    # Missing start → 400
+    status2, _ = _api_post("range/ipv4", {"end": "10.0.0.255"})
+    assert_eq("api range: missing start → 400", status2, 400)
+
+    # end < start → 400
+    status3, _ = _api_post("range/ipv4", {"start": "10.0.0.255", "end": "10.0.0.0"})
+    assert_eq("api range: end<start → 400", status3, 400)
+
+
+async def test_api_tree(page: Page) -> None:
+    section("API — POST /api/v1/tree")
+    status, data = _api_post("tree", {
+        "parent":   "10.0.0.0/24",
+        "children": ["10.0.0.0/25", "10.0.0.128/25"],
+    })
+    assert_eq("api tree: HTTP 200", status, 200)
+    assert_eq("api tree: ok=true",  data.get("ok"), True)
+    tree = data.get("data", {}).get("tree", {})
+    assert_eq("api tree: root cidr", tree.get("cidr"), "10.0.0.0/24")
+    children = tree.get("children", [])
+    assert_true("api tree: 2 children", len(children) == 2, f"got: {children}")
+
+    # Invalid parent → 400
+    status2, _ = _api_post("tree", {"parent": "not-a-cidr", "children": []})
+    assert_eq("api tree: invalid parent → 400", status2, 400)
 
 
 # ---------------------------------------------------------------------------
@@ -1615,6 +1960,9 @@ async def main() -> None:
             await test_splitter_shareable_url(page)
             await test_vlsm_shareable_url(page)
             await test_vlsm_csv_export(page)
+            await test_vlsm_json_export(page)
+            await test_vlsm_xlsx_export(page)
+            await test_ascii_export(page)
             await test_vlsm_reset(page)
             await test_vlsm_validation(page)
             await test_vlsm_copy_all(page)
@@ -1628,6 +1976,9 @@ async def main() -> None:
             await test_regression_bugs_v130(page)
             await test_supernet_ui(page)
             await test_ula_generator_ui(page)
+            await test_tooltips_help_bubbles(page)
+            await test_visual_regression(page)
+            await test_docs_footer_link(page)
             await test_api_meta(page)
             await test_api_ipv4(page)
             await test_api_ipv6(page)
@@ -1640,6 +1991,7 @@ async def main() -> None:
             await test_api_rdns(page)
             await test_api_bulk(page)
             await test_vlsm_session_ttl_notice(page)
+            await test_session_forms_spacing(page)
             await test_permissions_policy_directives(page)
             await test_vlsm_utilisation_accuracy(page)
             await test_ipv4_binary_hex_decimal(page)
@@ -1648,6 +2000,10 @@ async def main() -> None:
             await test_api_ipv6_v220_fields(page)
             await test_api_v220_endpoint_allowlist(page)
             await test_api_v220_rate_limit_contract(page)
+            await test_ipv4_range_to_cidr(page)
+            await test_tree_view(page)
+            await test_api_range(page)
+            await test_api_tree(page)
         finally:
             await context.close()
             await browser.close()

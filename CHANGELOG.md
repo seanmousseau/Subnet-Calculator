@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-04-12
+
+### Added
+- **IP range → CIDR conversion** — new IPv4 panel accepts a start IP and end IP and returns the minimal set of covering CIDRs (greedy largest-aligned block algorithm); results are copyable per-row and via Copy All; shareable via the share bar; also available as `POST /api/v1/range/ipv4` REST endpoint — closes #182
+- **Subnet allocation tree view** — new IPv4 panel accepts a parent CIDR and a list of allocated child CIDRs and renders them as a collapsible containment tree with gap detection (unallocated space shown as muted CIDR nodes); also available as `POST /api/v1/tree` REST endpoint — closes #183
+- **VLSM planner: JSON and XLSX export** — the VLSM results toolbar now has CSV | JSON | XLSX export buttons; JSON export uses a `Blob` URL download; XLSX export uses SheetJS (vendored at `assets/vendor/xlsx/xlsx.full.min.js`, SRI-verified, `defer`-loaded) — closes #184
+- **ASCII network diagram export** — "Export ASCII" button on IPv4/IPv6 splitter results and the VLSM results toolbar copies a Unicode box-drawing tree (`├─`, `└─`) of the parent CIDR and its allocated subnets to the clipboard — closes #185
+- **Tooltips and help bubbles** — 20 `?` help-bubble icons added across the IPv4, IPv6, and VLSM panels (IP address input, subnet mask, wildcard mask, address type, binary panel, splitter prefix, supernet, summarise, multi-CIDR overlap, IPv6 expanded/compressed, ULA global ID, VLSM hosts/waste/utilisation headers, VLSM session panel, two-CIDR overlap, and range-to-CIDR start IP); pure CSS tooltip, keyboard-accessible (`tabindex="0"`, `role="tooltip"`, `aria-describedby`) — closes #198
+- **Visual regression tests** — Pillow-based pixel-comparison snapshots for desktop (1280 px), tablet (768 px), and mobile (375 px) viewports; `UPDATE_SNAPSHOTS=1` env var writes new baselines; baselines committed to `testing/snapshots/` — closes #196
+- **User documentation site** — MkDocs Material site covering all calculator features, the REST API, and operator config; deployed to GitHub Pages via `.github/workflows/docs.yml` on push to `main`; Docs link added to the app footer — closes #197
+
+### Fixed
+- **Save Session button spacing** — the Save and Restore session forms in the VLSM tab were only 8 px apart; wrapped in a `<div class="session-forms">` with `gap: 1rem` so they breathe correctly at all viewport widths — closes #199
+
+### Tests / CI
+- PHPStan level 9: 0 errors
+- PHPCS PSR-12: 0 errors
+- PHPUnit: 131 tests, 195 assertions (14 skipped on platforms without GMP)
+- Playwright browser suite: 299/299 passed (74 test groups)
+
 ## [2.2.0] - 2026-04-12
 
 ### Added
