@@ -240,8 +240,8 @@ if ($i < 3) {
                           placeholder="One IPv4 CIDR per line (max 50):&#10;10.0.0.0/24&#10;10.0.1.0/24"
                           autocomplete="off" spellcheck="false"><?= htmlspecialchars($supernet_input) ?></textarea>
                 <div class="splitter-row supernet-action-row">
-                    <button type="submit" name="supernet_action" value="find" class="splitter-btn">Find Supernet<?= help_bubble('supernet-find', 'Finds the smallest single CIDR block that contains all of the listed CIDRs. Useful for aggregating routes into a single summary route.') ?></button>
-                    <button type="submit" name="supernet_action" value="summarise" class="splitter-btn">Summarise Routes<?= help_bubble('supernet-summarise', 'Computes the minimal set of non-overlapping CIDRs that exactly covers the listed networks. Unlike Find Supernet, this avoids including addresses outside the input ranges.') ?></button>
+                    <button type="submit" name="supernet_action" value="find" class="splitter-btn">Find Supernet</button><?= help_bubble('supernet-find', 'Finds the smallest single CIDR block that contains all of the listed CIDRs. Useful for aggregating routes into a single summary route.') ?>
+                    <button type="submit" name="supernet_action" value="summarise" class="splitter-btn">Summarise Routes</button><?= help_bubble('supernet-summarise', 'Computes the minimal set of non-overlapping CIDRs that exactly covers the listed networks. Unlike Find Supernet, this avoids including addresses outside the input ranges.') ?>
                 </div>
             </form>
             <?php if ($supernet_error) : ?>
