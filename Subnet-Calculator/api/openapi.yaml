@@ -660,9 +660,9 @@ paths:
                             items: { type: string }
                             example: ["10.0.0.0/24"]
         "400": { description: Invalid IPs or end < start, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-        "401": { description: Missing or invalid API key / Bearer token }
-        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "429": { description: Rate limit exceeded }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
 
   /tree:
     post:
@@ -687,6 +687,7 @@ paths:
                 children:
                   type: array
                   description: Allocated child CIDRs (must all be contained within parent)
+                  maxItems: 100
                   items: { type: string }
                   example: ["10.0.0.0/26", "10.0.0.128/26"]
       responses:
@@ -718,6 +719,6 @@ paths:
                                 description: Unallocated CIDR blocks within this node
                                 items: { type: string }
         "400": { description: Invalid CIDRs or children outside parent, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-        "401": { description: Missing or invalid API key / Bearer token }
-        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "429": { description: Rate limit exceeded }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }

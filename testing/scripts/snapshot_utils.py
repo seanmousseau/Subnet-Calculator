@@ -49,7 +49,7 @@ async def compare_snapshot(
     page: Page,
     name: str,
     threshold: float = 0.02,
-) -> tuple[bool, float]:
+) -> "tuple[bool, float]":
     """
     Compare the current page against the baseline PNG for *name*.
 
@@ -60,6 +60,10 @@ async def compare_snapshot(
     When UPDATE_SNAPSHOTS=1 the baseline is overwritten and (True, 0.0) is
     returned without performing a comparison.
     """
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError(
+            f"threshold must be in [0.0, 1.0], got {threshold!r}"
+        )
     if not _PIL_AVAILABLE:
         raise RuntimeError(
             "Pillow is required for visual regression tests: pip install Pillow"

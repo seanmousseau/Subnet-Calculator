@@ -20,7 +20,7 @@ The IPv6 splitter works identically and appears after an IPv6 result. For splits
 
 ## Export ASCII format
 
-```
+```text
 10.0.0.0/24
 ├─ 10.0.0.0/26
 ├─ 10.0.0.64/26

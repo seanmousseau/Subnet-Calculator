@@ -100,7 +100,7 @@ curl -X POST https://example.com/subnet-calculator/api/v1/range/ipv4 \
   -d '{"start":"10.0.0.0","end":"10.0.0.255"}'
 ```
 
-Response: `{"cidrs":["10.0.0.0/24"]}`
+Response: `{"ok":true,"data":{"cidrs":["10.0.0.0/24"]}}`
 
 ### POST /api/v1/tree
 
@@ -111,7 +111,7 @@ curl -X POST https://example.com/subnet-calculator/api/v1/tree \
   -d '{"parent":"10.0.0.0/24","children":["10.0.0.0/25","10.0.0.128/25"]}'
 ```
 
-Response: `{"tree":{...}}`
+Response: `{"ok":true,"data":{"tree":{...}}}`
 
 ### POST /api/v1/bulk
 

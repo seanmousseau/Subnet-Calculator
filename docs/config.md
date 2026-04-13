@@ -29,11 +29,11 @@ All variables have safe defaults and the app works without a `config.php`.
 | `$recaptcha_enterprise_site_key` | `''` | reCAPTCHA Enterprise site key |
 | `$recaptcha_enterprise_api_key` | `''` | reCAPTCHA Enterprise API key |
 | `$recaptcha_enterprise_project_id` | `''` | Google Cloud project ID |
-| `$api_enabled` | `true` | Enable the `/api/v1/` REST API |
-| `$api_rate_limit` | `60` | Requests per minute per IP (0 = disabled) |
-| `$api_keys` | `[]` | Optional array of API keys; if non-empty, requests must include `X-Api-Key` |
-| `$api_key_rate_limits` | `[]` | Per-key rate limit overrides (`['key' => rpm]`) |
-| `$api_endpoint_allowlist` | `[]` | Restrict which endpoints are accessible (empty = all allowed) |
+| `$api_tokens` | `[]` | Bearer tokens that authorise REST API requests. Empty = open API (no auth). Non-empty: requests must include `Authorization: Bearer <token>` |
+| `$api_rate_limit_rpm` | `60` | Requests per minute per IP (0 = disabled) |
+| `$api_rate_limit_tokens` | `[]` | Per-token RPM overrides (`['token' => rpm]`). `0` = unlimited for that token |
+| `$api_allowed_endpoints` | `[]` | Endpoint allowlist. Empty = all endpoints available. Non-empty = only listed endpoints accessible; unlisted return 404 |
+| `$api_cors_origins` | `'*'` | `Access-Control-Allow-Origin` header value for API responses |
 
 ## Example
 

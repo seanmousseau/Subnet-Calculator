@@ -28,7 +28,7 @@ Works identically to the IPv4 splitter. For very large splits (prefix difference
 
 ## Overlap Checker
 
-Two IPv6 CIDRs can be compared via the **Subnet Overlap Checker** panel on the VLSM tab. Also supports mixed IPv4/IPv6 pairs (result will be "No overlap").
+Two IPv6 CIDRs can be compared via the **Subnet Overlap Checker** panel on the VLSM tab. Mixed IPv4/IPv6 pairs are not supported — the checker returns an error ("Cannot compare IPv4 and IPv6 addresses.").
 
 ## ULA Prefix Generator
 

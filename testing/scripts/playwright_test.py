@@ -150,7 +150,7 @@ async def iframe_result_value(frame: Frame, label: str) -> str | None:
         var rows = document.querySelectorAll('.result-row');
         for (var i = 0; i < rows.length; i++) {
             var l = rows[i].querySelector('.result-label');
-            if (l && l.textContent.trim() === label) {
+            if (l && l.textContent.trim().startsWith(label)) {
                 var v = rows[i].querySelector('.result-value');
                 return v ? v.textContent.trim() : null;
             }
@@ -1728,7 +1728,7 @@ async def test_ipv4_range_to_cidr(page: Page) -> None:
     # Expect a single CIDR result covering the full /24
     items = await page.locator(".split-item .split-subnet-text").all_text_contents()
     assert_true(
-        "range→cidr: 10.0.0.0–10.0.0.255 = one /24 block",
+        "range->cidr: 10.0.0.0-10.0.0.255 = one /24 block",
         "10.0.0.0/24" in items,
         f"got: {items}",
     )
@@ -1740,7 +1740,7 @@ async def test_ipv4_range_to_cidr(page: Page) -> None:
     await page.wait_for_load_state("load")
     items2 = await page.locator(".split-item .split-subnet-text").all_text_contents()
     assert_true(
-        "range→cidr: 10.0.0.0–10.0.0.4 includes /30 block",
+        "range->cidr: 10.0.0.0-10.0.0.4 includes /30 block",
         "10.0.0.0/30" in items2,
         f"got: {items2}",
     )

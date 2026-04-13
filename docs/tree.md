@@ -19,7 +19,7 @@ The tree shows:
 
 ## Example
 
-```
+```text
 10.0.0.0/16
 ├── 10.0.0.0/24    (allocated)
 │   ├── 10.0.0.0/25  (allocated)

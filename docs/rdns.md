@@ -28,4 +28,17 @@ The zone is derived from the network address nibbles up to the prefix boundary.
 
 ## REST API
 
-The `rdns` field is included in all `/api/v1/ipv4` and `/api/v1/ipv6` responses. A dedicated `/api/v1/rdns` endpoint accepts a CIDR and returns just the zone string.
+The `rdns` field is included in all `/api/v1/ipv4` and `/api/v1/ipv6` responses. A dedicated `/api/v1/rdns` endpoint accepts a CIDR and returns a structured object:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "zone": "1.168.192.in-addr.arpa",
+    "format": "ipv4",
+    "ttl": 3600,
+    "record_count": 256,
+    "content": "...<BIND zone file>..."
+  }
+}
+```

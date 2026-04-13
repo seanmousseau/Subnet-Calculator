@@ -26,4 +26,8 @@ if (isset($r['error'])) {
     json_err($r['error']);
 }
 
-json_ok(['tree' => $r['tree'] ?? []]);
+if (!isset($r['tree'])) {
+    json_err('Tree could not be built.');
+}
+
+json_ok(['tree' => $r['tree']]);
