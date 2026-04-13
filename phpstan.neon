@@ -12,6 +12,7 @@ parameters:
         - Subnet-Calculator/api/v1/helpers.php
         - Subnet-Calculator/includes/functions-range.php
         - Subnet-Calculator/includes/functions-tree.php
+        - Subnet-Calculator/api/v1/index.php
     # config.php is gitignored (user override) — skip if absent
     excludePaths:
         - Subnet-Calculator/config.php (?)

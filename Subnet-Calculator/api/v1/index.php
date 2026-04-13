@@ -32,12 +32,16 @@ api_cors();
 api_authenticate();
 api_rate_limit(api_client_key());
 
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-$uri    = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+$raw_method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$method     = is_string($raw_method) ? $raw_method : 'GET';
+$raw_uri    = $_SERVER['REQUEST_URI'] ?? '/';
+$parsed_uri = is_string($raw_uri) ? (parse_url($raw_uri, PHP_URL_PATH) ?? '/') : '/';
+$uri        = is_string($parsed_uri) ? $parsed_uri : '/';
 
 // Strip leading script path so the router sees only the part after /api/v1
 // Works whether the app lives at docroot or a sub-path.
-$script_dir = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/');
+$raw_script = $_SERVER['SCRIPT_NAME'] ?? '';
+$script_dir = is_string($raw_script) ? rtrim(dirname($raw_script), '/') : '';
 if ($script_dir !== '' && str_starts_with($uri, $script_dir)) {
     $uri = substr($uri, strlen($script_dir));
 }

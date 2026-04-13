@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-04-13
+
+### Added
+- **`$locale` config variable** — locale-aware thousands separators in all displayed counts using PHP's `intl` extension (`NumberFormatter`); falls back to `number_format()` comma separators when `intl` is absent or locale is `'en'`; configurable via `$locale` in `config.php` — closes #191
+- **ESLint and Stylelint** — `eslint.config.js` and `.stylelintrc.json` added; `npm run lint:js` / `npm run lint:css` / `npm run lint` available; three intentional empty catch blocks in `app.js` converted to optional catch binding syntax
+- **OpenAPI example responses** — every `200` response in `api/openapi.yaml` now includes a concrete `example:` block with realistic test data; documentation-only change with no runtime impact — closes #188
+
+### Fixed
+- **CSP inline style violations** — 16 `style="..."` attributes across tree/range/ULA panels replaced with named CSS classes (`.tree-node`, `.tree-gap`, `.tree-free-label`, etc.) so the strict `style-src 'self' 'nonce-...'` CSP passes with zero browser violations — closes #206
+- **Tooltip visual polish** — `text-transform: none` on `.help-bubble-text` prevents uppercase inheritance from label context; `max-width: min(260px, calc(100vw - 2rem))` prevents overflow; JS right-edge detection adds `.bubble-right-edge` modifier on resize/tab-switch so tooltips near the viewport edge flip left-aligned — closes #205
+- **Print stylesheet** — VLSM results table and utilisation summary are correctly visible in `@media print`; export buttons, copy-all buttons, and ASCII export hidden; table headers repeat across page breaks — closes #193
+
+### Tooling / CI
+- PHPStan level 9 extended to cover `Subnet-Calculator/api/v1/index.php`; `$_SERVER` access patterns corrected to use `is_string()` narrowing
+- `.coderabbit.yaml` review instructions added for `package.json`, `eslint.config.js`, `.stylelintrc.json`, `.semgrep/rules.yml`
+- `.semgrep/rules.yml` new rule: `js-unsafe-dom-insertion` flags `insertAdjacentHTML` with non-literal strings
+
+### Tests / CI
+- PHPStan level 9: 0 errors
+- PHPCS PSR-12: 0 errors
+- PHPUnit: 158 tests, 243 assertions (14 skipped on platforms without GMP)
+- Playwright browser suite: 308/308 passed (81 test groups)
+
 ## [2.3.0] - 2026-04-12
 
 ### Added

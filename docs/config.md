@@ -34,6 +34,7 @@ All variables have safe defaults and the app works without a `config.php`.
 | `$api_rate_limit_tokens` | `[]` | Per-token RPM overrides (`['token' => rpm]`). `0` = unlimited for that token |
 | `$api_allowed_endpoints` | `[]` | Endpoint allowlist. Empty = all endpoints available. Non-empty = only listed endpoints accessible; unlisted return 404 |
 | `$api_cors_origins` | `'*'` | `Access-Control-Allow-Origin` header value for API responses |
+| `$locale` | `'en'` | BCP 47 locale tag for locale-aware number formatting (e.g. `'de'`, `'fr'`). Uses PHP `intl` extension when available; falls back to comma separators |
 
 ## Example
 

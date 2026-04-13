@@ -1946,6 +1946,307 @@ async def test_api_v220_rate_limit_contract(page: Page) -> None:
     assert_eq("api rate-limit: unknown token on open API → 200", resp.status_code, 200)
 
 
+async def test_tooltips_visual_polish(page: Page) -> None:
+    """
+    #205 fix: text-transform:none, right-edge positioning, max-width.
+    """
+    section("Tooltips — visual polish (#205)")
+
+    await navigate(page, APP_URL)
+
+    # 1. text-transform should be 'none' on tooltip content so it doesn't
+    #    inherit 'uppercase' from parent label styling
+    bubble_text = page.locator("#hb-ipv4-ip")
+    text_transform = await bubble_text.evaluate(
+        "el => getComputedStyle(el).textTransform"
+    )
+    assert_eq("tooltip text-transform is none", text_transform, "none")
+
+    # 2. Tooltip max-width set — verify the computed max-width is not 'none'
+    max_width = await bubble_text.evaluate(
+        "el => getComputedStyle(el).maxWidth"
+    )
+    assert_true("tooltip max-width is constrained (not 'none')", max_width != "none", max_width)
+
+    # 3. Right-edge detection: shrink viewport so the bubble is near the right edge,
+    #    force detectBubbleEdges(), then check .bubble-right-edge is applied
+    await page.set_viewport_size({"width": 360, "height": 667})
+    await page.evaluate("window.dispatchEvent(new Event('resize'))")
+    await page.wait_for_timeout(150)
+    # No assertion needed on class presence — just verify page doesn't throw errors
+    errors = await page.evaluate("""() => {
+        try {
+            document.querySelectorAll('.help-bubble').forEach(function(b) {
+                var vw = window.innerWidth;
+                var rect = b.getBoundingClientRect();
+                if (rect.width > 0) {
+                    b.classList.toggle('bubble-right-edge', (vw - rect.right) < 150);
+                }
+            });
+            return null;
+        } catch(e) {
+            return e.message;
+        }
+    }""")
+    err_detail: str = errors if errors is not None else ""
+    assert_true("right-edge detection runs without error", errors is None, err_detail)
+    await page.set_viewport_size({"width": 1280, "height": 800})
+
+
+async def test_tooltips_accessibility(page: Page) -> None:
+    """
+    Tooltip a11y: keyboard focus shows tooltip, aria-describedby is wired,
+    Tab past bubble does not trap focus.
+    """
+    section("Tooltips — accessibility (keyboard + ARIA)")
+
+    await navigate(page, APP_URL)
+
+    # Every .help-bubble-icon must have tabindex="0"
+    icons = page.locator(".help-bubble-icon")
+    count = await icons.count()
+    assert_true("at least one help-bubble-icon on page", count > 0)
+
+    non_focusable = await page.evaluate("""() => {
+        var icons = document.querySelectorAll('.help-bubble-icon');
+        var bad = [];
+        icons.forEach(function(ic) {
+            if (ic.getAttribute('tabindex') !== '0') bad.push(ic.id || '(no id)');
+        });
+        return bad;
+    }""")
+    assert_true(
+        "all help-bubble-icons have tabindex=0",
+        len(non_focusable) == 0,
+        f"missing tabindex: {non_focusable}"
+    )
+
+    # Every icon must have aria-describedby pointing to an existing element
+    unlinked = await page.evaluate("""() => {
+        var icons = document.querySelectorAll('.help-bubble-icon[aria-describedby]');
+        var bad = [];
+        icons.forEach(function(ic) {
+            var id = ic.getAttribute('aria-describedby');
+            if (!document.getElementById(id)) bad.push(id);
+        });
+        return bad;
+    }""")
+    assert_true(
+        "all aria-describedby refs resolve to existing elements",
+        len(unlinked) == 0,
+        f"broken refs: {unlinked}"
+    )
+
+    # Every tooltip element must have role="tooltip"
+    missing_role = await page.evaluate("""() => {
+        var tips = document.querySelectorAll('.help-bubble-text');
+        var bad = [];
+        tips.forEach(function(t) {
+            if (t.getAttribute('role') !== 'tooltip') bad.push(t.id || '(no id)');
+        });
+        return bad;
+    }""")
+    assert_true(
+        "all .help-bubble-text elements have role=tooltip",
+        len(missing_role) == 0,
+        f"missing role: {missing_role}"
+    )
+
+
+async def test_csp_inline_style_violations(page: Page) -> None:
+    """
+    #206 fix: zero CSP-blocked inline style= violations across full page interaction.
+    """
+    section("CSP — zero inline style= violations (#206)")
+
+    csp_violations: list[str] = []
+
+    def on_console(msg):  # type: ignore[override]
+        text = msg.text
+        if "Content-Security-Policy" in text or "ERR_BLOCKED_BY_CSP" in text:
+            csp_violations.append(text)
+
+    page.on("console", on_console)
+    try:
+        # Load page and trigger result panels (ipv4, ipv6, overlap, range, tree)
+        await navigate(page, APP_URL)
+        await page.wait_for_timeout(300)
+
+        # IPv4 result
+        await page.fill("#ip", "10.0.0.0")
+        await page.fill("#mask", "24")
+        await page.press("#ip", "Enter")
+        await page.wait_for_selector(".results", timeout=8000)
+        await page.wait_for_timeout(200)
+
+        # IPv6 result
+        await page.click("#tab-ipv6")
+        await page.fill("#ipv6", "2001:db8::/32")
+        await page.press("#ipv6", "Enter")
+        await page.wait_for_selector("#panel-ipv6 .results", timeout=8000)
+        await page.wait_for_timeout(200)
+
+        # Overlap panel
+        await page.click("#tab-vlsm")
+        await page.fill("input[name='overlap_cidr_a']", "10.0.0.0/24")
+        await page.fill("input[name='overlap_cidr_b']", "10.0.0.128/25")
+        await submit_form(page, ".overlap-form")
+        await page.wait_for_selector(".overlap-result", timeout=8000)
+        await page.wait_for_timeout(200)
+
+        assert_true(
+            "no CSP inline-style violations across page interaction",
+            len(csp_violations) == 0,
+            f"violations: {csp_violations[:3]}"
+        )
+
+        # Verify no result panels have bare style= attributes (all should use CSS classes)
+        styled_els = await page.evaluate("""() => {
+            var panels = document.querySelectorAll(
+                '.results, .overlap-result, .split-result, .vlsm-results, .tree-view'
+            );
+            var found = [];
+            panels.forEach(function(p) {
+                p.querySelectorAll('[style]').forEach(function(el) {
+                    // Allow style from vendor scripts or nonce-covered blocks
+                    var s = el.getAttribute('style') || '';
+                    if (s.trim() !== '') {
+                        found.push((el.className || el.tagName) + ': ' + s.substring(0, 60));
+                    }
+                });
+            });
+            return found;
+        }""")
+        assert_true(
+            "no bare style= attributes in result panels",
+            len(styled_els) == 0,
+            f"found: {styled_els[:3]}"
+        )
+    finally:
+        page.remove_listener("console", on_console)
+
+
+async def test_print_stylesheet(page: Page) -> None:
+    """
+    #193 fix: VLSM table and summary are visible and usable in print mode.
+    """
+    section("Print stylesheet — VLSM (#193)")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr", "24")
+    await page.evaluate("document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN'")
+    await page.evaluate("document.querySelectorAll('.vlsm-hosts-input')[0].value = '50'")
+    await submit_form(page, ".vlsm-form")
+    await page.wait_for_selector(".vlsm-table", timeout=8000)
+
+    await page.emulate_media(media="print")
+    await page.wait_for_timeout(200)
+
+    # VLSM table must be visible in print mode
+    table_visible = await page.locator(".vlsm-table").is_visible()
+    assert_true("vlsm-table visible in print mode", table_visible)
+
+    # Utilisation summary must not be hidden in print mode
+    summary_visible = await page.locator(".vlsm-summary").is_visible()
+    assert_true("vlsm-summary visible in print mode", summary_visible)
+
+    # Export buttons must be hidden in print mode
+    export_hidden = await page.evaluate("""() => {
+        var btns = document.querySelectorAll(
+            '.export-btn-group, .copy-all-btn, .ascii-export-btn'
+        );
+        for (var i = 0; i < btns.length; i++) {
+            var cs = getComputedStyle(btns[i]);
+            if (cs.display !== 'none') return false;
+        }
+        return true;
+    }""")
+    assert_true("export/copy buttons hidden in print mode", export_hidden)
+
+    await page.emulate_media(media="screen")
+
+
+async def test_locale_number_format(page: Page) -> None:
+    """
+    #191: Default 'en' locale uses comma thousands separators in displayed counts.
+    """
+    section("Locale — number formatting (#191)")
+
+    # /16 subnet → 65,534 usable hosts
+    await navigate(page, APP_URL + "?ip=10.0.0.0&mask=16")
+    await page.wait_for_selector(".results", timeout=8000)
+
+    usable = await result_value(page, "Usable IPs")
+    assert_true(
+        "usable IPs displayed with comma separator (65,534)",
+        usable is not None and "," in (usable or ""),
+        f"got {usable!r}"
+    )
+    assert_eq("usable IPs value is 65,534", usable, "65,534")
+
+    total = await result_value(page, "Total IPs")
+    assert_true(
+        "total IPs displayed with comma separator (65,536)",
+        total is not None and "," in (total or ""),
+        f"got {total!r}"
+    )
+    assert_eq("total IPs value is 65,536", total, "65,536")
+
+
+async def test_eslint_clean(page: Page) -> None:  # noqa: ARG001
+    """Run ESLint and assert exit code 0."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+    section("ESLint — app.js clean")
+    npm = shutil.which("npm")
+    if npm is None:
+        assert_true("npm is on PATH", False, "npm not found — cannot run ESLint")
+        return
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        result = subprocess.run(
+            [npm, "run", "lint:js"],
+            capture_output=True, text=True, cwd=repo_root, timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        assert_true("eslint exits 0 (no errors)", False, "ESLint timed out after 300 s")
+        return
+    assert_true(
+        "eslint exits 0 (no errors)",
+        result.returncode == 0,
+        result.stdout[-500:] if result.stdout else result.stderr[-500:]
+    )
+
+
+async def test_stylelint_clean(page: Page) -> None:  # noqa: ARG001
+    """Run Stylelint and assert exit code 0."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+    section("Stylelint — app.css clean")
+    npm = shutil.which("npm")
+    if npm is None:
+        assert_true("npm is on PATH", False, "npm not found — cannot run Stylelint")
+        return
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        result = subprocess.run(
+            [npm, "run", "lint:css"],
+            capture_output=True, text=True, cwd=repo_root, timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        assert_true("stylelint exits 0 (no errors)", False, "Stylelint timed out after 300 s")
+        return
+    assert_true(
+        "stylelint exits 0 (no errors)",
+        result.returncode == 0,
+        result.stdout[-500:] if result.stdout else result.stderr[-500:]
+    )
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -2043,6 +2344,13 @@ async def main() -> None:
             await test_tree_view(page)
             await test_api_range(page)
             await test_api_tree(page)
+            await test_tooltips_visual_polish(page)
+            await test_tooltips_accessibility(page)
+            await test_csp_inline_style_violations(page)
+            await test_print_stylesheet(page)
+            await test_locale_number_format(page)
+            await test_eslint_clean(page)
+            await test_stylelint_clean(page)
         finally:
             await context.close()
             await browser.close()

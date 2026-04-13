@@ -60,6 +60,22 @@ rules:
       include:
         - "**/Subnet-Calculator/includes/config.php"
 
+  # ── JavaScript: unsafe DOM insertion with dynamic data ─────────────────────
+  - id: js-unsafe-dom-insertion
+    patterns:
+      - pattern: $EL.insertAdjacentHTML($POS, $DATA);
+      - pattern-not: $EL.insertAdjacentHTML($POS, "...");
+      - pattern-not: $EL.insertAdjacentHTML($POS, '...');
+    message: >
+      insertAdjacentHTML with a non-literal string can allow XSS if the data
+      contains user-controlled input. Use insertAdjacentText for plain text
+      or sanitize the HTML before insertion.
+    languages: [javascript]
+    severity: ERROR
+    paths:
+      include:
+        - "**/Subnet-Calculator/assets/app.js"
+
   # ── TLS verification must not be disabled in captcha verify calls ───────────
   - id: php-curl-ssl-verify-peer-false
     pattern: curl_setopt($CH, CURLOPT_SSL_VERIFYPEER, false);

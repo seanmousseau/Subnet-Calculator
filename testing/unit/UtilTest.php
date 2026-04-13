@@ -75,4 +75,52 @@ class UtilTest extends TestCase
     {
         $this->assertSame('other', type_badge_class('Unknown Type'));
     }
+
+    // ── format_number ─────────────────────────────────────────────────────────
+
+    public function testFormatNumberDefaultLocale(): void
+    {
+        $GLOBALS['locale'] = 'en';
+        $this->assertSame('65,534', format_number(65534));
+    }
+
+    public function testFormatNumberZero(): void
+    {
+        $GLOBALS['locale'] = 'en';
+        $this->assertSame('0', format_number(0));
+    }
+
+    public function testFormatNumberSmall(): void
+    {
+        $GLOBALS['locale'] = 'en';
+        $this->assertSame('254', format_number(254));
+    }
+
+    public function testFormatNumberLargeNumber(): void
+    {
+        $GLOBALS['locale'] = 'en';
+        $this->assertSame('16,777,216', format_number(16777216));
+    }
+
+    public function testFormatNumberFallbackEn(): void
+    {
+        // When locale is 'en', format_number must use number_format() fallback
+        // regardless of intl availability, so the output is always comma-separated.
+        $GLOBALS['locale'] = 'en';
+        $result = format_number(1234567);
+        $this->assertSame('1,234,567', $result);
+    }
+
+    public function testFormatNumberIntlLocale(): void
+    {
+        if (!\extension_loaded('intl')) {
+            $this->markTestSkipped('intl extension not available');
+        }
+        $GLOBALS['locale'] = 'de';
+        $result = format_number(65534);
+        // German uses period as thousands separator
+        $this->assertStringContainsString('65', $result);
+        $this->assertNotSame('65,534', $result, 'de locale should not produce en comma format');
+        $GLOBALS['locale'] = 'en';
+    }
 }

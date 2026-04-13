@@ -2,7 +2,7 @@
 
 The calculator exposes a versioned JSON REST API at `/api/v1/`.
 
-Full machine-readable spec: [`api/openapi.yaml`](https://github.com/seanmousseau/Subnet-Calculator/blob/main/Subnet-Calculator/api/openapi.yaml) (OpenAPI 3.1).
+Full machine-readable spec: [`api/openapi.yaml`](https://github.com/seanmousseau/Subnet-Calculator/blob/main/Subnet-Calculator/api/openapi.yaml) (OpenAPI 3.1). All `200` responses include a concrete `example:` block showing a typical response payload.
 
 ## Authentication
 

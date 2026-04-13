@@ -53,7 +53,7 @@ function fallbackCopy(text) {
     document.body.appendChild(ta);
     ta.focus();
     ta.select();
-    try { document.execCommand('copy'); showToast('Copied!'); } catch (e) { showToast('Copy failed'); }
+    try { document.execCommand('copy'); showToast('Copied!'); } catch { showToast('Copy failed'); }
     document.body.removeChild(ta);
 }
 
@@ -350,6 +350,26 @@ document.getElementById('vlsm-export-ascii')?.addEventListener('click', function
     copyText(diagram, 'ASCII copied!');
 });
 
+// ── Tooltip right-edge overflow detection (#205) ─────────────────────────────
+(function () {
+    function detectBubbleEdges() {
+        var vw = window.innerWidth;
+        document.querySelectorAll('.help-bubble').forEach(function (bubble) {
+            var rect = bubble.getBoundingClientRect();
+            if (rect.width === 0) { return; } // inside hidden panel — skip
+            bubble.classList.toggle('bubble-right-edge', (vw - rect.right) < 150);
+        });
+    }
+    detectBubbleEdges();
+    window.addEventListener('resize', detectBubbleEdges);
+    // Re-run after tab switches (panel becomes visible, layout recalculates)
+    document.querySelectorAll('.tab-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            requestAnimationFrame(detectBubbleEdges);
+        });
+    });
+})();
+
 // ── iframe: auto-detect and report height to parent via postMessage ───────────
 if (window.self !== window.top) {
     document.documentElement.classList.add('in-iframe');
@@ -363,14 +383,14 @@ if (window.self !== window.top) {
         try {
             var stored = sessionStorage.getItem('_sc_parent_origin');
             if (stored) return stored;
-        } catch (e) {}
+        } catch { /* sessionStorage unavailable */ }
         try {
             var o = new URL(document.referrer).origin;
             if (o !== window.location.origin) {
-                try { sessionStorage.setItem('_sc_parent_origin', o); } catch (e) {}
+                try { sessionStorage.setItem('_sc_parent_origin', o); } catch { /* sessionStorage unavailable */ }
                 return o;
             }
-        } catch (e) {}
+        } catch { /* invalid referrer URL */ }
         return null;
     })();
     (function () {
