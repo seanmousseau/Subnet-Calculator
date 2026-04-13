@@ -24,7 +24,11 @@ function gmp_to_ipv6(\GMP $n): string
     if (strlen($hex) > 32) {
         throw new \OverflowException('GMP value exceeds 128 bits.');
     }
-    $result = inet_ntop(hex2bin($hex));
+    $bin = hex2bin($hex);
+    if ($bin === false) {
+        throw new \RuntimeException('hex2bin failed on computed IPv6 hex string.');
+    }
+    $result = inet_ntop($bin);
     if ($result === false) {
         throw new \RuntimeException('inet_ntop failed on computed IPv6 address.');
     }
@@ -62,7 +66,8 @@ function ipv6_ptr_zone(string $network_cidr): string
 {
     [$ip, $prefix] = explode('/', $network_cidr);
     $prefix = (int)$prefix;
-    $hex    = bin2hex(inet_pton($ip));                   // 32 lowercase hex chars
+    $pton   = inet_pton($ip);
+    $hex    = bin2hex($pton !== false ? $pton : '');     // 32 lowercase hex chars
     $nibble_count = (int)floor($prefix / 4);             // significant nibbles
     $significant  = array_slice(str_split($hex), 0, $nibble_count);
     if ($significant === []) {
@@ -71,6 +76,7 @@ function ipv6_ptr_zone(string $network_cidr): string
     return implode('.', array_reverse($significant)) . '.ip6.arpa';
 }
 
+/** @return array<string, mixed> */
 function calculate_subnet6(string $ip, int $prefix): array
 {
     $ip_int    = ipv6_to_gmp($ip);
