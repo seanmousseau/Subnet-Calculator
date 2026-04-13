@@ -106,6 +106,39 @@ reviews:
         Subnet-Calculator/api/v1/**: validate all inputs, check ip2long()
         for false before arithmetic, use & 0xFFFFFFFF.
 
+    - path: "package.json"
+      instructions: |
+        Must have "private": true and "type": "module" to prevent accidental
+        npm publish and to support ESLint flat config. devDependencies only —
+        no runtime dependencies belong here. Scripts must include lint:js,
+        lint:css, and lint. Verify eslint and stylelint version ranges are
+        consistent with eslint.config.js and .stylelintrc.json.
+
+    - path: "eslint.config.js"
+      instructions: |
+        ESLint flat config (v9+) for Subnet-Calculator/assets/app.js.
+        Must set sourceType: "script" (not "module" — app.js uses IIFE/var,
+        not ES modules). ecmaVersion should be 2020 to allow optional catch
+        binding. Check that no browser globals are listed that should be
+        flagged as undefined, and that no-console is at most "warn" (not
+        "error") since some intentional logging may exist.
+
+    - path: ".stylelintrc.json"
+      instructions: |
+        Stylelint config for Subnet-Calculator/assets/app.css.
+        Must exclude vendor assets (Subnet-Calculator/assets/vendor/**).
+        The project uses intentional compact single-line CSS rules and BEM
+        class names — verify that declaration-block-single-line-max-declarations
+        and selector-class-pattern are disabled or set to null.
+
+    - path: ".semgrep/rules.yml"
+      instructions: |
+        Custom Semgrep rules for PHP and JavaScript.
+        Verify: no overly broad patterns that would produce false positives
+        on normal code, path includes are scoped to relevant directories only,
+        and message strings clearly describe both the risk and the safe
+        alternative. Do not add catch-all rules without narrow patterns.
+
   finishing_touches:
     docstrings:
       enabled: false  # PHP files use declare(strict_types=1) with type hints; no docstrings needed

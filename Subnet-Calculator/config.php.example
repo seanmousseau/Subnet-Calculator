@@ -57,6 +57,13 @@ $frame_ancestors = '*';
 // Set explicitly if behind a reverse proxy that mangles REQUEST_URI or HTTP_HOST.
 $canonical_url = '';
 
+// ── Localisation (v2.4.0) ─────────────────────────────────────────────────
+// BCP 47 locale tag used for locale-aware number formatting via PHP's intl extension.
+// The default 'en' produces comma separators (1,234,567). Set to a different locale
+// to use its conventions, e.g. 'de' → 1.234.567, 'fr' → 1 234 567.
+// Requires the PHP intl extension (php-intl). Falls back to number_format() if absent.
+$locale = 'en';
+
 // ── REST API (v2.0.0) ──────────────────────────────────────────────────────
 // Bearer tokens that authorise API requests.
 // Empty array = open API (no auth required).

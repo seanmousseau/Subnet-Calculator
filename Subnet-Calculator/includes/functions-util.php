@@ -131,6 +131,34 @@ function type_badge_class(string $type): string
     return $map[$type] ?? 'other';
 }
 
+// ─── Locale-aware number formatting ──────────────────────────────────────────
+
+/**
+ * Format an integer with locale-aware thousands separators.
+ *
+ * Uses PHP's intl NumberFormatter when the intl extension is loaded and
+ * $locale (a global set by config.php) is not the default 'en'. Falls back
+ * to number_format() which uses comma separators.
+ *
+ * @param int|float $n
+ * @return string
+ */
+function format_number(int|float $n): string
+{
+    $raw = $GLOBALS['locale'] ?? 'en';
+    $loc = is_string($raw) ? $raw : 'en';
+    if ($loc !== 'en' && \extension_loaded('intl')) {
+        $fmt = \numfmt_create($loc, \NumberFormatter::DECIMAL);
+        if ($fmt !== null) {
+            $out = \numfmt_format($fmt, $n);
+            if ($out !== false) {
+                return $out;
+            }
+        }
+    }
+    return \number_format((int)$n);
+}
+
 // ─── Help bubble ─────────────────────────────────────────────────────────────
 
 /**

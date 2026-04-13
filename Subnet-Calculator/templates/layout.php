@@ -148,7 +148,7 @@
                 </div>
                 <div class="result-row hosts-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Usable IPs</span>
-                    <span class="result-value"><?= number_format($result['usable_hosts']) ?></span>
+                    <span class="result-value"><?= format_number($result['usable_hosts']) ?></span>
                 </div>
                 <?php $ip4type = get_ipv4_type($input_ip); ?>
                 <div class="result-row" title="Click to copy" tabindex="0" role="button">
@@ -224,7 +224,7 @@ if ($i < 3) {
                             </div>
                         <?php endforeach; ?>
                         <?php if ($split_result['total'] > $split_result['showing']) : ?>
-                            <div class="split-more">+&nbsp;<?= number_format($split_result['total'] - $split_result['showing']) ?> more</div>
+                            <div class="split-more">+&nbsp;<?= format_number($split_result['total'] - $split_result['showing']) ?> more</div>
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>
@@ -239,7 +239,7 @@ if ($i < 3) {
                 <textarea name="supernet_input" rows="4" class="multi-overlap-input"
                           placeholder="One IPv4 CIDR per line (max 50):&#10;10.0.0.0/24&#10;10.0.1.0/24"
                           autocomplete="off" spellcheck="false"><?= htmlspecialchars($supernet_input) ?></textarea>
-                <div class="splitter-row" style="gap:0.5rem;margin-top:0.5rem;">
+                <div class="splitter-row supernet-action-row">
                     <button type="submit" name="supernet_action" value="find" class="splitter-btn">Find Supernet<?= help_bubble('supernet-find', 'Finds the smallest single CIDR block that contains all of the listed CIDRs. Useful for aggregating routes into a single summary route.') ?></button>
                     <button type="submit" name="supernet_action" value="summarise" class="splitter-btn">Summarise Routes<?= help_bubble('supernet-summarise', 'Computes the minimal set of non-overlapping CIDRs that exactly covers the listed networks. Unlike Find Supernet, this avoids including addresses outside the input ranges.') ?></button>
                 </div>
@@ -252,7 +252,7 @@ if ($i < 3) {
                         <?= htmlspecialchars($supernet_result['supernet'] ?? '') ?>
                     </div>
                 <?php else : ?>
-                    <div class="split-list" style="margin-top:0.5rem;">
+                    <div class="split-list split-list--mt">
                         <button type="button" class="copy-all-btn" data-target="supernet">Copy All</button>
                         <?php foreach ($supernet_result['summaries'] ?? [] as $s) : ?>
                             <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
@@ -293,7 +293,7 @@ if ($i < 3) {
             <?php if ($range_error) : ?>
                 <div class="error"><?= htmlspecialchars($range_error) ?></div>
             <?php elseif ($range_result !== null) : ?>
-                <div class="split-list" style="margin-top:0.5rem;">
+                <div class="split-list split-list--mt">
                     <button type="button" class="copy-all-btn" data-target="range">Copy All</button>
                     <?php foreach ($range_result as $r_cidr) : ?>
                         <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($r_cidr) ?>">
@@ -313,8 +313,8 @@ if ($i < 3) {
             <div class="overlap-title">Subnet Allocation Tree</div>
             <form method="post" novalidate>
                 <input type="hidden" name="tab" value="ipv4">
-                <div class="form-group" style="margin-bottom:0.5rem;">
-                    <label for="tree_parent" style="font-size:0.8rem;color:var(--color-text-faint);">Parent CIDR</label>
+                <div class="form-group tree-form-group">
+                    <label for="tree_parent" class="tree-parent-label">Parent CIDR</label>
                     <input type="text" id="tree_parent" name="tree_parent"
                            value="<?= htmlspecialchars($tree_parent) ?>"
                            placeholder="10.0.0.0/16" autocomplete="off" spellcheck="false">
@@ -322,14 +322,14 @@ if ($i < 3) {
                 <textarea name="tree_children" rows="4" class="multi-overlap-input"
                           placeholder="One child CIDR per line (max 100):&#10;10.0.0.0/24&#10;10.0.1.0/24"
                           autocomplete="off" spellcheck="false"><?= htmlspecialchars($tree_children) ?></textarea>
-                <div style="margin-top:0.5rem;">
+                <div class="tree-action-row">
                     <button type="submit" class="splitter-btn">Build Tree</button>
                 </div>
             </form>
             <?php if ($tree_error) : ?>
                 <div class="error"><?= htmlspecialchars($tree_error) ?></div>
             <?php elseif ($tree_result !== null) : ?>
-                <div class="tree-view" style="margin-top:0.5rem;">
+                <div class="tree-view">
                     <?php
                     /**
                      * @param array<string, mixed> $node
@@ -339,7 +339,7 @@ if ($i < 3) {
                     {
                         $indent = str_repeat('&nbsp;&nbsp;&nbsp;&nbsp;', $depth);
                         $cidr   = htmlspecialchars((string)($node['cidr'] ?? ''));
-                        echo '<div class="tree-node" style="font-size:0.85rem;margin:0.15rem 0;">';
+                        echo '<div class="tree-node">';
                         echo $indent . '<span class="tree-cidr" tabindex="0" role="button" data-copy="' . $cidr . '" title="Click to copy">';
                         echo '<code>' . $cidr . '</code>';
                         echo '</span>';
@@ -352,8 +352,8 @@ if ($i < 3) {
                         }
                         foreach ((array)$gaps as $gap) {
                             $gap_safe = htmlspecialchars((string)$gap);
-                            echo '<div class="tree-node tree-gap" style="font-size:0.85rem;margin:0.15rem 0;color:var(--color-text-faint);font-style:italic;">';
-                            echo $indent . '&nbsp;&nbsp;&nbsp;&nbsp;<code>' . $gap_safe . '</code> <span style="font-size:0.75rem;">(free)</span>';
+                            echo '<div class="tree-node tree-gap">';
+                            echo $indent . '&nbsp;&nbsp;&nbsp;&nbsp;<code>' . $gap_safe . '</code> <span class="tree-free-label">(free)</span>';
                             echo '</div>';
                         }
                     }
@@ -428,7 +428,7 @@ if ($i < 3) {
                 </div>
                 <div class="result-row hosts-row" title="Click to copy" tabindex="0" role="button">
                     <span class="result-label">Total Addresses</span>
-                    <span class="result-value"><?= htmlspecialchars(is_numeric($result6['total']) ? number_format((int)$result6['total']) : $result6['total']) ?></span>
+                    <span class="result-value"><?= htmlspecialchars(is_numeric($result6['total']) ? format_number((int)$result6['total']) : $result6['total']) ?></span>
                 </div>
                 <?php $ip6type = get_ipv6_type($input_ipv6); ?>
                 <div class="result-row" title="Click to copy" tabindex="0" role="button">
@@ -539,7 +539,7 @@ if ($i < 3) {
                             $total6   = $split_result6['total'];
                             $showing6 = $split_result6['showing'];
                             $has_more6 = is_numeric($total6) ? ($showing6 < (int)$total6) : true;
-                            $more_label6 = is_numeric($total6) ? number_format((int)$total6 - $showing6) : $total6 . ' total';
+                            $more_label6 = is_numeric($total6) ? format_number((int)$total6 - $showing6) : $total6 . ' total';
                         ?>
                         <?php if ($has_more6) : ?>
                             <div class="split-more">+&nbsp;<?= htmlspecialchars($more_label6) ?> more</div>
@@ -554,15 +554,15 @@ if ($i < 3) {
             <div class="overlap-title">IPv6 ULA Prefix Generator (RFC 4193)</div>
             <form method="post" novalidate>
                 <input type="hidden" name="tab" value="ipv6">
-                <div class="form-row" style="align-items:flex-end;gap:0.5rem;">
-                    <div class="form-group" style="flex:1;">
-                        <label for="ula_global_id">Global ID <span style="font-weight:normal;font-size:0.85em;">(optional 10 hex chars)</span><?= help_bubble('ula-global-id', 'A 40-bit hex value used as the globally unique portion of the ULA prefix (RFC 4193). Leave blank to generate one pseudo-randomly from the current timestamp.') ?></label>
+                <div class="form-row ula-form-row">
+                    <div class="form-group">
+                        <label for="ula_global_id">Global ID <span class="label-footnote">(optional 10 hex chars)</span><?= help_bubble('ula-global-id', 'A 40-bit hex value used as the globally unique portion of the ULA prefix (RFC 4193). Leave blank to generate one pseudo-randomly from the current timestamp.') ?></label>
                         <input type="text" id="ula_global_id" name="ula_global_id"
                                value="<?= htmlspecialchars($ula_global_id_input) ?>"
                                placeholder="e.g. 1a2b3c4d5e (random if blank)"
                                autocomplete="off" spellcheck="false" maxlength="10">
                     </div>
-                    <div style="padding-bottom:0.1rem;">
+                    <div class="ula-generate-wrap">
                         <button type="submit" name="ula_generate" value="1" class="splitter-btn">Generate</button>
                     </div>
                 </div>
@@ -574,10 +574,10 @@ if ($i < 3) {
                     <div class="overlap-result overlap-contains"><?= htmlspecialchars($ula_result['prefix'] ?? '') ?></div>
                     <div class="ula-meta">
                         <span>Global ID: <code><?= htmlspecialchars($ula_result['global_id'] ?? '') ?></code></span>
-                        <span>Available /64s: <strong><?= number_format((int)($ula_result['available_64s'] ?? 0)) ?></strong></span>
+                        <span>Available /64s: <strong><?= format_number((int)($ula_result['available_64s'] ?? 0)) ?></strong></span>
                     </div>
                     <?php if (!empty($ula_result['example_64s'])) : ?>
-                    <div class="split-list" style="margin-top:0.5rem;">
+                    <div class="split-list split-list--mt">
                         <button type="button" class="copy-all-btn" data-target="ula">Copy All</button>
                         <?php foreach ($ula_result['example_64s'] as $ex64) : ?>
                             <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($ex64) ?>">
@@ -665,13 +665,13 @@ if ($i < 3) {
                         <tr data-first="<?= htmlspecialchars($alloc_detail['first_usable']) ?>"
                             data-last="<?= htmlspecialchars($alloc_detail['last_usable']) ?>">
                             <td><?= htmlspecialchars($alloc['name']) ?></td>
-                            <td><?= number_format($alloc['hosts_needed']) ?></td>
+                            <td><?= format_number($alloc['hosts_needed']) ?></td>
                             <td class="vlsm-subnet-cell" tabindex="0" role="button"
                                 title="Click to copy" data-copy="<?= htmlspecialchars($alloc['subnet']) ?>">
                                 <code><?= htmlspecialchars($alloc['subnet']) ?></code>
                             </td>
-                            <td><?= number_format($alloc['usable']) ?></td>
-                            <td class="vlsm-waste"><?= number_format($alloc['waste']) ?></td>
+                            <td><?= format_number($alloc['usable']) ?></td>
+                            <td class="vlsm-waste"><?= format_number($alloc['waste']) ?></td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -694,9 +694,9 @@ if ($i < 3) {
                 : 0.0;
             ?>
             <div class="vlsm-summary">
-                <span>Hosts requested: <strong><?= number_format($vlsm_total_hosts_req) ?></strong></span>
-                <span>Allocated: <strong><?= number_format($vlsm_total_allocated) ?></strong> addresses</span>
-                <span>Remaining: <strong><?= number_format($vlsm_remaining) ?></strong></span>
+                <span>Hosts requested: <strong><?= format_number($vlsm_total_hosts_req) ?></strong></span>
+                <span>Allocated: <strong><?= format_number($vlsm_total_allocated) ?></strong> addresses</span>
+                <span>Remaining: <strong><?= format_number($vlsm_remaining) ?></strong></span>
                 <span>Utilisation: <strong><?= $vlsm_util_pct ?>%</strong><?= help_bubble('vlsm-util', 'Total allocated addresses ÷ total addresses in the parent subnet × 100. Values below 100% indicate unallocated space remaining in the parent block.') ?></span>
             </div>
             <div class="export-btn-group">
@@ -720,7 +720,7 @@ if ($i < 3) {
             <div class="overlap-title">Save &amp; Restore Session<?= help_bubble('vlsm-session', 'Saves your VLSM inputs to the server so you can restore them later via a short link. Sessions expire after the configured TTL. No account required.') ?></div>
             <p class="session-ttl-notice">Saved sessions expire after <?= (int)$session_ttl_days ?> day<?= (int)$session_ttl_days === 1 ? '' : 's' ?>.</p>
             <?php if ($session_save_id !== '') : ?>
-                <div class="overlap-result overlap-contains share-bar" style="margin-bottom:0.5rem;">
+                <div class="overlap-result overlap-contains share-bar session-saved-bar">
                     <span class="share-label">Session saved. Share this link:</span>
                     <code class="share-url"><?= htmlspecialchars($share_base_server . $session_save_url) ?></code>
                     <button type="button" class="share-copy"

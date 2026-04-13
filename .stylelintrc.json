@@ -1,0 +1,15 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "ignoreFiles": ["Subnet-Calculator/assets/vendor/**"],
+  "rules": {
+    "no-descending-specificity": null,
+    "comment-empty-line-before": null,
+    "declaration-block-single-line-max-declarations": null,
+    "rule-empty-line-before": null,
+    "selector-class-pattern": null,
+    "color-hex-length": "short",
+    "color-function-notation": "modern",
+    "alpha-value-notation": "percentage",
+    "media-feature-range-notation": "context"
+  }
+}
