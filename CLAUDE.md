@@ -44,7 +44,7 @@ tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
 
 (Or run `/release` to automate steps 1–7.)
 
-PHP unit tests: `testing/unit/` (131 tests, 195 assertions; 14 skipped on platforms without GMP). Playwright browser tests: `testing/scripts/playwright_test.py` (62 test groups) covers page load, security headers, Permissions-Policy, CSP nonce integrity, IPv4/IPv6 calculation, reverse DNS zones, edge cases, address type badges, subnet splitters, copy buttons, splitter shareable URLs, binary representation, VLSM planner, overlap checker, shareable GET URLs, iframe integration, UI interactions, VLSM shareable URL, VLSM CSV export, VLSM reset/validation, Copy All buttons, VLSM utilisation summary, IPv6 overlap, multi-CIDR overlap, IPv6 binary/hex, v1.3.0 regression tests, supernet/summarise UI, ULA generator UI, VLSM session TTL notice, REST API endpoints (meta, IPv4, IPv6, VLSM, overlap, split, supernet, ULA, rdns, bulk, OpenAPI spec), IPv4 binary hex/decimal rows, IPv6 address expanded/compressed forms, and API v2.2.0 new fields.
+PHP unit tests: `testing/unit/` (131 tests, 195 assertions; 14 skipped on platforms without GMP). Playwright browser tests: `testing/scripts/playwright_test.py` (74 test groups, 299 assertions) covers page load, security headers, Permissions-Policy, CSP nonce integrity, IPv4/IPv6 calculation, reverse DNS zones, edge cases, address type badges, subnet splitters, copy buttons, splitter shareable URLs, binary representation, VLSM planner, overlap checker, shareable GET URLs, iframe integration, UI interactions, VLSM shareable URL, VLSM CSV/JSON/XLSX export, VLSM reset/validation, Copy All buttons, VLSM utilisation summary, IPv6 overlap, multi-CIDR overlap, IPv6 binary/hex, v1.3.0 regression tests, supernet/summarise UI, ULA generator UI, VLSM session TTL notice, REST API endpoints (meta, IPv4, IPv6, VLSM, overlap, split, supernet, ULA, rdns, bulk, OpenAPI spec, range/ipv4, tree), IPv4 binary hex/decimal rows, IPv6 address expanded/compressed forms, API v2.2.0 new fields, ASCII export, tooltips/help bubbles, visual regression, docs footer link, IP range→CIDR UI, tree view UI, and API v2.3.0 endpoints.
 
 ## Repository layout
 
@@ -57,12 +57,14 @@ Subnet-Calculator/      ← docroot (serve this directory)
     functions-ipv6.php  ← IPv6 utility functions
     functions-ipv6.php  ← IPv6 utility functions
     functions-split.php ← subnet splitter functions
-    functions-util.php  ← address type detection + badge helpers
+    functions-util.php  ← address type detection + badge helpers + help_bubble()
     functions-vlsm.php  ← VLSM planner function
     functions-supernet.php ← supernet_find(), summarise_cidrs()
     functions-ula.php   ← generate_ula_prefix() (RFC 4193)
     functions-session.php ← SQLite session CRUD
     functions-resolve.php ← resolve_ipv4_input(), resolve_ipv6_input() (shared by web + API)
+    functions-range.php ← range_to_cidrs() — IP range → minimal CIDR list
+    functions-tree.php  ← build_subnet_tree() — allocation tree with gap detection
     request.php         ← Turnstile verify, GET/POST handling; requires functions-resolve.php
   templates/            ← HTML template (blocked from direct web access)
     layout.php
@@ -73,6 +75,9 @@ Subnet-Calculator/      ← docroot (serve this directory)
     logo.png            ← PNG fallback for Safari <14
     favicon-32.webp
     favicon-32.png      ← PNG fallback for browsers without WebP favicon support
+    vendor/
+      xlsx/
+        xlsx.full.min.js ← SheetJS 0.20.3, SRI-verified, defer-loaded
   api/
     openapi.yaml        ← OpenAPI 3.1 specification for all REST endpoints
     v1/
@@ -81,20 +86,33 @@ Subnet-Calculator/      ← docroot (serve this directory)
       .htaccess         ← front-controller rewrite; blocks helpers.php
       handlers/         ← one file per endpoint (blocked from direct web access)
         ipv4.php, ipv6.php, vlsm.php, overlap.php, split.php,
-        supernet.php, ula.php, sessions.php
+        supernet.php, ula.php, sessions.php, range.php, tree.php
   data/                 ← SQLite DB location (blocked from web; git-ignored)
   .htaccess             ← blocks config files, tarballs, subdirs; cache headers
   robots.txt
   config.php.example    ← copy to config.php to override defaults
   config.php            ← local overrides (git-ignored)
+docs/                   ← MkDocs Material source (deployed to GitHub Pages)
+  mkdocs.yml
+  requirements.txt
+  index.md, ipv4.md, ipv6.md, vlsm.md, splitter.md, overlap.md,
+  supernet.md, ula.md, binary.md, rdns.md, sessions.md, sharing.md,
+  tree.md, api.md, config.md
 releases/               ← versioned release tarballs
+testing/
+  snapshots/            ← Pillow visual regression baselines (committed PNGs)
+  scripts/
+    playwright_test.py  ← 74 test groups, 299 assertions
+    snapshot_utils.py   ← capture_snapshot / compare_snapshot helpers
 README.md
 CHANGELOG.md
 CONTRIBUTING.md
 SECURITY.md
 LICENSE
-.phpcs.xml             ← PHPCS PSR-12 config (excludes test-file naming rules)
+.phpcs.xml             ← PHPCS PSR-12 config (excludes vendor/; test-file naming)
 .github/
+  workflows/
+    docs.yml            ← MkDocs GitHub Pages deploy on push to main
 .claude/
 ```
 

@@ -79,7 +79,7 @@
             <input type="hidden" name="tab" value="ipv4">
             <div class="form-row">
                 <div class="form-group">
-                    <label for="ip">IP Address</label>
+                    <label for="ip">IP Address<?= help_bubble('ipv4-ip', 'Enter an IPv4 address (e.g. 192.168.1.1) or CIDR notation (e.g. 192.168.1.0/24). The subnet mask field is optional when using CIDR notation.') ?></label>
                     <input type="text" id="ip" name="ip"
                            placeholder="192.168.1.0 or 192.168.1.0/24"
                            value="<?= htmlspecialchars($input_ip) ?>"
@@ -87,7 +87,7 @@
                            <?= $error ? 'aria-invalid="true" aria-describedby="ipv4-error"' : '' ?>>
                 </div>
                 <div class="form-group">
-                    <label for="mask">Netmask</label>
+                    <label for="mask">Netmask<?= help_bubble('ipv4-mask', 'Enter the subnet mask as a prefix length (/24), dotted-decimal (255.255.255.0), or wildcard (0.0.0.255). Leave blank when using CIDR notation in the IP field.') ?></label>
                     <input type="text" id="mask" name="mask"
                            placeholder="/24 or 255.255.255.0"
                            value="<?= htmlspecialchars($input_mask) ?>"
@@ -131,7 +131,7 @@
                     <span class="result-value"><?= htmlspecialchars($result['netmask_octet']) ?></span>
                 </div>
                 <div class="result-row" title="Click to copy" tabindex="0" role="button">
-                    <span class="result-label">Wildcard Mask</span>
+                    <span class="result-label">Wildcard Mask<?= help_bubble('ipv4-wildcard', 'The inverse of the subnet mask. Used in access-control lists (ACLs) to specify matching bits — a 0 means the bit must match, a 1 means any value is accepted.') ?></span>
                     <span class="result-value"><?= htmlspecialchars($result['wildcard']) ?></span>
                 </div>
                 <div class="result-row" title="Click to copy" tabindex="0" role="button">
@@ -152,7 +152,7 @@
                 </div>
                 <?php $ip4type = get_ipv4_type($input_ip); ?>
                 <div class="result-row" title="Click to copy" tabindex="0" role="button">
-                    <span class="result-label">Address Type</span>
+                    <span class="result-label">Address Type<?= help_bubble('ipv4-type', 'Classifies the IP address by its purpose: Private (RFC 1918), Loopback (127.0.0.0/8), Link-local (169.254.0.0/16), Public (globally routable), Multicast (224.0.0.0/4), etc.') ?></span>
                     <span class="result-value"><span class="badge badge-<?= type_badge_class($ip4type) ?>"><?= htmlspecialchars($ip4type) ?></span></span>
                 </div>
                 <div class="result-row" title="Click to copy" tabindex="0" role="button">
@@ -166,7 +166,7 @@
             $bin_mask  = array_map(fn($o) => sprintf('%08b', (int)$o), explode('.', $result['netmask_octet']));
             ?>
             <details class="binary-details">
-                <summary>Binary Representation</summary>
+                <summary>Binary Representation<?= help_bubble('ipv4-binary', 'Shows the network address and mask in binary. Blue bits are the network portion (fixed); grey bits are the host portion (variable). Also shows the network address in hexadecimal and unsigned decimal.') ?></summary>
                 <div class="binary-grid">
                     <span class="bin-label">Network</span>
                     <code class="bin-value"><?php
@@ -201,7 +201,7 @@ if ($i < 3) {
                     <input type="hidden" name="ip" value="<?= htmlspecialchars($input_ip) ?>">
                     <input type="hidden" name="mask" value="<?= htmlspecialchars($input_mask) ?>">
                     <div class="splitter-row">
-                        <span class="splitter-label">Split into</span>
+                        <span class="splitter-label">Split into<?= help_bubble('ipv4-split', 'Enter a prefix length larger than the parent (e.g. /25 splits a /24 into two /25 subnets). The result is capped at the configured maximum.') ?></span>
                         <input type="text" name="split_prefix" class="splitter-input"
                                placeholder="/25" value="<?= htmlspecialchars($input_split_prefix) ?>"
                                autocomplete="off" spellcheck="false"
@@ -212,8 +212,9 @@ if ($i < 3) {
                 <?php if ($split_error) : ?>
                     <div class="error" id="split-error-ipv4"><?= htmlspecialchars($split_error) ?></div>
                 <?php elseif ($split_result && $split_result['showing'] > 0) : ?>
-                    <div class="split-list">
+                    <div class="split-list" data-parent="<?= htmlspecialchars($result['cidr'] ?? '') ?>">
                         <button type="button" class="copy-all-btn" data-target="split">Copy All</button>
+                        <button type="button" class="ascii-export-btn">Export ASCII</button>
                         <?php foreach ($split_result['subnets'] as $s) : ?>
                             <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
                                 <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
@@ -239,8 +240,8 @@ if ($i < 3) {
                           placeholder="One IPv4 CIDR per line (max 50):&#10;10.0.0.0/24&#10;10.0.1.0/24"
                           autocomplete="off" spellcheck="false"><?= htmlspecialchars($supernet_input) ?></textarea>
                 <div class="splitter-row" style="gap:0.5rem;margin-top:0.5rem;">
-                    <button type="submit" name="supernet_action" value="find" class="splitter-btn">Find Supernet</button>
-                    <button type="submit" name="supernet_action" value="summarise" class="splitter-btn">Summarise Routes</button>
+                    <button type="submit" name="supernet_action" value="find" class="splitter-btn">Find Supernet<?= help_bubble('supernet-find', 'Finds the smallest single CIDR block that contains all of the listed CIDRs. Useful for aggregating routes into a single summary route.') ?></button>
+                    <button type="submit" name="supernet_action" value="summarise" class="splitter-btn">Summarise Routes<?= help_bubble('supernet-summarise', 'Computes the minimal set of non-overlapping CIDRs that exactly covers the listed networks. Unlike Find Supernet, this avoids including addresses outside the input ranges.') ?></button>
                 </div>
             </form>
             <?php if ($supernet_error) : ?>
@@ -266,6 +267,99 @@ if ($i < 3) {
                         <div class="split-more"><?= $s_count ?> prefix<?= $s_count !== 1 ? 'es' : '' ?> from <?= $i_count ?> input<?= $i_count !== 1 ? 's' : '' ?></div>
                     </div>
                 <?php endif; ?>
+            <?php endif; ?>
+        </div>
+
+        <!-- Range → CIDR Panel -->
+        <div class="overlap-panel">
+            <div class="overlap-title">IP Range &rarr; CIDR<?= help_bubble('range-cidr', 'Enter a start and end IPv4 address to get the minimal set of CIDR blocks that exactly covers that range using the greedy largest-aligned-block algorithm.') ?></div>
+            <form method="post" novalidate>
+                <input type="hidden" name="tab" value="ipv4">
+                <div class="overlap-inputs">
+                    <input type="text" name="range_start"
+                           value="<?= htmlspecialchars($range_start) ?>"
+                           placeholder="Start IP (e.g. 10.0.0.0)"
+                           autocomplete="off" spellcheck="false"
+                           aria-label="Start IP address">
+                    <span class="overlap-vs">to</span>
+                    <input type="text" name="range_end"
+                           value="<?= htmlspecialchars($range_end) ?>"
+                           placeholder="End IP (e.g. 10.0.0.255)"
+                           autocomplete="off" spellcheck="false"
+                           aria-label="End IP address">
+                    <button type="submit" class="splitter-btn">Convert</button>
+                </div>
+            </form>
+            <?php if ($range_error) : ?>
+                <div class="error"><?= htmlspecialchars($range_error) ?></div>
+            <?php elseif ($range_result !== null) : ?>
+                <div class="split-list" style="margin-top:0.5rem;">
+                    <button type="button" class="copy-all-btn" data-target="range">Copy All</button>
+                    <?php foreach ($range_result as $r_cidr) : ?>
+                        <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($r_cidr) ?>">
+                            <span class="split-subnet-text"><?= htmlspecialchars($r_cidr) ?></span>
+                            <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($r_cidr) ?>" aria-label="Copy <?= htmlspecialchars($r_cidr) ?>">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            </button>
+                        </div>
+                    <?php endforeach; ?>
+                    <div class="split-more"><?= count($range_result) ?> CIDR block<?= count($range_result) !== 1 ? 's' : '' ?></div>
+                </div>
+            <?php endif; ?>
+        </div>
+
+        <!-- Subnet Allocation Tree View -->
+        <div class="overlap-panel">
+            <div class="overlap-title">Subnet Allocation Tree</div>
+            <form method="post" novalidate>
+                <input type="hidden" name="tab" value="ipv4">
+                <div class="form-group" style="margin-bottom:0.5rem;">
+                    <label for="tree_parent" style="font-size:0.8rem;color:var(--color-text-faint);">Parent CIDR</label>
+                    <input type="text" id="tree_parent" name="tree_parent"
+                           value="<?= htmlspecialchars($tree_parent) ?>"
+                           placeholder="10.0.0.0/16" autocomplete="off" spellcheck="false">
+                </div>
+                <textarea name="tree_children" rows="4" class="multi-overlap-input"
+                          placeholder="One child CIDR per line (max 100):&#10;10.0.0.0/24&#10;10.0.1.0/24"
+                          autocomplete="off" spellcheck="false"><?= htmlspecialchars($tree_children) ?></textarea>
+                <div style="margin-top:0.5rem;">
+                    <button type="submit" class="splitter-btn">Build Tree</button>
+                </div>
+            </form>
+            <?php if ($tree_error) : ?>
+                <div class="error"><?= htmlspecialchars($tree_error) ?></div>
+            <?php elseif ($tree_result !== null) : ?>
+                <div class="tree-view" style="margin-top:0.5rem;">
+                    <?php
+                    /**
+                     * @param array<string, mixed> $node
+                     * @param int $depth
+                     */
+                    function render_tree_node(array $node, int $depth = 0): void
+                    {
+                        $indent = str_repeat('&nbsp;&nbsp;&nbsp;&nbsp;', $depth);
+                        $cidr   = htmlspecialchars((string)($node['cidr'] ?? ''));
+                        echo '<div class="tree-node" style="font-size:0.85rem;margin:0.15rem 0;">';
+                        echo $indent . '<span class="tree-cidr" tabindex="0" role="button" data-copy="' . $cidr . '" title="Click to copy">';
+                        echo '<code>' . $cidr . '</code>';
+                        echo '</span>';
+                        echo '</div>';
+                        $gaps = $node['gaps'] ?? [];
+                        foreach ((array)($node['children'] ?? []) as $child) {
+                            if (is_array($child)) {
+                                render_tree_node($child, $depth + 1);
+                            }
+                        }
+                        foreach ((array)$gaps as $gap) {
+                            $gap_safe = htmlspecialchars((string)$gap);
+                            echo '<div class="tree-node tree-gap" style="font-size:0.85rem;margin:0.15rem 0;color:var(--color-text-faint);font-style:italic;">';
+                            echo $indent . '&nbsp;&nbsp;&nbsp;&nbsp;<code>' . $gap_safe . '</code> <span style="font-size:0.75rem;">(free)</span>';
+                            echo '</div>';
+                        }
+                    }
+                    render_tree_node($tree_result);
+                    ?>
+                </div>
             <?php endif; ?>
         </div>
     </div>
@@ -347,11 +441,11 @@ if ($i < 3) {
                 </div>
                 <?php if (isset($result6['address_expanded'])) : ?>
                 <div class="result-row" title="Click to copy" tabindex="0" role="button">
-                    <span class="result-label">Address (Expanded)</span>
+                    <span class="result-label">Address (Expanded)<?= help_bubble('ipv6-expanded', 'Full 128-bit representation with all leading zeros shown, e.g. 2001:0db8:0000:0000:0000:0000:0000:0001.') ?></span>
                     <span class="result-value"><?= htmlspecialchars($result6['address_expanded']) ?></span>
                 </div>
                 <div class="result-row" title="Click to copy" tabindex="0" role="button">
-                    <span class="result-label">Address (Compressed)</span>
+                    <span class="result-label">Address (Compressed)<?= help_bubble('ipv6-compressed', 'Canonical short form per RFC 5952 — leading zeros in each group are suppressed and the longest run of consecutive all-zero groups is replaced with ::.') ?></span>
                     <span class="result-value"><?= htmlspecialchars($result6['address_compressed']) ?></span>
                 </div>
                 <?php endif; ?>
@@ -371,7 +465,7 @@ if ($i < 3) {
             }
             if (isset($bin6_ok) && $bin6_ok) : ?>
             <details class="binary-details">
-                <summary>Binary / Hex Representation</summary>
+                <summary>Binary / Hex Representation<?= help_bubble('ipv6-binary', 'Shows the IPv6 address in binary (128 bits), split into network (blue) and interface (grey) portions based on the prefix length. Also displays the address in hexadecimal.') ?></summary>
                 <div class="binary-grid">
                     <span class="bin-label">Hex</span>
                     <code class="bin-value"><?php
@@ -430,8 +524,9 @@ if ($i < 3) {
                 <?php if ($split_error6) : ?>
                     <div class="error" id="split-error-ipv6"><?= htmlspecialchars($split_error6) ?></div>
                 <?php elseif ($split_result6 && $split_result6['showing'] > 0) : ?>
-                    <div class="split-list">
+                    <div class="split-list" data-parent="<?= htmlspecialchars($result6['network_cidr'] ?? '') ?>">
                         <button type="button" class="copy-all-btn" data-target="split">Copy All</button>
+                        <button type="button" class="ascii-export-btn">Export ASCII</button>
                         <?php foreach ($split_result6['subnets'] as $s) : ?>
                             <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
                                 <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
@@ -461,7 +556,7 @@ if ($i < 3) {
                 <input type="hidden" name="tab" value="ipv6">
                 <div class="form-row" style="align-items:flex-end;gap:0.5rem;">
                     <div class="form-group" style="flex:1;">
-                        <label for="ula_global_id">Global ID <span style="font-weight:normal;font-size:0.85em;">(optional 10 hex chars)</span></label>
+                        <label for="ula_global_id">Global ID <span style="font-weight:normal;font-size:0.85em;">(optional 10 hex chars)</span><?= help_bubble('ula-global-id', 'A 40-bit hex value used as the globally unique portion of the ULA prefix (RFC 4193). Leave blank to generate one pseudo-randomly from the current timestamp.') ?></label>
                         <input type="text" id="ula_global_id" name="ula_global_id"
                                value="<?= htmlspecialchars($ula_global_id_input) ?>"
                                placeholder="e.g. 1a2b3c4d5e (random if blank)"
@@ -551,15 +646,15 @@ if ($i < 3) {
             <div class="error"><?= htmlspecialchars($vlsm_error) ?></div>
         <?php elseif ($vlsm_result !== null) : ?>
             <div class="vlsm-results">
-                <p class="vlsm-sort-note">Results sorted largest-first for efficient allocation.</p>
+                <p class="vlsm-sort-note">Results sorted largest-first for efficient allocation.<?= help_bubble('vlsm-sort', 'Subnets are allocated from largest to smallest so that larger blocks can be placed at aligned boundaries without wasting address space.') ?></p>
                 <table class="vlsm-table">
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <th>Hosts Needed</th>
+                            <th>Hosts Needed<?= help_bubble('vlsm-hosts', 'The number of usable host addresses you requested for this subnet. The allocated block is the smallest power-of-2 that satisfies this requirement (plus network and broadcast addresses).') ?></th>
                             <th>Allocated Subnet</th>
                             <th>Usable</th>
-                            <th>Waste</th>
+                            <th>Waste<?= help_bubble('vlsm-waste', 'Usable addresses in the allocated block minus the hosts you requested. Larger values indicate more address space is reserved than strictly needed.') ?></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -602,9 +697,14 @@ if ($i < 3) {
                 <span>Hosts requested: <strong><?= number_format($vlsm_total_hosts_req) ?></strong></span>
                 <span>Allocated: <strong><?= number_format($vlsm_total_allocated) ?></strong> addresses</span>
                 <span>Remaining: <strong><?= number_format($vlsm_remaining) ?></strong></span>
-                <span>Utilisation: <strong><?= $vlsm_util_pct ?>%</strong></span>
+                <span>Utilisation: <strong><?= $vlsm_util_pct ?>%</strong><?= help_bubble('vlsm-util', 'Total allocated addresses ÷ total addresses in the parent subnet × 100. Values below 100% indicate unallocated space remaining in the parent block.') ?></span>
             </div>
-            <button type="button" id="vlsm-export-csv">Export CSV</button>
+            <div class="export-btn-group">
+                <button type="button" id="vlsm-export-csv">Export CSV</button>
+                <button type="button" id="vlsm-export-json">Export JSON</button>
+                <button type="button" id="vlsm-export-xlsx">Export XLSX</button>
+                <button type="button" id="vlsm-export-ascii">Export ASCII</button>
+            </div>
             <?php if ($show_share_bar && $share_url !== '') : ?>
             <div class="share-bar">
                 <span class="share-label">Share</span>
@@ -617,7 +717,7 @@ if ($i < 3) {
         <?php if ($session_enabled) : ?>
         <!-- Session Save / Restore -->
         <div class="overlap-panel">
-            <div class="overlap-title">Save &amp; Restore Session</div>
+            <div class="overlap-title">Save &amp; Restore Session<?= help_bubble('vlsm-session', 'Saves your VLSM inputs to the server so you can restore them later via a short link. Sessions expire after the configured TTL. No account required.') ?></div>
             <p class="session-ttl-notice">Saved sessions expire after <?= (int)$session_ttl_days ?> day<?= (int)$session_ttl_days === 1 ? '' : 's' ?>.</p>
             <?php if ($session_save_id !== '') : ?>
                 <div class="overlap-result overlap-contains share-bar" style="margin-bottom:0.5rem;">
@@ -630,33 +730,35 @@ if ($i < 3) {
             <?php if ($session_error) : ?>
                 <div class="error"><?= htmlspecialchars($session_error) ?></div>
             <?php endif; ?>
-            <form method="post" novalidate>
-                <input type="hidden" name="tab" value="vlsm">
-                <input type="hidden" name="vlsm_network" value="<?= htmlspecialchars($vlsm_network) ?>">
-                <input type="hidden" name="vlsm_cidr" value="<?= htmlspecialchars($vlsm_cidr_input) ?>">
-                <?php foreach ($vlsm_requirements as $req) : ?>
-                    <input type="hidden" name="vlsm_name[]" value="<?= htmlspecialchars($req['name']) ?>">
-                    <input type="hidden" name="vlsm_hosts[]" value="<?= htmlspecialchars((string)$req['hosts']) ?>">
-                <?php endforeach; ?>
-                <button type="submit" name="session_action" value="save" class="splitter-btn">Save Session</button>
-            </form>
-            <form method="get" novalidate style="margin-top:0.5rem;">
-                <div class="overlap-inputs" style="gap:0.5rem;">
+            <div class="session-forms">
+                <form method="post" novalidate>
                     <input type="hidden" name="tab" value="vlsm">
-                    <input type="text" name="s"
-                           value="<?= htmlspecialchars($session_load_id) ?>"
-                           placeholder="8-char session ID"
-                           autocomplete="off" spellcheck="false" maxlength="8"
-                           aria-label="Session ID">
-                    <button type="submit" class="splitter-btn">Load</button>
-                </div>
-            </form>
+                    <input type="hidden" name="vlsm_network" value="<?= htmlspecialchars($vlsm_network) ?>">
+                    <input type="hidden" name="vlsm_cidr" value="<?= htmlspecialchars($vlsm_cidr_input) ?>">
+                    <?php foreach ($vlsm_requirements as $req) : ?>
+                        <input type="hidden" name="vlsm_name[]" value="<?= htmlspecialchars($req['name']) ?>">
+                        <input type="hidden" name="vlsm_hosts[]" value="<?= htmlspecialchars((string)$req['hosts']) ?>">
+                    <?php endforeach; ?>
+                    <button type="submit" name="session_action" value="save" class="splitter-btn">Save Session</button>
+                </form>
+                <form method="get" novalidate>
+                    <div class="overlap-inputs">
+                        <input type="hidden" name="tab" value="vlsm">
+                        <input type="text" name="s"
+                               value="<?= htmlspecialchars($session_load_id) ?>"
+                               placeholder="8-char session ID"
+                               autocomplete="off" spellcheck="false" maxlength="8"
+                               aria-label="Session ID">
+                        <button type="submit" class="splitter-btn">Load</button>
+                    </div>
+                </form>
+            </div>
         </div>
         <?php endif; ?>
 
         <!-- Overlap Checker -->
         <div class="overlap-panel">
-            <div class="overlap-title">Subnet Overlap Checker</div>
+            <div class="overlap-title">Subnet Overlap Checker<?= help_bubble('overlap-two', 'Compares two CIDRs and reports whether they overlap, one contains the other, are identical, or have no relationship. Supports both IPv4 and IPv6.') ?></div>
             <form method="post" class="overlap-form" novalidate>
                 <input type="hidden" name="tab" value="vlsm">
                 <div class="overlap-inputs">
@@ -690,7 +792,7 @@ if ($i < 3) {
 
         <!-- Multi-CIDR Overlap Checker -->
         <div class="overlap-panel multi-overlap-panel">
-            <div class="overlap-title">Multi-CIDR Overlap Check</div>
+            <div class="overlap-title">Multi-CIDR Overlap Check<?= help_bubble('multi-cidr', 'Enter up to 50 IPv4 or IPv6 CIDRs, one per line. The tool reports any pairs that overlap, are identical, or where one contains the other.') ?></div>
             <form method="post" class="overlap-form" novalidate>
                 <input type="hidden" name="tab" value="vlsm">
                 <textarea name="multi_overlap_input" class="multi-overlap-input"
@@ -728,11 +830,14 @@ if ($i < 3) {
 
     <footer>
         <a href="https://github.com/seanmousseau/Subnet-Calculator" target="_blank" rel="noopener noreferrer">github.com/seanmousseau/Subnet-Calculator</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://seanmousseau.github.io/Subnet-Calculator/" target="_blank" rel="noreferrer">Docs</a>
     </footer>
 </div>
 
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">Copied!</div>
 
+<script defer src="assets/vendor/xlsx/xlsx.full.min.js" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
 <script src="assets/app.js?v=<?= $app_version ?>"></script>
 </body>
 </html>

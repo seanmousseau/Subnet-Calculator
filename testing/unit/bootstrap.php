@@ -14,3 +14,5 @@ require $base . 'functions-supernet.php';
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require $base . 'functions-resolve.php';
+require $base . 'functions-range.php';
+require $base . 'functions-tree.php';

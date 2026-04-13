@@ -617,3 +617,108 @@ paths:
                                 error: { type: string, description: "Present when ok is false." }
         "400": { description: Invalid request, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
+
+  /range/ipv4:
+    post:
+      operationId: rangeToIPv4CIDRs
+      summary: Convert an IPv4 address range to its minimal covering CIDR list
+      description: |
+        Accepts a start IP and end IP (both inclusive) and returns the minimal list of
+        CIDRs that exactly covers the range using a greedy largest-aligned block algorithm.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [start, end]
+              properties:
+                start:
+                  type: string
+                  description: Start IPv4 address (inclusive)
+                  example: "10.0.0.0"
+                end:
+                  type: string
+                  description: End IPv4 address (inclusive)
+                  example: "10.0.0.255"
+      responses:
+        "200":
+          description: List of covering CIDRs
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [cidrs]
+                        properties:
+                          cidrs:
+                            type: array
+                            items: { type: string }
+                            example: ["10.0.0.0/24"]
+        "400": { description: Invalid IPs or end < start, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+
+  /tree:
+    post:
+      operationId: buildSubnetTree
+      summary: Build a subnet allocation tree from a parent CIDR and child allocations
+      description: |
+        Accepts a parent CIDR and an array of allocated child CIDRs and returns a
+        containment tree showing how the children nest within the parent, including
+        unallocated gap CIDRs between allocated blocks.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parent, children]
+              properties:
+                parent:
+                  type: string
+                  description: Parent IPv4 CIDR
+                  example: "10.0.0.0/24"
+                children:
+                  type: array
+                  description: Allocated child CIDRs (must all be contained within parent)
+                  maxItems: 100
+                  items: { type: string }
+                  example: ["10.0.0.0/26", "10.0.0.128/26"]
+      responses:
+        "200":
+          description: Subnet allocation tree
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [tree]
+                        properties:
+                          tree:
+                            type: object
+                            description: Root tree node
+                            required: [cidr, allocated, children]
+                            properties:
+                              cidr:      { type: string }
+                              allocated: { type: boolean }
+                              children:
+                                type: array
+                                items: { type: object }
+                              gaps:
+                                type: array
+                                description: Unallocated CIDR blocks within this node
+                                items: { type: string }
+        "400": { description: Invalid CIDRs or children outside parent, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }

@@ -4,6 +4,9 @@
 
     <rule ref="PSR12"/>
 
+    <!-- Vendored third-party assets — do not lint -->
+    <exclude-pattern>Subnet-Calculator/assets/vendor/**</exclude-pattern>
+
     <!-- Test files: PHPUnit convention uses underscores in method names
          and top-level classes without a namespace. -->
     <rule ref="PSR1.Classes.ClassDeclaration">

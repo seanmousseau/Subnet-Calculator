@@ -128,6 +128,18 @@ $session_save_id  = '';
 $session_load_id  = '';
 $session_error    = null;
 
+$range_start  = '';
+$range_end    = '';
+/** @var list<string>|null $range_result */
+$range_result = null;
+$range_error  = null;
+
+$tree_parent   = '';
+$tree_children = '';
+/** @var array<string, mixed>|null $tree_result */
+$tree_result = null;
+$tree_error  = null;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $post_tab   = $_POST['tab'] ?? $default_tab;
     $active_tab = in_array($post_tab, ['ipv4', 'ipv6', 'vlsm'], true) ? $post_tab : 'ipv4';
@@ -140,9 +152,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_supernet      = isset($_POST['supernet_action']);
     $is_ula           = isset($_POST['ula_generate']);
     $is_session_save  = isset($_POST['session_action']) && (string)($_POST['session_action'] ?? '') === 'save';
+    $is_range         = isset($_POST['range_start']) || isset($_POST['range_end']);
+    $is_tree          = isset($_POST['tree_parent']);
 
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
-        || $is_supernet || $is_ula || $is_session_save;
+        || $is_supernet || $is_ula || $is_session_save || $is_range || $is_tree;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -505,6 +519,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $session_error = 'Failed to save session. Please try again.';
                     }
                 }
+            }
+        }
+    }
+    if ($is_range && !$form_blocked) {
+        $range_start = trim((string)($_POST['range_start'] ?? ''));
+        $range_end   = trim((string)($_POST['range_end']   ?? ''));
+        if ($range_start === '' || $range_end === '') {
+            $range_error = 'Both start and end IP addresses are required.';
+        } else {
+            $rr = range_to_cidrs($range_start, $range_end);
+            if (isset($rr['error'])) {
+                $range_error = $rr['error'];
+            } else {
+                $range_result = $rr['cidrs'] ?? [];
+            }
+        }
+    }
+
+    if ($is_tree && !$form_blocked) {
+        $tree_parent   = trim((string)($_POST['tree_parent']   ?? ''));
+        $tree_children = trim((string)($_POST['tree_children'] ?? ''));
+        $child_lines   = array_values(array_filter(array_map('trim', explode("\n", $tree_children))));
+        if ($tree_parent === '') {
+            $tree_error = 'Parent CIDR is required.';
+        } elseif (count($child_lines) > 100) {
+            $tree_error = 'Maximum 100 child CIDRs per request.';
+        } else {
+            $tr = build_subnet_tree($tree_parent, $child_lines);
+            if (isset($tr['error'])) {
+                $tree_error = $tr['error'];
+            } else {
+                $tree_result = $tr['tree'] ?? [];
             }
         }
     }

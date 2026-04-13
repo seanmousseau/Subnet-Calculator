@@ -130,3 +130,24 @@ function type_badge_class(string $type): string
     ];
     return $map[$type] ?? 'other';
 }
+
+// ─── Help bubble ─────────────────────────────────────────────────────────────
+
+/**
+ * Render an inline help-bubble icon with a tooltip.
+ *
+ * Returns pre-escaped HTML — safe to echo directly (do not re-escape).
+ */
+function help_bubble(string $id, string $text): string
+{
+    // Normalise $id to a safe HTML-ID token (alphanumerics, hyphens, underscores only).
+    $safe_id = preg_replace('/[^A-Za-z0-9\-_]/', '-', $id);
+    if ($safe_id === '' || $safe_id === null) {
+        $safe_id = 'auto';
+    }
+    $safe = htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    return '<span class="help-bubble">'
+         . '<span class="help-bubble-icon" tabindex="0" aria-describedby="hb-' . $safe_id . '">?</span>'
+         . '<span class="help-bubble-text" role="tooltip" id="hb-' . $safe_id . '">' . $safe . '</span>'
+         . '</span>';
+}

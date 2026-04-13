@@ -15,7 +15,8 @@ https://dev.seanmousseau.com/subnet-calculator/
 - Handles edge cases: `/0`, `/31` (point-to-point), `/32` (host route)
 - Paste a full CIDR string (e.g. `192.168.1.0/24`) into the IP field — it auto-splits on blur
 - Binary representation — collapsible section showing network and host bits with colour coding; also displays the network address in **hex** (e.g. `C0.A8.01.00`) and **decimal** (e.g. `3232235776`)
-- Subnet splitter — split into equal smaller subnets; per-row copy buttons; split prefix included in shareable URL
+- Subnet splitter — split into equal smaller subnets; per-row copy buttons; split prefix included in shareable URL; ASCII diagram export
+- **IP range → CIDR conversion** — enter a start and end IP to get the minimal covering CIDR list
 
 **IPv6**
 - CIDR prefix input (`/64`, `64`)
@@ -33,7 +34,8 @@ https://dev.seanmousseau.com/subnet-calculator/
 - Utilisation summary: Hosts Requested, Allocated, Remaining, Utilisation %
 - Add or remove requirement rows dynamically; supports any number of subnets
 - Shareable URL — GET parameters auto-populate and run the planner on page load
-- Export CSV — download full results as a CSV file
+- Export CSV / JSON / XLSX — download full results in any of three formats
+- **ASCII diagram export** — copy a Unicode box-drawing tree of the allocated subnets
 - Client-side validation with inline errors; loading state on submit
 - **Session save/restore** (opt-in) — save VLSM state to SQLite and restore via a short shareable URL
 
@@ -130,6 +132,8 @@ All POST endpoints accept and return JSON. Responses are enveloped:
 | `POST` | `/api/v1/ula` | Generate IPv6 ULA prefix |
 | `POST` | `/api/v1/sessions` | Save VLSM session (requires `$session_enabled = true`) |
 | `GET` | `/api/v1/sessions/{id}` | Restore VLSM session |
+| `POST` | `/api/v1/range/ipv4` | Convert an IP range to minimal CIDR list |
+| `POST` | `/api/v1/tree` | Build subnet allocation tree from parent + child CIDRs |
 
 See `api/openapi.yaml` for the full OpenAPI 3.1 specification.
 
@@ -139,6 +143,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File |
 |---------|------|
+| 2.3.0 | `releases/subnet-calculator-2.3.0.tar.gz` |
 | 2.2.0 | `releases/subnet-calculator-2.2.0.tar.gz` |
 | 2.1.0 | `releases/subnet-calculator-2.1.0.tar.gz` |
 | 2.0.1 | `releases/subnet-calculator-2.0.1.tar.gz` |

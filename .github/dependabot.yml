@@ -11,3 +11,8 @@ updates:
       interval: "weekly"
     ignore:
       - dependency-name: "anthropics/claude-code-action"
+
+  - package-ecosystem: "pip"
+    directory: "/docs"
+    schedule:
+      interval: "weekly"

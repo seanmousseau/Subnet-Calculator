@@ -82,6 +82,30 @@ reviews:
         reference defined schemas, and all error responses (400, 401, 404, 429)
         are documented.
 
+    - path: "docs/**"
+      instructions: |
+        Documentation source for GitHub Pages (MkDocs Material). Verify that
+        all feature descriptions match the current code behaviour, code examples
+        are accurate, and no internal/server config secrets are documented.
+
+    - path: "assets/vendor/**"
+      instructions: |
+        Vendored third-party assets (currently SheetJS xlsx.full.min.js).
+        Verify the SRI integrity hash on the <script> tag in layout.php matches
+        the actual file. Do not flag the minified JS for style issues.
+
+    - path: "Subnet-Calculator/api/v1/handlers/tree.php"
+      instructions: |
+        REST API handler for POST /api/v1/tree. Same rules as
+        Subnet-Calculator/api/v1/**: validate all inputs, use
+        json_ok()/json_err(), no variable require paths.
+
+    - path: "Subnet-Calculator/api/v1/handlers/range.php"
+      instructions: |
+        REST API handler for POST /api/v1/range/ipv4. Same rules as
+        Subnet-Calculator/api/v1/**: validate all inputs, check ip2long()
+        for false before arithmetic, use & 0xFFFFFFFF.
+
   finishing_touches:
     docstrings:
       enabled: false  # PHP files use declare(strict_types=1) with type hints; no docstrings needed

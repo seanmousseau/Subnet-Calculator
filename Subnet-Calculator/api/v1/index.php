@@ -23,6 +23,8 @@ require $base . 'functions-supernet.php';
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require_once $base . 'functions-resolve.php';
+require $base . 'functions-range.php';
+require $base . 'functions-tree.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -58,6 +60,8 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/bulk',
             'POST /api/v1/sessions',
             'GET  /api/v1/sessions/{id}',
+            'POST /api/v1/range/ipv4',
+            'POST /api/v1/tree',
         ],
     ]);
 }
@@ -118,6 +122,12 @@ switch ($route_key) {
         break;
     case 'POST /sessions':
         require __DIR__ . '/handlers/sessions.php';
+        break;
+    case 'POST /range/ipv4':
+        require __DIR__ . '/handlers/range.php';
+        break;
+    case 'POST /tree':
+        require __DIR__ . '/handlers/tree.php';
         break;
 }
 

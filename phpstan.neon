@@ -10,6 +10,8 @@ parameters:
         - Subnet-Calculator/includes/functions-session.php
         - Subnet-Calculator/includes/functions-resolve.php
         - Subnet-Calculator/api/v1/helpers.php
+        - Subnet-Calculator/includes/functions-range.php
+        - Subnet-Calculator/includes/functions-tree.php
     # config.php is gitignored (user override) — skip if absent
     excludePaths:
         - Subnet-Calculator/config.php (?)
