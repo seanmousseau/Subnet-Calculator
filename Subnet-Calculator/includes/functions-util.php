@@ -156,7 +156,8 @@ function format_number(int|float $n): string
             }
         }
     }
-    return \number_format((int)$n);
+    $decimals = (is_float($n) && floor($n) !== $n) ? 2 : 0;
+    return \number_format($n, $decimals);
 }
 
 // ─── Help bubble ─────────────────────────────────────────────────────────────

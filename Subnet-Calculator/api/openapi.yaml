@@ -212,9 +212,9 @@ paths:
                   network_hex: "0A.00.00.00"
                   network_decimal: 167772160
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "401": { description: Unauthorised }
-        "429": { description: Rate limit exceeded }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
 
   /ipv6:
     post:
@@ -252,8 +252,9 @@ paths:
                   address_expanded: "2001:0db8:0000:0000:0000:0000:0000:0000"
                   address_compressed: "2001:db8::"
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "401": { description: Unauthorised }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
 
   /vlsm:
     post:
@@ -317,8 +318,9 @@ paths:
                       usable: 14
                       waste: 0
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "401": { description: Unauthorised }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
 
   /overlap:
     post:
@@ -360,7 +362,9 @@ paths:
                   cidr_b: "10.0.0.128/25"
                   relation: "a_contains_b"
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
 
   /split/ipv4:
     post:
@@ -402,7 +406,9 @@ paths:
                     - "10.0.0.128/26"
                     - "10.0.0.192/26"
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
 
   /split/ipv6:
     post:
@@ -437,14 +443,16 @@ paths:
                   network: "2001:db8::/32"
                   split_prefix: "/48"
                   total: 65536
-                  showing: 16
+                  showing: 4
                   subnets:
                     - "2001:db8::/48"
                     - "2001:db8:1::/48"
                     - "2001:db8:2::/48"
                     - "2001:db8:3::/48"
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
 
   /supernet:
     post:
@@ -496,7 +504,9 @@ paths:
                 data:
                   supernet: "10.0.0.0/23"
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
 
   /ula:
     post:
@@ -535,7 +545,9 @@ paths:
                     - "fd1a:2b3c:4d5e:0003::/64"
                   available_64s: 65536
         "400": { description: Invalid global_id, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
 
   /sessions:
     post:
@@ -573,7 +585,9 @@ paths:
                 data:
                   id: "a1b2c3d4"
         "400": { description: Invalid payload }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "501": { description: Session persistence not enabled on this server }
 
   /sessions/{id}:
@@ -615,7 +629,9 @@ paths:
                       - { name: "LAN", hosts: 50 }
                       - { name: "DMZ", hosts: 14 }
         "400": { description: Invalid session ID format }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Session not found or expired }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "501": { description: Session persistence not enabled on this server }
 
   /rdns:
@@ -698,7 +714,9 @@ paths:
                     1 IN PTR 1.1.168.192.example.com.
                     2 IN PTR 2.1.168.192.example.com.
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "500": { description: GMP extension missing (IPv6 only) }
 
   /bulk:
@@ -778,7 +796,9 @@ paths:
                         last_addr: "2001:db8:ffff:ffff:ffff:ffff:ffff:ffff"
                         total_addresses: "79228162514264337593543950336"
         "400": { description: Invalid request, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
 
   /range/ipv4:
     post:

@@ -889,9 +889,9 @@
 
             /* #193: VLSM table — full width with repeating headers on page breaks */
             .vlsm-results { overflow-x: visible; }
-            .vlsm-table { width: 100%; table-layout: fixed; word-break: break-word; }
+            .vlsm-table { width: 100%; table-layout: fixed; overflow-wrap: anywhere; }
             .vlsm-table thead { display: table-header-group; }
-            .vlsm-summary { page-break-inside: avoid; }
+            .vlsm-summary { break-inside: avoid; }
 
             /* #193: hide export/copy/share controls */
             .export-btn-group,

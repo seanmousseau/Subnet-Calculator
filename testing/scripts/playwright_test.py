@@ -2088,10 +2088,10 @@ async def test_csp_inline_style_violations(page: Page) -> None:
     await page.wait_for_timeout(200)
 
     # Overlap panel
-    await page.click("#tab-overlap")
-    await page.fill("#overlap_a", "10.0.0.0/24")
-    await page.fill("#overlap_b", "10.0.0.128/25")
-    await page.press("#overlap_a", "Enter")
+    await page.click("#tab-vlsm")
+    await page.fill("input[name='overlap_cidr_a']", "10.0.0.0/24")
+    await page.fill("input[name='overlap_cidr_b']", "10.0.0.128/25")
+    await submit_form(page, ".overlap-form")
     await page.wait_for_selector(".overlap-result", timeout=8000)
     await page.wait_for_timeout(200)
 
@@ -2179,13 +2179,13 @@ async def test_locale_number_format(page: Page) -> None:
     await navigate(page, APP_URL + "?ip=10.0.0.0&mask=16")
     await page.wait_for_selector(".results", timeout=8000)
 
-    usable = await result_value(page, "Usable Hosts")
+    usable = await result_value(page, "Usable IPs")
     assert_true(
-        "usable hosts displayed with comma separator (65,534)",
+        "usable IPs displayed with comma separator (65,534)",
         usable is not None and "," in (usable or ""),
         f"got {usable!r}"
     )
-    assert_eq("usable hosts value is 65,534", usable, "65,534")
+    assert_eq("usable IPs value is 65,534", usable, "65,534")
 
     total = await result_value(page, "Total IPs")
     assert_true(
@@ -2198,11 +2198,18 @@ async def test_locale_number_format(page: Page) -> None:
 
 async def test_eslint_clean(page: Page) -> None:  # noqa: ARG001
     """Run ESLint and assert exit code 0."""
+    import shutil
     import subprocess
+    from pathlib import Path
     section("ESLint — app.js clean")
+    npm = shutil.which("npm")
+    if npm is None:
+        assert_true("npm is on PATH", False, "npm not found — cannot run ESLint")
+        return
+    repo_root = Path(__file__).resolve().parents[2]
     result = subprocess.run(
-        ["npm", "run", "lint:js"],
-        capture_output=True, text=True,
+        [npm, "run", "lint:js"],
+        capture_output=True, text=True, cwd=repo_root,
     )
     assert_true(
         "eslint exits 0 (no errors)",
@@ -2213,11 +2220,18 @@ async def test_eslint_clean(page: Page) -> None:  # noqa: ARG001
 
 async def test_stylelint_clean(page: Page) -> None:  # noqa: ARG001
     """Run Stylelint and assert exit code 0."""
+    import shutil
     import subprocess
+    from pathlib import Path
     section("Stylelint — app.css clean")
+    npm = shutil.which("npm")
+    if npm is None:
+        assert_true("npm is on PATH", False, "npm not found — cannot run Stylelint")
+        return
+    repo_root = Path(__file__).resolve().parents[2]
     result = subprocess.run(
-        ["npm", "run", "lint:css"],
-        capture_output=True, text=True,
+        [npm, "run", "lint:css"],
+        capture_output=True, text=True, cwd=repo_root,
     )
     assert_true(
         "stylelint exits 0 (no errors)",
