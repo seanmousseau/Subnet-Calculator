@@ -482,9 +482,11 @@ paths:
                       data:
                         oneOf:
                           - type: object
+                            required: [supernet]
                             properties:
                               supernet: { type: string, example: "10.0.0.0/23" }
                           - type: object
+                            required: [summaries]
                             properties:
                               summaries:
                                 type: array
