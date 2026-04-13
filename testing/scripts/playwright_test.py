@@ -2067,63 +2067,63 @@ async def test_csp_inline_style_violations(page: Page) -> None:
             csp_violations.append(text)
 
     page.on("console", on_console)
+    try:
+        # Load page and trigger result panels (ipv4, ipv6, overlap, range, tree)
+        await navigate(page, APP_URL)
+        await page.wait_for_timeout(300)
 
-    # Load page and trigger result panels (ipv4, ipv6, overlap, range, tree)
-    await navigate(page, APP_URL)
-    await page.wait_for_timeout(300)
+        # IPv4 result
+        await page.fill("#ip", "10.0.0.0")
+        await page.fill("#mask", "24")
+        await page.press("#ip", "Enter")
+        await page.wait_for_selector(".results", timeout=8000)
+        await page.wait_for_timeout(200)
 
-    # IPv4 result
-    await page.fill("#ip", "10.0.0.0")
-    await page.fill("#mask", "24")
-    await page.press("#ip", "Enter")
-    await page.wait_for_selector(".results", timeout=8000)
-    await page.wait_for_timeout(200)
+        # IPv6 result
+        await page.click("#tab-ipv6")
+        await page.fill("#ipv6", "2001:db8::/32")
+        await page.press("#ipv6", "Enter")
+        await page.wait_for_selector("#panel-ipv6 .results", timeout=8000)
+        await page.wait_for_timeout(200)
 
-    # IPv6 result
-    await page.click("#tab-ipv6")
-    await page.fill("#ipv6", "2001:db8::/32")
-    await page.press("#ipv6", "Enter")
-    await page.wait_for_selector("#panel-ipv6 .results", timeout=8000)
-    await page.wait_for_timeout(200)
+        # Overlap panel
+        await page.click("#tab-vlsm")
+        await page.fill("input[name='overlap_cidr_a']", "10.0.0.0/24")
+        await page.fill("input[name='overlap_cidr_b']", "10.0.0.128/25")
+        await submit_form(page, ".overlap-form")
+        await page.wait_for_selector(".overlap-result", timeout=8000)
+        await page.wait_for_timeout(200)
 
-    # Overlap panel
-    await page.click("#tab-vlsm")
-    await page.fill("input[name='overlap_cidr_a']", "10.0.0.0/24")
-    await page.fill("input[name='overlap_cidr_b']", "10.0.0.128/25")
-    await submit_form(page, ".overlap-form")
-    await page.wait_for_selector(".overlap-result", timeout=8000)
-    await page.wait_for_timeout(200)
+        assert_true(
+            "no CSP inline-style violations across page interaction",
+            len(csp_violations) == 0,
+            f"violations: {csp_violations[:3]}"
+        )
 
-    assert_true(
-        "no CSP inline-style violations across page interaction",
-        len(csp_violations) == 0,
-        f"violations: {csp_violations[:3]}"
-    )
-
-    # Verify no result panels have bare style= attributes (all should use CSS classes)
-    styled_els = await page.evaluate("""() => {
-        var panels = document.querySelectorAll(
-            '.results, .overlap-result, .split-result, .vlsm-results, .tree-view'
-        );
-        var found = [];
-        panels.forEach(function(p) {
-            p.querySelectorAll('[style]').forEach(function(el) {
-                // Allow style from vendor scripts or nonce-covered blocks
-                var s = el.getAttribute('style') || '';
-                if (s.trim() !== '') {
-                    found.push((el.className || el.tagName) + ': ' + s.substring(0, 60));
-                }
+        # Verify no result panels have bare style= attributes (all should use CSS classes)
+        styled_els = await page.evaluate("""() => {
+            var panels = document.querySelectorAll(
+                '.results, .overlap-result, .split-result, .vlsm-results, .tree-view'
+            );
+            var found = [];
+            panels.forEach(function(p) {
+                p.querySelectorAll('[style]').forEach(function(el) {
+                    // Allow style from vendor scripts or nonce-covered blocks
+                    var s = el.getAttribute('style') || '';
+                    if (s.trim() !== '') {
+                        found.push((el.className || el.tagName) + ': ' + s.substring(0, 60));
+                    }
+                });
             });
-        });
-        return found;
-    }""")
-    assert_true(
-        "no bare style= attributes in result panels",
-        len(styled_els) == 0,
-        f"found: {styled_els[:3]}"
-    )
-
-    page.remove_listener("console", on_console)
+            return found;
+        }""")
+        assert_true(
+            "no bare style= attributes in result panels",
+            len(styled_els) == 0,
+            f"found: {styled_els[:3]}"
+        )
+    finally:
+        page.remove_listener("console", on_console)
 
 
 async def test_print_stylesheet(page: Page) -> None:
@@ -2206,10 +2206,14 @@ async def test_eslint_clean(page: Page) -> None:  # noqa: ARG001
         assert_true("npm is on PATH", False, "npm not found — cannot run ESLint")
         return
     repo_root = Path(__file__).resolve().parents[2]
-    result = subprocess.run(
-        [npm, "run", "lint:js"],
-        capture_output=True, text=True, cwd=repo_root,
-    )
+    try:
+        result = subprocess.run(
+            [npm, "run", "lint:js"],
+            capture_output=True, text=True, cwd=repo_root, timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        assert_true("eslint exits 0 (no errors)", False, "ESLint timed out after 300 s")
+        return
     assert_true(
         "eslint exits 0 (no errors)",
         result.returncode == 0,
@@ -2228,10 +2232,14 @@ async def test_stylelint_clean(page: Page) -> None:  # noqa: ARG001
         assert_true("npm is on PATH", False, "npm not found — cannot run Stylelint")
         return
     repo_root = Path(__file__).resolve().parents[2]
-    result = subprocess.run(
-        [npm, "run", "lint:css"],
-        capture_output=True, text=True, cwd=repo_root,
-    )
+    try:
+        result = subprocess.run(
+            [npm, "run", "lint:css"],
+            capture_output=True, text=True, cwd=repo_root, timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        assert_true("stylelint exits 0 (no errors)", False, "Stylelint timed out after 300 s")
+        return
     assert_true(
         "stylelint exits 0 (no errors)",
         result.returncode == 0,
