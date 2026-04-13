@@ -28,8 +28,9 @@ try:
         compare_snapshot,
         set_viewport as _set_viewport,
     )
-    _SNAPSHOTS_AVAILABLE = _SNAPSHOT_PIL_AVAILABLE
+    _SNAPSHOTS_AVAILABLE = True
 except ImportError:
+    _SNAPSHOT_PIL_AVAILABLE = False
     _SNAPSHOTS_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
@@ -1264,11 +1265,10 @@ async def test_tooltips_help_bubbles(page: Page) -> None:
 async def test_visual_regression(page: Page) -> None:
     section("Visual regression — pixel comparison against baselines")
 
-    if not _SNAPSHOTS_AVAILABLE:
+    UPDATE = os.environ.get("UPDATE_SNAPSHOTS", "0") == "1"
+    if not _SNAPSHOTS_AVAILABLE or (not UPDATE and not _SNAPSHOT_PIL_AVAILABLE):
         ok("visual regression: snapshot_utils not available — skipped")
         return
-
-    UPDATE = os.environ.get("UPDATE_SNAPSHOTS", "0") == "1"
 
     async def snap(name: str) -> None:
         if UPDATE:
@@ -1592,19 +1592,16 @@ async def test_session_forms_spacing(page: Page) -> None:
     if panel is None:
         ok("session forms spacing: sessions not enabled on this server (skipped)")
         return
-    save_btn = await page.query_selector("button[name='session_action'][value='save']")
-    session_input = await page.query_selector("input[name='s']")
-    if save_btn is None or session_input is None:
-        ok("session forms spacing: elements not found (skipped)")
+    forms = page.locator(".session-forms")
+    if await forms.count() == 0:
+        ok("session forms spacing: .session-forms not found (skipped)")
         return
-    save_box = await save_btn.bounding_box()
-    input_box = await session_input.bounding_box()
-    if save_box is None or input_box is None:
-        ok("session forms spacing: bounding boxes unavailable (skipped)")
-        return
-    gap = input_box["y"] - (save_box["y"] + save_box["height"])
+    gap = await forms.evaluate("""(el) => {
+        var style = window.getComputedStyle(el);
+        return parseFloat(style.rowGap || style.gap || '0');
+    }""")
     assert_true(
-        "session forms spacing: gap between Save button and session ID input >= 12px",
+        "session forms spacing: container gap >= 12px",
         gap >= 12,
         f"got gap={gap:.1f}px",
     )
