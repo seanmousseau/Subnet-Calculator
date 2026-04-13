@@ -29,7 +29,7 @@ npm run lint:css  # Stylelint on app.css
 npm run lint      # both
 
 # Deploy to dev server, then run the end-to-end browser test suite (~517 assertions)
-# Requires: dev server running, Chrome CDP container at 192.168.80.15:9224
+# Requires: dev server running at root@192.168.80.15
 rsync -a --delete Subnet-Calculator/ root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
 scp testing/fixtures/iframe-test.html root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
 bash -c 'set -a; source ~/.claude/dev-secrets.env; set +a; python3 testing/scripts/playwright_test.py'

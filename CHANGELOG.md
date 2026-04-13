@@ -19,7 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Mobile horizontal overflow** — `.splitter-row` gains `flex-wrap: wrap` so the supernet action buttons stack correctly on 375 px viewports
 
 ### Tooling / CI
-- PHPStan level 9 expanded to all `includes/functions-*.php` and all `api/v1/handlers/*.php`; real type errors in `functions-ipv4.php`, `functions-ipv6.php`, `functions-split.php`, and `functions-util.php` corrected (`ip2long`/`inet_pton`/`unpack` false-return handling, missing iterableValue annotations)
+- PHPStan level 9 expanded to all `includes/functions-*.php` and all `api/v1/handlers/*.php`; real type errors corrected:
+  - `functions-ipv4.php`: `ip2long()` and `long2ip()` false-return guarded in `cidr_to_mask()`, `mask_to_cidr()`, `is_valid_mask_octet()`, `cidr_to_wildcard()`
+  - `functions-ipv6.php`: `inet_pton()` and `hex2bin()` false-return guarded in `gmp_to_ipv6()`; `ipv6_ptr_zone()` now throws `\InvalidArgumentException` on invalid input instead of silently returning a bad zone
+  - `functions-util.php`: `unpack()` false/short-result path in `get_ipv6_type()` now returns `'Unknown'` immediately
+  - `functions-ipv4.php`, `functions-ipv6.php`, `functions-split.php`: `@return array<string, mixed>` PHPDoc added to `calculate_subnet()`, `calculate_subnet6()`, `split_subnet()`, `split_subnet6()`
 - `.coderabbit.yaml` review instructions added for `package.json`, `eslint.config.js`, `.stylelintrc.json`, `.semgrep.yml`
 - `.semgrep.yml` added: PHP XSS (unsanitised `$_GET`/`$_POST` echo), PHP SQL injection (string-concatenated queries), JS unsafe DOM content rules
 

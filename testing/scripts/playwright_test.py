@@ -2474,7 +2474,7 @@ async def test_all_tooltips_direction(page: Page) -> None:
     # 8 bubbles when sessions are disabled (vlsm-session bubble is conditional);
     # 9+ when sessions are enabled.
     assert_true(
-        f"found all expected help bubbles (≥8)",
+        "found all expected help bubbles (≥8)",
         total_tips >= 8,
         f"found {total_tips}"
     )
@@ -2516,7 +2516,8 @@ async def test_console_no_errors(page: Page) -> None:
                     len(errors) == 0, "; ".join(errors))
         assert_true("no console warnings on page load",
                     len(warnings) == 0, "; ".join(warnings))
-        errors.clear(); warnings.clear()
+        errors.clear()
+        warnings.clear()
 
         # 2. IPv4 result
         await navigate(page, APP_URL + "?ip=192.168.1.0&mask=%2F24")
@@ -2526,7 +2527,8 @@ async def test_console_no_errors(page: Page) -> None:
                     len(errors) == 0, "; ".join(errors))
         assert_true("no console warnings — IPv4 result",
                     len(warnings) == 0, "; ".join(warnings))
-        errors.clear(); warnings.clear()
+        errors.clear()
+        warnings.clear()
 
         # 3. IPv6 result
         await navigate(page, APP_URL + "?tab=ipv6&ipv6=2001%3Adb8%3A%3A1&prefix=32")
@@ -2536,7 +2538,8 @@ async def test_console_no_errors(page: Page) -> None:
                     len(errors) == 0, "; ".join(errors))
         assert_true("no console warnings — IPv6 result",
                     len(warnings) == 0, "; ".join(warnings))
-        errors.clear(); warnings.clear()
+        errors.clear()
+        warnings.clear()
 
         # 4. VLSM result
         await navigate(
@@ -2550,7 +2553,8 @@ async def test_console_no_errors(page: Page) -> None:
                     len(errors) == 0, "; ".join(errors))
         assert_true("no console warnings — VLSM result",
                     len(warnings) == 0, "; ".join(warnings))
-        errors.clear(); warnings.clear()
+        errors.clear()
+        warnings.clear()
 
         # 5. Theme toggle (dark → light → dark)
         await navigate(page, APP_URL)
@@ -2563,7 +2567,8 @@ async def test_console_no_errors(page: Page) -> None:
         await page.wait_for_timeout(200)
         assert_true("no console errors — dark mode toggle",
                     len(errors) == 0, "; ".join(errors))
-        errors.clear(); warnings.clear()
+        errors.clear()
+        warnings.clear()
 
         # 6. Hover every help-bubble icon (tooltip JS runs)
         await navigate(page, APP_URL)
@@ -2571,16 +2576,15 @@ async def test_console_no_errors(page: Page) -> None:
         icon_count = await page.locator(".help-bubble-icon").count()
         for i in range(icon_count):
             icon = page.locator(".help-bubble-icon").nth(i)
-            try:
+            if await icon.is_visible():
                 await icon.hover(timeout=1000)
-            except Exception:
-                pass  # off-screen icons in hidden panels are fine to skip
         await page.wait_for_timeout(200)
         assert_true("no console errors — help bubble hovers",
                     len(errors) == 0, "; ".join(errors))
         assert_true("no console warnings — help bubble hovers",
                     len(warnings) == 0, "; ".join(warnings))
-        errors.clear(); warnings.clear()
+        errors.clear()
+        warnings.clear()
 
         # 7. Copy button clicks
         await navigate(page, APP_URL + "?ip=10.0.0.0&mask=24")
@@ -2592,7 +2596,8 @@ async def test_console_no_errors(page: Page) -> None:
             await page.wait_for_timeout(200)
         assert_true("no console errors — copy button click",
                     len(errors) == 0, "; ".join(errors))
-        errors.clear(); warnings.clear()
+        errors.clear()
+        warnings.clear()
 
         # 8. Tab switching
         await navigate(page, APP_URL)
@@ -2603,7 +2608,8 @@ async def test_console_no_errors(page: Page) -> None:
                     len(errors) == 0, "; ".join(errors))
         assert_true("no console warnings — tab switching",
                     len(warnings) == 0, "; ".join(warnings))
-        errors.clear(); warnings.clear()
+        errors.clear()
+        warnings.clear()
 
     finally:
         page.remove_listener("console", _on_msg)

@@ -66,8 +66,11 @@ function ipv6_ptr_zone(string $network_cidr): string
 {
     [$ip, $prefix] = explode('/', $network_cidr);
     $prefix = (int)$prefix;
-    $pton   = inet_pton($ip);
-    $hex    = bin2hex($pton !== false ? $pton : '');     // 32 lowercase hex chars
+    $pton = inet_pton($ip);
+    if ($pton === false || strlen($pton) !== 16) {
+        throw new \InvalidArgumentException('Invalid IPv6 address passed to ipv6_ptr_zone: ' . $ip);
+    }
+    $hex = bin2hex($pton);                              // 32 lowercase hex chars
     $nibble_count = (int)floor($prefix / 4);             // significant nibbles
     $significant  = array_slice(str_split($hex), 0, $nibble_count);
     if ($significant === []) {
