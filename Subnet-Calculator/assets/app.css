@@ -760,6 +760,13 @@
             transform: none;
         }
 
+        /* #205: section-header bubbles appear below the trigger so they don't
+           overlap the card/content immediately above the panel title */
+        .overlap-title .help-bubble-text {
+            bottom: auto;
+            top: calc(100% + 6px);
+        }
+
         /* ── CSP fix: classes replacing inline style= attributes (#206) ─────── */
 
         /* Supernet action row (Find Supernet + Summarise buttons) */
