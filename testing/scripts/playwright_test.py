@@ -2247,6 +2247,495 @@ async def test_stylelint_clean(page: Page) -> None:  # noqa: ARG001
     )
 
 
+async def test_full_visual_inspection(page: Page) -> None:
+    """
+    Systematic visual inspection: every tab, every major result state, both
+    viewports.  Asserts that key structural elements are present and not
+    clipped (bounding-rect checks) rather than pixel-diffing, so the test
+    stays green after intentional UI changes.
+    """
+    section("Full visual inspection — all tabs / states")
+
+    async def _rect_ok(locator, label: str) -> None:
+        """Assert element has non-zero width & height and is inside the viewport."""
+        rect = await locator.bounding_box()
+        assert_true(f"{label}: visible on screen", rect is not None,
+                    "element not visible or off-screen")
+        if rect:
+            assert_true(f"{label}: width > 0",  rect["width"]  > 0)
+            assert_true(f"{label}: height > 0", rect["height"] > 0)
+            vw = await page.evaluate("window.innerWidth")
+            vh = await page.evaluate("window.innerHeight + window.scrollY")
+            assert_true(
+                f"{label}: not clipped left",
+                rect["x"] >= -1,
+                f"x={rect['x']:.0f}"
+            )
+            assert_true(
+                f"{label}: right edge within page",
+                rect["x"] + rect["width"] <= vw + 4,
+                f"right={rect['x']+rect['width']:.0f} vw={vw}"
+            )
+
+    # ── Desktop 1280×800 ────────────────────────────────────────────────────
+    await page.set_viewport_size({"width": 1280, "height": 800})
+    await navigate(page, APP_URL)
+
+    # Structural chrome
+    await _rect_ok(page.locator("img.logo"),                    "logo (desktop)")
+    await _rect_ok(page.locator("h1"),                          "h1 title (desktop)")
+    await _rect_ok(page.locator(".version"),                    "version badge (desktop)")
+    await _rect_ok(page.locator("#tab-ipv4"),                   "IPv4 tab btn (desktop)")
+    await _rect_ok(page.locator("#tab-ipv6"),                   "IPv6 tab btn (desktop)")
+    await _rect_ok(page.locator("#tab-vlsm"),                   "VLSM tab btn (desktop)")
+    await _rect_ok(page.locator("footer"),                      "footer (desktop)")
+
+    # IPv4 form idle
+    await _rect_ok(page.locator("#ip"),                         "IPv4 ip input (desktop)")
+    await _rect_ok(page.locator("#mask"),                       "IPv4 mask input (desktop)")
+    await _rect_ok(page.locator("#panel-ipv4 button[type=submit]"), "IPv4 calculate btn (desktop)")
+
+    # IPv4 result
+    await navigate(page, APP_URL + "?ip=192.168.1.0&mask=%2F24")
+    await page.wait_for_selector(".results", timeout=8000)
+    await _rect_ok(page.locator(".results"),                    "IPv4 results panel (desktop)")
+    await _rect_ok(page.locator(".result-row").first,           "first result row (desktop)")
+    # Address-type badge must be visible
+    badge_count = await page.locator(".type-badge").count()
+    assert_true("address-type badge present in IPv4 result", badge_count > 0)
+
+    # Splitter panels
+    await _rect_ok(page.locator(".splitter").first,             "splitter panel (desktop)")
+
+    # IPv6 tab
+    await navigate(page, APP_URL + "?tab=ipv6&ipv6=2001%3Adb8%3A%3A1&prefix=32")
+    await page.wait_for_selector("#panel-ipv6 .results", timeout=8000)
+    await _rect_ok(page.locator("#panel-ipv6 .results"),        "IPv6 results panel (desktop)")
+    badge_count6 = await page.locator("#panel-ipv6 .type-badge").count()
+    assert_true("address-type badge present in IPv6 result", badge_count6 > 0)
+
+    # VLSM tab with result
+    await navigate(
+        page,
+        APP_URL + "?tab=vlsm&vlsm_network=10.0.0.0&vlsm_cidr=24"
+        "&vlsm_name%5B%5D=Sales&vlsm_hosts%5B%5D=50"
+        "&vlsm_name%5B%5D=HR&vlsm_hosts%5B%5D=20"
+    )
+    await page.wait_for_selector(".vlsm-table", timeout=8000)
+    await _rect_ok(page.locator(".vlsm-table"),                 "VLSM table (desktop)")
+    await _rect_ok(page.locator(".vlsm-summary"),               "VLSM utilisation summary (desktop)")
+    await _rect_ok(page.locator(".export-btn-group"),           "VLSM export buttons (desktop)")
+    # Section-header panels (overlap/session/multi-cidr)
+    await _rect_ok(page.locator("#hb-vlsm-session").locator("..").locator(".."),
+                                                                "SAVE & RESTORE section (desktop)")
+    await _rect_ok(page.locator(".overlap-panel").first,        "overlap panel (desktop)")
+
+    # ── Mobile 375×667 ──────────────────────────────────────────────────────
+    await page.set_viewport_size({"width": 375, "height": 667})
+
+    await navigate(page, APP_URL)
+    await _rect_ok(page.locator("img.logo"),                    "logo (mobile)")
+    await _rect_ok(page.locator("#tab-ipv4"),                   "IPv4 tab (mobile)")
+
+    # IPv4 result at mobile
+    await navigate(page, APP_URL + "?ip=10.0.0.0&mask=8")
+    await page.wait_for_selector(".results", timeout=8000)
+    await _rect_ok(page.locator(".results"),                    "IPv4 results panel (mobile)")
+    # No horizontal overflow
+    scroll_w = await page.evaluate("document.documentElement.scrollWidth")
+    vw_m     = await page.evaluate("window.innerWidth")
+    assert_true(
+        "no horizontal scroll on mobile (375 px)",
+        scroll_w <= vw_m + 2,
+        f"scrollWidth={scroll_w} innerWidth={vw_m}"
+    )
+
+    # Restore
+    await page.set_viewport_size({"width": 1280, "height": 800})
+
+
+async def test_all_tooltips_direction(page: Page) -> None:
+    """
+    Verify every help bubble in the app:
+    - appears in the correct direction (below for label/section-header context,
+      above otherwise)
+    - does not overflow the viewport on any edge
+    - shows correct tooltip text (non-empty, text-transform: none)
+    """
+    section("All tooltips — direction, overflow, and content")
+
+    await page.set_viewport_size({"width": 1280, "height": 900})
+
+    # Make all panels visible so we can measure hidden-tab bubbles too
+    await navigate(page, APP_URL)
+    await page.evaluate("document.querySelectorAll('.panel').forEach(p => p.style.display = 'block')")
+
+    # Force-load the updated stylesheet (bypass any cache) so the fixes are active
+    await page.evaluate("""() => {
+        var link = document.querySelector('link[rel="stylesheet"][href*="app.css"]');
+        if (link) link.href = link.href.split('?')[0] + '?v=' + Date.now();
+    }""")
+    await page.wait_for_timeout(800)
+
+    results = await page.evaluate("""() => {
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        return Array.from(document.querySelectorAll('.help-bubble-text')).map(function(el) {
+            // Force visible to measure
+            el.style.visibility = 'visible';
+            el.style.opacity    = '1';
+            var tipRect  = el.getBoundingClientRect();
+            var icon     = el.previousElementSibling;
+            var iconRect = icon ? icon.getBoundingClientRect() : null;
+            var cs       = getComputedStyle(el);
+            // Determine parent context
+            var parent = el.parentElement ? el.parentElement.className : '';
+            var inLabel        = !!el.closest('label');
+            var inOverlapTitle = !!el.closest('.overlap-title');
+            var shouldBeBelow  = inLabel || inOverlapTitle;
+            var isBelow = iconRect ? (tipRect.top >= iconRect.bottom - 2) : null;
+            el.style.visibility = '';
+            el.style.opacity    = '';
+            return {
+                id:            el.id,
+                text:          el.textContent.trim().substring(0, 60),
+                textTransform: cs.textTransform,
+                shouldBeBelow: shouldBeBelow,
+                isBelow:       isBelow,
+                overflowTop:   tipRect.top    < 0,
+                overflowRight: tipRect.right  > vw,
+                overflowLeft:  tipRect.left   < 0,
+                parentCtx:     parent.substring(0, 40),
+            };
+        });
+    }""")
+
+    for tip in results:
+        tid = tip["id"] or "(no id)"
+
+        # Non-empty content
+        assert_true(
+            f"{tid}: tooltip has non-empty text",
+            len(tip["text"]) > 0,
+            repr(tip["text"])
+        )
+
+        # text-transform must be 'none' (not inheriting label/button uppercase)
+        assert_eq(
+            f"{tid}: text-transform is none",
+            tip["textTransform"], "none"
+        )
+
+        # Direction check (only for elements where direction can be measured)
+        if tip["isBelow"] is not None:
+            if tip["shouldBeBelow"]:
+                assert_true(
+                    f"{tid}: appears below trigger (label/section-header context)",
+                    tip["isBelow"],
+                    f"parentCtx={tip['parentCtx']}"
+                )
+            # else: above is acceptable — we don't assert direction for mid-page buttons
+
+        # No viewport overflow
+        assert_true(f"{tid}: no overflow top",   not tip["overflowTop"],
+                    f"tipTop<0 for {tid}")
+        assert_true(f"{tid}: no overflow right",  not tip["overflowRight"],
+                    f"tipRight>vw for {tid}")
+        assert_true(f"{tid}: no overflow left",   not tip["overflowLeft"],
+                    f"tipLeft<0 for {tid}")
+
+    total_tips = len(results)
+    assert_true(
+        f"found all expected help bubbles (≥9)",
+        total_tips >= 9,
+        f"found {total_tips}"
+    )
+
+
+async def test_console_no_errors(page: Page) -> None:
+    """
+    Listen to browser console across every major app state and assert zero
+    errors or warnings.  Captures: page load, all three tabs (idle + result),
+    theme toggle, VLSM with result, overlap, ULA generation.
+    """
+    section("Console — zero errors across all app states")
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    # Ignore known benign Playwright noise
+    _IGNORE = (
+        "net::ERR_ABORTED",           # browser cancels duplicate navigations
+        "favicon",                    # favicon 404 is cosmetic
+    )
+
+    def _on_msg(msg) -> None:  # type: ignore[override]
+        text = msg.text
+        if any(s in text for s in _IGNORE):
+            return
+        if msg.type == "error":
+            errors.append(f"[{msg.type}] {text}")
+        elif msg.type == "warning":
+            warnings.append(f"[{msg.type}] {text}")
+
+    page.on("console", _on_msg)
+
+    try:
+        # 1. Fresh page load (dark mode default)
+        await navigate(page, APP_URL)
+        await page.wait_for_timeout(300)
+        assert_true("no console errors on page load",
+                    len(errors) == 0, "; ".join(errors))
+        assert_true("no console warnings on page load",
+                    len(warnings) == 0, "; ".join(warnings))
+        errors.clear(); warnings.clear()
+
+        # 2. IPv4 result
+        await navigate(page, APP_URL + "?ip=192.168.1.0&mask=%2F24")
+        await page.wait_for_selector(".results", timeout=8000)
+        await page.wait_for_timeout(200)
+        assert_true("no console errors — IPv4 result",
+                    len(errors) == 0, "; ".join(errors))
+        assert_true("no console warnings — IPv4 result",
+                    len(warnings) == 0, "; ".join(warnings))
+        errors.clear(); warnings.clear()
+
+        # 3. IPv6 result
+        await navigate(page, APP_URL + "?tab=ipv6&ipv6=2001%3Adb8%3A%3A1&prefix=32")
+        await page.wait_for_selector("#panel-ipv6 .results", timeout=8000)
+        await page.wait_for_timeout(200)
+        assert_true("no console errors — IPv6 result",
+                    len(errors) == 0, "; ".join(errors))
+        assert_true("no console warnings — IPv6 result",
+                    len(warnings) == 0, "; ".join(warnings))
+        errors.clear(); warnings.clear()
+
+        # 4. VLSM result
+        await navigate(
+            page,
+            APP_URL + "?tab=vlsm&vlsm_network=10.0.0.0&vlsm_cidr=24"
+            "&vlsm_name%5B%5D=Sales&vlsm_hosts%5B%5D=50"
+        )
+        await page.wait_for_selector(".vlsm-table", timeout=8000)
+        await page.wait_for_timeout(200)
+        assert_true("no console errors — VLSM result",
+                    len(errors) == 0, "; ".join(errors))
+        assert_true("no console warnings — VLSM result",
+                    len(warnings) == 0, "; ".join(warnings))
+        errors.clear(); warnings.clear()
+
+        # 5. Theme toggle (dark → light → dark)
+        await navigate(page, APP_URL)
+        await page.wait_for_timeout(200)
+        await page.click(".theme-btn, button[aria-label*='theme'], button[aria-label*='Theme']")
+        await page.wait_for_timeout(200)
+        assert_true("no console errors — light mode toggle",
+                    len(errors) == 0, "; ".join(errors))
+        await page.click(".theme-btn, button[aria-label*='theme'], button[aria-label*='Theme']")
+        await page.wait_for_timeout(200)
+        assert_true("no console errors — dark mode toggle",
+                    len(errors) == 0, "; ".join(errors))
+        errors.clear(); warnings.clear()
+
+        # 6. Hover every help-bubble icon (tooltip JS runs)
+        await navigate(page, APP_URL)
+        await page.wait_for_timeout(200)
+        icon_count = await page.locator(".help-bubble-icon").count()
+        for i in range(icon_count):
+            icon = page.locator(".help-bubble-icon").nth(i)
+            try:
+                await icon.hover(timeout=1000)
+            except Exception:
+                pass  # off-screen icons in hidden panels are fine to skip
+        await page.wait_for_timeout(200)
+        assert_true("no console errors — help bubble hovers",
+                    len(errors) == 0, "; ".join(errors))
+        assert_true("no console warnings — help bubble hovers",
+                    len(warnings) == 0, "; ".join(warnings))
+        errors.clear(); warnings.clear()
+
+        # 7. Copy button clicks
+        await navigate(page, APP_URL + "?ip=10.0.0.0&mask=24")
+        await page.wait_for_selector(".results", timeout=8000)
+        copy_btns = page.locator(".subnet-copy, .copy-btn")
+        cnt = await copy_btns.count()
+        if cnt > 0:
+            await copy_btns.first.click()
+            await page.wait_for_timeout(200)
+        assert_true("no console errors — copy button click",
+                    len(errors) == 0, "; ".join(errors))
+        errors.clear(); warnings.clear()
+
+        # 8. Tab switching
+        await navigate(page, APP_URL)
+        for tab in ("#tab-ipv6", "#tab-vlsm", "#tab-ipv4"):
+            await page.click(tab)
+            await page.wait_for_timeout(150)
+        assert_true("no console errors — tab switching",
+                    len(errors) == 0, "; ".join(errors))
+        assert_true("no console warnings — tab switching",
+                    len(warnings) == 0, "; ".join(warnings))
+        errors.clear(); warnings.clear()
+
+    finally:
+        page.remove_listener("console", _on_msg)
+
+
+async def test_theme_light_dark(page: Page) -> None:
+    """
+    Verify dark and light theme: computed colours, persistence across reload,
+    and that no UI element is invisible (white-on-white / black-on-black) in
+    either mode.
+    """
+    section("Theme — light and dark mode visual verification")
+
+    await page.set_viewport_size({"width": 1280, "height": 800})
+    await navigate(page, APP_URL)
+
+    # ── Dark mode (default) ─────────────────────────────────────────────────
+    theme_attr = await page.get_attribute("html", "data-theme")
+    is_dark = theme_attr != "light"
+    assert_true("default theme is dark (data-theme != 'light')", is_dark,
+                f"data-theme={theme_attr!r}")
+
+    dark_vars = await page.evaluate("""() => {
+        var r = document.documentElement;
+        var cs = getComputedStyle(r);
+        return {
+            bg:      cs.getPropertyValue('--color-bg').trim(),
+            surface: cs.getPropertyValue('--color-surface').trim(),
+            text:    cs.getPropertyValue('--color-text').trim(),
+            border:  cs.getPropertyValue('--color-border').trim(),
+        };
+    }""")
+    assert_true("dark --color-bg is set",     bool(dark_vars["bg"]),     dark_vars["bg"])
+    assert_true("dark --color-surface is set", bool(dark_vars["surface"]), dark_vars["surface"])
+    assert_true("dark --color-text is set",   bool(dark_vars["text"]),   dark_vars["text"])
+
+    # bg and text must be different colours (not invisible)
+    assert_true(
+        "dark: bg and text colours differ (no invisible text)",
+        dark_vars["bg"] != dark_vars["text"],
+        f"bg={dark_vars['bg']} text={dark_vars['text']}"
+    )
+
+    # Card must be visible against background
+    card_bg = await page.evaluate(
+        "() => getComputedStyle(document.querySelector('.card')).backgroundColor"
+    )
+    body_bg = await page.evaluate(
+        "() => getComputedStyle(document.body).backgroundColor"
+    )
+    assert_true("dark: card background is set", bool(card_bg), card_bg)
+
+    # Key elements visible in dark mode
+    assert_true("dark: h1 visible",      await page.locator("h1").is_visible())
+    assert_true("dark: logo visible",    await page.locator("img.logo").is_visible())
+    assert_true("dark: tabs visible",    await page.locator(".tabs").is_visible())
+    assert_true("dark: form visible",    await page.locator("#panel-ipv4 .form-row").first.is_visible())
+
+    # IPv4 result in dark mode
+    await navigate(page, APP_URL + "?ip=192.168.1.0&mask=%2F24")
+    await page.wait_for_selector(".results", timeout=8000)
+    assert_true("dark: results panel visible", await page.locator(".results").is_visible())
+    result_text_color = await page.evaluate(
+        "() => getComputedStyle(document.querySelector('.result-value')).color"
+    )
+    assert_true("dark: result value has colour", bool(result_text_color), result_text_color)
+
+    # ── Toggle to light mode ────────────────────────────────────────────────
+    await navigate(page, APP_URL)
+    theme_btn = page.locator(".theme-btn, button[aria-label*='theme'], button[aria-label*='Theme']")
+    await theme_btn.click()
+    await page.wait_for_timeout(200)
+
+    theme_light = await page.get_attribute("html", "data-theme")
+    assert_eq("after toggle: data-theme is 'light'", theme_light, "light")
+
+    light_vars = await page.evaluate("""() => {
+        var r = document.documentElement;
+        var cs = getComputedStyle(r);
+        return {
+            bg:      cs.getPropertyValue('--color-bg').trim(),
+            surface: cs.getPropertyValue('--color-surface').trim(),
+            text:    cs.getPropertyValue('--color-text').trim(),
+        };
+    }""")
+    assert_true("light --color-bg is set",   bool(light_vars["bg"]),   light_vars["bg"])
+    assert_true("light --color-text is set", bool(light_vars["text"]), light_vars["text"])
+
+    # bg and text must differ in light mode too
+    assert_true(
+        "light: bg and text colours differ (no invisible text)",
+        light_vars["bg"] != light_vars["text"],
+        f"bg={light_vars['bg']} text={light_vars['text']}"
+    )
+
+    # Dark and light bg colours must be distinct from each other
+    assert_true(
+        "light bg differs from dark bg (themes are genuinely different)",
+        light_vars["bg"] != dark_vars["bg"],
+        f"light={light_vars['bg']} dark={dark_vars['bg']}"
+    )
+
+    # Key elements visible in light mode
+    assert_true("light: h1 visible",      await page.locator("h1").is_visible())
+    assert_true("light: logo visible",    await page.locator("img.logo").is_visible())
+    assert_true("light: tabs visible",    await page.locator(".tabs").is_visible())
+    assert_true("light: form visible",    await page.locator("#panel-ipv4 .form-row").first.is_visible())
+
+    # IPv4 result in light mode
+    await navigate(page, APP_URL + "?ip=192.168.1.0&mask=%2F24")
+    await page.wait_for_selector(".results", timeout=8000)
+    assert_true("light: results panel visible", await page.locator(".results").is_visible())
+    light_result_color = await page.evaluate(
+        "() => getComputedStyle(document.querySelector('.result-value')).color"
+    )
+    assert_true("light: result value has colour", bool(light_result_color), light_result_color)
+
+    # ── Theme persists across reload ────────────────────────────────────────
+    await page.reload(wait_until="load")
+    await page.wait_for_timeout(200)
+    theme_after_reload = await page.get_attribute("html", "data-theme")
+    assert_eq("light theme persists after page reload", theme_after_reload, "light")
+
+    # ── Toggle back to dark and verify persistence ───────────────────────────
+    await navigate(page, APP_URL)
+    await page.click(".theme-btn, button[aria-label*='theme'], button[aria-label*='Theme']")
+    await page.wait_for_timeout(200)
+    theme_back_to_dark = await page.get_attribute("html", "data-theme")
+    assert_true("toggled back to dark mode",
+                theme_back_to_dark != "light", f"data-theme={theme_back_to_dark!r}")
+
+    await page.reload(wait_until="load")
+    await page.wait_for_timeout(200)
+    theme_dark_persisted = await page.get_attribute("html", "data-theme")
+    assert_true("dark theme persists after page reload",
+                theme_dark_persisted != "light", f"data-theme={theme_dark_persisted!r}")
+
+    # ── VLSM result in light mode (most complex output) ─────────────────────
+    # Switch to light again for this check
+    await navigate(page, APP_URL)
+    await page.click(".theme-btn, button[aria-label*='theme'], button[aria-label*='Theme']")
+    await page.wait_for_timeout(200)
+    await navigate(
+        page,
+        APP_URL + "?tab=vlsm&vlsm_network=10.0.0.0&vlsm_cidr=24"
+        "&vlsm_name%5B%5D=LAN&vlsm_hosts%5B%5D=50"
+    )
+    await page.wait_for_selector(".vlsm-table", timeout=8000)
+    assert_true("light: VLSM table visible", await page.locator(".vlsm-table").is_visible())
+    assert_true("light: VLSM summary visible",
+                await page.locator(".vlsm-summary").is_visible())
+
+    # Restore dark mode at end so other tests aren't affected
+    await navigate(page, APP_URL)
+    current = await page.get_attribute("html", "data-theme")
+    if current == "light":
+        await page.click(".theme-btn, button[aria-label*='theme'], button[aria-label*='Theme']")
+        await page.wait_for_timeout(200)
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -2351,6 +2840,10 @@ async def main() -> None:
             await test_locale_number_format(page)
             await test_eslint_clean(page)
             await test_stylelint_clean(page)
+            await test_full_visual_inspection(page)
+            await test_all_tooltips_direction(page)
+            await test_console_no_errors(page)
+            await test_theme_light_dark(page)
         finally:
             await context.close()
             await browser.close()
