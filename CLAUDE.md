@@ -107,7 +107,7 @@ releases/               ← versioned release tarballs
 testing/
   snapshots/            ← Pillow visual regression baselines (committed PNGs)
   scripts/
-    playwright_test.py  ← 74 test groups, 299 assertions
+    playwright_test.py  ← 81 test groups, 308 assertions
     snapshot_utils.py   ← capture_snapshot / compare_snapshot helpers
 README.md
 CHANGELOG.md

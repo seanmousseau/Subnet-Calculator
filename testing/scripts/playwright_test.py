@@ -1956,7 +1956,6 @@ async def test_tooltips_visual_polish(page: Page) -> None:
 
     # 1. text-transform should be 'none' on tooltip content so it doesn't
     #    inherit 'uppercase' from parent label styling
-    icon = page.locator(".help-bubble-icon[aria-describedby='hb-ipv4-ip']")
     bubble_text = page.locator("#hb-ipv4-ip")
     text_transform = await bubble_text.evaluate(
         "el => getComputedStyle(el).textTransform"
