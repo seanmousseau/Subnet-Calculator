@@ -40,7 +40,7 @@ npm run lint
 
 ## Project structure
 
-```
+```text
 Subnet-Calculator/         ← docroot (serve this directory)
   index.php                ← entry point (bootstrap only)
   includes/                ← PHP functions and request handling (web-blocked)
@@ -74,7 +74,7 @@ testing/
 
 ## Guidelines
 
-- PHP 8.1+ — use strict types, typed parameters, and return types
+- PHP 8.1+ — add `declare(strict_types=1);` at the top of utility files (`includes/functions-*.php`) and use typed parameters and return types
 - Keep runtime dependencies at zero (dev tools like PHPUnit/ESLint are fine)
 - New utility functions go in the appropriate `includes/functions-*.php` file
 - API handlers live in `Subnet-Calculator/api/v1/handlers/`; use `json_ok()`/`json_err()` for all responses

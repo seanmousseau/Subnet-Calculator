@@ -2265,8 +2265,8 @@ async def test_full_visual_inspection(page: Page) -> None:
         assert_true(f"{label}: visible on screen", rect is not None,
                     "element not visible or off-screen")
         if rect:
-            assert_true(f"{label}: width > 0",  rect["width"]  > 0)
-            assert_true(f"{label}: height > 0", rect["height"] > 0)
+            assert_true(f"{label}: width > 0",  rect["width"]  > 0, f"width={rect['width']}")
+            assert_true(f"{label}: height > 0", rect["height"] > 0, f"height={rect['height']}")
             vw = await page.evaluate("window.innerWidth")
             vh = await page.evaluate("window.innerHeight + window.scrollY")
             assert_true(

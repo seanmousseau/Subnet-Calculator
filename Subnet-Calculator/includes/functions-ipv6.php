@@ -79,7 +79,18 @@ function ipv6_ptr_zone(string $network_cidr): string
     return implode('.', array_reverse($significant)) . '.ip6.arpa';
 }
 
-/** @return array<string, mixed> */
+/**
+ * @return array{
+ *   network_cidr: string,
+ *   prefix: string,
+ *   first_ip: string,
+ *   last_ip: string,
+ *   total: string,
+ *   ptr_zone: string,
+ *   address_expanded: string,
+ *   address_compressed: string
+ * }
+ */
 function calculate_subnet6(string $ip, int $prefix): array
 {
     $ip_int    = ipv6_to_gmp($ip);
