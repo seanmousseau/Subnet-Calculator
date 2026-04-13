@@ -127,11 +127,18 @@ async def submit_form(page: Page, selector: str) -> None:
 
 
 async def result_value(page: Page, label: str) -> str | None:
+    # Match only the direct text nodes in .result-label so help-bubble icons
+    # ("?") and their hidden tooltip text are excluded — enabling exact equality.
     return await page.evaluate("""(label) => {
         var rows = document.querySelectorAll('.result-row');
         for (var i = 0; i < rows.length; i++) {
             var l = rows[i].querySelector('.result-label');
-            if (l && l.textContent.trim().startsWith(label)) {
+            if (!l) continue;
+            var text = Array.from(l.childNodes)
+                .filter(function(n) { return n.nodeType === 3; })
+                .map(function(n) { return n.textContent; })
+                .join('').trim();
+            if (text === label) {
                 var v = rows[i].querySelector('.result-value');
                 return v ? v.textContent.trim() : null;
             }
@@ -152,11 +159,17 @@ async def get_iframe_frame(page: Page) -> Frame:
 
 
 async def iframe_result_value(frame: Frame, label: str) -> str | None:
+    # Same direct text-node strategy as result_value() — exact match, no help-bubble noise.
     return await frame.evaluate("""(label) => {
         var rows = document.querySelectorAll('.result-row');
         for (var i = 0; i < rows.length; i++) {
             var l = rows[i].querySelector('.result-label');
-            if (l && l.textContent.trim().startsWith(label)) {
+            if (!l) continue;
+            var text = Array.from(l.childNodes)
+                .filter(function(n) { return n.nodeType === 3; })
+                .map(function(n) { return n.textContent; })
+                .join('').trim();
+            if (text === label) {
                 var v = rows[i].querySelector('.result-value');
                 return v ? v.textContent.trim() : null;
             }
@@ -1290,7 +1303,7 @@ async def test_visual_regression(page: Page) -> None:
     # IPv4 result
     await navigate(page, APP_URL)
     await page.fill("#ip", "192.168.1.0")
-    await page.fill("#mask", "/24")
+    await page.fill("#mask", "/24")  # leading slash intentionally exercises CIDR-notation auto-parse
     await page.press("#ip", "Enter")
     await page.wait_for_selector(".results")
     await snap("ipv4_result_1280")
