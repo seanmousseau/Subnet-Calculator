@@ -22,9 +22,14 @@ try:
     import sys as _sys
     import os as _os
     _sys.path.insert(0, _os.path.dirname(__file__))
-    from snapshot_utils import capture_snapshot, compare_snapshot, set_viewport as _set_viewport
-    _SNAPSHOTS_AVAILABLE = True
-except Exception:
+    from snapshot_utils import (  # noqa: E402
+        _PIL_AVAILABLE as _SNAPSHOT_PIL_AVAILABLE,
+        capture_snapshot,
+        compare_snapshot,
+        set_viewport as _set_viewport,
+    )
+    _SNAPSHOTS_AVAILABLE = _SNAPSHOT_PIL_AVAILABLE
+except ImportError:
     _SNAPSHOTS_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
@@ -1278,7 +1283,7 @@ async def test_visual_regression(page: Page) -> None:
                 else:
                     fail(label, f"diff {diff_pct:.2%} exceeds threshold 2%")
             except FileNotFoundError as exc:
-                ok(f"visual: {name} — no baseline, skipped ({exc})")
+                fail(f"visual: {name} — no baseline (run with UPDATE_SNAPSHOTS=1 to create)", str(exc))
 
     # Desktop viewport
     await _set_viewport(page, 1280)
@@ -1744,6 +1749,11 @@ async def test_ipv4_range_to_cidr(page: Page) -> None:
         "10.0.0.0/30" in items2,
         f"got: {items2}",
     )
+    assert_true(
+        "range->cidr: 10.0.0.0-10.0.0.4 includes trailing /32 block",
+        "10.0.0.4/32" in items2,
+        f"got: {items2}",
+    )
     # Error case: end < start
     await navigate(page, APP_URL)
     await page.fill("input[name='range_start']", "10.0.0.10")
@@ -1760,6 +1770,7 @@ async def test_ipv4_range_to_cidr(page: Page) -> None:
 
 async def test_tree_view(page: Page) -> None:
     section("Subnet allocation tree view UI")
+    # Full allocation — both /25s, no gaps
     await navigate(page, APP_URL)
     await page.fill("#tree_parent", "10.0.0.0/24")
     await page.fill("textarea[name='tree_children']", "10.0.0.0/25\n10.0.0.128/25")
@@ -1775,6 +1786,18 @@ async def test_tree_view(page: Page) -> None:
         "tree view: child 10.0.0.0/25 visible",
         any("10.0.0.0/25" in n for n in tree_nodes),
         f"got nodes: {tree_nodes}",
+    )
+    # Partial allocation — only one /25; the other /25 should appear as a gap
+    await navigate(page, APP_URL)
+    await page.fill("#tree_parent", "10.0.0.0/24")
+    await page.fill("textarea[name='tree_children']", "10.0.0.0/25")
+    await page.click("button.splitter-btn[type='submit']:near(textarea[name='tree_children'])")
+    await page.wait_for_load_state("load")
+    tree_nodes2 = await page.locator(".tree-node").all_text_contents()
+    assert_true(
+        "tree view: gap 10.0.0.128/25 visible for partial allocation",
+        any("10.0.0.128/25" in n for n in tree_nodes2),
+        f"got nodes: {tree_nodes2}",
     )
     # Invalid parent → error
     await navigate(page, APP_URL)

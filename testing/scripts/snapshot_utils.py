@@ -64,14 +64,16 @@ async def compare_snapshot(
         raise ValueError(
             f"threshold must be in [0.0, 1.0], got {threshold!r}"
         )
+
+    # Honor update mode before checking Pillow — baseline writes don't need PIL.
+    if _UPDATE:
+        await capture_snapshot(page, name)
+        return True, 0.0
+
     if not _PIL_AVAILABLE:
         raise RuntimeError(
             "Pillow is required for visual regression tests: pip install Pillow"
         )
-
-    if _UPDATE:
-        await capture_snapshot(page, name)
-        return True, 0.0
 
     baseline_path = _SNAPSHOTS_DIR / f"{name}.png"
     if not baseline_path.exists():
