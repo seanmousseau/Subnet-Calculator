@@ -1229,14 +1229,13 @@ async def test_tooltips_help_bubbles(page: Page) -> None:
     assert_true("help bubble for IP address input exists",
                 await bubble.count() > 0)
 
-    # Hover over the icon and verify the tooltip text element becomes visible
-    icon = page.locator(".help-bubble-icon").first
+    # Hover over the specific icon for the IP address bubble and verify its tooltip becomes visible
+    icon = page.locator(".help-bubble-icon[aria-describedby='hb-ipv4-ip']")
     await icon.hover()
     await page.wait_for_timeout(200)
-    tooltip = page.locator(".help-bubble-text").first
-    box = await tooltip.bounding_box()
-    assert_true("tooltip bounding box has positive height after hover",
-                box is not None and (box.get("height") or 0) > 0, str(box))
+    tooltip = page.locator("#hb-ipv4-ip")
+    assert_true("targeted tooltip is visible after hover",
+                await tooltip.is_visible())
 
     # VLSM tab — waste header bubble (only visible after a calculation)
     await navigate(page, APP_URL)
@@ -1757,8 +1756,12 @@ async def test_ipv4_range_to_cidr(page: Page) -> None:
     await page.fill("input[name='range_end']",   "10.0.0.1")
     await page.click("button.splitter-btn[type='submit']:near(input[name='range_end'])")
     await page.wait_for_load_state("load")
-    err = await page.locator(".error").first.text_content() or ""
-    assert_true("range→cidr: end<start shows error", err.strip() != "", f"got: {err!r}")
+    range_panel = page.locator(".overlap-panel").filter(
+        has=page.locator("input[name='range_start']")
+    )
+    err = await range_panel.locator(".error").text_content() or ""
+    assert_contains("range->cidr: end<start error message",
+                    err, "Start address must be less than or equal to end address.")
 
 
 # ---------------------------------------------------------------------------
@@ -1802,8 +1805,11 @@ async def test_tree_view(page: Page) -> None:
     await page.fill("textarea[name='tree_children']", "10.0.0.0/25")
     await page.click("button.splitter-btn[type='submit']:near(textarea[name='tree_children'])")
     await page.wait_for_load_state("load")
-    err = await page.locator(".error").first.text_content() or ""
-    assert_true("tree view: invalid parent shows error", err.strip() != "", f"got: {err!r}")
+    tree_panel = page.locator(".overlap-panel").filter(
+        has=page.locator("#tree_parent")
+    )
+    err = await tree_panel.locator(".error").text_content() or ""
+    assert_contains("tree view: invalid parent error message", err, "Invalid parent CIDR")
 
 
 # ---------------------------------------------------------------------------
