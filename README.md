@@ -1,4 +1,4 @@
-<img width="125" src="https://media.pupness.ca/file/seanmousseau/assets/logos/sc/logo.webp" alt="Subnet Calculator" />
+<img width="125" src="https://media.seanmousseau.com/file/seanmousseau/assets/logos/sc/logo.webp" alt="Subnet Calculator" />
 
 # Subnet Calculator
 
