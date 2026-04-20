@@ -29,7 +29,7 @@ npm run lint:js   # ESLint on app.js
 npm run lint:css  # Stylelint on app.css
 npm run lint      # both
 
-# OpenAPI spec lint (errors fail; 24 known warnings about missing tags/descriptions are pre-existing)
+# OpenAPI spec lint (errors fail; warnings should be reviewed and triaged each run)
 npx --yes @stoplight/spectral-cli@6 lint Subnet-Calculator/api/openapi.yaml
 
 # Security scan

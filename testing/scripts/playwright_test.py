@@ -2838,6 +2838,14 @@ async def test_vlsm_keyboard_delete(page: Page) -> None:
     await page.keyboard.press("Delete")
     rows_after = await page.locator(".vlsm-req-row").count()
     assert_true("Delete key removes a VLSM row", rows_after == rows_before - 1)
+    focused_class = await page.evaluate(
+        "document.activeElement ? document.activeElement.className : ''"
+    )
+    assert_true(
+        "focus moves to a remaining VLSM name input after delete",
+        "vlsm-name-input" in (focused_class or ""),
+        str(focused_class),
+    )
 
 
 # ---------------------------------------------------------------------------
