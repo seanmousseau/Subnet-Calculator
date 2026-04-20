@@ -14,7 +14,8 @@ for f in Subnet-Calculator/includes/*.php Subnet-Calculator/templates/layout.php
          Subnet-Calculator/api/v1/*.php Subnet-Calculator/api/v1/handlers/*.php; do php -l "$f"; done
 
 # Static analysis (PHPStan level 9, configured in phpstan.neon)
-phpstan analyse --no-progress
+# --memory-limit=512M required — default 128M causes a crash on this codebase
+phpstan analyse --no-progress --memory-limit=512M
 
 # Unit tests (PHPUnit 11, requires: composer install)
 composer install --no-interaction --prefer-dist
@@ -28,7 +29,15 @@ npm run lint:js   # ESLint on app.js
 npm run lint:css  # Stylelint on app.css
 npm run lint      # both
 
-# Deploy to dev server, then run the end-to-end browser test suite (~517 assertions)
+# OpenAPI spec lint (errors fail; warnings should be reviewed and triaged each run)
+npx --yes @stoplight/spectral-cli@6 lint Subnet-Calculator/api/openapi.yaml
+
+# Security scan
+semgrep --config=.semgrep/rules.yml --config p/php --config p/owasp-top-ten \
+    --config p/sql-injection --error \
+    Subnet-Calculator/includes/ Subnet-Calculator/api/ Subnet-Calculator/templates/
+
+# Deploy to dev server, then run the end-to-end browser test suite (~535 assertions)
 # Requires: dev server running at root@192.168.80.15
 rsync -a --delete Subnet-Calculator/ root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
 scp testing/fixtures/iframe-test.html root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
@@ -49,7 +58,7 @@ tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
 
 (Or run `/release` to automate steps 1–7.)
 
-PHP unit tests: `testing/unit/` (158 tests, 243 assertions; 14 skipped on platforms without GMP). Playwright browser tests: `testing/scripts/playwright_test.py` (85 test groups, 517 assertions) covers page load, security headers, Permissions-Policy, CSP nonce integrity, IPv4/IPv6 calculation, reverse DNS zones, edge cases, address type badges, subnet splitters, copy buttons, splitter shareable URLs, binary representation, VLSM planner, overlap checker, shareable GET URLs, iframe integration, UI interactions, VLSM shareable URL, VLSM CSV/JSON/XLSX export, VLSM reset/validation, Copy All buttons, VLSM utilisation summary, IPv6 overlap, multi-CIDR overlap, IPv6 binary/hex, v1.3.0 regression tests, supernet/summarise UI, ULA generator UI, VLSM session TTL notice, REST API endpoints (meta, IPv4, IPv6, VLSM, overlap, split, supernet, ULA, rdns, bulk, OpenAPI spec, range/ipv4, tree), IPv4 binary hex/decimal rows, IPv6 address expanded/compressed forms, API v2.2.0 new fields, ASCII export, tooltips/help bubbles, visual regression, docs footer link, IP range→CIDR UI, tree view UI, API v2.3.0 endpoints, tooltip visual polish (#205), tooltip accessibility, CSP inline-style violations (#206), print stylesheet (#193), locale number format (#191), ESLint/Stylelint clean, full visual inspection, all-tooltips direction, console error monitoring, light/dark theme testing.
+PHP unit tests: `testing/unit/` (158 tests, 243 assertions; 14 skipped on platforms without GMP). Playwright browser tests: `testing/scripts/playwright_test.py` (91 test groups, 535 assertions) covers page load, security headers, Permissions-Policy, CSP nonce integrity, IPv4/IPv6 calculation, reverse DNS zones, edge cases, address type badges, subnet splitters, copy buttons, splitter shareable URLs, binary representation, VLSM planner, overlap checker, shareable GET URLs, iframe integration, UI interactions, VLSM shareable URL, VLSM CSV/JSON/XLSX export, VLSM reset/validation, Copy All buttons, VLSM utilisation summary, IPv6 overlap, multi-CIDR overlap, IPv6 binary/hex, v1.3.0 regression tests, supernet/summarise UI, ULA generator UI, VLSM session TTL notice, REST API endpoints (meta, IPv4, IPv6, VLSM, overlap, split, supernet, ULA, rdns, bulk, OpenAPI spec, range/ipv4, tree), IPv4 binary hex/decimal rows, IPv6 address expanded/compressed forms, API v2.2.0 new fields, ASCII export, tooltips/help bubbles, visual regression, docs footer link, IP range→CIDR UI, tree view UI, API v2.3.0 endpoints, tooltip visual polish (#205), tooltip accessibility, CSP inline-style violations (#206), print stylesheet (#193), locale number format (#191), ESLint/Stylelint clean, full visual inspection, all-tooltips direction, console error monitoring, light/dark theme testing, a11y landmarks/skip link, a11y input focus ring, a11y toast ARIA, a11y help bubble keyboard, a11y prefers-reduced-motion CSS, VLSM keyboard Delete.
 
 ## Repository layout
 
@@ -107,7 +116,7 @@ releases/               ← versioned release tarballs
 testing/
   snapshots/            ← Pillow visual regression baselines (committed PNGs)
   scripts/
-    playwright_test.py  ← 85 test groups, 517 assertions
+    playwright_test.py  ← 91 test groups, 535 assertions
     snapshot_utils.py   ← capture_snapshot / compare_snapshot helpers
 README.md
 CHANGELOG.md
@@ -141,6 +150,8 @@ PHP application with a slim entry point (`index.php`) that bootstraps includes a
 - **iframe auto-sizing**: `window.self !== window.top` detection adds `in-iframe` to `<html>`, activating CSS overrides (`min-height:0`, `align-items:flex-start`) and a `postMessage` height reporter via `ResizeObserver`; target origin uses `window.location.ancestorOrigins[0]` (Chrome/Edge) with a `sessionStorage` fallback (Firefox) — **not** `document.referrer`, which breaks after same-origin form-submit navigations inside the iframe
 - **Clipboard**: `navigator.clipboard.writeText()` with `document.execCommand('copy')` fallback via hidden textarea for cross-origin iframes
 - **Theme**: `html[data-theme="light"]` CSS overrides; dark is default; `localStorage` persistence via inline `<script>` in `<head>` (runs before render to avoid flash)
+- **Page landmark**: the outermost card is `<main id="main-content">` — the skip link and any iframe consumers that need to target the content area should use `#main-content`
+- **`help_bubble()` icons**: all icons carry `tabindex="0" role="button" aria-label="Help"` — any new help bubbles created via `help_bubble()` inherit this automatically; the existing `:focus-within` CSS in `app.css` reveals the tooltip on keyboard focus without any JS
 
 ## Branching
 

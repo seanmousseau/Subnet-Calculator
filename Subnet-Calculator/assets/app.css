@@ -34,9 +34,9 @@
             --color-border:       #cbd5e1;
             --color-text:         #1e293b;
             --color-text-heading: #0f172a;
-            --color-text-muted:   #64748b;
+            --color-text-muted:   #4b5563;
             --color-text-subtle:  #475569;
-            --color-text-faint:   #94a3b8;
+            --color-text-faint:   #6b7280;
             --color-input-bg:     #fff;
             --color-input-text:   #0f172a;
             --color-accent:       #3b82f6;
@@ -61,6 +61,22 @@
             justify-content: center;
             padding: 2rem 1rem;
         }
+
+        .skip-link {
+            position: absolute;
+            top: -100%;
+            left: 1rem;
+            padding: 0.5rem 1rem;
+            background: var(--color-accent);
+            color: var(--color-btn-text);
+            border-radius: 0 0 6px 6px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            text-decoration: none;
+            z-index: 1000;
+            transition: top 0.1s;
+        }
+        .skip-link:focus { top: 0; }
 
         .card {
             background: var(--color-surface);
@@ -154,7 +170,13 @@
 
         input[type="number"] { font-size: 1rem; }
 
-        input[type="text"]:focus { outline: none; border-color: var(--color-accent); }
+        input[type="text"]:focus-visible,
+        input[type="number"]:focus-visible,
+        textarea:focus-visible {
+            outline: 2px solid var(--color-accent);
+            outline-offset: 1px;
+            border-color: var(--color-accent);
+        }
         input[type="text"]::placeholder { color: var(--color-text-faint); }
 
         .btn-row { display: flex; gap: 0.75rem; margin-top: 0.25rem; }
@@ -562,6 +584,12 @@
             padding: 0.15rem 0;
         }
 
+        button:focus-visible,
+        a.btn:focus-visible {
+            outline: 2px solid var(--color-accent);
+            outline-offset: 2px;
+        }
+
         /* VLSM planner */
         .vlsm-form { margin-bottom: 0.75rem; }
 
@@ -732,10 +760,11 @@
         .help-bubble { position: relative; display: inline-flex; align-items: center; }
         .help-bubble-icon {
             display: inline-flex; align-items: center; justify-content: center;
-            width: 14px; height: 14px; border-radius: 50%;
+            width: 18px; height: 18px; border-radius: 50%;
             background: var(--color-border); color: var(--color-text-subtle);
-            font-size: 0.65rem; font-weight: 700; line-height: 1;
+            font-size: 0.7rem; font-weight: 700; line-height: 1;
             cursor: help; margin-left: 0.3rem; flex-shrink: 0;
+            padding: 3px;
         }
         .help-bubble-text {
             position: absolute; bottom: calc(100% + 6px); left: 50%;
@@ -912,6 +941,15 @@
             .export-btn-group,
             .copy-all-btn,
             .ascii-export-btn { display: none !important; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
         }
 
         html.in-iframe,

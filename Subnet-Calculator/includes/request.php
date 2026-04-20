@@ -1,4 +1,4 @@
-<?php
+<?php // phpcs:disable PSR1.Files.SideEffects.FoundWithSymbols
 
 declare(strict_types=1);
 
@@ -17,7 +17,11 @@ function turnstile_verify(string $token, string $secret, string $remoteip): bool
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => http_build_query(['secret' => $secret, 'response' => $token, 'remoteip' => $remoteip]),
+        CURLOPT_POSTFIELDS     => http_build_query([
+            'secret'   => $secret,
+            'response' => $token,
+            'remoteip' => $remoteip,
+        ]),
         CURLOPT_TIMEOUT        => 5,
     ]);
     $raw  = curl_exec($ch);
@@ -36,7 +40,11 @@ function hcaptcha_verify(string $token, string $secret, string $remoteip): bool
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => http_build_query(['secret' => $secret, 'response' => $token, 'remoteip' => $remoteip]),
+        CURLOPT_POSTFIELDS     => http_build_query([
+            'secret'   => $secret,
+            'response' => $token,
+            'remoteip' => $remoteip,
+        ]),
         CURLOPT_TIMEOUT        => 5,
     ]);
     $raw  = curl_exec($ch);
@@ -575,7 +583,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if (is_array($raw_reqs)) {
                             foreach ($raw_reqs as $req) {
                                 if (is_array($req) && isset($req['name'], $req['hosts'])) {
-                                    $vlsm_requirements[] = ['name' => (string)$req['name'], 'hosts' => (int)$req['hosts']];
+                                    $vlsm_requirements[] = [
+                                        'name'  => (string)$req['name'],
+                                        'hosts' => (int)$req['hosts'],
+                                    ];
                                 }
                             }
                         }
@@ -707,7 +718,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Build fixed background override style
 $bg_override_style = '';
-if ($fixed_bg_color !== 'null' && $fixed_bg_color !== '' && preg_match('/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/', (string)$fixed_bg_color)) {
+$bg_regex = '/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/';
+if (
+    $fixed_bg_color !== 'null' && $fixed_bg_color !== ''
+    && preg_match($bg_regex, (string)$fixed_bg_color)
+) {
     $bg_override_style = ':root,html[data-theme="light"]{--color-bg:' . htmlspecialchars((string)$fixed_bg_color) . '}';
 }
 
@@ -715,10 +730,14 @@ if ($fixed_bg_color !== 'null' && $fixed_bg_color !== '' && preg_match('/^#([0-9
 $share_url = '';
 if ($result) {
     $sp = $split_result ? ['split_prefix' => ltrim($input_split_prefix, '/')] : [];
-    $share_url = '?' . http_build_query(['tab' => 'ipv4', 'ip' => $input_ip, 'mask' => ltrim($result['netmask_cidr'], '/')] + $sp);
+    $share_url = '?' . http_build_query(
+        ['tab' => 'ipv4', 'ip' => $input_ip, 'mask' => ltrim($result['netmask_cidr'], '/')] + $sp
+    );
 } elseif ($result6) {
     $sp6 = $split_result6 ? ['split_prefix6' => ltrim($input_split_prefix6, '/')] : [];
-    $share_url = '?' . http_build_query(['tab' => 'ipv6', 'ipv6' => $input_ipv6, 'prefix' => ltrim($result6['prefix'], '/')] + $sp6);
+    $share_url = '?' . http_build_query(
+        ['tab' => 'ipv6', 'ipv6' => $input_ipv6, 'prefix' => ltrim($result6['prefix'], '/')] + $sp6
+    );
 } elseif ($vlsm_result !== null && $vlsm_network !== '') {
     $vlsm_names = array_map(fn($r) => $r['name'], $vlsm_requirements);
     $vlsm_qhosts = array_map(fn($r) => $r['hosts'], $vlsm_requirements);

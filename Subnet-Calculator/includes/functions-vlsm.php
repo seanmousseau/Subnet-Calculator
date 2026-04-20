@@ -11,7 +11,10 @@ declare(strict_types=1);
  * Subnets are allocated largest-first within the parent network.
  *
  * @param  array<array{name: string, hosts: int}> $requirements
- * @return array{allocations?: list<array{name: string, hosts_needed: int, subnet: string, usable: int, waste: int}>, error?: string}
+ * @return array{
+ *   allocations?: list<array{name: string, hosts_needed: int, subnet: string, usable: int, waste: int}>,
+ *   error?: string
+ * }
  */
 function vlsm_allocate(string $network_ip, int $cidr, array $requirements): array
 {
@@ -52,7 +55,8 @@ function vlsm_allocate(string $network_ip, int $cidr, array $requirements): arra
             } elseif ($hosts_needed <= 2) {
                 $prefix = 31;
             } else {
-                return ['error' => "Requirement \"{$req['name']}\" needs {$hosts_needed} hosts but no prefix fits within /{$cidr}."];
+                return ['error' => "Requirement \"{$req['name']}\" needs {$hosts_needed} hosts"
+                    . " but no prefix fits within /{$cidr}."];
             }
         }
 

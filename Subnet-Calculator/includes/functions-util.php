@@ -180,7 +180,8 @@ function help_bubble(string $id, string $text): string
     }
     $safe = htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     return '<span class="help-bubble">'
-         . '<span class="help-bubble-icon" tabindex="0" aria-describedby="hb-' . $safe_id . '">?</span>'
+         . '<span class="help-bubble-icon" tabindex="0" role="button"'
+         . ' aria-label="Help" aria-describedby="hb-' . $safe_id . '">?</span>'
          . '<span class="help-bubble-text" role="tooltip" id="hb-' . $safe_id . '">' . $safe . '</span>'
          . '</span>';
 }

@@ -163,6 +163,19 @@ autoFocusActive();
         const rows = reqs.querySelectorAll('.vlsm-req-row');
         if (rows.length > 1) btn.closest('.vlsm-req-row').remove();
     });
+
+    reqs.addEventListener('keydown', function (e) {
+        if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+        const btn = e.target.closest('.vlsm-remove-row');
+        if (!btn) return;
+        e.preventDefault();
+        const rows = [...reqs.querySelectorAll('.vlsm-req-row')];
+        if (rows.length <= 1) return;
+        const idx = rows.indexOf(btn.closest('.vlsm-req-row'));
+        btn.closest('.vlsm-req-row').remove();
+        const remaining = reqs.querySelectorAll('.vlsm-name-input');
+        (remaining[idx] || remaining[idx - 1])?.focus();
+    });
 })();
 
 // ── VLSM: submit validation + loading state ──────────────────────────────────

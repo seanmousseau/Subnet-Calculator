@@ -21,4 +21,5 @@
     <rule ref="Squiz.Classes.ValidClassName">
         <exclude-pattern>testing/unit/*</exclude-pattern>
     </rule>
+
 </ruleset>

@@ -146,6 +146,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File |
 |---------|------|
+| 2.5.0 | `releases/subnet-calculator-2.5.0.tar.gz` |
 | 2.4.1 | `releases/subnet-calculator-2.4.1.tar.gz` |
 | 2.4.0 | `releases/subnet-calculator-2.4.0.tar.gz` |
 | 2.3.0 | `releases/subnet-calculator-2.3.0.tar.gz` |
@@ -168,7 +169,7 @@ Pre-built release archives are available in `releases/`:
 Each archive contains the app files at the root level. Extract directly into your webroot to install or upgrade in place:
 
 ```bash
-tar -xzf subnet-calculator-2.4.1.tar.gz -C /var/www/html/subnet-calculator/
+tar -xzf subnet-calculator-2.5.0.tar.gz -C /var/www/html/subnet-calculator/
 ```
 
 ## Embedding
@@ -288,6 +289,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 | Version | Notes |
 |---------|-------|
+| 2.5.0 | Accessibility & UX hardening: skip link, `<main>` landmark, input focus rings, button focus-visible, light mode color contrast, prefers-reduced-motion, help bubble touch target + keyboard access, VLSM keyboard Delete; 6 new a11y test groups (529 assertions) |
 | 2.4.1 | Patch: supernet tooltip fix (moved out of button elements), PHP type correctness fixes (`ip2long`/`inet_pton`/`unpack` false-return handling), PHPStan expanded to all handler and function files, Semgrep rules, 4 new Playwright test groups (517 assertions) |
 | 2.4.0 | `$locale` config for locale-aware number formatting, ESLint + Stylelint tooling, OpenAPI example responses, CSP inline-style fix, tooltip visual polish, VLSM print stylesheet, mobile overflow fix |
 | 2.3.0 | IP range → CIDR conversion, subnet allocation tree view, VLSM JSON/XLSX export, ASCII diagram export, help bubble tooltips, visual regression tests, GitHub Pages documentation site |
