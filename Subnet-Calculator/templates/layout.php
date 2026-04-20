@@ -40,7 +40,8 @@
     <?php endif; ?>
 </head>
 <body>
-<div class="card">
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<main class="card" id="main-content">
     <div class="title-row">
         <picture>
             <source srcset="assets/logo.webp" type="image/webp">
@@ -833,7 +834,7 @@ if ($i < 3) {
         &nbsp;&middot;&nbsp;
         <a href="https://seanmousseau.github.io/Subnet-Calculator/" target="_blank" rel="noreferrer">Docs</a>
     </footer>
-</div>
+</main>
 
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">Copied!</div>
 

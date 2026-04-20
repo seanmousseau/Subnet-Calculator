@@ -2771,6 +2771,76 @@ async def test_theme_light_dark(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# a11y tests (v2.5.0)
+# ---------------------------------------------------------------------------
+
+async def test_a11y_landmarks(page: Page) -> None:
+    section("a11y — page landmarks (<main>, skip link)")
+    await navigate(page, APP_URL)
+    assert_true("<main> element exists", await page.locator("main.card").count() == 1)
+    skip_link = page.locator("a.skip-link")
+    assert_true("skip link exists", await skip_link.count() == 1)
+    assert_eq("skip link href", await skip_link.get_attribute("href"), "#main-content")
+    assert_eq("main has id main-content", await page.locator("#main-content").count(), 1)
+
+
+async def test_a11y_focus_inputs(page: Page) -> None:
+    section("a11y — input focus ring (outline not none)")
+    await navigate(page, APP_URL)
+    outline = await page.eval_on_selector("#ip", """el => {
+        el.focus();
+        return getComputedStyle(el).outlineStyle;
+    }""")
+    assert_true("input focus outline is not none", outline != "none")
+
+
+async def test_a11y_toast_aria(page: Page) -> None:
+    section("a11y — toast aria-live region")
+    await navigate(page, APP_URL)
+    toast = page.locator("#toast")
+    assert_eq("toast role", await toast.get_attribute("role"), "status")
+    assert_eq("toast aria-live", await toast.get_attribute("aria-live"), "polite")
+    assert_eq("toast aria-atomic", await toast.get_attribute("aria-atomic"), "true")
+
+
+async def test_a11y_help_bubble_keyboard(page: Page) -> None:
+    section("a11y — help bubble keyboard accessible")
+    await navigate(page, APP_URL)
+    icon = page.locator(".help-bubble-icon").first
+    assert_eq("help icon tabindex", await icon.get_attribute("tabindex"), "0")
+    assert_eq("help icon role", await icon.get_attribute("role"), "button")
+
+
+async def test_a11y_reduced_motion_css(page: Page) -> None:
+    section("a11y — prefers-reduced-motion CSS media query present")
+    await navigate(page, APP_URL)
+    has_rule = await page.evaluate("""() => {
+        for (const sheet of document.styleSheets) {
+            try {
+                for (const rule of sheet.cssRules) {
+                    if (rule.conditionText?.includes('prefers-reduced-motion')) return true;
+                }
+            } catch (e) {}
+        }
+        return false;
+    }""")
+    assert_true("prefers-reduced-motion media query present", has_rule)
+
+
+async def test_vlsm_keyboard_delete(page: Page) -> None:
+    section("VLSM — keyboard Delete on remove button")
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.click(".vlsm-add-row")
+    rows_before = await page.locator(".vlsm-req-row").count()
+    remove_btns = page.locator(".vlsm-remove-row")
+    await remove_btns.first.focus()
+    await page.keyboard.press("Delete")
+    rows_after = await page.locator(".vlsm-req-row").count()
+    assert_true("Delete key removes a VLSM row", rows_after == rows_before - 1)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -2878,6 +2948,12 @@ async def main() -> None:
             await test_all_tooltips_direction(page)
             await test_console_no_errors(page)
             await test_theme_light_dark(page)
+            await test_a11y_landmarks(page)
+            await test_a11y_focus_inputs(page)
+            await test_a11y_toast_aria(page)
+            await test_a11y_help_bubble_keyboard(page)
+            await test_a11y_reduced_motion_css(page)
+            await test_vlsm_keyboard_delete(page)
         finally:
             await context.close()
             await browser.close()

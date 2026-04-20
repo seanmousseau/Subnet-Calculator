@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-04-20
+
+### Added
+- **Skip-to-content link** — visually hidden `<a href="#main-content">` becomes visible on keyboard focus; resolves WCAG 2.4.1 (Bypass Blocks) — closes #217
+- **`<main>` landmark** — outermost card element promoted from `<div>` to `<main id="main-content">` so screen readers and the skip link have a named landmark — closes #216
+- **Help bubble keyboard access** — `.help-bubble-icon` gains `role="button"` and `aria-label="Help"`; existing `:focus-within` CSS already reveals the tooltip on keyboard focus — closes #215
+
+### Fixed
+- **Input focus ring** — removed `outline: none` on text/number inputs; replaced with `outline: 2px solid var(--color-accent)` via `:focus-visible` so keyboard users see a visible ring while mouse clicks are unaffected — closes #211
+- **Button focus-visible** — all `button` and `a.btn` elements now show a 2 px accent outline on keyboard focus — closes #223
+- **Light mode color contrast** — `--color-text-faint` raised from `#94a3b8` (~2.9:1) to `#6b7280` (~4.9:1); `--color-text-muted` raised from `#64748b` to `#4b5563` (~5.9:1); both now exceed WCAG AA 4.5:1 — closes #214
+- **`prefers-reduced-motion`** — global media query disables all CSS transitions and animations when the OS reduced-motion preference is set — closes #212
+- **Help bubble touch target** — `.help-bubble-icon` enlarged from 14×14 px to 18×18 px with 3 px padding (24×24 px tap area), meeting WCAG 2.2 SC 2.5.8 — closes #215
+
+### a11y
+- **VLSM row keyboard Delete** — pressing `Delete` or `Backspace` on a focused remove button deletes the row and moves focus to the nearest remaining name input — closes #190
+
+### Tests
+- 6 new Playwright a11y test groups: landmarks, input focus ring, toast ARIA, help bubble keyboard, prefers-reduced-motion CSS, VLSM keyboard Delete (91 groups, 529 assertions)
+- Visual regression baselines regenerated after CSS token changes
+
 ## [2.4.1] - 2026-04-13
 
 ### Added
