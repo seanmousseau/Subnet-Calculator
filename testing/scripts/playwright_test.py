@@ -2792,6 +2792,16 @@ async def test_a11y_focus_inputs(page: Page) -> None:
         return getComputedStyle(el).outlineStyle;
     }""")
     assert_true("input focus outline is not none", outline != "none")
+    btn_outline = await page.eval_on_selector("button[type='submit']", """el => {
+        el.focus();
+        return getComputedStyle(el).outlineStyle;
+    }""")
+    assert_true("button focus outline is not none", btn_outline != "none")
+    reset_outline = await page.eval_on_selector("a.btn.reset", """el => {
+        el.focus();
+        return getComputedStyle(el).outlineStyle;
+    }""")
+    assert_true("a.btn focus outline is not none", reset_outline != "none")
 
 
 async def test_a11y_toast_aria(page: Page) -> None:
@@ -2809,6 +2819,7 @@ async def test_a11y_help_bubble_keyboard(page: Page) -> None:
     icon = page.locator(".help-bubble-icon").first
     assert_eq("help icon tabindex", await icon.get_attribute("tabindex"), "0")
     assert_eq("help icon role", await icon.get_attribute("role"), "button")
+    assert_eq("help icon aria-label", await icon.get_attribute("aria-label"), "Help")
 
 
 async def test_a11y_reduced_motion_css(page: Page) -> None:
@@ -2845,6 +2856,21 @@ async def test_vlsm_keyboard_delete(page: Page) -> None:
         "focus moves to a remaining VLSM name input after delete",
         "vlsm-name-input" in (focused_class or ""),
         str(focused_class),
+    )
+    # Backspace path
+    await page.click(".vlsm-add-row")
+    rows_before_bs = await page.locator(".vlsm-req-row").count()
+    await page.locator(".vlsm-remove-row").first.focus()
+    await page.keyboard.press("Backspace")
+    rows_after_bs = await page.locator(".vlsm-req-row").count()
+    assert_true("Backspace key removes a VLSM row", rows_after_bs == rows_before_bs - 1)
+    focused_class_bs = await page.evaluate(
+        "document.activeElement ? document.activeElement.className : ''"
+    )
+    assert_true(
+        "focus moves to name input after Backspace delete",
+        "vlsm-name-input" in (focused_class_bs or ""),
+        str(focused_class_bs),
     )
 
 
