@@ -24,6 +24,34 @@ servers:
 
 security: []   # Override per-operation when $api_tokens is configured
 
+tags:
+  - name: Meta
+    description: API metadata and discovery
+  - name: IPv4
+    description: IPv4 subnet calculation
+  - name: IPv6
+    description: IPv6 subnet calculation
+  - name: VLSM
+    description: Variable Length Subnet Masking allocation
+  - name: Overlap
+    description: Subnet overlap detection
+  - name: Split
+    description: Subnet splitting
+  - name: Supernet
+    description: Route summarisation and supernet calculation
+  - name: ULA
+    description: IPv6 Unique Local Address generation
+  - name: Sessions
+    description: VLSM session persistence
+  - name: RDNS
+    description: Reverse-DNS zone generation
+  - name: Bulk
+    description: Batch subnet calculation
+  - name: Range
+    description: IP address range to CIDR conversion
+  - name: Tree
+    description: Subnet allocation tree
+
 components:
   securitySchemes:
     bearerAuth:
@@ -135,6 +163,7 @@ paths:
   /:
     get:
       operationId: meta
+      tags: [Meta]
       summary: API metadata
       description: Returns API version and list of available endpoints.
       responses:
@@ -173,7 +202,12 @@ paths:
   /ipv4:
     post:
       operationId: calcIpv4
+      tags: [IPv4]
       summary: IPv4 subnet calculation
+      description: >
+        Calculate IPv4 subnet details including network address, broadcast,
+        netmask, wildcard mask, host range, usable host count, address type,
+        and reverse-DNS zone from an IP address and optional prefix or mask.
       requestBody:
         required: true
         content:
@@ -219,7 +253,12 @@ paths:
   /ipv6:
     post:
       operationId: calcIpv6
+      tags: [IPv6]
       summary: IPv6 subnet calculation
+      description: >
+        Calculate IPv6 prefix details including network CIDR, first and last
+        address, total address count, expanded and compressed address forms,
+        and address type. Requires the PHP GMP extension on the server.
       requestBody:
         required: true
         content:
@@ -259,7 +298,13 @@ paths:
   /vlsm:
     post:
       operationId: calcVlsm
+      tags: [VLSM]
       summary: VLSM subnet allocation
+      description: >
+        Allocates subnets from a parent network using Variable Length Subnet
+        Masking. Requirements are sorted largest-first and packed greedily;
+        the response includes each allocation's subnet, host range, usable
+        count, and wasted addresses.
       requestBody:
         required: true
         content:
@@ -325,7 +370,12 @@ paths:
   /overlap:
     post:
       operationId: checkOverlap
+      tags: [Overlap]
       summary: Subnet overlap check (IPv4 or IPv6)
+      description: >
+        Compares two CIDR blocks and returns their containment relation:
+        none, identical, a_contains_b, or b_contains_a. Accepts both IPv4
+        and IPv6 prefixes; both inputs must be the same address family.
       requestBody:
         required: true
         content:
@@ -369,7 +419,12 @@ paths:
   /split/ipv4:
     post:
       operationId: splitIpv4
+      tags: [Split]
       summary: Split an IPv4 subnet into smaller subnets
+      description: >
+        Divides a parent IPv4 subnet into equal-size child subnets at the
+        given prefix length. Results are paginated via the `limit` parameter
+        (default 16, max 256).
       requestBody:
         required: true
         content:
@@ -413,7 +468,13 @@ paths:
   /split/ipv6:
     post:
       operationId: splitIpv6
+      tags: [Split]
       summary: Split an IPv6 subnet into smaller subnets
+      description: >
+        Divides a parent IPv6 prefix into equal-size child prefixes at the
+        given prefix length. When the prefix difference is ≥ 63 the total
+        count is returned as a string (e.g. "2^65"). Results are paginated
+        via `limit` (default 16, max 256).
       requestBody:
         required: true
         content:
@@ -457,7 +518,12 @@ paths:
   /supernet:
     post:
       operationId: supernet
+      tags: [Supernet]
       summary: Find supernet or summarise IPv4 routes
+      description: >
+        Two modes: `find` returns the tightest supernet covering all input
+        CIDRs; `summarise` returns the minimal set of covering prefixes using
+        a greedy aggregation algorithm. Accepts IPv4 CIDRs only.
       requestBody:
         required: true
         content:
@@ -511,7 +577,12 @@ paths:
   /ula:
     post:
       operationId: generateUla
+      tags: [ULA]
       summary: Generate an IPv6 ULA /48 prefix (RFC 4193)
+      description: >
+        Generates a random or deterministic IPv6 Unique Local Address /48
+        prefix per RFC 4193. Optionally accepts a 10-hex-char global ID;
+        if omitted a cryptographically random one is generated.
       requestBody:
         content:
           application/json:
@@ -552,6 +623,7 @@ paths:
   /sessions:
     post:
       operationId: createSession
+      tags: [Sessions]
       summary: Save a VLSM session payload
       description: Requires `$session_enabled = true` on the server.
       requestBody:
@@ -593,7 +665,12 @@ paths:
   /sessions/{id}:
     get:
       operationId: loadSession
+      tags: [Sessions]
       summary: Load a saved session by ID
+      description: >
+        Retrieves a previously saved VLSM session by its 8-hex-char ID.
+        Sessions expire after the server-configured TTL (default 30 days).
+        Requires `$session_enabled = true` on the server.
       parameters:
         - name: id
           in: path
@@ -637,6 +714,7 @@ paths:
   /rdns:
     post:
       operationId: generateRdns
+      tags: [RDNS]
       summary: Generate a reverse-DNS zone file (BIND / RFC 2317)
       description: |
         Generates a BIND-format PTR zone file for the given subnet.
@@ -722,6 +800,7 @@ paths:
   /bulk:
     post:
       operationId: bulkCalculate
+      tags: [Bulk]
       summary: Calculate multiple subnets in a single request
       description: |
         Accepts up to 50 CIDR inputs and returns a per-item result array.
@@ -803,6 +882,7 @@ paths:
   /range/ipv4:
     post:
       operationId: rangeToIPv4CIDRs
+      tags: [Range]
       summary: Convert an IPv4 address range to its minimal covering CIDR list
       description: |
         Accepts a start IP and end IP (both inclusive) and returns the minimal list of
@@ -854,6 +934,7 @@ paths:
   /tree:
     post:
       operationId: buildSubnetTree
+      tags: [Tree]
       summary: Build a subnet allocation tree from a parent CIDR and child allocations
       description: |
         Accepts a parent CIDR and an array of allocated child CIDRs and returns a

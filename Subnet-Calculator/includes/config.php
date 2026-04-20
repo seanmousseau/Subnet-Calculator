@@ -21,7 +21,8 @@ $recaptcha_enterprise_api_key     = '';
 $recaptcha_enterprise_project_id  = '';
 $recaptcha_score_threshold        = 0.5;
 $page_title           = 'Subnet Calculator';
-$page_description     = 'Free online subnet calculator for IPv4 and IPv6. Calculate network address, broadcast, netmask, host range, and split subnets.';
+$page_description     = 'Free online subnet calculator for IPv4 and IPv6. '
+    . 'Calculate network address, broadcast, netmask, host range, and split subnets.';
 $show_share_bar       = true;
 $frame_ancestors      = '*';
 $canonical_url        = '';
@@ -55,7 +56,11 @@ if (!in_array($form_protection, ['none', 'honeypot', 'turnstile', 'hcaptcha', 'r
     error_log('sc: invalid $form_protection "' . $form_protection . '" — reset to "none"');
     $form_protection = 'none';
 }
-if (!is_numeric($recaptcha_score_threshold) || (float)$recaptcha_score_threshold < 0.0 || (float)$recaptcha_score_threshold > 1.0) {
+if (
+    !is_numeric($recaptcha_score_threshold)
+    || (float)$recaptcha_score_threshold < 0.0
+    || (float)$recaptcha_score_threshold > 1.0
+) {
     error_log('sc: invalid $recaptcha_score_threshold — reset to 0.5');
     $recaptcha_score_threshold = 0.5;
 } else {

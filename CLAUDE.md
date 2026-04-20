@@ -14,7 +14,8 @@ for f in Subnet-Calculator/includes/*.php Subnet-Calculator/templates/layout.php
          Subnet-Calculator/api/v1/*.php Subnet-Calculator/api/v1/handlers/*.php; do php -l "$f"; done
 
 # Static analysis (PHPStan level 9, configured in phpstan.neon)
-phpstan analyse --no-progress
+# --memory-limit=512M required — default 128M causes a crash on this codebase
+phpstan analyse --no-progress --memory-limit=512M
 
 # Unit tests (PHPUnit 11, requires: composer install)
 composer install --no-interaction --prefer-dist
@@ -27,6 +28,14 @@ vendor/bin/phpcs --standard=PSR12 Subnet-Calculator/includes/ Subnet-Calculator/
 npm run lint:js   # ESLint on app.js
 npm run lint:css  # Stylelint on app.css
 npm run lint      # both
+
+# OpenAPI spec lint (errors fail; 24 known warnings about missing tags/descriptions are pre-existing)
+npx --yes @stoplight/spectral-cli@6 lint Subnet-Calculator/api/openapi.yaml
+
+# Security scan
+semgrep --config=.semgrep/rules.yml --config p/php --config p/owasp-top-ten \
+    --config p/sql-injection --error \
+    Subnet-Calculator/includes/ Subnet-Calculator/api/ Subnet-Calculator/templates/
 
 # Deploy to dev server, then run the end-to-end browser test suite (~517 assertions)
 # Requires: dev server running at root@192.168.80.15

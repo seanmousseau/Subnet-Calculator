@@ -69,7 +69,10 @@ function api_rate_limit(string $key): void
     // Bearer token is present and has an entry in $api_rate_limit_tokens.
     $rpm = (int)($api_rate_limit_rpm ?? 0);
     $rl_key = $key; // default: key by IP
-    if (is_array($api_tokens) && $api_tokens !== [] && is_array($api_rate_limit_tokens) && $api_rate_limit_tokens !== []) {
+    if (
+        is_array($api_tokens) && $api_tokens !== []
+        && is_array($api_rate_limit_tokens) && $api_rate_limit_tokens !== []
+    ) {
         $authRaw = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
         $auth    = is_string($authRaw) ? $authRaw : '';
         if (str_starts_with($auth, 'Bearer ')) {
