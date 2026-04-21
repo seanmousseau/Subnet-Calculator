@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-04-21
+
+### Added
+- **Docker + Playwright test environment** — `Dockerfile` and `docker-compose.yml` containerise the PHP app and Playwright test runner; `make test-docker` runs the full E2E suite without requiring the remote dev server — closes #226
+- **GitHub CI Playwright workflow** — `.github/workflows/playwright.yml` runs the Playwright suite on every PR via Docker — closes #228
+- **`GET /api/v1/changelog`** endpoint — returns `CHANGELOG.md` as a JSON string; registered in the meta endpoint list and documented in `api/openapi.yaml` — closes #186
+- **`api_deprecation_headers()`** utility function in `api/v1/helpers.php` — sends `Sunset`, `Deprecation`, and `Link` headers for future endpoint deprecation workflows
+- **`$api_request_log` config option** — when enabled, each API request is logged (endpoint, method, client IP, timestamp) to `data/api_requests.sqlite`; fails open on any DB error — closes #187
+- **JetBrains Mono** — self-hosted WOFF2 (`assets/fonts/JetBrainsMono-Regular.woff2`, OFL 1.1) replaces `'Courier New'` in all monospace contexts (result values, binary rows, ULA codes, VLSM table cells) — closes #218
+- **Makefile** — `make test-docker` target added as the canonical pre-PR local test gate — closes #227
+
+### Changed
+- **Wider card on large viewports** — card `max-width` increases to `800px` at `width >= 900px`, giving the VLSM table and other dense panels more breathing room — closes #219
+- **Tablet responsive breakpoint** — new `@media (481px <= width <= 767px)` rule adjusts card padding for mid-range viewports — closes #220
+- **Scroll affordance on narrow viewports** — `.vlsm-results` and `.split-list-scroll` show a right-edge gradient fade (using `--color-surface`) at `width <= 767px` to indicate horizontal scrollability — closes #221
+- **CI cleanup** — removed `claude-code-review.yml` GitHub Actions workflow — closes #225
+
+### Performance
+- **Early TTFB flush** — `ob_flush(); flush()` call after `</head>` in `layout.php` allows the browser to start fetching `app.css` while PHP evaluates the page body — closes #194
+
+### Tests
+- `APP_URL` and `_APP_BASE` in `playwright_test.py` now read from the `APP_URL` environment variable (fallback to dev server URL)
+- `SKIP_SNAPSHOTS=1` environment variable skips pixel-level snapshot comparisons in Docker CI
+- Playwright test group and assertion counts updated (snapshot baselines regenerated for font and layout changes)
+
 ## [2.5.0] - 2026-04-20
 
 ### Added

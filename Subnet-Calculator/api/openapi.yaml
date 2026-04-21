@@ -51,6 +51,8 @@ tags:
     description: IP address range to CIDR conversion
   - name: Tree
     description: Subnet allocation tree
+  - name: Changelog
+    description: API changelog
 
 components:
   securitySchemes:
@@ -1009,3 +1011,30 @@ paths:
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+
+  /changelog:
+    get:
+      operationId: getChangelog
+      tags: [Changelog]
+      summary: Get CHANGELOG.md contents
+      description: Returns the full CHANGELOG.md as a Markdown string.
+      responses:
+        "200":
+          description: Changelog contents
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          changelog: { type: string, description: "Full CHANGELOG.md contents" }
+              example:
+                ok: true
+                data:
+                  changelog: "## [2.6.0] - 2026-04-21\n### Added\n- ..."
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "503": { description: Changelog file not available on this server, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }

@@ -1,0 +1,26 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  playwright-tests:
+    build:
+      context: .
+      dockerfile: testing/Dockerfile.playwright
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      APP_URL: "http://app/"
+      SKIP_SNAPSHOTS: "1"
+      SKIP_LINT: "1"
+      # No IPAM_BASIC_USER/PASS — no reverse proxy in Docker
+    volumes:
+      - ./testing/snapshots:/app/testing/snapshots
+    working_dir: /app

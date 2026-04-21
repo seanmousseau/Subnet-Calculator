@@ -73,10 +73,14 @@
     ExpiresByType text/css                 "access plus 1 year"
     ExpiresByType application/javascript   "access plus 1 year"
     ExpiresByType text/javascript          "access plus 1 year"
+    ExpiresByType font/woff2               "access plus 1 year"
 </IfModule>
 
 <IfModule mod_headers.c>
     <FilesMatch "\.(webp|png|svg|css|js)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+    <FilesMatch "\.woff2$">
         Header set Cache-Control "public, max-age=31536000, immutable"
     </FilesMatch>
 </IfModule>
