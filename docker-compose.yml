@@ -2,9 +2,9 @@ services:
   app:
     build: .
     ports:
-      - "8080:80"
+      - "8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -17,7 +17,7 @@ services:
       app:
         condition: service_healthy
     environment:
-      APP_URL: "http://app/"
+      APP_URL: "http://app:8080/"
       SKIP_SNAPSHOTS: "1"
       SKIP_LINT: "1"
       # No IPAM_BASIC_USER/PASS — no reverse proxy in Docker

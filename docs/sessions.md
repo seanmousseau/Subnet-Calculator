@@ -21,7 +21,7 @@ Sessions expire after a configurable TTL (default 30 days). The expiry is shown 
 
 ## Storage
 
-Sessions are stored in a SQLite database. The default path is `data/sessions.db` relative to the app directory; this can be overridden with `$session_db_path` in `config.php`. The file is blocked from direct web access by `.htaccess`. Expired sessions are pruned on each save.
+Sessions are stored in a SQLite database. The default path is `data/sessions.sqlite` relative to the app directory; this can be overridden with `$session_db_path` in `config.php`. The file is blocked from direct web access by `.htaccess`. Expired sessions are pruned on each save.
 
 ## Disabling sessions
 

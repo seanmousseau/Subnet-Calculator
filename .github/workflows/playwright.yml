@@ -20,7 +20,7 @@ jobs:
       - name: Run Playwright tests
         run: |
           docker compose run --rm \
-            -e APP_URL=http://app/ \
+            -e APP_URL=http://app:8080/ \
             -e SKIP_SNAPSHOTS=1 \
             -e SKIP_LINT=1 \
             playwright-tests python3 testing/scripts/playwright_test.py

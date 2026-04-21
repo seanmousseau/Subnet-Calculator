@@ -2885,8 +2885,8 @@ async def test_vlsm_keyboard_delete(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 async def main() -> None:
-    _needs_auth = "dev-direct.seanmousseau.com" in APP_URL
-    if _needs_auth and (not BASIC_USER or not BASIC_PASS):
+    _needs_auth = bool(BASIC_USER and BASIC_PASS)
+    if not _needs_auth and "dev-direct.seanmousseau.com" in APP_URL:
         print(f"{RED}ERROR: IPAM_BASIC_USER / IPAM_BASIC_PASS not set.{RST}")
         print("Run: bash -c 'set -a; source ~/.claude/dev-secrets.env; set +a; python3 testing/scripts/playwright_test.py'")
         sys.exit(1)
