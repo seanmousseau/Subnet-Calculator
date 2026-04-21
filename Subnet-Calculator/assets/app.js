@@ -443,3 +443,8 @@ if (window.self !== window.top) {
         }
     });
 }
+
+// ── Service Worker registration ───────────────────────────────────────────
+if (window.self === window.top && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+}

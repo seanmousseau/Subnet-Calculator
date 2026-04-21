@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-04-21
+
+### Added
+- **Service Worker** — `sw.js` added at the docroot; caches the app shell (`/`) at install time and applies cache-first for static assets (`/assets/`) and network-first for HTML navigations. Only registered in non-iframe mode. Cache name `sc-v2.7.0` ensures old caches are evicted on upgrade — closes #192
+- **PHP client library** — `clients/php/SubnetCalculatorClient.php`: zero-dependency, single-file PHP 7.4+ client with typed methods for all 16 API endpoints (`calcIpv4`, `calcIpv6`, `calcVlsm`, `checkOverlap`, `splitIpv4`, `splitIpv6`, `supernet`, `generateUla`, `createSession`, `loadSession`, `generateRdns`, `bulkCalculate`, `rangeToIPv4CIDRs`, `buildSubnetTree`, `getChangelog`, `meta`); falls back from cURL to `file_get_contents` stream transport; PHP 8.5 `http_get_last_response_headers()` compatibility — closes #189
+- **Open Graph + Twitter card meta tags** — `og:image:width` (520), `og:image:height` (600), `og:image:type`, `og:site_name`, `twitter:title`, `twitter:description`, `twitter:image`, `twitter:image:alt`, `theme-color` (#0F172A), and `color-scheme` added to `templates/layout.php`; image dimensions now match the actual `logo.webp` asset — closes #222
+- **`sw.js` cache headers** — `.htaccess` adds `Cache-Control: no-cache, no-store, must-revalidate` and `Service-Worker-Allowed: /` for `sw.js` so browsers always check for SW updates without the long-cache policy applied to other JS assets
+
+### Tests
+- 17 new PHPUnit unit tests in `testing/unit/ClientTest.php` covering `SubnetCalculatorClient` request routing, body construction, and `decode()` error handling (175 total; 271 assertions)
+- `phpstan.neon` extended to include `clients/php/SubnetCalculatorClient.php`
+
 ## [2.6.0] - 2026-04-21
 
 ### Added

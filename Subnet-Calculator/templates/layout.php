@@ -12,8 +12,18 @@
     <title><?= htmlspecialchars($page_title) ?></title>
     <link rel="icon" type="image/webp" href="assets/favicon-32.webp">
     <link rel="icon" type="image/png"  href="assets/favicon-32.png">
-    <meta property="og:image" content="<?= $canonical_url ?>/assets/logo.webp">
-    <meta name="twitter:card" content="summary">
+    <meta property="og:image"        content="<?= $canonical_url ?>/assets/logo.webp">
+    <meta property="og:image:width"  content="520">
+    <meta property="og:image:height" content="600">
+    <meta property="og:image:type"   content="image/webp">
+    <meta property="og:site_name"    content="Subnet Calculator">
+    <meta name="twitter:card"        content="summary">
+    <meta name="twitter:title"       content="<?= htmlspecialchars($page_title) ?>">
+    <meta name="twitter:description" content="<?= htmlspecialchars($page_description) ?>">
+    <meta name="twitter:image"       content="<?= $canonical_url ?>/assets/logo.webp">
+    <meta name="twitter:image:alt"   content="Subnet Calculator logo">
+    <meta name="theme-color"         content="#0F172A">
+    <meta name="color-scheme"        content="dark light">
     <?php if ($turnstile_curl_missing) : ?>
     <!-- sc-warning: Turnstile is configured but the PHP cURL extension is not loaded.
          Captcha verification is being skipped. Install php-curl to enable it. -->

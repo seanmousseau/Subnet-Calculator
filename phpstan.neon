@@ -31,6 +31,7 @@ parameters:
         - Subnet-Calculator/api/v1/handlers/range.php
         - Subnet-Calculator/api/v1/handlers/tree.php
         - Subnet-Calculator/api/v1/handlers/changelog.php
+        - Subnet-Calculator/clients/php/SubnetCalculatorClient.php
     # config.php is gitignored (user override) — skip if absent
     excludePaths:
         - Subnet-Calculator/config.php (?)
