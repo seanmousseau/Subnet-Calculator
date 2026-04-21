@@ -50,7 +50,10 @@ bash -c 'set -a; source ~/.claude/dev-secrets.env; set +a; python3 testing/scrip
 
 # Build a release tarball (files at root level — untar directly in webroot to install/upgrade)
 # Also bump $app_version in Subnet-Calculator/includes/config.php before building
+# CHANGELOG.md is bundled so GET /api/v1/changelog works in tarball installs
+cp CHANGELOG.md Subnet-Calculator/CHANGELOG.md
 tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
+rm Subnet-Calculator/CHANGELOG.md
 ```
 
 **Release checklist:**

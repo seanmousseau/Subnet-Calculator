@@ -197,8 +197,8 @@ function api_log_request(string $key, string $endpoint, string $method): void
 function api_deprecation_headers(string $sunset_date, string $link = ''): void
 {
     header('Sunset: ' . $sunset_date);
+    header('Deprecation: true');
     if ($link !== '') {
-        header('Deprecation: true');
         header('Link: <' . $link . '>; rel="deprecation"');
     }
 }

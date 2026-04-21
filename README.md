@@ -170,7 +170,7 @@ Pre-built release archives are available in `releases/`:
 Each archive contains the app files at the root level. Extract directly into your webroot to install or upgrade in place:
 
 ```bash
-tar -xzf subnet-calculator-2.5.0.tar.gz -C /var/www/html/subnet-calculator/
+tar -xzf subnet-calculator-2.6.0.tar.gz -C /var/www/html/subnet-calculator/
 ```
 
 ## Embedding

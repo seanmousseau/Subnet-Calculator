@@ -42,7 +42,7 @@ BASIC_PASS  = os.environ.get("IPAM_BASIC_PASS", "")
 APP_URL     = os.environ.get(
     "APP_URL",
     "https://dev-direct.seanmousseau.com:8343/claude/subnet-calculator/",
-)
+).rstrip("/") + "/"
 SKIP_LINT   = os.environ.get("SKIP_LINT", "0") == "1"
 
 # ---------------------------------------------------------------------------
@@ -105,10 +105,7 @@ def assert_true(name: str, value, detail: str = "") -> bool:
 # HTTP helper (used by header / CSP tests — no browser required)
 # ---------------------------------------------------------------------------
 
-_APP_BASE = os.environ.get(
-    "APP_URL",
-    "https://dev-direct.seanmousseau.com:8343/claude/subnet-calculator/",
-)
+_APP_BASE = APP_URL
 _SESSION  = _requests.Session()
 if BASIC_USER and BASIC_PASS:
     _SESSION.auth = (BASIC_USER, BASIC_PASS)
