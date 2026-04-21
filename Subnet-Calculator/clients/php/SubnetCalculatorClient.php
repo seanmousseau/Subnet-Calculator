@@ -14,7 +14,7 @@ namespace SubnetCalculator;
  */
 class SubnetCalculatorClient
 {
-    private string $baseUrl;
+    protected string $baseUrl;
     private int $timeout;
 
     public function __construct(string $baseUrl = 'https://subnetcalculator.app/api/v1', int $timeout = 10)

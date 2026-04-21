@@ -30,6 +30,7 @@ class TestableClient extends SubnetCalculatorClient
 
     public function getCapturedMethod(): string  { return $this->capturedMethod; }
     public function getCapturedPath(): string    { return $this->capturedPath;   }
+    public function getBaseUrl(): string         { return $this->baseUrl;        }
 
     /** @return array<string, mixed>|null */
     public function getCapturedBody(): ?array    { return $this->capturedBody;   }
@@ -72,17 +73,13 @@ class ClientTest extends TestCase
     public function testConstructorStripsTrailingSlash(): void
     {
         $c = new TestableClient('https://example.com/api/v1/');
-        $c->setMockResponse(['ok' => true, 'data' => []]);
-        $c->meta();
-        $this->assertSame('/', $c->getCapturedPath());
+        $this->assertSame('https://example.com/api/v1', $c->getBaseUrl());
     }
 
     public function testConstructorDefaultUrl(): void
     {
         $c = new TestableClient();
-        $c->setMockResponse(['ok' => true, 'data' => []]);
-        $c->meta();
-        $this->assertSame('/', $c->getCapturedPath());
+        $this->assertSame('https://subnetcalculator.app/api/v1', $c->getBaseUrl());
     }
 
     // ── Endpoint routing ───────────────────────────────────────────────────
@@ -276,5 +273,11 @@ class ClientTest extends TestCase
     {
         $this->expectException(\JsonException::class);
         $this->client->callDecode('not json', 200, 'http://x');
+    }
+
+    public function testDecodeThrowsOnJsonScalarBody(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->client->callDecode('"scalar"', 200, 'http://x');
     }
 }

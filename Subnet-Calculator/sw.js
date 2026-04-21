@@ -3,10 +3,22 @@
 const CACHE_NAME   = 'sc-v2.7.0';
 const CACHE_PREFIX = 'sc-v';
 
+// Scope-relative paths — work in both root and subdir installs
+const ASSETS_PATH  = new URL('assets/', self.registration.scope).pathname;
+const SHELL_URL    = new URL('./', self.registration.scope).toString();
+
+// Assets to pre-cache at install time
+const PRECACHE_URLS = [
+    SHELL_URL,
+    new URL('assets/app.css',     self.registration.scope).toString(),
+    new URL('assets/app.js',      self.registration.scope).toString(),
+    new URL('assets/logo.webp',   self.registration.scope).toString(),
+];
+
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
-            .then(cache => cache.add('./'))
+            .then(cache => cache.addAll(PRECACHE_URLS))
             .then(() => self.skipWaiting())
     );
 });
@@ -33,7 +45,7 @@ self.addEventListener('fetch', event => {
     if (url.origin !== self.location.origin) return;
 
     // Static assets: cache-first, populate cache on network hit
-    if (url.pathname.startsWith('/assets/')) {
+    if (url.pathname.startsWith(ASSETS_PATH)) {
         event.respondWith(
             caches.match(request).then(cached => {
                 if (cached) return cached;
@@ -57,17 +69,20 @@ self.addEventListener('fetch', event => {
     // non-navigation GETs (API calls, XHR) should fail normally when offline
     if (request.mode !== 'navigate') return;
 
+    // Normalize to the shell URL so query strings don't create unbounded cache entries
+    const shellRequest = new Request(SHELL_URL);
+
     event.respondWith(
         fetch(request)
             .then(response => {
                 if (response.ok) {
                     event.waitUntil(
                         caches.open(CACHE_NAME)
-                            .then(cache => cache.put(request, response.clone()))
+                            .then(cache => cache.put(shellRequest, response.clone()))
                     );
                 }
                 return response;
             })
-            .catch(() => caches.match('./'))
+            .catch(() => caches.match(shellRequest))
     );
 });
