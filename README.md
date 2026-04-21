@@ -4,7 +4,7 @@
 
 A lightweight, web-based subnet calculator written in PHP supporting both IPv4 and IPv6.
 
-https://dev.seanmousseau.com/subnet-calculator/
+https://subnetcalculator.app
 
 **[Documentation](https://seanmousseau.github.io/Subnet-Calculator/)**
 
