@@ -142,7 +142,7 @@ function api_rate_limit(string $key): void
         $ins->bindValue(':t', $now, SQLITE3_INTEGER);
         $ins->execute();
         $db->close();
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
         error_log('sc api rate-limit error: ' . $e->getMessage());
         // fail open
     }
@@ -186,7 +186,7 @@ function api_log_request(string $key, string $endpoint, string $method): void
         $ins->bindValue(':t', time(), SQLITE3_INTEGER);
         $ins->execute();
         $db->close();
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
         error_log('sc api request-log error: ' . $e->getMessage());
         // fail open
     }
