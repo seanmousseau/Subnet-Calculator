@@ -90,4 +90,9 @@
     <FilesMatch "\.woff2$">
         Header set Cache-Control "public, max-age=31536000, immutable"
     </FilesMatch>
+    # Service Worker must not be long-cached — browser needs to check for updates on every load
+    <Files "sw.js">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Service-Worker-Allowed "/"
+    </Files>
 </IfModule>
