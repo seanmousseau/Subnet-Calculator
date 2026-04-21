@@ -38,6 +38,10 @@ $raw_uri    = $_SERVER['REQUEST_URI'] ?? '/';
 $parsed_uri = is_string($raw_uri) ? (parse_url($raw_uri, PHP_URL_PATH) ?? '/') : '/';
 $uri        = is_string($parsed_uri) ? $parsed_uri : '/';
 
+if ($api_request_log) {
+    api_log_request(api_client_key(), $uri, $method);
+}
+
 // Strip leading script path so the router sees only the part after /api/v1
 // Works whether the app lives at docroot or a sub-path.
 $raw_script = $_SERVER['SCRIPT_NAME'] ?? '';
@@ -66,6 +70,7 @@ if ($uri === '/' && $method === 'GET') {
             'GET  /api/v1/sessions/{id}',
             'POST /api/v1/range/ipv4',
             'POST /api/v1/tree',
+            'GET  /api/v1/changelog',
         ],
     ]);
 }
@@ -132,6 +137,9 @@ switch ($route_key) {
         break;
     case 'POST /tree':
         require __DIR__ . '/handlers/tree.php';
+        break;
+    case 'GET /changelog':
+        require __DIR__ . '/handlers/changelog.php';
         break;
 }
 

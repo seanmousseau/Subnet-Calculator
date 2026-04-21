@@ -37,9 +37,13 @@ except ImportError:
 # Config
 # ---------------------------------------------------------------------------
 
-BASIC_USER = os.environ.get("IPAM_BASIC_USER", "")
-BASIC_PASS = os.environ.get("IPAM_BASIC_PASS", "")
-APP_URL    = "https://dev-direct.seanmousseau.com:8343/claude/subnet-calculator/"
+BASIC_USER  = os.environ.get("IPAM_BASIC_USER", "")
+BASIC_PASS  = os.environ.get("IPAM_BASIC_PASS", "")
+APP_URL     = os.environ.get(
+    "APP_URL",
+    "https://dev-direct.seanmousseau.com:8343/claude/subnet-calculator/",
+).rstrip("/") + "/"
+SKIP_LINT   = os.environ.get("SKIP_LINT", "0") == "1"
 
 # ---------------------------------------------------------------------------
 # Colours / counters
@@ -101,9 +105,10 @@ def assert_true(name: str, value, detail: str = "") -> bool:
 # HTTP helper (used by header / CSP tests — no browser required)
 # ---------------------------------------------------------------------------
 
-_APP_BASE = "https://dev-direct.seanmousseau.com:8343/claude/subnet-calculator/"
+_APP_BASE = APP_URL
 _SESSION  = _requests.Session()
-_SESSION.auth    = (BASIC_USER, BASIC_PASS)
+if BASIC_USER and BASIC_PASS:
+    _SESSION.auth = (BASIC_USER, BASIC_PASS)
 _SESSION.verify  = False  # self-signed cert on dev server
 
 
@@ -1352,7 +1357,7 @@ async def test_docs_footer_link(page: Page) -> None:
 # REST API — direct HTTP tests
 # ---------------------------------------------------------------------------
 
-_API_BASE = "https://dev-direct.seanmousseau.com:8343/claude/subnet-calculator/api/v1/"
+_API_BASE = APP_URL.rstrip("/") + "/api/v1/"
 
 
 def _api_post(path: str, body: dict) -> tuple[int, dict]:
@@ -1473,10 +1478,7 @@ async def test_api_ula(page: Page) -> None:
 
 async def test_api_openapi_spec(page: Page) -> None:
     section("API — OpenAPI spec")
-    resp = _SESSION.get(
-        "https://dev-direct.seanmousseau.com:8343/claude/subnet-calculator/api/openapi.yaml",
-        timeout=10,
-    )
+    resp = _SESSION.get(APP_URL.rstrip("/") + "/api/openapi.yaml", timeout=10)
     assert_eq("api openapi.yaml: HTTP 200", resp.status_code, 200)
     assert_contains("api openapi.yaml: contains 'openapi: 3.1'", resp.text, "openapi: 3.1")
     assert_contains("api openapi.yaml: contains /ipv4 path", resp.text, "/ipv4")
@@ -2204,6 +2206,8 @@ async def test_eslint_clean(page: Page) -> None:  # noqa: ARG001
     import subprocess
     from pathlib import Path
     section("ESLint — app.js clean")
+    if SKIP_LINT:
+        return
     npm = shutil.which("npm")
     if npm is None:
         assert_true("npm is on PATH", False, "npm not found — cannot run ESLint")
@@ -2230,6 +2234,8 @@ async def test_stylelint_clean(page: Page) -> None:  # noqa: ARG001
     import subprocess
     from pathlib import Path
     section("Stylelint — app.css clean")
+    if SKIP_LINT:
+        return
     npm = shutil.which("npm")
     if npm is None:
         assert_true("npm is on PATH", False, "npm not found — cannot run Stylelint")
@@ -2879,7 +2885,8 @@ async def test_vlsm_keyboard_delete(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 async def main() -> None:
-    if not BASIC_USER or not BASIC_PASS:
+    _needs_auth = bool(BASIC_USER and BASIC_PASS)
+    if not _needs_auth and "dev-direct.seanmousseau.com" in APP_URL:
         print(f"{RED}ERROR: IPAM_BASIC_USER / IPAM_BASIC_PASS not set.{RST}")
         print("Run: bash -c 'set -a; source ~/.claude/dev-secrets.env; set +a; python3 testing/scripts/playwright_test.py'")
         sys.exit(1)
@@ -2889,10 +2896,10 @@ async def main() -> None:
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
-        context = await browser.new_context(
-            http_credentials={"username": BASIC_USER, "password": BASIC_PASS},
-            ignore_https_errors=True,
-        )
+        ctx_kwargs: dict = {"ignore_https_errors": True}
+        if _needs_auth:
+            ctx_kwargs["http_credentials"] = {"username": BASIC_USER, "password": BASIC_PASS}
+        context = await browser.new_context(**ctx_kwargs)
         page = await context.new_page()
 
         try:

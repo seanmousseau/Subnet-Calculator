@@ -37,7 +37,12 @@ semgrep --config=.semgrep/rules.yml --config p/php --config p/owasp-top-ten \
     --config p/sql-injection --error \
     Subnet-Calculator/includes/ Subnet-Calculator/api/ Subnet-Calculator/templates/
 
-# Deploy to dev server, then run the end-to-end browser test suite (~535 assertions)
+# Run the end-to-end browser test suite via Docker (preferred — no dev server needed)
+# SKIP_SNAPSHOTS=1 and SKIP_LINT=1 set automatically via docker-compose.yml
+# Run npm run lint separately for ESLint/Stylelint; update snapshots via dev server flow
+make test-docker
+
+# Deploy to dev server and run the full suite (includes visual regression snapshots)
 # Requires: dev server running at root@192.168.80.15
 rsync -a --delete Subnet-Calculator/ root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
 scp testing/fixtures/iframe-test.html root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
@@ -45,7 +50,10 @@ bash -c 'set -a; source ~/.claude/dev-secrets.env; set +a; python3 testing/scrip
 
 # Build a release tarball (files at root level — untar directly in webroot to install/upgrade)
 # Also bump $app_version in Subnet-Calculator/includes/config.php before building
+# CHANGELOG.md is bundled so GET /api/v1/changelog works in tarball installs
+cp CHANGELOG.md Subnet-Calculator/CHANGELOG.md
 tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
+rm Subnet-Calculator/CHANGELOG.md
 ```
 
 **Release checklist:**

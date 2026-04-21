@@ -1,3 +1,11 @@
+        @font-face {
+            font-family: 'JetBrains Mono';
+            src: url('fonts/JetBrainsMono-Regular.woff2') format('woff2');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+
         :root {
             /* Page background */
             --color-bg:           #0f172a;
@@ -161,7 +169,7 @@
             border: 1px solid var(--color-border);
             border-radius: 6px;
             color: var(--color-input-text);
-            font-family: 'Courier New', monospace;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
             font-size: 1rem;
             padding: 0.55rem 0.75rem;
             transition: border-color 0.15s;
@@ -262,7 +270,7 @@
 
         .result-value {
             color: var(--color-accent-light);
-            font-family: 'Courier New', monospace;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
             font-size: 0.9rem;
             font-weight: 600;
         }
@@ -363,7 +371,7 @@
 
         .share-url {
             color: var(--color-text-subtle);
-            font-family: 'Courier New', monospace;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
             font-size: 0.75rem;
             flex: 1;
             word-break: break-all;
@@ -444,7 +452,7 @@
         }
 
         .bin-value {
-            font-family: 'Courier New', monospace;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
             font-size: 0.75rem;
             letter-spacing: 0.02em;
             word-break: break-all;
@@ -537,7 +545,7 @@
             color: var(--color-accent-light);
             cursor: pointer;
             display: flex;
-            font-family: 'Courier New', monospace;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
             font-size: 0.78rem;
             justify-content: space-between;
             padding: 0.3rem 0.4rem 0.3rem 0.5rem;
@@ -677,7 +685,7 @@
 
         .vlsm-subnet-cell {
             cursor: pointer;
-            font-family: 'Courier New', monospace;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
         }
 
         .vlsm-subnet-cell:hover { background: var(--color-border); }
@@ -879,7 +887,7 @@
             border: 1px solid var(--color-border);
             border-radius: 6px;
             color: var(--color-input-text);
-            font-family: 'Courier New', monospace;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
             font-size: 0.85rem;
             padding: 0.5rem 0.75rem;
             resize: vertical;
@@ -907,11 +915,39 @@
             flex-wrap: wrap;
             color: var(--color-text-faint);
         }
-        .ula-meta code { font-family: 'Courier New', monospace; color: var(--color-text); }
+        .ula-meta code { font-family: 'JetBrains Mono', 'Courier New', monospace; color: var(--color-text); }
 
         @media (width <= 480px) {
             .form-row { flex-direction: column; }
             .split-list { grid-template-columns: 1fr; }
+        }
+
+        @media (481px <= width <= 767px) {
+            .card { padding: 1.5rem 1.25rem; }
+        }
+
+        @media (width >= 900px) {
+            .card { max-width: 800px; }
+        }
+
+        /* Scroll affordance: right-edge gradient fade on narrow viewports */
+        @media (width <= 767px) {
+            .vlsm-results,
+            .split-list-scroll {
+                position: relative;
+            }
+            .vlsm-results::after,
+            .split-list-scroll::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 2.5rem;
+                height: 100%;
+                background: linear-gradient(to right, transparent, var(--color-surface));
+                pointer-events: none;
+                border-radius: 0 6px 6px 0;
+            }
         }
 
         @media print {

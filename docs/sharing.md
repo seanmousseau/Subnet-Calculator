@@ -2,13 +2,15 @@
 
 ## Shareable URLs
 
-The **Share** bar appears below calculation results when `$show_share_bar = true` (the default) and `$canonical_url` is set in `config.php`. It shows a URL that encodes all inputs as GET parameters so anyone who visits it sees the same result immediately.
+The **Share** bar appears below calculation results when `$show_share_bar = true` (the default). It shows a URL that encodes all inputs as GET parameters so anyone who visits it sees the same result immediately.
 
 Example:
 
 ```text
 https://example.com/subnet-calculator/?tab=ipv4&ip=192.168.1.0&mask=%2F24
 ```
+
+Set `$canonical_url` in `config.php` to control the base URL used when building shareable links. If left empty the app auto-derives it from the current request.
 
 ## iframe Embedding
 
@@ -43,4 +45,8 @@ window.addEventListener('message', function (e) {
 
 ### Frame-ancestors policy
 
-Control which origins may embed the calculator via `$frame_ancestors` in `config.php`. Default is `'self'` (same origin only). Set to `'*'` to allow any origin, or to a specific domain.
+Control which origins may embed the calculator via `$frame_ancestors` in `config.php`. The default is `'*'` (any origin may embed). Set to `"'self'"` to restrict to same-origin only, or provide a space-separated list of allowed origins:
+
+```php
+$frame_ancestors = "'self' https://intranet.example.com";
+```

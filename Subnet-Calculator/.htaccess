@@ -28,6 +28,12 @@
     Require all denied
 </FilesMatch>
 
+# CHANGELOG.md is bundled in tarballs for the /api/v1/changelog endpoint;
+# block direct HTTP access so the raw file is not publicly readable.
+<Files "CHANGELOG.md">
+    Require all denied
+</Files>
+
 # -----------------------------------------------------------------------
 # OpenLiteSpeed / LiteSpeed fallback (RewriteRule [F] is widely supported)
 # -----------------------------------------------------------------------
@@ -37,6 +43,7 @@
     # Sensitive config files
     RewriteRule ^config\.php$         - [F,L]
     RewriteRule ^config\.php\.example$ - [F,L]
+    RewriteRule ^CHANGELOG\.md$       - [F,L]
 
     # Deployment artefacts
     RewriteRule \.(tar\.gz|tar|gz|zip)$ - [F,L]
@@ -73,10 +80,14 @@
     ExpiresByType text/css                 "access plus 1 year"
     ExpiresByType application/javascript   "access plus 1 year"
     ExpiresByType text/javascript          "access plus 1 year"
+    ExpiresByType font/woff2               "access plus 1 year"
 </IfModule>
 
 <IfModule mod_headers.c>
     <FilesMatch "\.(webp|png|svg|css|js)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+    <FilesMatch "\.woff2$">
         Header set Cache-Control "public, max-age=31536000, immutable"
     </FilesMatch>
 </IfModule>

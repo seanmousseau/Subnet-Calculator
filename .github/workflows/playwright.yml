@@ -1,0 +1,30 @@
+name: Playwright E2E
+
+on:
+  pull_request:
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start app container
+        run: docker compose up --build -d app
+
+      - name: Wait for app to be healthy
+        run: |
+          timeout 60 sh -c 'until docker compose ps app | grep -qF "(healthy)"; do sleep 2; done'
+
+      - name: Run Playwright tests
+        run: |
+          docker compose run --rm \
+            -e APP_URL=http://app:8080/ \
+            -e SKIP_SNAPSHOTS=1 \
+            -e SKIP_LINT=1 \
+            playwright-tests python3 testing/scripts/playwright_test.py
+
+      - name: Tear down containers
+        if: always()
+        run: docker compose down

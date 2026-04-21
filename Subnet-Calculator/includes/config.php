@@ -6,7 +6,7 @@ declare(strict_types=1);
 // These are the built-in defaults. To override, copy config.php.example to
 // config.php alongside this file — config.php is never overwritten by upgrades.
 
-$app_version          = '2.5.0';
+$app_version          = '2.6.0';
 $locale               = 'en'; // BCP 47 locale tag for number formatting (e.g. 'de', 'fr')
 $fixed_bg_color       = 'null';
 $default_tab          = 'ipv4'; // 'ipv4', 'ipv6', or 'vlsm'
@@ -38,6 +38,10 @@ $api_cors_origins        = '*';  // CORS Access-Control-Allow-Origin
 $session_enabled    = false;  // Enable SQLite-backed VLSM session save/restore
 $session_db_path    = '';     // Absolute path to SQLite file (auto if empty)
 $session_ttl_days   = 30;     // Days before a saved session expires
+
+// API request logging (v2.6.0)
+$api_request_log         = false;  // Enable SQLite-backed API request logging
+$api_request_log_db_path = '';     // Absolute path to log DB (auto if empty)
 
 if (file_exists(__DIR__ . '/../config.php')) {
     require __DIR__ . '/../config.php';
@@ -100,3 +104,5 @@ if (!is_string($api_cors_origins) || $api_cors_origins === '') {
 $session_enabled  = (bool)$session_enabled;
 $session_db_path  = is_string($session_db_path) ? $session_db_path : '';
 $session_ttl_days = max(1, (int)$session_ttl_days);
+$api_request_log         = (bool)$api_request_log;
+$api_request_log_db_path = is_string($api_request_log_db_path) ? $api_request_log_db_path : '';

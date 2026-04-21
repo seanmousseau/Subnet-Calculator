@@ -32,6 +32,7 @@ from playwright.async_api import Page
 
 _SNAPSHOTS_DIR = Path(__file__).parent.parent / "snapshots"
 _UPDATE = os.environ.get("UPDATE_SNAPSHOTS", "0") == "1"
+_SKIP   = os.environ.get("SKIP_SNAPSHOTS", "0") == "1"
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -64,6 +65,9 @@ async def compare_snapshot(
         raise ValueError(
             f"threshold must be in [0.0, 1.0], got {threshold!r}"
         )
+
+    if _SKIP:
+        return True, 0.0
 
     # Honor update mode before checking Pillow — baseline writes don't need PIL.
     if _UPDATE:

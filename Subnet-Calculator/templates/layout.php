@@ -39,6 +39,7 @@
         <script src="https://www.google.com/recaptcha/enterprise.js" async defer></script>
     <?php endif; ?>
 </head>
+<?php if (ob_get_level() > 0) { ob_flush(); flush(); } ?>
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 <main class="card" id="main-content">

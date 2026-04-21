@@ -142,9 +142,64 @@ function api_rate_limit(string $key): void
         $ins->bindValue(':t', $now, SQLITE3_INTEGER);
         $ins->execute();
         $db->close();
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
         error_log('sc api rate-limit error: ' . $e->getMessage());
         // fail open
+    }
+}
+
+// ── API request logging ───────────────────────────────────────────────────────
+
+function api_log_request(string $key, string $endpoint, string $method): void
+{
+    global $api_request_log_db_path;
+
+    $db_path = ($api_request_log_db_path !== '') ? $api_request_log_db_path
+        : dirname(__DIR__, 2) . '/data/api_requests.sqlite';
+    try {
+        $db_dir = dirname($db_path);
+        if (!is_dir($db_dir)) {
+            mkdir($db_dir, 0755, true);
+        }
+        $db = new \SQLite3($db_path);
+        $db->enableExceptions(true);
+        $db->busyTimeout(3000);
+        $db->exec(
+            'CREATE TABLE IF NOT EXISTS api_requests (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                endpoint     TEXT    NOT NULL,
+                method       TEXT    NOT NULL,
+                client_key   TEXT    NOT NULL,
+                requested_at INTEGER NOT NULL
+            )'
+        );
+        $ins = $db->prepare(
+            'INSERT INTO api_requests (endpoint, method, client_key, requested_at)
+             VALUES (:ep, :m, :k, :t)'
+        );
+        if ($ins === false) {
+            throw new \RuntimeException('Failed to prepare api_requests insert.');
+        }
+        $ins->bindValue(':ep', $endpoint, SQLITE3_TEXT);
+        $ins->bindValue(':m', $method, SQLITE3_TEXT);
+        $ins->bindValue(':k', $key, SQLITE3_TEXT);
+        $ins->bindValue(':t', time(), SQLITE3_INTEGER);
+        $ins->execute();
+        $db->close();
+    } catch (\Throwable $e) {
+        error_log('sc api request-log error: ' . $e->getMessage());
+        // fail open
+    }
+}
+
+// ── Deprecation headers ───────────────────────────────────────────────────────
+
+function api_deprecation_headers(string $sunset_date, string $link = ''): void
+{
+    header('Sunset: ' . $sunset_date);
+    header('Deprecation: true');
+    if ($link !== '') {
+        header('Link: <' . $link . '>; rel="deprecation"');
     }
 }
 

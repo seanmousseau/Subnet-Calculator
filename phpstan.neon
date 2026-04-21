@@ -30,6 +30,7 @@ parameters:
         - Subnet-Calculator/api/v1/handlers/sessions.php
         - Subnet-Calculator/api/v1/handlers/range.php
         - Subnet-Calculator/api/v1/handlers/tree.php
+        - Subnet-Calculator/api/v1/handlers/changelog.php
     # config.php is gitignored (user override) — skip if absent
     excludePaths:
         - Subnet-Calculator/config.php (?)
@@ -47,6 +48,11 @@ parameters:
         # defaults and sanitisation) can change those values at runtime.
         - '#^Call to function in_array\(\) with arguments .+ will always evaluate to (true|false)\.$#'
         - '#^Strict comparison using === between .+ will always evaluate to (true|false)\.$#'
+
+        # api/v1/index.php uses $api_request_log from config.php (required at the
+        # top of index.php) — PHPStan cannot trace globals across require chains.
+        - message: '#Variable \$api_request_log might not be defined\.#'
+          path: Subnet-Calculator/api/v1/index.php
 
         # API handlers are required by api/v1/index.php after helpers.php sets
         # up globals ($method, $uri) and after config.php sets $split_max_subnets,

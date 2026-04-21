@@ -12,7 +12,7 @@ Results are displayed as a list of CIDRs with:
 - **Copy All** — copies all CIDRs as newline-separated text
 - **Export ASCII** — builds a plaintext tree and copies it to the clipboard
 
-The maximum number of results is controlled by `$split_max_subnets` in `config.php` (default 256). When the total exceeds this limit a note is shown.
+The maximum number of results is controlled by `$split_max_subnets` in `config.php` (default `16`). When the total exceeds this limit a note is shown. The value is clamped to the range 1–256.
 
 ## IPv6
 

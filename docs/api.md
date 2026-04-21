@@ -6,7 +6,16 @@ Full machine-readable spec: [`api/openapi.yaml`](https://github.com/seanmousseau
 
 ## Authentication
 
-All endpoints are unauthenticated by default. Optional API-key authentication and per-token rate limiting can be configured — see [Operator Config](config.md).
+All endpoints are unauthenticated by default. Optional Bearer-token authentication and per-token rate limiting can be configured — see [Operator Config](config.md).
+
+## Response format
+
+All responses are JSON objects with an `ok` boolean:
+
+```json
+{ "ok": true,  "data": { ... } }
+{ "ok": false, "error": "Human-readable message" }
+```
 
 ## Endpoints
 
@@ -16,6 +25,20 @@ Returns the application version and a list of available endpoints.
 
 ```bash
 curl https://example.com/subnet-calculator/api/v1/meta
+```
+
+### GET /api/v1/changelog
+
+Returns the full `CHANGELOG.md` content as a string.
+
+```bash
+curl https://example.com/subnet-calculator/api/v1/changelog
+```
+
+Response:
+
+```json
+{ "ok": true, "data": { "changelog": "# Changelog\n\n## [2.6.0] ..." } }
 ```
 
 ### POST /api/v1/ipv4
@@ -34,15 +57,17 @@ Calculate IPv6 subnet details.
 
 ```bash
 curl -X POST https://example.com/subnet-calculator/api/v1/ipv6 \
+  -H 'Content-Type: application/json' \
   -d '{"ip":"2001:db8::/32"}'
 ```
 
 ### POST /api/v1/vlsm
 
-VLSM planner.
+VLSM planner — allocate variable-length subnets from a parent block.
 
 ```bash
 curl -X POST https://example.com/subnet-calculator/api/v1/vlsm \
+  -H 'Content-Type: application/json' \
   -d '{"network":"10.0.0.0","cidr":24,"subnets":[{"name":"LAN","hosts":50}]}'
 ```
 
@@ -52,35 +77,53 @@ Two-CIDR overlap check.
 
 ```bash
 curl -X POST https://example.com/subnet-calculator/api/v1/overlap \
+  -H 'Content-Type: application/json' \
   -d '{"cidr_a":"10.0.0.0/24","cidr_b":"10.0.0.128/25"}'
 ```
 
-### POST /api/v1/split
+### POST /api/v1/split/ipv4
 
-Subnet splitter (IPv4 or IPv6).
+Split an IPv4 network into equal-sized sub-networks.
 
 ```bash
-curl -X POST https://example.com/subnet-calculator/api/v1/split \
+curl -X POST https://example.com/subnet-calculator/api/v1/split/ipv4 \
+  -H 'Content-Type: application/json' \
   -d '{"cidr":"10.0.0.0/24","prefix":26}'
+```
+
+### POST /api/v1/split/ipv6
+
+Split an IPv6 network into equal-sized sub-networks.
+
+```bash
+curl -X POST https://example.com/subnet-calculator/api/v1/split/ipv6 \
+  -H 'Content-Type: application/json' \
+  -d '{"cidr":"2001:db8::/48","prefix":64}'
 ```
 
 ### POST /api/v1/supernet
 
-Find supernet or summarise routes.
+Find a supernet or summarise routes.
 
 ```bash
 curl -X POST https://example.com/subnet-calculator/api/v1/supernet \
+  -H 'Content-Type: application/json' \
   -d '{"cidrs":["10.0.0.0/25","10.0.0.128/25"],"action":"find"}'
 ```
 
+`action` is `"find"` (tightest enclosing supernet) or `"summarise"` (minimal covering set).
+
 ### POST /api/v1/ula
 
-Generate a ULA prefix.
+Generate a ULA prefix (RFC 4193).
 
 ```bash
 curl -X POST https://example.com/subnet-calculator/api/v1/ula \
+  -H 'Content-Type: application/json' \
   -d '{"global_id":"aabbccddee"}'
 ```
+
+Omit `global_id` for a randomly generated prefix.
 
 ### POST /api/v1/rdns
 
@@ -88,15 +131,17 @@ Reverse DNS zone for a CIDR.
 
 ```bash
 curl -X POST https://example.com/subnet-calculator/api/v1/rdns \
+  -H 'Content-Type: application/json' \
   -d '{"cidr":"192.168.1.0/24"}'
 ```
 
 ### POST /api/v1/range/ipv4
 
-Convert an IP range to CIDR blocks.
+Convert an IP range to a minimal list of CIDR blocks.
 
 ```bash
 curl -X POST https://example.com/subnet-calculator/api/v1/range/ipv4 \
+  -H 'Content-Type: application/json' \
   -d '{"start":"10.0.0.0","end":"10.0.0.255"}'
 ```
 
@@ -104,24 +149,36 @@ Response: `{"ok":true,"data":{"cidrs":["10.0.0.0/24"]}}`
 
 ### POST /api/v1/tree
 
-Build a subnet allocation tree.
+Build a subnet allocation tree with gap detection.
 
 ```bash
 curl -X POST https://example.com/subnet-calculator/api/v1/tree \
+  -H 'Content-Type: application/json' \
   -d '{"parent":"10.0.0.0/24","children":["10.0.0.0/25","10.0.0.128/25"]}'
 ```
 
-Response: `{"ok":true,"data":{"tree":{...}}}`
-
 ### POST /api/v1/bulk
 
-Run multiple operations in one request (up to 20).
+Run multiple operations in a single request (up to 20).
 
 ```bash
 curl -X POST https://example.com/subnet-calculator/api/v1/bulk \
+  -H 'Content-Type: application/json' \
   -d '{"requests":[{"method":"POST","path":"/ipv4","body":{"ip":"10.0.0.0/8"}}]}'
 ```
 
 ### GET /api/v1/sessions/:id
 
-Retrieve a saved VLSM session by ID.
+Retrieve a saved VLSM session by ID. Only available when `$session_enabled = true` in `config.php`.
+
+## Rate limiting
+
+When `$api_rate_limit_rpm` is set (default 60), requests exceeding the limit receive a `429` response with a `Retry-After: 60` header. Per-token overrides are supported via `$api_rate_limit_tokens`.
+
+## Endpoint allowlisting
+
+Set `$api_allowed_endpoints` in `config.php` to restrict which endpoints are accessible. Unlisted endpoints return `404`. Example:
+
+```php
+$api_allowed_endpoints = ['ipv4', 'ipv6', 'meta'];
+```
