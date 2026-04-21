@@ -12,7 +12,16 @@
     <title><?= htmlspecialchars($page_title) ?></title>
     <link rel="icon" type="image/webp" href="assets/favicon-32.webp">
     <link rel="icon" type="image/png"  href="assets/favicon-32.png">
-    <meta property="og:image"        content="<?= $canonical_url ?>/assets/logo.webp">
+    <?php
+    // $canonical_url may include a path (e.g. in subdir installs); extract scheme+host
+    // so the social image URL always points to the docroot, not a page path.
+    $_cu      = parse_url(htmlspecialchars_decode((string) $canonical_url));
+    $_si_url  = htmlspecialchars(
+        ($_cu['scheme'] ?? 'https') . '://' . ($_cu['host'] ?? '') . '/assets/logo.webp'
+    );
+    unset($_cu);
+    ?>
+    <meta property="og:image"        content="<?= $_si_url ?>">
     <meta property="og:image:width"  content="520">
     <meta property="og:image:height" content="600">
     <meta property="og:image:type"   content="image/webp">
@@ -20,7 +29,7 @@
     <meta name="twitter:card"        content="summary">
     <meta name="twitter:title"       content="<?= htmlspecialchars($page_title) ?>">
     <meta name="twitter:description" content="<?= htmlspecialchars($page_description) ?>">
-    <meta name="twitter:image"       content="<?= $canonical_url ?>/assets/logo.webp">
+    <meta name="twitter:image"       content="<?= $_si_url ?>">
     <meta name="twitter:image:alt"   content="Subnet Calculator logo">
     <meta name="theme-color"         content="#0F172A">
     <meta name="color-scheme"        content="dark light">

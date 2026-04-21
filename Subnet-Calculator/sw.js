@@ -39,8 +39,12 @@ self.addEventListener('fetch', event => {
                 if (cached) return cached;
                 return fetch(request).then(response => {
                     if (response.ok) {
-                        caches.open(CACHE_NAME)
-                            .then(cache => cache.put(request, response.clone()));
+                        // Attach cache write to event lifetime so the SW isn't
+                        // terminated before the write completes
+                        event.waitUntil(
+                            caches.open(CACHE_NAME)
+                                .then(cache => cache.put(request, response.clone()))
+                        );
                     }
                     return response;
                 });
@@ -49,13 +53,18 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // HTML (navigations + shareable GET URLs): network-first, fall back to cached shell
+    // Only intercept navigation requests for the offline shell fallback —
+    // non-navigation GETs (API calls, XHR) should fail normally when offline
+    if (request.mode !== 'navigate') return;
+
     event.respondWith(
         fetch(request)
             .then(response => {
                 if (response.ok) {
-                    caches.open(CACHE_NAME)
-                        .then(cache => cache.put(request, response.clone()));
+                    event.waitUntil(
+                        caches.open(CACHE_NAME)
+                            .then(cache => cache.put(request, response.clone()))
+                    );
                 }
                 return response;
             })

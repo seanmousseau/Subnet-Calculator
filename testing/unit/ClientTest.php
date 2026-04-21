@@ -159,8 +159,85 @@ class ClientTest extends TestCase
     {
         $this->client->rangeToIPv4CIDRs('10.0.0.1', '10.0.0.254');
         $body = $this->client->getCapturedBody();
-        $this->assertSame('10.0.0.1',  $body['start_ip'] ?? null);
-        $this->assertSame('10.0.0.254', $body['end_ip'] ?? null);
+        $this->assertSame('10.0.0.1',   $body['start_ip'] ?? null);
+        $this->assertSame('10.0.0.254', $body['end_ip']   ?? null);
+    }
+
+    public function testSplitIpv4SendsRequiredFields(): void
+    {
+        $this->client->splitIpv4('10.0.0.0', 26, '24', 8);
+        $body = $this->client->getCapturedBody();
+        $this->assertSame('POST', $this->client->getCapturedMethod());
+        $this->assertSame('/split/ipv4', $this->client->getCapturedPath());
+        $this->assertSame('10.0.0.0', $body['ip']           ?? null);
+        $this->assertSame(26,          $body['split_prefix'] ?? null);
+        $this->assertSame('24',        $body['mask']         ?? null);
+        $this->assertSame(8,           $body['limit']        ?? null);
+    }
+
+    public function testSplitIpv4OmitsMaskWhenEmpty(): void
+    {
+        $this->client->splitIpv4('10.0.0.0', 26);
+        $this->assertArrayNotHasKey('mask', $this->client->getCapturedBody() ?? []);
+    }
+
+    public function testSplitIpv6SendsRequiredFields(): void
+    {
+        $this->client->splitIpv6('2001:db8::/32', 48);
+        $body = $this->client->getCapturedBody();
+        $this->assertSame('/split/ipv6', $this->client->getCapturedPath());
+        $this->assertSame('2001:db8::/32', $body['ipv6']         ?? null);
+        $this->assertSame(48,              $body['split_prefix'] ?? null);
+    }
+
+    public function testGenerateUlaOmitsSeedWhenEmpty(): void
+    {
+        $this->client->generateUla();
+        $this->assertSame('/ula', $this->client->getCapturedPath());
+        $this->assertSame([], $this->client->getCapturedBody());
+    }
+
+    public function testGenerateUlaSendsSeedWhenProvided(): void
+    {
+        $this->client->generateUla('myhost.example.com');
+        $this->assertSame(['seed' => 'myhost.example.com'], $this->client->getCapturedBody());
+    }
+
+    public function testCreateSessionSendsPayload(): void
+    {
+        $payload = ['network' => '10.0.0.0/24', 'allocations' => []];
+        $this->client->createSession($payload);
+        $this->assertSame('POST', $this->client->getCapturedMethod());
+        $this->assertSame('/sessions', $this->client->getCapturedPath());
+        $this->assertSame(['payload' => $payload], $this->client->getCapturedBody());
+    }
+
+    public function testGenerateRdnsSendsDefaults(): void
+    {
+        $this->client->generateRdns('10.0.0.0/24');
+        $body = $this->client->getCapturedBody();
+        $this->assertSame('/rdns',    $this->client->getCapturedPath());
+        $this->assertSame('10.0.0.0/24', $body['cidr']   ?? null);
+        $this->assertSame('bind',         $body['format'] ?? null);
+        $this->assertSame(3600,           $body['ttl']    ?? null);
+    }
+
+    public function testBuildSubnetTreeSendsParentAndAllocations(): void
+    {
+        $allocs = ['10.0.0.0/25', '10.0.0.128/26'];
+        $this->client->buildSubnetTree('10.0.0.0/24', $allocs);
+        $body = $this->client->getCapturedBody();
+        $this->assertSame('/tree',         $this->client->getCapturedPath());
+        $this->assertSame('10.0.0.0/24',  $body['parent']      ?? null);
+        $this->assertSame($allocs,         $body['allocations'] ?? null);
+    }
+
+    public function testGetChangelogSendsGet(): void
+    {
+        $this->client->getChangelog();
+        $this->assertSame('GET',        $this->client->getCapturedMethod());
+        $this->assertSame('/changelog', $this->client->getCapturedPath());
+        $this->assertNull($this->client->getCapturedBody());
     }
 
     // ── decode() error handling ────────────────────────────────────────────
