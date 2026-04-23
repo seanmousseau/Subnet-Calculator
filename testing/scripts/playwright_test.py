@@ -403,7 +403,7 @@ async def test_ipv4_splitter(page: Page) -> None:
     await page.click("#panel-ipv4 .tool-trigger[data-tool='split']")
     await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
     await page.fill("input[name='split_prefix']", "/26")
-    await submit_form(page, ".splitter-form")
+    await submit_form(page, "#panel-ipv4 .splitter-form")
 
     count = await page.evaluate("document.querySelectorAll('.split-item').length.toString()")
     assert_eq("split /24→/26 gives 4 subnets",     count, "4")
@@ -417,7 +417,7 @@ async def test_ipv4_splitter(page: Page) -> None:
     await page.click("#panel-ipv4 .tool-trigger[data-tool='split']")
     await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
     await page.fill("input[name='split_prefix']", "/24")
-    await submit_form(page, ".splitter-form")
+    await submit_form(page, "#panel-ipv4 .splitter-form")
     err = await page.text_content(".error")
     assert_true("splitter rejects same-size prefix", err and "larger" in err.lower(), str(err))
 
@@ -521,7 +521,7 @@ async def test_ipv6_splitter(page: Page) -> None:
     await page.click("#panel-ipv6 .tool-trigger[data-tool='split6']")
     await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
     await page.fill("input[name='split_prefix6']", "/33")
-    await submit_form(page, ".splitter-form")
+    await submit_form(page, "#panel-ipv6 .splitter-form")
 
     count = await page.evaluate("document.querySelectorAll('.split-item').length.toString()")
     assert_eq("split /32→/33 gives 2 subnets", count, "2")
@@ -785,7 +785,7 @@ async def test_splitter_copy_buttons(page: Page) -> None:
     await page.click("#panel-ipv4 .tool-trigger[data-tool='split']")
     await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
     await page.fill("input[name='split_prefix']", "/26")
-    await submit_form(page, ".splitter-form")
+    await submit_form(page, "#panel-ipv4 .splitter-form")
 
     assert_true("subnet-copy buttons present",
                 await page.evaluate("document.querySelectorAll('.subnet-copy').length > 0"))
@@ -805,7 +805,7 @@ async def test_splitter_shareable_url(page: Page) -> None:
     await page.click("#panel-ipv4 .tool-trigger[data-tool='split']")
     await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
     await page.fill("input[name='split_prefix']", "/26")
-    await submit_form(page, ".splitter-form")
+    await submit_form(page, "#panel-ipv4 .splitter-form")
 
     share = await page.text_content(".share-url") or ""
     assert_contains("share URL includes split_prefix", share, "split_prefix=26")
@@ -928,7 +928,7 @@ async def test_ascii_export(page: Page) -> None:
     await page.click("#panel-ipv4 .tool-trigger[data-tool='split']")
     await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
     await page.fill("input[name='split_prefix']", "/25")
-    await submit_form(page, ".splitter-form")
+    await submit_form(page, "#panel-ipv4 .splitter-form")
     assert_true("ASCII export button present in splitter",
                 await page.locator("#panel-ipv4 .ascii-export-btn").count() > 0)
 
@@ -994,7 +994,7 @@ async def test_ipv4_copy_all(page: Page) -> None:
     await page.click("#panel-ipv4 .tool-trigger[data-tool='split']")
     await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
     await page.fill("input[name='split_prefix']", "/26")
-    await submit_form(page, ".splitter-form")
+    await submit_form(page, "#panel-ipv4 .splitter-form")
     assert_true("Copy All button present in IPv4 split list",
                 await page.locator("#panel-ipv4 .copy-all-btn[data-target='split']").count() > 0)
 
@@ -1010,7 +1010,7 @@ async def test_ipv6_copy_all(page: Page) -> None:
     await page.click("#panel-ipv6 .tool-trigger[data-tool='split6']")
     await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
     await page.fill("input[name='split_prefix6']", "/34")
-    await submit_form(page, ".splitter-form")
+    await submit_form(page, "#panel-ipv6 .splitter-form")
     assert_true("Copy All button present in IPv6 split list",
                 await page.locator("#panel-ipv6 .copy-all-btn[data-target='split']").count() > 0)
 
@@ -1331,8 +1331,8 @@ async def test_tool_drawer_toolbar_renders(page: Page) -> None:
     await page.fill("#ip", "192.168.1.0")
     await page.fill("#mask", "/24")
     await submit_form(page, "#panel-ipv4 form")
-    await page.wait_for_selector(".tool-toolbar")
-    toolbar = page.locator(".tool-toolbar")
+    await page.wait_for_selector("#panel-ipv4 .tool-toolbar")
+    toolbar = page.locator("#panel-ipv4 .tool-toolbar")
     assert_true("toolbar visible after calculate", await toolbar.is_visible())
     assert_true("split trigger present",     await toolbar.locator(".tool-trigger[data-tool='split']").count() == 1)
     assert_true("supernet trigger present",  await toolbar.locator(".tool-trigger[data-tool='supernet']").count() == 1)
@@ -2487,8 +2487,8 @@ async def test_full_visual_inspection(page: Page) -> None:
     badge_count = await page.locator(".results .badge").count()
     assert_true("address-type badge present in IPv4 result", badge_count > 0)
 
-    # Splitter panels
-    await _rect_ok(page.locator(".splitter").first,             "splitter panel (desktop)")
+    # Tool toolbar visible after IPv4 result (v2.8.0 drawer feature)
+    await _rect_ok(page.locator("#panel-ipv4 .tool-toolbar"),   "IPv4 tool toolbar (desktop)")
 
     # IPv6 tab
     await navigate(page, APP_URL + "?tab=ipv6&ipv6=2001%3Adb8%3A%3A1&prefix=32")
@@ -2508,16 +2508,10 @@ async def test_full_visual_inspection(page: Page) -> None:
     await _rect_ok(page.locator(".vlsm-table"),                 "VLSM table (desktop)")
     await _rect_ok(page.locator(".vlsm-summary"),               "VLSM utilisation summary (desktop)")
     await _rect_ok(page.locator(".export-btn-group"),           "VLSM export buttons (desktop)")
-    # Section-header panels visible on the VLSM tab
-    overlap_count = await page.locator(".overlap-panel").count()
-    assert_true("VLSM overlap panels present (≥2)", overlap_count >= 2,
-                f"found {overlap_count}")
-    # Scroll the first overlap panel inside the active VLSM tab into view before
-    # measuring; the top-level .overlap-panel selector would also match hidden IPv4/IPv6
-    # panels, giving a None bounding box.
-    vlsm_overlap = page.locator("#panel-vlsm .overlap-panel").first
-    await vlsm_overlap.scroll_into_view_if_needed()
-    await _rect_ok(vlsm_overlap,                                "overlap panel (desktop)")
+    # Tool toolbar is visible on the VLSM tab (v2.8.0 drawer feature)
+    vlsm_toolbar = page.locator("#panel-vlsm .tool-toolbar")
+    await vlsm_toolbar.scroll_into_view_if_needed()
+    await _rect_ok(vlsm_toolbar,                                "VLSM tool toolbar (desktop)")
 
     # ── Mobile 375×667 ──────────────────────────────────────────────────────
     await page.set_viewport_size({"width": 375, "height": 667})
