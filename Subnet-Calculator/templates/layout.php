@@ -215,173 +215,200 @@ if ($i < 3) {
                 <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
             </div>
             <?php endif; ?>
-            <div class="splitter">
-                <div class="splitter-title">Split Subnet</div>
-                <form method="post" class="splitter-form">
-                    <input type="hidden" name="tab" value="ipv4">
-                    <input type="hidden" name="ip" value="<?= htmlspecialchars($input_ip) ?>">
-                    <input type="hidden" name="mask" value="<?= htmlspecialchars($input_mask) ?>">
-                    <div class="splitter-row">
-                        <span class="splitter-label">Split into<?= help_bubble('ipv4-split', 'Enter a prefix length larger than the parent (e.g. /25 splits a /24 into two /25 subnets). The result is capped at the configured maximum.') ?></span>
-                        <input type="text" name="split_prefix" class="splitter-input"
-                               placeholder="/25" value="<?= htmlspecialchars($input_split_prefix) ?>"
-                               autocomplete="off" spellcheck="false"
-                               <?= $split_error ? 'aria-invalid="true" aria-describedby="split-error-ipv4"' : '' ?>>
-                        <button type="submit" class="splitter-btn">Split</button>
-                    </div>
-                </form>
-                <?php if ($split_error) : ?>
-                    <div class="error" id="split-error-ipv4"><?= htmlspecialchars($split_error) ?></div>
-                <?php elseif ($split_result && $split_result['showing'] > 0) : ?>
-                    <div class="split-list" data-parent="<?= htmlspecialchars($result['cidr'] ?? '') ?>">
-                        <button type="button" class="copy-all-btn" data-target="split">Copy All</button>
-                        <button type="button" class="ascii-export-btn">Export ASCII</button>
-                        <?php foreach ($split_result['subnets'] as $s) : ?>
-                            <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
-                                <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
-                                <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s) ?>" aria-label="Copy <?= htmlspecialchars($s) ?>">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                </button>
-                            </div>
-                        <?php endforeach; ?>
-                        <?php if ($split_result['total'] > $split_result['showing']) : ?>
-                            <div class="split-more">+&nbsp;<?= format_number($split_result['total'] - $split_result['showing']) ?> more</div>
-                        <?php endif; ?>
-                    </div>
-                <?php endif; ?>
-            </div>
         <?php endif; ?>
 
-        <!-- Supernet / Route Summarisation Tool -->
-        <div class="overlap-panel">
-            <div class="overlap-title">Supernet &amp; Route Summarisation</div>
-            <form method="post" novalidate>
-                <input type="hidden" name="tab" value="ipv4">
-                <textarea name="supernet_input" rows="4" class="multi-overlap-input"
-                          placeholder="One IPv4 CIDR per line (max 50):&#10;10.0.0.0/24&#10;10.0.1.0/24"
-                          autocomplete="off" spellcheck="false"><?= htmlspecialchars($supernet_input) ?></textarea>
-                <div class="splitter-row supernet-action-row">
-                    <button type="submit" name="supernet_action" value="find" class="splitter-btn">Find Supernet</button><?= help_bubble('supernet-find', 'Finds the smallest single CIDR block that contains all of the listed CIDRs. Useful for aggregating routes into a single summary route.') ?>
-                    <button type="submit" name="supernet_action" value="summarise" class="splitter-btn">Summarise Routes</button><?= help_bubble('supernet-summarise', 'Computes the minimal set of non-overlapping CIDRs that exactly covers the listed networks. Unlike Find Supernet, this avoids including addresses outside the input ranges.') ?>
-                </div>
-            </form>
-            <?php if ($supernet_error) : ?>
-                <div class="error"><?= htmlspecialchars($supernet_error) ?></div>
-            <?php elseif ($supernet_result !== null) : ?>
-                <?php if ($supernet_action === 'find') : ?>
-                    <div class="overlap-result overlap-contains">
-                        <?= htmlspecialchars($supernet_result['supernet'] ?? '') ?>
-                    </div>
-                <?php else : ?>
-                    <div class="split-list split-list--mt">
-                        <button type="button" class="copy-all-btn" data-target="supernet">Copy All</button>
-                        <?php foreach ($supernet_result['summaries'] ?? [] as $s) : ?>
-                            <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
-                                <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
-                                <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s) ?>" aria-label="Copy <?= htmlspecialchars($s) ?>">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                </button>
-                            </div>
-                        <?php endforeach; ?>
-                        <?php $s_count = count($supernet_result['summaries'] ?? []);
-                              $i_count = count(array_filter(explode("\n", $supernet_input))); ?>
-                        <div class="split-more"><?= $s_count ?> prefix<?= $s_count !== 1 ? 'es' : '' ?> from <?= $i_count ?> input<?= $i_count !== 1 ? 's' : '' ?></div>
-                    </div>
-                <?php endif; ?>
-            <?php endif; ?>
+        <?php
+        $open_tool_ipv4 = null;
+        if ($split_result !== null || $split_error !== null) { $open_tool_ipv4 = 'split'; }
+        elseif ($supernet_result !== null || $supernet_error !== null) { $open_tool_ipv4 = 'supernet'; }
+        elseif ($range_result !== null || $range_error !== null) { $open_tool_ipv4 = 'range'; }
+        elseif ($tree_result !== null || $tree_error !== null) { $open_tool_ipv4 = 'tree'; }
+        ?>
+        <div class="tool-toolbar"<?= $open_tool_ipv4 ? ' data-open-tool="' . $open_tool_ipv4 . '"' : '' ?>>
+            <button type="button" class="tool-trigger" data-tool="split" aria-expanded="false">Split Subnet</button>
+            <button type="button" class="tool-trigger" data-tool="supernet" aria-expanded="false">Supernet</button>
+            <button type="button" class="tool-trigger" data-tool="range" aria-expanded="false">Range&rarr;CIDR</button>
+            <button type="button" class="tool-trigger" data-tool="tree" aria-expanded="false">Subnet Tree</button>
         </div>
 
-        <!-- Range → CIDR Panel -->
-        <div class="overlap-panel">
-            <div class="overlap-title">IP Range &rarr; CIDR<?= help_bubble('range-cidr', 'Enter a start and end IPv4 address to get the minimal set of CIDR blocks that exactly covers that range using the greedy largest-aligned-block algorithm.') ?></div>
-            <form method="post" novalidate>
-                <input type="hidden" name="tab" value="ipv4">
-                <div class="overlap-inputs">
-                    <input type="text" name="range_start"
-                           value="<?= htmlspecialchars($range_start) ?>"
-                           placeholder="Start IP (e.g. 10.0.0.0)"
-                           autocomplete="off" spellcheck="false"
-                           aria-label="Start IP address">
-                    <span class="overlap-vs">to</span>
-                    <input type="text" name="range_end"
-                           value="<?= htmlspecialchars($range_end) ?>"
-                           placeholder="End IP (e.g. 10.0.0.255)"
-                           autocomplete="off" spellcheck="false"
-                           aria-label="End IP address">
-                    <button type="submit" class="splitter-btn">Convert</button>
-                </div>
-            </form>
-            <?php if ($range_error) : ?>
-                <div class="error"><?= htmlspecialchars($range_error) ?></div>
-            <?php elseif ($range_result !== null) : ?>
-                <div class="split-list split-list--mt">
-                    <button type="button" class="copy-all-btn" data-target="range">Copy All</button>
-                    <?php foreach ($range_result as $r_cidr) : ?>
-                        <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($r_cidr) ?>">
-                            <span class="split-subnet-text"><?= htmlspecialchars($r_cidr) ?></span>
-                            <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($r_cidr) ?>" aria-label="Copy <?= htmlspecialchars($r_cidr) ?>">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                            </button>
+        <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv4">
+            <div class="tool-drawer-header">
+                <span class="tool-drawer-title" id="drawer-title-ipv4">Tool</span>
+                <button type="button" class="tool-drawer-close" aria-label="Close">&times;</button>
+            </div>
+
+            <div class="tool-panel" data-tool="split">
+                <div class="splitter">
+                    <div class="splitter-title">Split Subnet</div>
+                    <form method="post" class="splitter-form">
+                        <input type="hidden" name="tab" value="ipv4">
+                        <input type="hidden" name="ip" value="<?= htmlspecialchars($input_ip) ?>">
+                        <input type="hidden" name="mask" value="<?= htmlspecialchars($input_mask) ?>">
+                        <div class="splitter-row">
+                            <span class="splitter-label">Split into<?= help_bubble('ipv4-split', 'Enter a prefix length larger than the parent (e.g. /25 splits a /24 into two /25 subnets). The result is capped at the configured maximum.') ?></span>
+                            <input type="text" name="split_prefix" class="splitter-input"
+                                   placeholder="/25" value="<?= htmlspecialchars($input_split_prefix) ?>"
+                                   autocomplete="off" spellcheck="false"
+                                   <?= $split_error ? 'aria-invalid="true" aria-describedby="split-error-ipv4"' : '' ?>>
+                            <button type="submit" class="splitter-btn">Split</button>
                         </div>
-                    <?php endforeach; ?>
-                    <div class="split-more"><?= count($range_result) ?> CIDR block<?= count($range_result) !== 1 ? 's' : '' ?></div>
+                    </form>
+                    <?php if ($split_error) : ?>
+                        <div class="error" id="split-error-ipv4"><?= htmlspecialchars($split_error) ?></div>
+                    <?php elseif ($split_result && $split_result['showing'] > 0) : ?>
+                        <div class="split-list" data-parent="<?= htmlspecialchars($result['cidr'] ?? '') ?>">
+                            <button type="button" class="copy-all-btn" data-target="split">Copy All</button>
+                            <button type="button" class="ascii-export-btn">Export ASCII</button>
+                            <?php foreach ($split_result['subnets'] as $s) : ?>
+                                <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
+                                    <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
+                                    <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s) ?>" aria-label="Copy <?= htmlspecialchars($s) ?>">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                </div>
+                            <?php endforeach; ?>
+                            <?php if ($split_result['total'] > $split_result['showing']) : ?>
+                                <div class="split-more">+&nbsp;<?= format_number($split_result['total'] - $split_result['showing']) ?> more</div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
-            <?php endif; ?>
-        </div>
+            </div>
 
-        <!-- Subnet Allocation Tree View -->
-        <div class="overlap-panel">
-            <div class="overlap-title">Subnet Allocation Tree</div>
-            <form method="post" novalidate>
-                <input type="hidden" name="tab" value="ipv4">
-                <div class="form-group tree-form-group">
-                    <label for="tree_parent" class="tree-parent-label">Parent CIDR</label>
-                    <input type="text" id="tree_parent" name="tree_parent"
-                           value="<?= htmlspecialchars($tree_parent) ?>"
-                           placeholder="10.0.0.0/16" autocomplete="off" spellcheck="false">
+            <div class="tool-panel" data-tool="supernet">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Supernet &amp; Route Summarisation</div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv4">
+                        <textarea name="supernet_input" rows="4" class="multi-overlap-input"
+                                  placeholder="One IPv4 CIDR per line (max 50):&#10;10.0.0.0/24&#10;10.0.1.0/24"
+                                  autocomplete="off" spellcheck="false"><?= htmlspecialchars($supernet_input) ?></textarea>
+                        <div class="splitter-row supernet-action-row">
+                            <button type="submit" name="supernet_action" value="find" class="splitter-btn">Find Supernet</button><?= help_bubble('supernet-find', 'Finds the smallest single CIDR block that contains all of the listed CIDRs. Useful for aggregating routes into a single summary route.') ?>
+                            <button type="submit" name="supernet_action" value="summarise" class="splitter-btn">Summarise Routes</button><?= help_bubble('supernet-summarise', 'Computes the minimal set of non-overlapping CIDRs that exactly covers the listed networks. Unlike Find Supernet, this avoids including addresses outside the input ranges.') ?>
+                        </div>
+                    </form>
+                    <?php if ($supernet_error) : ?>
+                        <div class="error"><?= htmlspecialchars($supernet_error) ?></div>
+                    <?php elseif ($supernet_result !== null) : ?>
+                        <?php if ($supernet_action === 'find') : ?>
+                            <div class="overlap-result overlap-contains">
+                                <?= htmlspecialchars($supernet_result['supernet'] ?? '') ?>
+                            </div>
+                        <?php else : ?>
+                            <div class="split-list split-list--mt">
+                                <button type="button" class="copy-all-btn" data-target="supernet">Copy All</button>
+                                <?php foreach ($supernet_result['summaries'] ?? [] as $s) : ?>
+                                    <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
+                                        <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
+                                        <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s) ?>" aria-label="Copy <?= htmlspecialchars($s) ?>">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        </button>
+                                    </div>
+                                <?php endforeach; ?>
+                                <?php $s_count = count($supernet_result['summaries'] ?? []);
+                                      $i_count = count(array_filter(explode("\n", $supernet_input))); ?>
+                                <div class="split-more"><?= $s_count ?> prefix<?= $s_count !== 1 ? 'es' : '' ?> from <?= $i_count ?> input<?= $i_count !== 1 ? 's' : '' ?></div>
+                            </div>
+                        <?php endif; ?>
+                    <?php endif; ?>
                 </div>
-                <textarea name="tree_children" rows="4" class="multi-overlap-input"
-                          placeholder="One child CIDR per line (max 100):&#10;10.0.0.0/24&#10;10.0.1.0/24"
-                          autocomplete="off" spellcheck="false"><?= htmlspecialchars($tree_children) ?></textarea>
-                <div class="tree-action-row">
-                    <button type="submit" class="splitter-btn">Build Tree</button>
+            </div>
+
+            <div class="tool-panel" data-tool="range">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IP Range &rarr; CIDR<?= help_bubble('range-cidr', 'Enter a start and end IPv4 address to get the minimal set of CIDR blocks that exactly covers that range using the greedy largest-aligned-block algorithm.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv4">
+                        <div class="overlap-inputs">
+                            <input type="text" name="range_start"
+                                   value="<?= htmlspecialchars($range_start) ?>"
+                                   placeholder="Start IP (e.g. 10.0.0.0)"
+                                   autocomplete="off" spellcheck="false"
+                                   aria-label="Start IP address">
+                            <span class="overlap-vs">to</span>
+                            <input type="text" name="range_end"
+                                   value="<?= htmlspecialchars($range_end) ?>"
+                                   placeholder="End IP (e.g. 10.0.0.255)"
+                                   autocomplete="off" spellcheck="false"
+                                   aria-label="End IP address">
+                            <button type="submit" class="splitter-btn">Convert</button>
+                        </div>
+                    </form>
+                    <?php if ($range_error) : ?>
+                        <div class="error"><?= htmlspecialchars($range_error) ?></div>
+                    <?php elseif ($range_result !== null) : ?>
+                        <div class="split-list split-list--mt">
+                            <button type="button" class="copy-all-btn" data-target="range">Copy All</button>
+                            <?php foreach ($range_result as $r_cidr) : ?>
+                                <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($r_cidr) ?>">
+                                    <span class="split-subnet-text"><?= htmlspecialchars($r_cidr) ?></span>
+                                    <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($r_cidr) ?>" aria-label="Copy <?= htmlspecialchars($r_cidr) ?>">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                </div>
+                            <?php endforeach; ?>
+                            <div class="split-more"><?= count($range_result) ?> CIDR block<?= count($range_result) !== 1 ? 's' : '' ?></div>
+                        </div>
+                    <?php endif; ?>
                 </div>
-            </form>
-            <?php if ($tree_error) : ?>
-                <div class="error"><?= htmlspecialchars($tree_error) ?></div>
-            <?php elseif ($tree_result !== null) : ?>
-                <div class="tree-view">
-                    <?php
-                    /**
-                     * @param array<string, mixed> $node
-                     * @param int $depth
-                     */
-                    function render_tree_node(array $node, int $depth = 0): void
-                    {
-                        $indent = str_repeat('&nbsp;&nbsp;&nbsp;&nbsp;', $depth);
-                        $cidr   = htmlspecialchars((string)($node['cidr'] ?? ''));
-                        echo '<div class="tree-node">';
-                        echo $indent . '<span class="tree-cidr" tabindex="0" role="button" data-copy="' . $cidr . '" title="Click to copy">';
-                        echo '<code>' . $cidr . '</code>';
-                        echo '</span>';
-                        echo '</div>';
-                        $gaps = $node['gaps'] ?? [];
-                        foreach ((array)($node['children'] ?? []) as $child) {
-                            if (is_array($child)) {
-                                render_tree_node($child, $depth + 1);
+            </div>
+
+            <div class="tool-panel" data-tool="tree">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Subnet Allocation Tree</div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv4">
+                        <div class="form-group tree-form-group">
+                            <label for="tree_parent" class="tree-parent-label">Parent CIDR</label>
+                            <input type="text" id="tree_parent" name="tree_parent"
+                                   value="<?= htmlspecialchars($tree_parent) ?>"
+                                   placeholder="10.0.0.0/16" autocomplete="off" spellcheck="false">
+                        </div>
+                        <textarea name="tree_children" rows="4" class="multi-overlap-input"
+                                  placeholder="One child CIDR per line (max 100):&#10;10.0.0.0/24&#10;10.0.1.0/24"
+                                  autocomplete="off" spellcheck="false"><?= htmlspecialchars($tree_children) ?></textarea>
+                        <div class="tree-action-row">
+                            <button type="submit" class="splitter-btn">Build Tree</button>
+                        </div>
+                    </form>
+                    <?php if ($tree_error) : ?>
+                        <div class="error"><?= htmlspecialchars($tree_error) ?></div>
+                    <?php elseif ($tree_result !== null) : ?>
+                        <div class="tree-view">
+                            <?php
+                            /**
+                             * @param array<string, mixed> $node
+                             * @param int $depth
+                             */
+                            function render_tree_node(array $node, int $depth = 0): void
+                            {
+                                $indent = str_repeat('&nbsp;&nbsp;&nbsp;&nbsp;', $depth);
+                                $cidr   = htmlspecialchars((string)($node['cidr'] ?? ''));
+                                echo '<div class="tree-node">';
+                                echo $indent . '<span class="tree-cidr" tabindex="0" role="button" data-copy="' . $cidr . '" title="Click to copy">';
+                                echo '<code>' . $cidr . '</code>';
+                                echo '</span>';
+                                echo '</div>';
+                                $gaps = $node['gaps'] ?? [];
+                                foreach ((array)($node['children'] ?? []) as $child) {
+                                    if (is_array($child)) {
+                                        render_tree_node($child, $depth + 1);
+                                    }
+                                }
+                                foreach ((array)$gaps as $gap) {
+                                    $gap_safe = htmlspecialchars((string)$gap);
+                                    echo '<div class="tree-node tree-gap">';
+                                    echo $indent . '&nbsp;&nbsp;&nbsp;&nbsp;<code>' . $gap_safe . '</code> <span class="tree-free-label">(free)</span>';
+                                    echo '</div>';
+                                }
                             }
-                        }
-                        foreach ((array)$gaps as $gap) {
-                            $gap_safe = htmlspecialchars((string)$gap);
-                            echo '<div class="tree-node tree-gap">';
-                            echo $indent . '&nbsp;&nbsp;&nbsp;&nbsp;<code>' . $gap_safe . '</code> <span class="tree-free-label">(free)</span>';
-                            echo '</div>';
-                        }
-                    }
-                    render_tree_node($tree_result);
-                    ?>
+                            render_tree_node($tree_result);
+                            ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
-            <?php endif; ?>
+            </div>
         </div>
     </div>
 
