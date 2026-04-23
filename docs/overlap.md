@@ -2,7 +2,7 @@
 
 ## Two-CIDR checker
 
-On the **VLSM** tab, the **Subnet Overlap Checker** panel accepts two CIDRs (IPv4 or IPv6). Possible results:
+The **Subnet Overlap Checker** is in the **Tool Drawer** — click the toolbar button on the IPv4 or IPv6 tab. It accepts two CIDRs (IPv4 or IPv6). Possible results:
 
 | Result | Meaning |
 |---|---|
@@ -20,3 +20,7 @@ If no overlaps are detected, a "No overlaps detected" message is shown.
 
 !!! tip
     Use the multi-CIDR checker to audit an existing address plan before deploying.
+
+## REST API
+
+The overlap check is also available programmatically via [`POST /api/v1/overlap`](api.md#post-apiv1overlap).

@@ -36,7 +36,7 @@ Expand the **Binary Representation** panel to see:
 
 Enter a longer prefix (e.g. `/25` to split a `/24` into two `/25s`) and click **Split**. Results are listed with individual copy buttons and a **Copy All** / **Export ASCII** option.
 
-The maximum number of subnets returned is set by `$split_max_subnets` in `config.php` (default 256).
+The maximum number of subnets returned is set by `$split_max_subnets` in `config.php` (default 16).
 
 ## Supernet & Route Summarisation
 

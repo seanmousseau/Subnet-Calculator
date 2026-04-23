@@ -36,7 +36,7 @@ The `rdns` field is included in all `/api/v1/ipv4` and `/api/v1/ipv6` responses.
   "data": {
     "zone": "1.168.192.in-addr.arpa",
     "format": "ipv4",
-    "ttl": 3600,
+    "ttl": 86400,
     "record_count": 256,
     "content": "...<BIND zone file>..."
   }

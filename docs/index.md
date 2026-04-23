@@ -24,6 +24,7 @@ Switch to the **IPv6** tab for IPv6 calculations, and to the **VLSM** tab to pla
 ## Requirements
 
 - PHP **8.1+** with the **GMP** extension (`php-gmp`)
+- **PHP `intl` extension** — enables locale-aware thousands-separator formatting (e.g. `1,234,567`). The app falls back to comma separators when unavailable, so this is optional but recommended.
 - A web server that supports `.htaccess` overrides (Apache 2.4+ or OpenLiteSpeed)
 - SQLite (bundled with PHP) — only required if sessions or API request logging are enabled
 
@@ -34,7 +35,7 @@ Switch to the **IPv6** tab for IPv6 calculations, and to the **VLSM** tab to pla
 Download the latest release tarball from the [GitHub releases page](https://github.com/seanmousseau/Subnet-Calculator/releases) and extract it into your web root:
 
 ```bash
-tar -xzf subnet-calculator-2.6.0.tar.gz -C /var/www/html/subnet-calculator/
+tar -xzf subnet-calculator-2.8.1.tar.gz -C /var/www/html/subnet-calculator/
 ```
 
 ### Option 2 — Docker
@@ -56,3 +57,7 @@ make test-docker
 ```
 
 See [Operator Config](config.md) for all available configuration options.
+
+## PHP Client Library
+
+A lightweight PHP wrapper for the REST API is bundled in the repository at `clients/php/SubnetCalculatorClient.php`. See the [PHP Client](client.md) page for usage examples.

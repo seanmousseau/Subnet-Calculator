@@ -1,6 +1,6 @@
 # Supernet & Route Summarisation
 
-Both tools are in the **Supernet & Route Summarisation** panel on the IPv4 tab.
+Both tools are in the **Tool Drawer** — click the toolbar button on the IPv4 tab.
 
 Enter one CIDR per line, then choose an action.
 
@@ -32,3 +32,7 @@ Result: 10.0.0.0/25
 ```
 
 Useful for building an optimised routing table from an arbitrary set of prefixes.
+
+## REST API
+
+Supernet calculation and route summarisation are available via [`POST /api/v1/supernet`](api.md#post-apiv1supernet).

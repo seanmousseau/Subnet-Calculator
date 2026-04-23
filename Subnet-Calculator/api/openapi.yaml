@@ -1,14 +1,14 @@
 openapi: 3.1.0
 info:
   title: Subnet Calculator API
-  version: "1"
+  version: "1.0"
   description: |
     JSON REST API for IPv4/IPv6 subnet calculation, VLSM allocation,
     overlap detection, subnet splitting, route summarisation, ULA prefix
     generation, and VLSM session persistence.
   license:
-    name: MIT
-    identifier: MIT
+    name: AGPL-3.0
+    identifier: AGPL-3.0-only
   contact:
     name: Sean Mousseau
     url: https://github.com/seanmousseau/Subnet-Calculator
@@ -200,6 +200,8 @@ paths:
                     - bulk
                     - range/ipv4
                     - tree
+                    - sessions
+                    - changelog
 
   /ipv4:
     post:

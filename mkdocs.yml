@@ -48,6 +48,7 @@ nav:
     - Shareable URLs & Embedding: sharing.md
   - Reference:
     - REST API: api.md
+    - PHP Client Library: client.md
     - Operator Config: config.md
 
 markdown_extensions:

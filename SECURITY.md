@@ -4,7 +4,10 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | ✅        |
+| 2.8.x   | ✅        |
+| < 2.8   | ❌        |
+
+Only the latest stable release receives security fixes.
 
 ## Reporting a Vulnerability
 

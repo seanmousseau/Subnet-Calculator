@@ -28,8 +28,12 @@ Works identically to the IPv4 splitter. For very large splits (prefix difference
 
 ## Overlap Checker
 
-Two IPv6 CIDRs can be compared via the **Subnet Overlap Checker** panel on the VLSM tab. Mixed IPv4/IPv6 pairs are not supported — the checker returns an error ("Cannot compare IPv4 and IPv6 addresses.").
+The **Subnet Overlap Checker** is in the **Tool Drawer** — click the toolbar button on the IPv6 tab. Mixed IPv4/IPv6 pairs are not supported — the checker returns an error ("Cannot compare IPv4 and IPv6 addresses."). See [Overlap Checker](overlap.md).
 
 ## ULA Prefix Generator
 
 See [IPv6 ULA Generator](ula.md).
+
+## REST API
+
+IPv6 subnet calculations are available programmatically via [`POST /api/v1/ipv6`](api.md#post-apiv1ipv6).

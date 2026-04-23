@@ -1,6 +1,6 @@
 # VLSM Sessions
 
-The **Save & Restore Session** panel on the VLSM tab lets you save your planner inputs and share them via a link.
+Session controls are in the **Tool Drawer** — click the toolbar button on the VLSM tab. They let you save your planner inputs and share them via a link.
 
 ## Saving
 
@@ -25,4 +25,13 @@ Sessions are stored in a SQLite database. The default path is `data/sessions.sql
 
 ## Disabling sessions
 
-Set `$session_enabled = false` in `config.php` to hide the Save & Restore panel and disable the SQLite database.
+Set `$session_enabled = false` in `config.php` to hide the session controls and disable the SQLite database.
+
+## API access
+
+Sessions can also be created and retrieved programmatically:
+
+- `POST /api/v1/sessions` — save a payload, receive an 8-hex-char ID
+- `GET /api/v1/sessions/:id` — retrieve a session by its 8-hex-char ID
+
+See [REST API](api.md#post-apiv1sessions) for curl examples.

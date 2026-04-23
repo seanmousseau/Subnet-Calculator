@@ -36,7 +36,31 @@ vendor/bin/phpcs --standard=PSR12 Subnet-Calculator/includes/ Subnet-Calculator/
 # JS/CSS linting
 npm install
 npm run lint
+
+# Security scan (Semgrep)
+semgrep --config=.semgrep/rules.yml --config p/php --config p/owasp-top-ten \
+    --config p/sql-injection --error \
+    Subnet-Calculator/includes/ Subnet-Calculator/api/ Subnet-Calculator/templates/
+
+# OpenAPI spec lint (Spectral)
+npx --yes @stoplight/spectral-cli@6 lint Subnet-Calculator/api/openapi.yaml
 ```
+
+### End-to-end tests (preferred)
+
+```bash
+make test-docker
+```
+
+This builds a Docker image, starts the app, and runs the full Playwright test suite (91 test groups, 561 assertions). `SKIP_SNAPSHOTS=1` and `SKIP_LINT=1` are set automatically — run `npm run lint` separately for ESLint/Stylelint.
+
+**Visual regression:** If your PR touches CSS, update snapshot baselines:
+
+```bash
+UPDATE_SNAPSHOTS=1 make test-docker
+```
+
+Commit the updated PNGs from `testing/snapshots/`.
 
 ## Project structure
 
@@ -66,10 +90,13 @@ Subnet-Calculator/         ← docroot (serve this directory)
       helpers.php          ← json_ok/json_err, auth, rate limiting, CORS
       handlers/            ← one file per endpoint
   config.php.example       ← copy to config.php to override defaults
+clients/
+  php/
+    SubnetCalculatorClient.php  ← PHP API client wrapper (no Composer required)
 testing/
   unit/                    ← PHPUnit tests
   scripts/
-    playwright_test.py     ← Playwright E2E browser tests (85 groups, 517 assertions)
+    playwright_test.py     ← Playwright E2E browser tests (91 groups, 561 assertions)
 ```
 
 ## Guidelines
