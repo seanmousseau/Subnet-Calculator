@@ -33,3 +33,7 @@ The **Subnet Overlap Checker** is in the **Tool Drawer** — click the toolbar b
 ## ULA Prefix Generator
 
 See [IPv6 ULA Generator](ula.md).
+
+## REST API
+
+IPv6 subnet calculations are available programmatically via [`POST /api/v1/ipv6`](api.md#post-apiv1ipv6).
