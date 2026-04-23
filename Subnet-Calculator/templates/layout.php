@@ -554,91 +554,112 @@ if ($i < 3) {
                 <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
             </div>
             <?php endif; ?>
-            <div class="splitter">
-                <div class="splitter-title">Split Subnet</div>
-                <form method="post" class="splitter-form">
-                    <input type="hidden" name="tab" value="ipv6">
-                    <input type="hidden" name="ipv6" value="<?= htmlspecialchars($input_ipv6) ?>">
-                    <input type="hidden" name="prefix" value="<?= htmlspecialchars($input_prefix) ?>">
-                    <div class="splitter-row">
-                        <span class="splitter-label">Split into</span>
-                        <input type="text" name="split_prefix6" class="splitter-input"
-                               placeholder="/65" value="<?= htmlspecialchars($input_split_prefix6) ?>"
-                               autocomplete="off" spellcheck="false"
-                               <?= $split_error6 ? 'aria-invalid="true" aria-describedby="split-error-ipv6"' : '' ?>>
-                        <button type="submit" class="splitter-btn">Split</button>
-                    </div>
-                </form>
-                <?php if ($split_error6) : ?>
-                    <div class="error" id="split-error-ipv6"><?= htmlspecialchars($split_error6) ?></div>
-                <?php elseif ($split_result6 && $split_result6['showing'] > 0) : ?>
-                    <div class="split-list" data-parent="<?= htmlspecialchars($result6['network_cidr'] ?? '') ?>">
-                        <button type="button" class="copy-all-btn" data-target="split">Copy All</button>
-                        <button type="button" class="ascii-export-btn">Export ASCII</button>
-                        <?php foreach ($split_result6['subnets'] as $s) : ?>
-                            <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
-                                <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
-                                <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s) ?>" aria-label="Copy <?= htmlspecialchars($s) ?>">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                </button>
-                            </div>
-                        <?php endforeach; ?>
-                        <?php
-                            $total6   = $split_result6['total'];
-                            $showing6 = $split_result6['showing'];
-                            $has_more6 = is_numeric($total6) ? ($showing6 < (int)$total6) : true;
-                            $more_label6 = is_numeric($total6) ? format_number((int)$total6 - $showing6) : $total6 . ' total';
-                        ?>
-                        <?php if ($has_more6) : ?>
-                            <div class="split-more">+&nbsp;<?= htmlspecialchars($more_label6) ?> more</div>
-                        <?php endif; ?>
-                    </div>
-                <?php endif; ?>
-            </div>
         <?php endif; ?>
 
-        <!-- ULA Generator -->
-        <div class="overlap-panel">
-            <div class="overlap-title">IPv6 ULA Prefix Generator (RFC 4193)</div>
-            <form method="post" novalidate>
-                <input type="hidden" name="tab" value="ipv6">
-                <div class="form-row ula-form-row">
-                    <div class="form-group">
-                        <label for="ula_global_id">Global ID <span class="label-footnote">(optional 10 hex chars)</span><?= help_bubble('ula-global-id', 'A 40-bit hex value used as the globally unique portion of the ULA prefix (RFC 4193). Leave blank to generate one pseudo-randomly from the current timestamp.') ?></label>
-                        <input type="text" id="ula_global_id" name="ula_global_id"
-                               value="<?= htmlspecialchars($ula_global_id_input) ?>"
-                               placeholder="e.g. 1a2b3c4d5e (random if blank)"
-                               autocomplete="off" spellcheck="false" maxlength="10">
-                    </div>
-                    <div class="ula-generate-wrap">
-                        <button type="submit" name="ula_generate" value="1" class="splitter-btn">Generate</button>
-                    </div>
-                </div>
-            </form>
-            <?php if ($ula_error) : ?>
-                <div class="error"><?= htmlspecialchars($ula_error) ?></div>
-            <?php elseif ($ula_result !== null) : ?>
-                <div class="ula-result">
-                    <div class="overlap-result overlap-contains"><?= htmlspecialchars($ula_result['prefix'] ?? '') ?></div>
-                    <div class="ula-meta">
-                        <span>Global ID: <code><?= htmlspecialchars($ula_result['global_id'] ?? '') ?></code></span>
-                        <span>Available /64s: <strong><?= format_number((int)($ula_result['available_64s'] ?? 0)) ?></strong></span>
-                    </div>
-                    <?php if (!empty($ula_result['example_64s'])) : ?>
-                    <div class="split-list split-list--mt">
-                        <button type="button" class="copy-all-btn" data-target="ula">Copy All</button>
-                        <?php foreach ($ula_result['example_64s'] as $ex64) : ?>
-                            <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($ex64) ?>">
-                                <span class="split-subnet-text"><?= htmlspecialchars($ex64) ?></span>
-                                <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($ex64) ?>" aria-label="Copy <?= htmlspecialchars($ex64) ?>">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                </button>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
+        <?php
+        $open_tool_ipv6 = null;
+        if ($split_result6 !== null || $split_error6 !== null) { $open_tool_ipv6 = 'split6'; }
+        elseif ($ula_result !== null || $ula_error !== null) { $open_tool_ipv6 = 'ula'; }
+        ?>
+        <div class="tool-toolbar"<?= $open_tool_ipv6 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv6) . '"' : '' ?>>
+            <button type="button" class="tool-trigger" data-tool="split6" aria-expanded="false">Split Subnet</button>
+            <button type="button" class="tool-trigger" data-tool="ula" aria-expanded="false">ULA Generator</button>
+        </div>
+
+        <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv6">
+            <div class="tool-drawer-header">
+                <span class="tool-drawer-title" id="drawer-title-ipv6">Tool</span>
+                <button type="button" class="tool-drawer-close" aria-label="Close">&times;</button>
+            </div>
+
+            <div class="tool-panel" data-tool="split6">
+                <div class="splitter">
+                    <div class="splitter-title">Split Subnet</div>
+                    <form method="post" class="splitter-form">
+                        <input type="hidden" name="tab" value="ipv6">
+                        <input type="hidden" name="ipv6" value="<?= htmlspecialchars($input_ipv6) ?>">
+                        <input type="hidden" name="prefix" value="<?= htmlspecialchars($input_prefix) ?>">
+                        <div class="splitter-row">
+                            <span class="splitter-label">Split into</span>
+                            <input type="text" name="split_prefix6" class="splitter-input"
+                                   placeholder="/65" value="<?= htmlspecialchars($input_split_prefix6) ?>"
+                                   autocomplete="off" spellcheck="false"
+                                   <?= $split_error6 ? 'aria-invalid="true" aria-describedby="split-error-ipv6"' : '' ?>>
+                            <button type="submit" class="splitter-btn">Split</button>
+                        </div>
+                    </form>
+                    <?php if ($split_error6) : ?>
+                        <div class="error" id="split-error-ipv6"><?= htmlspecialchars($split_error6) ?></div>
+                    <?php elseif ($split_result6 && $split_result6['showing'] > 0) : ?>
+                        <div class="split-list" data-parent="<?= htmlspecialchars($result6['network_cidr'] ?? '') ?>">
+                            <button type="button" class="copy-all-btn" data-target="split">Copy All</button>
+                            <button type="button" class="ascii-export-btn">Export ASCII</button>
+                            <?php foreach ($split_result6['subnets'] as $s) : ?>
+                                <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
+                                    <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
+                                    <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s) ?>" aria-label="Copy <?= htmlspecialchars($s) ?>">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                </div>
+                            <?php endforeach; ?>
+                            <?php
+                                $total6   = $split_result6['total'];
+                                $showing6 = $split_result6['showing'];
+                                $has_more6 = is_numeric($total6) ? ($showing6 < (int)$total6) : true;
+                                $more_label6 = is_numeric($total6) ? format_number((int)$total6 - $showing6) : $total6 . ' total';
+                            ?>
+                            <?php if ($has_more6) : ?>
+                                <div class="split-more">+&nbsp;<?= htmlspecialchars($more_label6) ?></div>
+                            <?php endif; ?>
+                        </div>
                     <?php endif; ?>
                 </div>
-            <?php endif; ?>
+            </div>
+
+            <div class="tool-panel" data-tool="ula">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IPv6 ULA Prefix Generator (RFC 4193)</div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row ula-form-row">
+                            <div class="form-group">
+                                <label for="ula_global_id">Global ID <span class="label-footnote">(optional 10 hex chars)</span><?= help_bubble('ula-global-id', 'A 40-bit hex value used as the globally unique portion of the ULA prefix (RFC 4193). Leave blank to generate one pseudo-randomly from the current timestamp.') ?></label>
+                                <input type="text" id="ula_global_id" name="ula_global_id"
+                                       value="<?= htmlspecialchars($ula_global_id_input) ?>"
+                                       placeholder="e.g. 1a2b3c4d5e (random if blank)"
+                                       autocomplete="off" spellcheck="false" maxlength="10">
+                            </div>
+                            <div class="ula-generate-wrap">
+                                <button type="submit" name="ula_generate" value="1" class="splitter-btn">Generate</button>
+                            </div>
+                        </div>
+                    </form>
+                    <?php if ($ula_error) : ?>
+                        <div class="error"><?= htmlspecialchars($ula_error) ?></div>
+                    <?php elseif ($ula_result !== null) : ?>
+                        <div class="ula-result">
+                            <div class="overlap-result overlap-contains"><?= htmlspecialchars($ula_result['prefix'] ?? '') ?></div>
+                            <div class="ula-meta">
+                                <span>Global ID: <code><?= htmlspecialchars($ula_result['global_id'] ?? '') ?></code></span>
+                                <span>Available /64s: <strong><?= format_number((int)($ula_result['available_64s'] ?? 0)) ?></strong></span>
+                            </div>
+                            <?php if (!empty($ula_result['example_64s'])) : ?>
+                            <div class="split-list split-list--mt">
+                                <button type="button" class="copy-all-btn" data-target="ula">Copy All</button>
+                                <?php foreach ($ula_result['example_64s'] as $ex64) : ?>
+                                    <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($ex64) ?>">
+                                        <span class="split-subnet-text"><?= htmlspecialchars($ex64) ?></span>
+                                        <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($ex64) ?>" aria-label="Copy <?= htmlspecialchars($ex64) ?>">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        </button>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
     </div>
 
