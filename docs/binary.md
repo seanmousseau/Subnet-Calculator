@@ -6,7 +6,7 @@ Expand the **Binary Representation** (IPv4) or **Binary / Hex Representation** (
 
 - **Network row** — 32-bit binary address; **blue** bits are the network portion (determined by the prefix length), **grey** bits are the host portion.
 - **Mask row** — 32-bit binary subnet mask.
-- **Hex** — network address as a 0-padded 8-character hex string (e.g. `c0a80100` for `192.168.1.0`).
+- **Hex** — network address in dotted-hex notation (e.g. `C0.A8.01.00` for `192.168.1.0`).
 - **Decimal** — network address as an unsigned 32-bit integer.
 - The boundary line shows the split: `Network: 24 bits | Host: 8 bits`.
 
