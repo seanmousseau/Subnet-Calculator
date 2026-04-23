@@ -42,11 +42,10 @@ semgrep --config=.semgrep/rules.yml --config p/php --config p/owasp-top-ten \
 # Run npm run lint separately for ESLint/Stylelint; update snapshots via dev server flow
 make test-docker
 
-# Deploy to dev server and run the full suite (includes visual regression snapshots)
+# Deploy to test instance (manual inspection — Playwright runs via make test-docker, no dev server needed)
 # Requires: dev server running at root@192.168.80.15
-rsync -a --delete Subnet-Calculator/ root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
-scp testing/fixtures/iframe-test.html root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/claude/subnet-calculator/
-bash -c 'set -a; source ~/.claude/dev-secrets.env; set +a; python3 testing/scripts/playwright_test.py'
+rsync -a --delete Subnet-Calculator/ root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/testing/sc/
+scp testing/fixtures/iframe-test.html root@192.168.80.15:/opt/container_data/dev.seanmousseau.com/html/testing/sc/
 
 # Build a release tarball (files at root level — untar directly in webroot to install/upgrade)
 # Also bump $app_version in Subnet-Calculator/includes/config.php before building
