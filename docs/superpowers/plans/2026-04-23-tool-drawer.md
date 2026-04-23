@@ -294,9 +294,10 @@ Append the following block to `app.css` after the `.overlap-panel` section (afte
     outline-offset: 2px;
 }
 
-/* No-JS: show all panels; JS: hide all, show only un-hidden */
+/* No-JS: show all panels stacked; JS: hide all, show only the active panel in an open drawer */
 .tool-panel { display: block; }
-.js-enabled .tool-panel[hidden] { display: none; }
+.js-enabled .tool-panel { display: none; }
+.js-enabled .tool-drawer.open .tool-panel.active { display: block; }
 ```
 
 - [ ] **Step 3: Verify no lint errors**

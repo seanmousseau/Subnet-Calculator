@@ -33,7 +33,7 @@ Replace always-visible inline sub-tool panels with a **persistent slide-in tool 
 
 - Each sub-tool block is wrapped in `<div class="tool-panel" data-tool="<id>">` and moved into a `<div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="tool-drawer-title-<tabid>">` at the bottom of each tab panel (one drawer per panel; use class not id to avoid duplicate-id violations).
 - A new `<div class="tool-toolbar">` is inserted directly after the binary `<details>`, containing one `<button class="tool-trigger" data-tool="<id>" aria-expanded="false">` per sub-tool.
-- The drawer includes a header: `<span id="tool-drawer-title">` (tool name) + `<button class="tool-drawer-close">×</button>`.
+- The drawer includes a header: `<span class="tool-drawer-title" id="drawer-title-<tabid>">` (tool name) + `<button class="tool-drawer-close">×</button>`.
 - No-JS fallback: toolbar buttons are hidden via `.js-enabled .tool-toolbar { display: flex }` (default hidden); sub-tool panels render inline when JS is absent.
 
 ### CSS (`assets/app.css`)
@@ -50,7 +50,7 @@ Replace always-visible inline sub-tool panels with a **persistent slide-in tool 
 
 A `toolDrawer` object (~80 lines) added to the existing script:
 
-```
+```js
 toolDrawer = {
   drawer, title, panels, triggers,
   open(toolId),   // show panel[toolId], update aria-expanded, move focus
@@ -76,7 +76,7 @@ toolDrawer = {
 - Only one tool visible at a time; switching tools cross-fades content (opacity 0→1, 150ms) without closing the drawer.
 - Drawer state is not persisted across page loads (sub-tool results already require a POST/GET round-trip; the auto-reopen on load covers the post-submit case).
 - `aria-expanded` on each toolbar button reflects whether the drawer is open **and** that button's tool is active.
-- Drawer `aria-labelledby` points to the `<span id="tool-drawer-title">` which updates to the active tool name on swap.
+- Drawer `aria-labelledby` points to the per-panel `<span class="tool-drawer-title">` (e.g. `drawer-title-ipv4`), whose text updates to the active tool name on swap.
 
 ## Testing
 

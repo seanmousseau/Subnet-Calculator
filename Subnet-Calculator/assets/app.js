@@ -447,6 +447,23 @@ if (window.self !== window.top) {
 // ── Tool Drawer ────────────────────────────────────────────────────────────
 const toolDrawer = {
     _activeTrigger: null,
+    _trapKeydown: null,
+
+    _buildTrap(drawer) {
+        return e => {
+            if (e.key !== 'Tab') return;
+            const els = Array.from(
+                drawer.querySelectorAll('input, button, textarea, select, [tabindex]:not([tabindex="-1"])')
+            ).filter(el => !el.disabled && el.offsetParent !== null);
+            if (els.length < 2) return;
+            const first = els[0], last = els[els.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault(); last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault(); first.focus();
+            }
+        };
+    },
 
     init() {
         document.documentElement.classList.add('js-enabled');
@@ -535,12 +552,20 @@ const toolDrawer = {
         drawer.classList.add('open');
         this._activeTrigger = trigger;
 
+        if (this._trapKeydown) drawer.removeEventListener('keydown', this._trapKeydown);
+        this._trapKeydown = this._buildTrap(drawer);
+        drawer.addEventListener('keydown', this._trapKeydown);
+
         const first = target.querySelector('input, button, textarea, select, [tabindex]:not([tabindex="-1"])');
         if (first) first.focus({ preventScroll: true });
     },
 
     close(drawer, trigger) {
         drawer.classList.remove('open');
+        if (this._trapKeydown) {
+            drawer.removeEventListener('keydown', this._trapKeydown);
+            this._trapKeydown = null;
+        }
         const panel = drawer.closest('.panel');
         panel.querySelectorAll('.tool-trigger').forEach(t => {
             t.setAttribute('aria-expanded', 'false');
@@ -571,6 +596,11 @@ const toolDrawer = {
         trigger.classList.add('active');
 
         this._activeTrigger = trigger;
+
+        if (this._trapKeydown) drawer.removeEventListener('keydown', this._trapKeydown);
+        this._trapKeydown = this._buildTrap(drawer);
+        drawer.addEventListener('keydown', this._trapKeydown);
+
         const first = target ? target.querySelector('input, button, textarea, select, [tabindex]:not([tabindex="-1"])') : null;
         if (first) first.focus({ preventScroll: true });
     }
