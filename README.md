@@ -55,6 +55,8 @@ https://subnetcalculator.app
 - All colours configured via CSS custom properties; optional `$fixed_bg_color` override
 - iframe-friendly mode with automatic height reporting via `postMessage`
 - External CSS (`assets/app.css`) and JS (`assets/app.js`); modular PHP structure (`includes/`, `templates/`); external config via `config.php`
+- **Offline mode** — a Service Worker caches the app shell so it continues to work without a network connection after the first visit
+- **Tool Drawer** (v2.8.0) — a slide-in toolbar panel groups sub-tools (subnet splitter, supernet/summarisation, IP range → CIDR, subnet allocation tree, overlap checker, ULA generator) so the main interface stays uncluttered
 
 ## Requirements
 
@@ -74,6 +76,16 @@ php -S localhost:8080 -t Subnet-Calculator/
 ```
 
 Then open `http://localhost:8080` in your browser.
+
+### Docker
+
+A `docker-compose.yml` is included for containerised deployments:
+
+```bash
+docker compose up --build
+```
+
+The app is served on port `8080` by default. Mount a `config.php` into the container to override configuration.
 
 ## Configuration
 
@@ -143,6 +155,17 @@ All POST endpoints accept and return JSON. Responses are enveloped:
 | `POST` | `/api/v1/bulk` | Run up to 50 operations in a single request |
 
 See `api/openapi.yaml` for the full OpenAPI 3.1 specification.
+
+### PHP Client Library
+
+A lightweight PHP wrapper is bundled at `clients/php/SubnetCalculatorClient.php`. Copy it into your project — no Composer required:
+
+```php
+require 'SubnetCalculatorClient.php';
+$client = new SubnetCalculatorClient('https://example.com/subnet-calculator/');
+$result = $client->ipv4('192.168.1.0/24');
+echo $result['data']['network_cidr'];
+```
 
 ## Downloads
 
