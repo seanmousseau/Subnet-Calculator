@@ -358,6 +358,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `$fixed_bg_color` hex validation regex now accepts only valid CSS hex lengths (3, 4, 6, or 8 hex digits); previously accepted 3–8 which allowed invalid values — closes #49
 - IPv6 exception messages no longer expose internal PHP error text; errors are logged via `error_log()` and a safe generic message is shown — closes #51
 
+## [0.7] - 2026-04-03
+
+### Added
+- iframe mode flag (`$iframe_mode`) with automatic `postMessage` height reporting via `ResizeObserver` — closes #37
+- External config consolidation: moved `$default_tab` and `$split_max_subnets` into the config section at the top of `index.php` so all operator-tunable values are in one place — closes #35
+
+### Changed
+- `$fixed_bg_color` default changed from `null` to the string `'null'` to prevent operator configuration errors like missing quotes around hex values; validation logic treats both `'null'` and empty string as no-op — closes #36
+
 ## [0.6] - 2026-04-03
 
 ### Added
