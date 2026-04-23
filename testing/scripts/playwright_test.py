@@ -400,6 +400,7 @@ async def test_ipv4_splitter(page: Page) -> None:
     await page.fill("#mask", "24")
     await submit_form(page, "#panel-ipv4 form")
 
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='split']")
     await page.fill("input[name='split_prefix']", "/26")
     await submit_form(page, ".splitter-form")
 
@@ -412,6 +413,7 @@ async def test_ipv4_splitter(page: Page) -> None:
     await page.fill("#ip",   "10.0.0.0")
     await page.fill("#mask", "24")
     await submit_form(page, "#panel-ipv4 form")
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='split']")
     await page.fill("input[name='split_prefix']", "/24")
     await submit_form(page, ".splitter-form")
     err = await page.text_content(".error")
@@ -514,6 +516,7 @@ async def test_ipv6_splitter(page: Page) -> None:
     await page.fill("#prefix", "32")
     await submit_form(page, "#panel-ipv6 form")
 
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='split6']")
     await page.fill("input[name='split_prefix6']", "/33")
     await submit_form(page, ".splitter-form")
 
@@ -712,6 +715,7 @@ async def test_overlap_checker(page: Page) -> None:
     await page.click("#tab-vlsm")
 
     # No overlap
+    await page.click("#panel-vlsm .tool-trigger[data-tool='overlap']")
     await page.fill("input[name='overlap_cidr_a']", "10.0.0.0/24")
     await page.fill("input[name='overlap_cidr_b']", "10.0.1.0/24")
     await submit_form(page, ".overlap-form")
@@ -721,6 +725,7 @@ async def test_overlap_checker(page: Page) -> None:
     # a contains b
     await navigate(page, APP_URL)
     await page.click("#tab-vlsm")
+    await page.click("#panel-vlsm .tool-trigger[data-tool='overlap']")
     await page.fill("input[name='overlap_cidr_a']", "10.0.0.0/23")
     await page.fill("input[name='overlap_cidr_b']", "10.0.0.0/24")
     await submit_form(page, ".overlap-form")
@@ -730,6 +735,7 @@ async def test_overlap_checker(page: Page) -> None:
     # Identical
     await navigate(page, APP_URL)
     await page.click("#tab-vlsm")
+    await page.click("#panel-vlsm .tool-trigger[data-tool='overlap']")
     await page.fill("input[name='overlap_cidr_a']", "192.168.0.0/24")
     await page.fill("input[name='overlap_cidr_b']", "192.168.0.0/24")
     await submit_form(page, ".overlap-form")
@@ -770,6 +776,7 @@ async def test_splitter_copy_buttons(page: Page) -> None:
     await page.fill("#ip",   "192.168.0.0")
     await page.fill("#mask", "24")
     await submit_form(page, "#panel-ipv4 form")
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='split']")
     await page.fill("input[name='split_prefix']", "/26")
     await submit_form(page, ".splitter-form")
 
@@ -788,6 +795,7 @@ async def test_splitter_shareable_url(page: Page) -> None:
     await page.fill("#ip",   "10.0.0.0")
     await page.fill("#mask", "24")
     await submit_form(page, "#panel-ipv4 form")
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='split']")
     await page.fill("input[name='split_prefix']", "/26")
     await submit_form(page, ".splitter-form")
 
@@ -909,6 +917,7 @@ async def test_ascii_export(page: Page) -> None:
     await page.fill("#ip",   "10.0.0.0")
     await page.fill("#mask", "24")
     await submit_form(page, "#panel-ipv4 form")
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='split']")
     await page.fill("input[name='split_prefix']", "/25")
     await submit_form(page, ".splitter-form")
     assert_true("ASCII export button present in splitter",
@@ -973,6 +982,7 @@ async def test_ipv4_copy_all(page: Page) -> None:
     await page.fill("#ip",   "192.168.0.0")
     await page.fill("#mask", "24")
     await submit_form(page, "#panel-ipv4 form")
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='split']")
     await page.fill("input[name='split_prefix']", "/26")
     await submit_form(page, ".splitter-form")
     assert_true("Copy All button present in IPv4 split list",
@@ -987,6 +997,7 @@ async def test_ipv6_copy_all(page: Page) -> None:
     await page.fill("#ipv6",   "2001:db8::")
     await page.fill("#prefix", "32")
     await submit_form(page, "#panel-ipv6 form")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='split6']")
     await page.fill("input[name='split_prefix6']", "/34")
     await submit_form(page, ".splitter-form")
     assert_true("Copy All button present in IPv6 split list",
@@ -1029,6 +1040,7 @@ async def test_ipv6_overlap(page: Page) -> None:
 
     await navigate(page, APP_URL)
     await page.click("#tab-vlsm")
+    await page.click("#panel-vlsm .tool-trigger[data-tool='overlap']")
     await page.fill("input[name='overlap_cidr_a']", "2001:db8::/32")
     await page.fill("input[name='overlap_cidr_b']", "2001:db8:1::/48")
     await submit_form(page, ".overlap-form")
@@ -1037,6 +1049,7 @@ async def test_ipv6_overlap(page: Page) -> None:
 
     await navigate(page, APP_URL)
     await page.click("#tab-vlsm")
+    await page.click("#panel-vlsm .tool-trigger[data-tool='overlap']")
     await page.fill("input[name='overlap_cidr_a']", "2001:db8::/32")
     await page.fill("input[name='overlap_cidr_b']", "2001:db9::/32")
     await submit_form(page, ".overlap-form")
@@ -1049,6 +1062,7 @@ async def test_multi_cidr_overlap(page: Page) -> None:
 
     await navigate(page, APP_URL)
     await page.click("#tab-vlsm")
+    await page.click("#panel-vlsm .tool-trigger[data-tool='multi']")
     await page.fill("textarea[name='multi_overlap_input']",
                     "10.0.0.0/23\n10.0.0.0/24\n192.168.1.0/24")
     await submit_form(page, ".multi-overlap-panel form")
@@ -1059,6 +1073,7 @@ async def test_multi_cidr_overlap(page: Page) -> None:
 
     await navigate(page, APP_URL)
     await page.click("#tab-vlsm")
+    await page.click("#panel-vlsm .tool-trigger[data-tool='multi']")
     await page.fill("textarea[name='multi_overlap_input']",
                     "10.0.0.0/24\n10.0.1.0/24\n10.0.2.0/24")
     await submit_form(page, ".multi-overlap-panel form")
@@ -1146,6 +1161,7 @@ async def test_supernet_ui(page: Page) -> None:
 
     await navigate(page, APP_URL)
     await page.click("#tab-ipv4")
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='supernet']")
 
     # Find supernet of two adjacent /24s — should be /23
     await page.fill("textarea[name='supernet_input']", "10.0.0.0/24\n10.0.1.0/24")
@@ -1158,6 +1174,7 @@ async def test_supernet_ui(page: Page) -> None:
     # Summarise routes — 3 inputs: /25 contained in /24, two /24s merge to /23
     await navigate(page, APP_URL)
     await page.click("#tab-ipv4")
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='supernet']")
     await page.fill("textarea[name='supernet_input']", "10.0.0.0/24\n10.0.0.0/25\n10.0.1.0/24")
     await page.click("button[name='supernet_action'][value='summarise']")
     await page.wait_for_load_state("load")
@@ -1172,6 +1189,7 @@ async def test_supernet_ui(page: Page) -> None:
     # Error case
     await navigate(page, APP_URL)
     await page.click("#tab-ipv4")
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='supernet']")
     await page.fill("textarea[name='supernet_input']", "not-a-cidr")
     await page.click("button[name='supernet_action'][value='find']")
     await page.wait_for_load_state("load")
@@ -1188,6 +1206,7 @@ async def test_ula_generator_ui(page: Page) -> None:
 
     await navigate(page, APP_URL)
     await page.click("#tab-ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='ula']")
 
     # Generate with random global ID
     await page.click("button[name='ula_generate']")
@@ -1213,6 +1232,7 @@ async def test_ula_generator_ui(page: Page) -> None:
     # Fixed global ID is deterministic
     await navigate(page, APP_URL)
     await page.click("#tab-ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='ula']")
     await page.fill("#ula_global_id", "aabbccddee")
     await page.click("button[name='ula_generate']")
     await page.wait_for_load_state("load")
@@ -1220,6 +1240,7 @@ async def test_ula_generator_ui(page: Page) -> None:
 
     await navigate(page, APP_URL)
     await page.click("#tab-ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='ula']")
     await page.fill("#ula_global_id", "aabbccddee")
     await page.click("button[name='ula_generate']")
     await page.wait_for_load_state("load")
@@ -1230,6 +1251,7 @@ async def test_ula_generator_ui(page: Page) -> None:
     # Invalid global ID shows error
     await navigate(page, APP_URL)
     await page.click("#tab-ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='ula']")
     await page.fill("#ula_global_id", "ZZZZ")
     await page.click("button[name='ula_generate']")
     await page.wait_for_load_state("load")
@@ -1851,6 +1873,7 @@ async def test_ipv6_address_forms(page: Page) -> None:
 async def test_ipv4_range_to_cidr(page: Page) -> None:
     section("IPv4 Range → CIDR UI")
     await navigate(page, APP_URL)
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='range']")
     # Fill start and end into the Range → CIDR panel
     await page.fill("input[name='range_start']", "10.0.0.0")
     await page.fill("input[name='range_end']",   "10.0.0.255")
@@ -1865,6 +1888,7 @@ async def test_ipv4_range_to_cidr(page: Page) -> None:
     )
     # Non-power-of-two range: two blocks expected
     await navigate(page, APP_URL)
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='range']")
     await page.fill("input[name='range_start']", "10.0.0.0")
     await page.fill("input[name='range_end']",   "10.0.0.4")
     await page.click("button.splitter-btn[type='submit']:near(input[name='range_end'])")
@@ -1882,6 +1906,7 @@ async def test_ipv4_range_to_cidr(page: Page) -> None:
     )
     # Error case: end < start
     await navigate(page, APP_URL)
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='range']")
     await page.fill("input[name='range_start']", "10.0.0.10")
     await page.fill("input[name='range_end']",   "10.0.0.1")
     await page.click("button.splitter-btn[type='submit']:near(input[name='range_end'])")
@@ -1902,6 +1927,7 @@ async def test_tree_view(page: Page) -> None:
     section("Subnet allocation tree view UI")
     # Full allocation — both /25s, no gaps
     await navigate(page, APP_URL)
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='tree']")
     await page.fill("#tree_parent", "10.0.0.0/24")
     await page.fill("textarea[name='tree_children']", "10.0.0.0/25\n10.0.0.128/25")
     await page.click("button.splitter-btn[type='submit']:near(textarea[name='tree_children'])")
@@ -1919,6 +1945,7 @@ async def test_tree_view(page: Page) -> None:
     )
     # Partial allocation — only one /25; the other /25 should appear as a gap
     await navigate(page, APP_URL)
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='tree']")
     await page.fill("#tree_parent", "10.0.0.0/24")
     await page.fill("textarea[name='tree_children']", "10.0.0.0/25")
     await page.click("button.splitter-btn[type='submit']:near(textarea[name='tree_children'])")
@@ -1931,6 +1958,7 @@ async def test_tree_view(page: Page) -> None:
     )
     # Invalid parent → error
     await navigate(page, APP_URL)
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='tree']")
     await page.fill("#tree_parent", "not-a-cidr")
     await page.fill("textarea[name='tree_children']", "10.0.0.0/25")
     await page.click("button.splitter-btn[type='submit']:near(textarea[name='tree_children'])")
@@ -2205,6 +2233,7 @@ async def test_csp_inline_style_violations(page: Page) -> None:
 
         # Overlap panel
         await page.click("#tab-vlsm")
+        await page.click("#panel-vlsm .tool-trigger[data-tool='overlap']")
         await page.fill("input[name='overlap_cidr_a']", "10.0.0.0/24")
         await page.fill("input[name='overlap_cidr_b']", "10.0.0.128/25")
         await submit_form(page, ".overlap-form")
