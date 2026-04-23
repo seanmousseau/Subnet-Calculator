@@ -35,7 +35,7 @@ The calculator detects when it is inside an iframe and:
 ```html
 <script>
 window.addEventListener('message', function (e) {
-  if (e.data && e.data.type === 'sc-height') {
+  if (e.data && e.data.type === 'sc-resize') {
     document.getElementById('calc-frame').style.height = e.data.height + 'px';
   }
 });
