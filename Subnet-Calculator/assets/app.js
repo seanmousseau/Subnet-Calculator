@@ -444,6 +444,140 @@ if (window.self !== window.top) {
     });
 }
 
+// ── Tool Drawer ────────────────────────────────────────────────────────────
+const toolDrawer = {
+    _activeTrigger: null,
+
+    init() {
+        document.documentElement.classList.add('js-enabled');
+
+        // Hide all tool panels on init (no-JS users see them stacked without this)
+        document.querySelectorAll('.tool-panel').forEach(p => { p.hidden = true; });
+
+        // Toolbar button clicks
+        document.querySelectorAll('.tool-trigger').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const panel  = btn.closest('.panel');
+                const drawer = panel.querySelector('.tool-drawer');
+                const toolId = btn.dataset.tool;
+                if (drawer.classList.contains('open') && btn.getAttribute('aria-expanded') === 'true') {
+                    this.close(drawer, btn);
+                } else if (drawer.classList.contains('open')) {
+                    this.swap(drawer, panel, toolId, btn);
+                } else {
+                    this.open(drawer, panel, toolId, btn);
+                }
+            });
+        });
+
+        // × close button
+        document.querySelectorAll('.tool-drawer-close').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const drawer     = btn.closest('.tool-drawer');
+                const activeBtn  = drawer.closest('.panel').querySelector('.tool-trigger[aria-expanded="true"]');
+                this.close(drawer, activeBtn);
+            });
+        });
+
+        // Escape key closes open drawer in the active panel
+        document.addEventListener('keydown', e => {
+            if (e.key !== 'Escape') return;
+            const openDrawer = document.querySelector('.panel.active .tool-drawer.open');
+            if (!openDrawer) return;
+            const activeBtn = openDrawer.closest('.panel').querySelector('.tool-trigger[aria-expanded="true"]');
+            this.close(openDrawer, activeBtn);
+        });
+
+        // Tab switch: close any open drawer in the panel being left
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tool-drawer.open').forEach(drawer => {
+                    const panel = drawer.closest('.panel');
+                    drawer.classList.remove('open');
+                    panel.querySelectorAll('.tool-trigger').forEach(t => {
+                        t.setAttribute('aria-expanded', 'false');
+                        t.classList.remove('active');
+                    });
+                    drawer.querySelectorAll('.tool-panel').forEach(p => { p.hidden = true; });
+                });
+            });
+        });
+
+        // Auto-open from PHP data-open-tool on page load
+        const activePanel = document.querySelector('.panel.active');
+        if (activePanel) {
+            const toolbar = activePanel.querySelector('.tool-toolbar[data-open-tool]');
+            if (toolbar) {
+                const toolId  = toolbar.dataset.openTool;
+                const trigger = toolbar.querySelector(`.tool-trigger[data-tool="${toolId}"]`);
+                const drawer  = activePanel.querySelector('.tool-drawer');
+                if (trigger && drawer) this.open(drawer, activePanel, toolId, trigger);
+            }
+        }
+    },
+
+    open(drawer, panel, toolId, trigger) {
+        drawer.querySelectorAll('.tool-panel').forEach(p => { p.hidden = true; });
+        const target = drawer.querySelector(`.tool-panel[data-tool="${toolId}"]`);
+        if (!target) return;
+        target.hidden = false;
+
+        const titleEl = drawer.querySelector('.tool-drawer-title');
+        if (titleEl) titleEl.textContent = trigger.textContent.trim();
+
+        panel.querySelectorAll('.tool-trigger').forEach(t => {
+            t.setAttribute('aria-expanded', 'false');
+            t.classList.remove('active');
+        });
+        trigger.setAttribute('aria-expanded', 'true');
+        trigger.classList.add('active');
+
+        drawer.classList.add('open');
+        this._activeTrigger = trigger;
+
+        const first = target.querySelector('input, button, textarea, select, [tabindex]:not([tabindex="-1"])');
+        if (first) first.focus();
+    },
+
+    close(drawer, trigger) {
+        drawer.classList.remove('open');
+        const panel = drawer.closest('.panel');
+        panel.querySelectorAll('.tool-trigger').forEach(t => {
+            t.setAttribute('aria-expanded', 'false');
+            t.classList.remove('active');
+        });
+        drawer.querySelectorAll('.tool-panel').forEach(p => { p.hidden = true; });
+        if (this._activeTrigger) {
+            this._activeTrigger.focus();
+            this._activeTrigger = null;
+        } else if (trigger) {
+            trigger.focus();
+        }
+    },
+
+    swap(drawer, panel, toolId, trigger) {
+        drawer.querySelectorAll('.tool-panel').forEach(p => { p.hidden = true; });
+        const target = drawer.querySelector(`.tool-panel[data-tool="${toolId}"]`);
+        if (target) target.hidden = false;
+
+        const titleEl = drawer.querySelector('.tool-drawer-title');
+        if (titleEl) titleEl.textContent = trigger.textContent.trim();
+
+        panel.querySelectorAll('.tool-trigger').forEach(t => {
+            t.setAttribute('aria-expanded', 'false');
+            t.classList.remove('active');
+        });
+        trigger.setAttribute('aria-expanded', 'true');
+        trigger.classList.add('active');
+
+        this._activeTrigger = trigger;
+        const first = target ? target.querySelector('input, button, textarea, select, [tabindex]:not([tabindex="-1"])') : null;
+        if (first) first.focus();
+    }
+};
+
+toolDrawer.init();
+
 // ── Service Worker registration ───────────────────────────────────────────
 if (window.self === window.top && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
