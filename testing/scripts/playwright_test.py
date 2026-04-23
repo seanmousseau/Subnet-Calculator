@@ -1279,6 +1279,119 @@ async def test_tooltips_help_bubbles(page: Page) -> None:
                 await ipv6_bubble.count() > 0)
 
 
+# ── Tool Drawer ───────────────────────────────────────────────────────────────
+
+async def test_tool_drawer_toolbar_renders(page: Page) -> None:
+    section("Tool Drawer: toolbar renders after IPv4 calculate")
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "192.168.1.0")
+    await page.fill("#mask", "/24")
+    await page.click("button[type=submit]")
+    await page.wait_for_selector(".tool-toolbar")
+    toolbar = page.locator(".tool-toolbar")
+    assert_true("toolbar visible after calculate", await toolbar.is_visible())
+    assert_true("split trigger present",     await toolbar.locator(".tool-trigger[data-tool='split']").count() == 1)
+    assert_true("supernet trigger present",  await toolbar.locator(".tool-trigger[data-tool='supernet']").count() == 1)
+    assert_true("range trigger present",     await toolbar.locator(".tool-trigger[data-tool='range']").count() == 1)
+    assert_true("tree trigger present",      await toolbar.locator(".tool-trigger[data-tool='tree']").count() == 1)
+
+
+async def test_tool_drawer_click_split_opens(page: Page) -> None:
+    section("Tool Drawer: click Split opens drawer")
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "10.0.0.0")
+    await page.fill("#mask", "/24")
+    await page.click("button[type=submit]")
+    await page.wait_for_selector(".tool-toolbar")
+    await page.click(".tool-trigger[data-tool='split']")
+    await page.wait_for_selector(".tool-drawer.open")
+    assert_true("drawer visible after split click",     await page.locator(".tool-drawer.open").is_visible())
+    assert_eq("split trigger aria-expanded=true",
+              await page.locator(".tool-trigger[data-tool='split']").get_attribute("aria-expanded"), "true")
+    assert_true("split panel visible inside drawer",    await page.locator(".tool-panel[data-tool='split']").is_visible())
+
+
+async def test_tool_drawer_auto_reopens_after_submit(page: Page) -> None:
+    section("Tool Drawer: auto-reopens after Split form submit")
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "10.0.0.0")
+    await page.fill("#mask", "/24")
+    await page.click("button[type=submit]")
+    await page.wait_for_selector(".tool-toolbar")
+    await page.click(".tool-trigger[data-tool='split']")
+    await page.fill("input[name='split_prefix']", "/25")
+    await page.click(".splitter-btn")
+    await page.wait_for_selector(".tool-drawer.open")
+    assert_true("drawer auto-reopens after split submit",    await page.locator(".tool-drawer.open").is_visible())
+    assert_true("split results present in drawer",           await page.locator(".split-item").count() > 0)
+
+
+async def test_tool_drawer_escape_closes(page: Page) -> None:
+    section("Tool Drawer: Escape closes drawer, focus returns to trigger")
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "10.0.0.0")
+    await page.fill("#mask", "/24")
+    await page.click("button[type=submit]")
+    await page.wait_for_selector(".tool-toolbar")
+    await page.locator(".tool-trigger[data-tool='split']").click()
+    await page.wait_for_selector(".tool-drawer.open")
+    await page.keyboard.press("Escape")
+    await page.wait_for_selector(".tool-drawer:not(.open)")
+    assert_true("drawer closed after Escape",
+                not await page.locator(".tool-drawer.open").is_visible())
+    focused_tool = await page.evaluate("document.activeElement?.dataset?.tool ?? ''")
+    assert_eq("focus returned to split trigger", focused_tool, "split")
+
+
+async def test_tool_drawer_close_button(page: Page) -> None:
+    section("Tool Drawer: x button closes drawer")
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "10.0.0.0")
+    await page.fill("#mask", "/24")
+    await page.click("button[type=submit]")
+    await page.wait_for_selector(".tool-toolbar")
+    await page.click(".tool-trigger[data-tool='supernet']")
+    await page.wait_for_selector(".tool-drawer.open")
+    await page.click(".tool-drawer-close")
+    await page.wait_for_selector(".tool-drawer:not(.open)")
+    assert_true("drawer closed after x click",
+                not await page.locator(".tool-drawer.open").is_visible())
+
+
+async def test_tool_drawer_toggle_closed(page: Page) -> None:
+    section("Tool Drawer: clicking same trigger twice toggles closed")
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "10.0.0.0")
+    await page.fill("#mask", "/24")
+    await page.click("button[type=submit]")
+    await page.wait_for_selector(".tool-toolbar")
+    await page.click(".tool-trigger[data-tool='range']")
+    await page.wait_for_selector(".tool-drawer.open")
+    await page.click(".tool-trigger[data-tool='range']")
+    await page.wait_for_selector(".tool-drawer:not(.open)")
+    assert_true("drawer toggled closed by second click",
+                not await page.locator(".tool-drawer.open").is_visible())
+
+
+async def test_tool_drawer_switch_tools(page: Page) -> None:
+    section("Tool Drawer: switching tools swaps content without close")
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "10.0.0.0")
+    await page.fill("#mask", "/24")
+    await page.click("button[type=submit]")
+    await page.wait_for_selector(".tool-toolbar")
+    await page.click(".tool-trigger[data-tool='split']")
+    await page.wait_for_selector(".tool-drawer.open")
+    await page.click(".tool-trigger[data-tool='tree']")
+    assert_true("drawer stays open on tool switch",     await page.locator(".tool-drawer.open").is_visible())
+    assert_true("tree panel visible after switch",      await page.locator(".tool-panel[data-tool='tree']").is_visible())
+    assert_true("split panel hidden after switch",      not await page.locator(".tool-panel[data-tool='split']").is_visible())
+    assert_eq("tree trigger aria-expanded=true",
+              await page.locator(".tool-trigger[data-tool='tree']").get_attribute("aria-expanded"), "true")
+    assert_eq("split trigger aria-expanded=false",
+              await page.locator(".tool-trigger[data-tool='split']").get_attribute("aria-expanded"), "false")
+
+
 async def test_visual_regression(page: Page) -> None:
     section("Visual regression — pixel comparison against baselines")
 
@@ -2951,6 +3064,13 @@ async def main() -> None:
             await test_supernet_ui(page)
             await test_ula_generator_ui(page)
             await test_tooltips_help_bubbles(page)
+            await test_tool_drawer_toolbar_renders(page)
+            await test_tool_drawer_click_split_opens(page)
+            await test_tool_drawer_auto_reopens_after_submit(page)
+            await test_tool_drawer_escape_closes(page)
+            await test_tool_drawer_close_button(page)
+            await test_tool_drawer_toggle_closed(page)
+            await test_tool_drawer_switch_tools(page)
             await test_visual_regression(page)
             await test_docs_footer_link(page)
             await test_api_meta(page)
