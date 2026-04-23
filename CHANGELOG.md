@@ -362,7 +362,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - iframe mode flag (`$iframe_mode`) with automatic `postMessage` height reporting via `ResizeObserver` — closes #37
-- External config consolidation: moved `$default_tab` and `$split_max_subnets` into the config section at the top of `index.php` so all operator-tunable values are in one place — closes #35
+- External config consolidation: moved `$default_tab` and `$split_max_subnets` into the configuration defaults section of `includes/config.php` so all operator-tunable values are in one place — closes #35
 
 ### Changed
 - `$fixed_bg_color` default changed from `null` to the string `'null'` to prevent operator configuration errors like missing quotes around hex values; validation logic treats both `'null'` and empty string as no-op — closes #36

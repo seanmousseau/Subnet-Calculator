@@ -162,8 +162,10 @@ A lightweight PHP wrapper is bundled at `clients/php/SubnetCalculatorClient.php`
 
 ```php
 require 'SubnetCalculatorClient.php';
+use SubnetCalculator\SubnetCalculatorClient;
+
 $client = new SubnetCalculatorClient('https://example.com/subnet-calculator/');
-$result = $client->ipv4('192.168.1.0/24');
+$result = $client->calcIpv4('192.168.1.0/24');
 echo $result['data']['network_cidr'];
 ```
 

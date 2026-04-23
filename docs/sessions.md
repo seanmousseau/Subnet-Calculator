@@ -31,7 +31,7 @@ Set `$session_enabled = false` in `config.php` to hide the session controls and 
 
 Sessions can also be created and retrieved programmatically:
 
-- `POST /api/v1/sessions` — save a payload, receive an 8-char ID
-- `GET /api/v1/sessions/:id` — retrieve a session by ID
+- `POST /api/v1/sessions` — save a payload, receive an 8-hex-char ID
+- `GET /api/v1/sessions/:id` — retrieve a session by its 8-hex-char ID
 
 See [REST API](api.md#post-apiv1sessions) for curl examples.

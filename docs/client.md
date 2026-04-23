@@ -64,7 +64,7 @@ try {
 
 ## Authentication
 
-If your self-hosted instance requires a Bearer token, extend the client and override `request()` to inject the `Authorization` header:
+If your self-hosted instance has `$api_tokens` configured, subclass the client and override `request()` with a complete curl implementation that injects the `Authorization` header. Calling `parent::request()` alone is not sufficient because the headers array is built inside that method and cannot be modified from a subclass.
 
 ```php
 use SubnetCalculator\SubnetCalculatorClient;
@@ -78,13 +78,36 @@ class AuthenticatedClient extends SubnetCalculatorClient
 
     protected function request(string $method, string $path, ?array $body): array
     {
-        // Inject the token before the parent sends the request.
-        // This hook point is available because request() is declared protected.
-        // For a simpler approach, set an Authorization header via a custom curlopt
-        // by overriding this method fully.
-        return parent::request($method, $path, $body);
+        $json    = $body !== null ? json_encode($body, JSON_THROW_ON_ERROR) : null;
+        $ch      = curl_init($this->baseUrl . $path);
+        $headers = ['Accept: application/json', 'Authorization: Bearer ' . $this->token];
+        if ($json !== null) {
+            $headers[] = 'Content-Type: application/json';
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
+        }
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => ($method === 'POST'),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_FAILONERROR    => false,
+        ]);
+        $raw    = curl_exec($ch);
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($raw === false) {
+            throw new \RuntimeException('cURL error');
+        }
+        $data = json_decode($raw, true);
+        if (!is_array($data) || !($data['ok'] ?? false)) {
+            throw new \RuntimeException($data['error'] ?? "HTTP $status");
+        }
+        return $data;
     }
 }
+
+$client = new AuthenticatedClient('https://example.com/subnet-calculator/', 'your-token');
+$result = $client->calcIpv4('10.0.0.0/24');
 ```
 
 For the public API at `subnetcalculator.app` no token is required.

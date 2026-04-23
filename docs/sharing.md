@@ -48,16 +48,16 @@ window.addEventListener('message', function (e) {
 After the iframe has loaded, send a `sc-set-bg` postMessage to change the calculator's background colour without reloading:
 
 ```js
-// Set a custom background colour — send only after the iframe's load event
 scFrame.addEventListener('load', function () {
+  // Set a custom background — must be sent after load
   scFrame.contentWindow.postMessage({ type: 'sc-set-bg', color: '#f0f4f8' }, '*');
-});
 
-// Reset to the default background (remove override)
-scFrame.contentWindow.postMessage({ type: 'sc-set-bg', color: null }, '*');
+  // Reset to the default background (remove override)
+  scFrame.contentWindow.postMessage({ type: 'sc-set-bg', color: null }, '*');
+});
 ```
 
-The `color` value accepts any valid CSS colour string. Messages sent before the iframe `load` event fires are silently ignored because the calculator's listener is not yet running.
+The `color` value must be a hex CSS colour: `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA`. Other formats (named colours, `rgb()`, `hsl()`) are not accepted and will reset the background to the default instead. Pass `null` to remove a previously set override. Messages sent before the iframe `load` event fires are silently ignored because the calculator's listener is not yet running.
 
 ### Frame-ancestors policy
 

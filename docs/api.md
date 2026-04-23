@@ -159,12 +159,12 @@ curl -X POST https://example.com/subnet-calculator/api/v1/tree \
 
 ### POST /api/v1/bulk
 
-Run multiple operations in a single request (up to 50).
+Run multiple subnet calculations in a single request (up to 50 CIDRs). Pass a `cidrs` array and an optional `type` (`auto`, `ipv4`, or `ipv6`; defaults to `auto`).
 
 ```bash
 curl -X POST https://example.com/subnet-calculator/api/v1/bulk \
   -H 'Content-Type: application/json' \
-  -d '{"requests":[{"method":"POST","path":"/ipv4","body":{"ip":"10.0.0.0/8"}}]}'
+  -d '{"cidrs":["10.0.0.0/24","2001:db8::/32"],"type":"auto"}'
 ```
 
 ### POST /api/v1/sessions
