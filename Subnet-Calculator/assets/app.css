@@ -93,6 +93,8 @@
             padding: 2rem;
             width: 100%;
             max-width: 560px;
+            position: relative;
+            overflow-x: clip;
         }
 
         .title-row {
@@ -998,3 +1000,120 @@
             min-height: 0;
             align-items: flex-start;
         }
+
+/* ── Tool Toolbar ─────────────────────────────────────────────────────────── */
+.tool-toolbar {
+    display: none;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border);
+}
+.js-enabled .tool-toolbar { display: flex; }
+
+.tool-trigger {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-subtle);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.4rem 0.7rem;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+.tool-trigger:hover { background: var(--color-border); color: var(--color-text); }
+.tool-trigger.active,
+.tool-trigger[aria-expanded="true"] {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: #fff;
+}
+.tool-trigger:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+/* ── Tool Drawer ──────────────────────────────────────────────────────────── */
+/* No-JS: sub-tools render stacked inline (drawer is normal block flow) */
+.tool-drawer { display: block; }
+
+/* JS: convert to slide-in panel */
+.js-enabled .tool-drawer {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 340px;
+    background: var(--color-surface);
+    border-left: 1px solid var(--color-border);
+    border-radius: 0 12px 12px 0;
+    overflow-y: auto;
+    transform: translateX(100%);
+    transition: transform 200ms ease;
+    z-index: 10;
+}
+.js-enabled .tool-drawer.open { transform: translateX(0); }
+
+/* Bottom sheet on narrow viewports */
+@media (width <= 480px) {
+    .js-enabled .tool-drawer {
+        top: auto;
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: 60vh;
+        border-left: none;
+        border-top: 1px solid var(--color-border);
+        border-radius: 12px 12px 0 0;
+        transform: translateY(100%);
+    }
+    .js-enabled .tool-drawer.open { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .js-enabled .tool-drawer { transition: none; }
+}
+
+.tool-drawer-header {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.65rem 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-input-bg);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.js-enabled .tool-drawer-header { display: flex; }
+
+.tool-drawer-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+}
+
+.tool-drawer-close {
+    background: none;
+    border: none;
+    color: var(--color-text-faint);
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+}
+.tool-drawer-close:hover { color: var(--color-text); background: var(--color-border); }
+.tool-drawer-close:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+/* No-JS: show all panels; JS: only show un-hidden panels */
+.tool-panel { display: block; }
+.js-enabled .tool-panel[hidden] { display: none; }
