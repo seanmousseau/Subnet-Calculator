@@ -450,9 +450,7 @@ const toolDrawer = {
 
     init() {
         document.documentElement.classList.add('js-enabled');
-
-        // Hide all tool panels on init (no-JS users see them stacked without this)
-        document.querySelectorAll('.tool-panel').forEach(p => { p.hidden = true; });
+        // CSS (.js-enabled .tool-panel { display: none }) hides all panels once js-enabled is set.
 
         // Toolbar button clicks
         document.querySelectorAll('.tool-trigger').forEach(btn => {
@@ -499,7 +497,7 @@ const toolDrawer = {
                         t.setAttribute('aria-expanded', 'false');
                         t.classList.remove('active');
                     });
-                    drawer.querySelectorAll('.tool-panel').forEach(p => { p.hidden = true; });
+                    drawer.querySelectorAll('.tool-panel').forEach(p => p.classList.remove('active'));
                     this._activeTrigger = null;
                 });
             });
@@ -519,10 +517,10 @@ const toolDrawer = {
     },
 
     open(drawer, panel, toolId, trigger) {
-        drawer.querySelectorAll('.tool-panel').forEach(p => { p.hidden = true; });
+        drawer.querySelectorAll('.tool-panel').forEach(p => p.classList.remove('active'));
         const target = drawer.querySelector(`.tool-panel[data-tool="${toolId}"]`);
         if (!target) return;
-        target.hidden = false;
+        target.classList.add('active');
 
         const titleEl = drawer.querySelector('.tool-drawer-title');
         if (titleEl) titleEl.textContent = trigger.textContent.trim();
@@ -548,7 +546,7 @@ const toolDrawer = {
             t.setAttribute('aria-expanded', 'false');
             t.classList.remove('active');
         });
-        drawer.querySelectorAll('.tool-panel').forEach(p => { p.hidden = true; });
+        drawer.querySelectorAll('.tool-panel').forEach(p => p.classList.remove('active'));
         if (this._activeTrigger) {
             this._activeTrigger.focus();
             this._activeTrigger = null;
@@ -558,9 +556,9 @@ const toolDrawer = {
     },
 
     swap(drawer, panel, toolId, trigger) {
-        drawer.querySelectorAll('.tool-panel').forEach(p => { p.hidden = true; });
+        drawer.querySelectorAll('.tool-panel').forEach(p => p.classList.remove('active'));
         const target = drawer.querySelector(`.tool-panel[data-tool="${toolId}"]`);
-        if (target) target.hidden = false;
+        if (target) target.classList.add('active');
 
         const titleEl = drawer.querySelector('.tool-drawer-title');
         if (titleEl) titleEl.textContent = trigger.textContent.trim();

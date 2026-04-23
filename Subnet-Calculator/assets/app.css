@@ -1114,6 +1114,7 @@
     outline-offset: 2px;
 }
 
-/* No-JS: show all panels; JS: only show un-hidden panels */
+/* No-JS: show all panels stacked; JS: hide all, show only the active panel in an open drawer */
 .tool-panel { display: block; }
-.js-enabled .tool-panel[hidden] { display: none; }
+.js-enabled .tool-panel { display: none; }
+.js-enabled .tool-drawer.open .tool-panel.active { display: block; }
