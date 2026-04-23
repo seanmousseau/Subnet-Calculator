@@ -224,7 +224,7 @@ if ($i < 3) {
         elseif ($range_result !== null || $range_error !== null) { $open_tool_ipv4 = 'range'; }
         elseif ($tree_result !== null || $tree_error !== null) { $open_tool_ipv4 = 'tree'; }
         ?>
-        <div class="tool-toolbar"<?= $open_tool_ipv4 ? ' data-open-tool="' . $open_tool_ipv4 . '"' : '' ?>>
+        <div class="tool-toolbar"<?= $open_tool_ipv4 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv4) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split" aria-expanded="false">Split Subnet</button>
             <button type="button" class="tool-trigger" data-tool="supernet" aria-expanded="false">Supernet</button>
             <button type="button" class="tool-trigger" data-tool="range" aria-expanded="false">Range&rarr;CIDR</button>
