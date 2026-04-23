@@ -556,7 +556,7 @@ const toolDrawer = {
         this._trapKeydown = this._buildTrap(drawer);
         drawer.addEventListener('keydown', this._trapKeydown);
 
-        const first = target.querySelector('input, button, textarea, select, [tabindex]:not([tabindex="-1"])');
+        const first = target.querySelector('input, button:not([aria-label="Help"]), textarea, select, [tabindex]:not([tabindex="-1"]):not([aria-label="Help"])');
         if (first) first.focus({ preventScroll: true });
     },
 
@@ -601,7 +601,7 @@ const toolDrawer = {
         this._trapKeydown = this._buildTrap(drawer);
         drawer.addEventListener('keydown', this._trapKeydown);
 
-        const first = target ? target.querySelector('input, button, textarea, select, [tabindex]:not([tabindex="-1"])') : null;
+        const first = target ? target.querySelector('input, button:not([aria-label="Help"]), textarea, select, [tabindex]:not([tabindex="-1"]):not([aria-label="Help"])') : null;
         if (first) first.focus({ preventScroll: true });
     }
 };
