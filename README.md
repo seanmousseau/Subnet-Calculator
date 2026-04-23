@@ -104,6 +104,8 @@ All tuneable values with their defaults:
 | `$api_rate_limit_rpm` | `60` | Maximum API requests per IP per minute (sliding window). `0` = disabled. |
 | `$api_rate_limit_tokens` | `[]` | Per-token RPM overrides: `['token' => rpm]`. `0` = unlimited for that token. |
 | `$api_allowed_endpoints` | `[]` | Endpoint allowlist. Empty = all endpoints available. Non-empty = only listed endpoints are accessible; unlisted endpoints return 404. The meta endpoint (`GET /api/v1/`) is always reachable regardless of this setting. |
+| `$api_request_log` | `false` | Log API requests to SQLite for analytics/abuse review. |
+| `$api_request_log_db_path` | `'data/api_requests.db'` | Path to the API request log SQLite database (relative to docroot). |
 | `$api_cors_origins` | `'*'` | `Access-Control-Allow-Origin` header value for API responses. |
 | `$session_enabled` | `false` | Enable SQLite-backed VLSM session save/restore. Requires `php-sqlite3`. |
 | `$session_db_path` | `''` | Absolute path to the SQLite database file. Leave empty to auto-place at `<docroot>/../data/sessions.sqlite`. |
@@ -124,7 +126,7 @@ All POST endpoints accept and return JSON. Responses are enveloped:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/v1/` | Endpoint list |
+| `GET` | `/api/v1/` | Returns API version and list of available endpoints |
 | `POST` | `/api/v1/ipv4` | IPv4 subnet calculation |
 | `POST` | `/api/v1/ipv6` | IPv6 subnet calculation |
 | `POST` | `/api/v1/vlsm` | VLSM allocation |
@@ -137,6 +139,8 @@ All POST endpoints accept and return JSON. Responses are enveloped:
 | `GET` | `/api/v1/sessions/{id}` | Restore VLSM session |
 | `POST` | `/api/v1/range/ipv4` | Convert an IP range to minimal CIDR list |
 | `POST` | `/api/v1/tree` | Build subnet allocation tree from parent + child CIDRs |
+| `GET` | `/api/v1/changelog` | Returns the application CHANGELOG as plain text |
+| `POST` | `/api/v1/bulk` | Run up to 50 operations in a single request |
 
 See `api/openapi.yaml` for the full OpenAPI 3.1 specification.
 
@@ -173,7 +177,7 @@ Pre-built release archives are available in `releases/`:
 Each archive contains the app files at the root level. Extract directly into your webroot to install or upgrade in place:
 
 ```bash
-tar -xzf subnet-calculator-2.7.0.tar.gz -C /var/www/html/subnet-calculator/
+tar -xzf subnet-calculator-2.8.1.tar.gz -C /var/www/html/subnet-calculator/
 ```
 
 ## Embedding
