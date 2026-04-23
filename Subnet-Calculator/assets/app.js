@@ -444,6 +444,170 @@ if (window.self !== window.top) {
     });
 }
 
+// ── Tool Drawer ────────────────────────────────────────────────────────────
+const toolDrawer = {
+    _activeTrigger: null,
+    _trapKeydown: null,
+
+    _buildTrap(drawer) {
+        return e => {
+            if (e.key !== 'Tab') return;
+            const els = Array.from(
+                drawer.querySelectorAll('input, button, textarea, select, [tabindex]:not([tabindex="-1"])')
+            ).filter(el => !el.disabled && el.offsetParent !== null);
+            if (els.length < 2) return;
+            const first = els[0], last = els[els.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault(); last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault(); first.focus();
+            }
+        };
+    },
+
+    init() {
+        document.documentElement.classList.add('js-enabled');
+        // CSS (.js-enabled .tool-panel { display: none }) hides all panels once js-enabled is set.
+
+        // Toolbar button clicks
+        document.querySelectorAll('.tool-trigger').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const panel  = btn.closest('.panel');
+                const drawer = panel?.querySelector('.tool-drawer');
+                if (!panel || !drawer) return;
+                const toolId = btn.dataset.tool;
+                if (drawer.classList.contains('open') && btn.getAttribute('aria-expanded') === 'true') {
+                    this.close(drawer, btn);
+                } else if (drawer.classList.contains('open')) {
+                    this.swap(drawer, panel, toolId, btn);
+                } else {
+                    this.open(drawer, panel, toolId, btn);
+                }
+            });
+        });
+
+        // × close button
+        document.querySelectorAll('.tool-drawer-close').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const drawer     = btn.closest('.tool-drawer');
+                const activeBtn  = drawer.closest('.panel').querySelector('.tool-trigger[aria-expanded="true"]');
+                this.close(drawer, activeBtn);
+            });
+        });
+
+        // Escape key closes open drawer in the active panel
+        document.addEventListener('keydown', e => {
+            if (e.key !== 'Escape') return;
+            const openDrawer = document.querySelector('.panel.active .tool-drawer.open');
+            if (!openDrawer) return;
+            const activeBtn = openDrawer.closest('.panel').querySelector('.tool-trigger[aria-expanded="true"]');
+            this.close(openDrawer, activeBtn);
+        });
+
+        // Tab switch: close any open drawer in the panel being left
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tool-drawer.open').forEach(drawer => {
+                    const panel = drawer.closest('.panel');
+                    drawer.classList.remove('open');
+                    panel.querySelectorAll('.tool-trigger').forEach(t => {
+                        t.setAttribute('aria-expanded', 'false');
+                        t.classList.remove('active');
+                    });
+                    drawer.querySelectorAll('.tool-panel').forEach(p => p.classList.remove('active'));
+                    this._activeTrigger = null;
+                });
+            });
+        });
+
+        // Auto-open from PHP data-open-tool on page load
+        const activePanel = document.querySelector('.panel.active');
+        if (activePanel) {
+            const toolbar = activePanel.querySelector('.tool-toolbar[data-open-tool]');
+            if (toolbar) {
+                const toolId  = toolbar.dataset.openTool;
+                const trigger = toolbar.querySelector(`.tool-trigger[data-tool="${toolId}"]`);
+                const drawer  = activePanel.querySelector('.tool-drawer');
+                if (trigger && drawer) this.open(drawer, activePanel, toolId, trigger);
+            }
+        }
+    },
+
+    open(drawer, panel, toolId, trigger) {
+        drawer.querySelectorAll('.tool-panel').forEach(p => p.classList.remove('active'));
+        const target = drawer.querySelector(`.tool-panel[data-tool="${toolId}"]`);
+        if (!target) return;
+        target.classList.add('active');
+
+        const titleEl = drawer.querySelector('.tool-drawer-title');
+        if (titleEl) titleEl.textContent = trigger.textContent.trim();
+
+        panel.querySelectorAll('.tool-trigger').forEach(t => {
+            t.setAttribute('aria-expanded', 'false');
+            t.classList.remove('active');
+        });
+        trigger.setAttribute('aria-expanded', 'true');
+        trigger.classList.add('active');
+
+        drawer.classList.add('open');
+        this._activeTrigger = trigger;
+
+        if (this._trapKeydown) drawer.removeEventListener('keydown', this._trapKeydown);
+        this._trapKeydown = this._buildTrap(drawer);
+        drawer.addEventListener('keydown', this._trapKeydown);
+
+        const first = target.querySelector('input, button, textarea, select, [tabindex]:not([tabindex="-1"])');
+        if (first) first.focus({ preventScroll: true });
+    },
+
+    close(drawer, trigger) {
+        drawer.classList.remove('open');
+        if (this._trapKeydown) {
+            drawer.removeEventListener('keydown', this._trapKeydown);
+            this._trapKeydown = null;
+        }
+        const panel = drawer.closest('.panel');
+        panel.querySelectorAll('.tool-trigger').forEach(t => {
+            t.setAttribute('aria-expanded', 'false');
+            t.classList.remove('active');
+        });
+        drawer.querySelectorAll('.tool-panel').forEach(p => p.classList.remove('active'));
+        if (this._activeTrigger) {
+            this._activeTrigger.focus();
+            this._activeTrigger = null;
+        } else if (trigger) {
+            trigger.focus();
+        }
+    },
+
+    swap(drawer, panel, toolId, trigger) {
+        drawer.querySelectorAll('.tool-panel').forEach(p => p.classList.remove('active'));
+        const target = drawer.querySelector(`.tool-panel[data-tool="${toolId}"]`);
+        if (target) target.classList.add('active');
+
+        const titleEl = drawer.querySelector('.tool-drawer-title');
+        if (titleEl) titleEl.textContent = trigger.textContent.trim();
+
+        panel.querySelectorAll('.tool-trigger').forEach(t => {
+            t.setAttribute('aria-expanded', 'false');
+            t.classList.remove('active');
+        });
+        trigger.setAttribute('aria-expanded', 'true');
+        trigger.classList.add('active');
+
+        this._activeTrigger = trigger;
+
+        if (this._trapKeydown) drawer.removeEventListener('keydown', this._trapKeydown);
+        this._trapKeydown = this._buildTrap(drawer);
+        drawer.addEventListener('keydown', this._trapKeydown);
+
+        const first = target ? target.querySelector('input, button, textarea, select, [tabindex]:not([tabindex="-1"])') : null;
+        if (first) first.focus({ preventScroll: true });
+    }
+};
+
+toolDrawer.init();
+
 // ── Service Worker registration ───────────────────────────────────────────
 if (window.self === window.top && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-04-23
+
+### Added
+- **Tool drawer** — IPv4, IPv6, and VLSM sub-tools (Split, Supernet, Range, Tree; Split6, ULA; Session, Overlap Checker, Multi-CIDR) are now tucked into a compact slide-in drawer accessed via a toolbar strip at the bottom of each tab panel. The main result area is always visible; sub-tools open on demand — closes #232 #233 #234 #235 #236
+- **Drawer focus trap** — Tab / Shift-Tab cycles within the open drawer; Escape closes it and returns focus to the trigger button
+- **Auto-reopen on form submit** — after submitting a sub-tool form (split, supernet, ULA, etc.) the page reloads and the drawer automatically reopens to the same tool with results visible; implemented via a PHP `data-open-tool` attribute on the toolbar wrapper
+- **Bottom-sheet on narrow viewports** — at `≤ 480 px` the drawer slides up from the bottom as a sheet (60 vh, `max-height: 100%`) instead of from the right
+
+### Changed
+- **Reduced visual clutter** — all sub-tool panels are hidden by default and revealed only when selected; no-JS users see them stacked as before
+
+### Tests
+- 7 new Playwright test groups covering drawer mechanics: toolbar render, click-to-open, auto-reopen after submit, Escape close, × close, toggle, and tool switching (561 assertions total)
+
 ## [2.7.0] - 2026-04-21
 
 ### Added
