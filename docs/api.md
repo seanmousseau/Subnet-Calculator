@@ -159,13 +159,34 @@ curl -X POST https://example.com/subnet-calculator/api/v1/tree \
 
 ### POST /api/v1/bulk
 
-Run multiple operations in a single request (up to 20).
+Run multiple operations in a single request (up to 50).
 
 ```bash
 curl -X POST https://example.com/subnet-calculator/api/v1/bulk \
   -H 'Content-Type: application/json' \
   -d '{"requests":[{"method":"POST","path":"/ipv4","body":{"ip":"10.0.0.0/8"}}]}'
 ```
+
+### POST /api/v1/sessions
+
+Save a VLSM session payload for later retrieval. Returns an 8-hex-char session ID. Only available when `$session_enabled = true` in `config.php`.
+
+```bash
+curl -X POST https://example.com/subnet-calculator/api/v1/sessions \
+  -H 'Content-Type: application/json' \
+  -d '{"payload":{"network":"10.0.0.0","cidr":"24","requirements":[{"name":"LAN","hosts":50}]}}'
+```
+
+Response (`201 Created`):
+
+```json
+{
+  "ok": true,
+  "data": { "id": "a1b2c3d4" }
+}
+```
+
+The session ID can then be used with `GET /api/v1/sessions/:id` to restore the session. Sessions expire after the server-configured TTL (default 30 days).
 
 ### GET /api/v1/sessions/:id
 
