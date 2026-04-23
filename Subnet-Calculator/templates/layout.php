@@ -580,7 +580,7 @@ if ($i < 3) {
                         <input type="hidden" name="ipv6" value="<?= htmlspecialchars($input_ipv6) ?>">
                         <input type="hidden" name="prefix" value="<?= htmlspecialchars($input_prefix) ?>">
                         <div class="splitter-row">
-                            <span class="splitter-label">Split into</span>
+                            <span class="splitter-label">Split into<?= help_bubble('ipv6-split', 'Enter a prefix length larger than the parent (e.g. /65 splits a /64 into two /65 subnets). The result is capped at the configured maximum.') ?></span>
                             <input type="text" name="split_prefix6" class="splitter-input"
                                    placeholder="/65" value="<?= htmlspecialchars($input_split_prefix6) ?>"
                                    autocomplete="off" spellcheck="false"
@@ -606,7 +606,7 @@ if ($i < 3) {
                                 $total6   = $split_result6['total'];
                                 $showing6 = $split_result6['showing'];
                                 $has_more6 = is_numeric($total6) ? ($showing6 < (int)$total6) : true;
-                                $more_label6 = is_numeric($total6) ? format_number((int)$total6 - $showing6) : $total6 . ' total';
+                                $more_label6 = is_numeric($total6) ? format_number((int)$total6 - $showing6) . ' more' : $total6 . ' more';
                             ?>
                             <?php if ($has_more6) : ?>
                                 <div class="split-more">+&nbsp;<?= htmlspecialchars($more_label6) ?></div>
