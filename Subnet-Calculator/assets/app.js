@@ -538,7 +538,7 @@ const toolDrawer = {
         this._activeTrigger = trigger;
 
         const first = target.querySelector('input, button, textarea, select, [tabindex]:not([tabindex="-1"])');
-        if (first) first.focus();
+        if (first) first.focus({ preventScroll: true });
     },
 
     close(drawer, trigger) {
@@ -574,7 +574,7 @@ const toolDrawer = {
 
         this._activeTrigger = trigger;
         const first = target ? target.querySelector('input, button, textarea, select, [tabindex]:not([tabindex="-1"])') : null;
-        if (first) first.focus();
+        if (first) first.focus({ preventScroll: true });
     }
 };
 
