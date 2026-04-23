@@ -783,117 +783,141 @@ if ($i < 3) {
             <?php endif; ?>
         <?php endif; ?>
 
-        <?php if ($session_enabled) : ?>
-        <!-- Session Save / Restore -->
-        <div class="overlap-panel">
-            <div class="overlap-title">Save &amp; Restore Session<?= help_bubble('vlsm-session', 'Saves your VLSM inputs to the server so you can restore them later via a short link. Sessions expire after the configured TTL. No account required.') ?></div>
-            <p class="session-ttl-notice">Saved sessions expire after <?= (int)$session_ttl_days ?> day<?= (int)$session_ttl_days === 1 ? '' : 's' ?>.</p>
-            <?php if ($session_save_id !== '') : ?>
-                <div class="overlap-result overlap-contains share-bar session-saved-bar">
-                    <span class="share-label">Session saved. Share this link:</span>
-                    <code class="share-url"><?= htmlspecialchars($share_base_server . $session_save_url) ?></code>
-                    <button type="button" class="share-copy"
-                            data-copy="<?= htmlspecialchars($session_save_url) ?>">Copy</button>
-                </div>
+        <?php
+        $open_tool_vlsm = null;
+        if ($session_save_id !== '' || $session_error !== null) { $open_tool_vlsm = 'session'; }
+        elseif ($overlap_result !== null || $overlap_error !== null) { $open_tool_vlsm = 'overlap'; }
+        elseif ($multi_overlap_result !== null || (isset($multi_overlap_error) && $multi_overlap_error !== null)) { $open_tool_vlsm = 'multi'; }
+        ?>
+        <div class="tool-toolbar"<?= $open_tool_vlsm ? ' data-open-tool="' . htmlspecialchars($open_tool_vlsm) . '"' : '' ?>>
+            <?php if ($session_enabled) : ?>
+            <button type="button" class="tool-trigger" data-tool="session" aria-expanded="false">Save Session</button>
             <?php endif; ?>
-            <?php if ($session_error) : ?>
-                <div class="error"><?= htmlspecialchars($session_error) ?></div>
-            <?php endif; ?>
-            <div class="session-forms">
-                <form method="post" novalidate>
-                    <input type="hidden" name="tab" value="vlsm">
-                    <input type="hidden" name="vlsm_network" value="<?= htmlspecialchars($vlsm_network) ?>">
-                    <input type="hidden" name="vlsm_cidr" value="<?= htmlspecialchars($vlsm_cidr_input) ?>">
-                    <?php foreach ($vlsm_requirements as $req) : ?>
-                        <input type="hidden" name="vlsm_name[]" value="<?= htmlspecialchars($req['name']) ?>">
-                        <input type="hidden" name="vlsm_hosts[]" value="<?= htmlspecialchars((string)$req['hosts']) ?>">
-                    <?php endforeach; ?>
-                    <button type="submit" name="session_action" value="save" class="splitter-btn">Save Session</button>
-                </form>
-                <form method="get" novalidate>
-                    <div class="overlap-inputs">
-                        <input type="hidden" name="tab" value="vlsm">
-                        <input type="text" name="s"
-                               value="<?= htmlspecialchars($session_load_id) ?>"
-                               placeholder="8-char session ID"
-                               autocomplete="off" spellcheck="false" maxlength="8"
-                               aria-label="Session ID">
-                        <button type="submit" class="splitter-btn">Load</button>
-                    </div>
-                </form>
+            <button type="button" class="tool-trigger" data-tool="overlap" aria-expanded="false">Overlap Check</button>
+            <button type="button" class="tool-trigger" data-tool="multi" aria-expanded="false">Multi-CIDR Overlap</button>
+        </div>
+
+        <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-vlsm">
+            <div class="tool-drawer-header">
+                <span class="tool-drawer-title" id="drawer-title-vlsm">Tool</span>
+                <button type="button" class="tool-drawer-close" aria-label="Close">&times;</button>
             </div>
-        </div>
-        <?php endif; ?>
 
-        <!-- Overlap Checker -->
-        <div class="overlap-panel">
-            <div class="overlap-title">Subnet Overlap Checker<?= help_bubble('overlap-two', 'Compares two CIDRs and reports whether they overlap, one contains the other, are identical, or have no relationship. Supports both IPv4 and IPv6.') ?></div>
-            <form method="post" class="overlap-form" novalidate>
-                <input type="hidden" name="tab" value="vlsm">
-                <div class="overlap-inputs">
-                    <input type="text" name="overlap_cidr_a"
-                           value="<?= htmlspecialchars($overlap_cidr_a) ?>"
-                           placeholder="10.0.0.0/24 or 2001:db8::/32" autocomplete="off" spellcheck="false"
-                           aria-label="First subnet CIDR">
-                    <span class="overlap-vs">vs</span>
-                    <input type="text" name="overlap_cidr_b"
-                           value="<?= htmlspecialchars($overlap_cidr_b) ?>"
-                           placeholder="10.0.0.128/25 or 2001:db8:1::/48" autocomplete="off" spellcheck="false"
-                           aria-label="Second subnet CIDR">
-                    <button type="submit" class="splitter-btn">Check</button>
+            <?php if ($session_enabled) : ?>
+            <div class="tool-panel" data-tool="session">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Save &amp; Restore Session<?= help_bubble('vlsm-session', 'Saves your VLSM inputs to the server so you can restore them later via a short link. Sessions expire after the configured TTL. No account required.') ?></div>
+                    <p class="session-ttl-notice">Saved sessions expire after <?= (int)$session_ttl_days ?> day<?= (int)$session_ttl_days === 1 ? '' : 's' ?>.</p>
+                    <?php if ($session_save_id !== '') : ?>
+                        <div class="overlap-result overlap-contains share-bar session-saved-bar">
+                            <span class="share-label">Session saved. Share this link:</span>
+                            <code class="share-url"><?= htmlspecialchars($share_base_server . $session_save_url) ?></code>
+                            <button type="button" class="share-copy"
+                                    data-copy="<?= htmlspecialchars($session_save_url) ?>">Copy</button>
+                        </div>
+                    <?php endif; ?>
+                    <?php if ($session_error) : ?>
+                        <div class="error"><?= htmlspecialchars($session_error) ?></div>
+                    <?php endif; ?>
+                    <div class="session-forms">
+                        <form method="post" novalidate>
+                            <input type="hidden" name="tab" value="vlsm">
+                            <input type="hidden" name="vlsm_network" value="<?= htmlspecialchars($vlsm_network) ?>">
+                            <input type="hidden" name="vlsm_cidr" value="<?= htmlspecialchars($vlsm_cidr_input) ?>">
+                            <?php foreach ($vlsm_requirements as $req) : ?>
+                                <input type="hidden" name="vlsm_name[]" value="<?= htmlspecialchars($req['name']) ?>">
+                                <input type="hidden" name="vlsm_hosts[]" value="<?= htmlspecialchars((string)$req['hosts']) ?>">
+                            <?php endforeach; ?>
+                            <button type="submit" name="session_action" value="save" class="splitter-btn">Save Session</button>
+                        </form>
+                        <form method="get" novalidate>
+                            <div class="overlap-inputs">
+                                <input type="hidden" name="tab" value="vlsm">
+                                <input type="text" name="s"
+                                       value="<?= htmlspecialchars($session_load_id) ?>"
+                                       placeholder="8-char session ID"
+                                       autocomplete="off" spellcheck="false" maxlength="8"
+                                       aria-label="Session ID">
+                                <button type="submit" class="splitter-btn">Load</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
-            </form>
-            <?php if ($overlap_error) : ?>
-                <div class="error"><?= htmlspecialchars($overlap_error) ?></div>
-            <?php elseif ($overlap_result !== null) : ?>
-                <?php
-                $overlap_labels = [
-                    'none'        => ['No overlap', 'overlap-none'],
-                    'identical'   => ['Identical subnets', 'overlap-identical'],
-                    'a_contains_b' => [$overlap_cidr_a . ' contains ' . $overlap_cidr_b, 'overlap-contains'],
-                    'b_contains_a' => [$overlap_cidr_b . ' contains ' . $overlap_cidr_a, 'overlap-contains'],
-                ];
-                [$label, $cls] = $overlap_labels[$overlap_result] ?? ['Unknown', ''];
-                ?>
-                <div class="overlap-result <?= htmlspecialchars($cls) ?>"><?= htmlspecialchars($label) ?></div>
+            </div>
             <?php endif; ?>
-        </div>
 
-        <!-- Multi-CIDR Overlap Checker -->
-        <div class="overlap-panel multi-overlap-panel">
-            <div class="overlap-title">Multi-CIDR Overlap Check<?= help_bubble('multi-cidr', 'Enter up to 50 IPv4 or IPv6 CIDRs, one per line. The tool reports any pairs that overlap, are identical, or where one contains the other.') ?></div>
-            <form method="post" class="overlap-form" novalidate>
-                <input type="hidden" name="tab" value="vlsm">
-                <textarea name="multi_overlap_input" class="multi-overlap-input"
-                          placeholder="One CIDR per line (max 50):&#10;10.0.0.0/24&#10;10.0.0.128/25&#10;192.168.1.0/24"
-                          rows="4" autocomplete="off" spellcheck="false"><?= htmlspecialchars($multi_overlap_input) ?></textarea>
-                <button type="submit" class="splitter-btn">Check</button>
-            </form>
-            <?php if ($multi_overlap_error) : ?>
-                <div class="error"><?= htmlspecialchars($multi_overlap_error) ?></div>
-            <?php elseif ($multi_overlap_result !== null) : ?>
-                <?php if (count($multi_overlap_result) === 0) : ?>
-                    <div class="overlap-result overlap-none">No overlaps detected.</div>
-                <?php else : ?>
-                    <ul class="multi-overlap-list">
-                        <?php foreach ($multi_overlap_result as $conflict) :
-                            if ($conflict['relation'] === 'identical') {
-                                $rel_label = 'Identical';
-                            } elseif ($conflict['relation'] === 'a_contains_b') {
-                                $rel_label = $conflict['a'] . ' contains ' . $conflict['b'];
-                            } elseif ($conflict['relation'] === 'b_contains_a') {
-                                $rel_label = $conflict['b'] . ' contains ' . $conflict['a'];
-                            } else {
-                                $rel_label = 'Overlap';
-                            }
-                            ?>
-                        <li class="overlap-contains">
-                            <code><?= htmlspecialchars($conflict['a']) ?></code> / <code><?= htmlspecialchars($conflict['b']) ?></code>: <?= htmlspecialchars($rel_label) ?>
-                        </li>
-                        <?php endforeach; ?>
-                    </ul>
-                <?php endif; ?>
-            <?php endif; ?>
+            <div class="tool-panel" data-tool="overlap">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Subnet Overlap Checker<?= help_bubble('overlap-two', 'Compares two CIDRs and reports whether they overlap, one contains the other, are identical, or have no relationship. Supports both IPv4 and IPv6.') ?></div>
+                    <form method="post" class="overlap-form" novalidate>
+                        <input type="hidden" name="tab" value="vlsm">
+                        <div class="overlap-inputs">
+                            <input type="text" name="overlap_cidr_a"
+                                   value="<?= htmlspecialchars($overlap_cidr_a) ?>"
+                                   placeholder="10.0.0.0/24 or 2001:db8::/32" autocomplete="off" spellcheck="false"
+                                   aria-label="First subnet CIDR">
+                            <span class="overlap-vs">vs</span>
+                            <input type="text" name="overlap_cidr_b"
+                                   value="<?= htmlspecialchars($overlap_cidr_b) ?>"
+                                   placeholder="10.0.0.128/25 or 2001:db8:1::/48" autocomplete="off" spellcheck="false"
+                                   aria-label="Second subnet CIDR">
+                            <button type="submit" class="splitter-btn">Check</button>
+                        </div>
+                    </form>
+                    <?php if ($overlap_error) : ?>
+                        <div class="error"><?= htmlspecialchars($overlap_error) ?></div>
+                    <?php elseif ($overlap_result !== null) : ?>
+                        <?php
+                        $overlap_labels = [
+                            'none'         => ['No overlap', 'overlap-none'],
+                            'identical'    => ['Identical subnets', 'overlap-identical'],
+                            'a_contains_b' => [$overlap_cidr_a . ' contains ' . $overlap_cidr_b, 'overlap-contains'],
+                            'b_contains_a' => [$overlap_cidr_b . ' contains ' . $overlap_cidr_a, 'overlap-contains'],
+                        ];
+                        [$label, $cls] = $overlap_labels[$overlap_result] ?? ['Unknown', ''];
+                        ?>
+                        <div class="overlap-result <?= htmlspecialchars($cls) ?>"><?= htmlspecialchars($label) ?></div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="multi">
+                <div class="overlap-panel multi-overlap-panel">
+                    <div class="overlap-title">Multi-CIDR Overlap Check<?= help_bubble('multi-cidr', 'Enter up to 50 IPv4 or IPv6 CIDRs, one per line. The tool reports any pairs that overlap, are identical, or where one contains the other.') ?></div>
+                    <form method="post" class="overlap-form" novalidate>
+                        <input type="hidden" name="tab" value="vlsm">
+                        <textarea name="multi_overlap_input" class="multi-overlap-input"
+                                  placeholder="One CIDR per line (max 50):&#10;10.0.0.0/24&#10;10.0.0.128/25&#10;192.168.1.0/24"
+                                  rows="4" autocomplete="off" spellcheck="false"><?= htmlspecialchars($multi_overlap_input) ?></textarea>
+                        <button type="submit" class="splitter-btn">Check</button>
+                    </form>
+                    <?php if ($multi_overlap_error) : ?>
+                        <div class="error"><?= htmlspecialchars($multi_overlap_error) ?></div>
+                    <?php elseif ($multi_overlap_result !== null) : ?>
+                        <?php if (count($multi_overlap_result) === 0) : ?>
+                            <div class="overlap-result overlap-none">No overlaps detected.</div>
+                        <?php else : ?>
+                            <ul class="multi-overlap-list">
+                                <?php foreach ($multi_overlap_result as $conflict) :
+                                    if ($conflict['relation'] === 'identical') {
+                                        $rel_label = 'Identical';
+                                    } elseif ($conflict['relation'] === 'a_contains_b') {
+                                        $rel_label = $conflict['a'] . ' contains ' . $conflict['b'];
+                                    } elseif ($conflict['relation'] === 'b_contains_a') {
+                                        $rel_label = $conflict['b'] . ' contains ' . $conflict['a'];
+                                    } else {
+                                        $rel_label = 'Overlap';
+                                    }
+                                    ?>
+                                <li class="overlap-contains">
+                                    <code><?= htmlspecialchars($conflict['a']) ?></code> / <code><?= htmlspecialchars($conflict['b']) ?></code>: <?= htmlspecialchars($rel_label) ?>
+                                </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
     </div>
 
