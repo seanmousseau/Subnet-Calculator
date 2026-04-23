@@ -787,7 +787,7 @@ if ($i < 3) {
         $open_tool_vlsm = null;
         if ($session_save_id !== '' || $session_error !== null) { $open_tool_vlsm = 'session'; }
         elseif ($overlap_result !== null || $overlap_error !== null) { $open_tool_vlsm = 'overlap'; }
-        elseif ($multi_overlap_result !== null || (isset($multi_overlap_error) && $multi_overlap_error !== null)) { $open_tool_vlsm = 'multi'; }
+        elseif ($multi_overlap_result !== null || $multi_overlap_error !== null) { $open_tool_vlsm = 'multi'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_vlsm ? ' data-open-tool="' . htmlspecialchars($open_tool_vlsm) . '"' : '' ?>>
             <?php if ($session_enabled) : ?>
