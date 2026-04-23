@@ -458,7 +458,8 @@ const toolDrawer = {
         document.querySelectorAll('.tool-trigger').forEach(btn => {
             btn.addEventListener('click', () => {
                 const panel  = btn.closest('.panel');
-                const drawer = panel.querySelector('.tool-drawer');
+                const drawer = panel?.querySelector('.tool-drawer');
+                if (!panel || !drawer) return;
                 const toolId = btn.dataset.tool;
                 if (drawer.classList.contains('open') && btn.getAttribute('aria-expanded') === 'true') {
                     this.close(drawer, btn);
@@ -499,6 +500,7 @@ const toolDrawer = {
                         t.classList.remove('active');
                     });
                     drawer.querySelectorAll('.tool-panel').forEach(p => { p.hidden = true; });
+                    this._activeTrigger = null;
                 });
             });
         });
