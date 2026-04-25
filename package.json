@@ -3,14 +3,17 @@
   "type": "module",
   "devDependencies": {
     "@eslint/js": "^9",
+    "@fontsource/fira-code": "^5.2.7",
+    "@fontsource/plus-jakarta-sans": "^5.2.8",
+    "@fontsource/space-grotesk": "^5.2.10",
     "eslint": "^9",
     "globals": "^15",
     "stylelint": "^16",
     "stylelint-config-standard": "^36"
   },
   "scripts": {
-    "lint:js":  "eslint Subnet-Calculator/assets/app.js",
+    "lint:js": "eslint Subnet-Calculator/assets/app.js",
     "lint:css": "stylelint Subnet-Calculator/assets/app.css",
-    "lint":     "npm run lint:js && npm run lint:css"
+    "lint": "npm run lint:js && npm run lint:css"
   }
 }
