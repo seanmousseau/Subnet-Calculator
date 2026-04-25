@@ -32,7 +32,7 @@
     <meta name="twitter:description" content="<?= htmlspecialchars($page_description) ?>">
     <meta name="twitter:image"       content="<?= $_si_url ?>">
     <meta name="twitter:image:alt"   content="Subnet Calculator logo">
-    <meta name="theme-color"         content="#0F172A">
+    <meta name="theme-color"         content="#0d1117">
     <meta name="color-scheme"        content="dark light">
     <?php if ($turnstile_curl_missing) : ?>
     <!-- sc-warning: Turnstile is configured but the PHP cURL extension is not loaded.
