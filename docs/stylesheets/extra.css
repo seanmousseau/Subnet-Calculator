@@ -807,4 +807,17 @@
   .sc-btn,
   .sc-card,
   .sc-card__cta { transition: none !important; }
+
+  .sc-btn--primary:hover,
+  .sc-btn--ghost:hover,
+  .sc-card:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+
+  .sc-card::before,
+  .sc-card:hover::before {
+    transition: none !important;
+    opacity: 0 !important;
+  }
 }
