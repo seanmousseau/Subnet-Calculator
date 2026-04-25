@@ -1,6 +1,6 @@
-# Subnet Calculator Docs — Style Guide
+# Subnet Calculator — Style Guide
 
-> Source of truth for the docs site visual design (`docs/stylesheets/extra.css` + `docs/overrides/home.html`).  
+> Source of truth for the visual identity across both sites: docs (`docs/stylesheets/extra.css` + `docs/overrides/home.html`) and app (`Subnet-Calculator/assets/`).  
 > This file lives in `docs/superpowers/` and is excluded from the MkDocs build.
 
 ---
@@ -41,17 +41,25 @@ A parent network block splitting into two child subnets — literally what the c
 └───┘ └───┘
 ```
 
-### What the existing app logo is for
+### App assets (subnetcalculator.app)
 
-The skeuomorphic calculator icon (`Subnet-Calculator/assets/logo.webp`, 520×600px) remains the correct asset for `subnetcalculator.app` (browser tab, OG/Twitter image, README). The blue LED-border style suits the app context. Do not use it on the docs site.
+The app uses the same mark system as the docs site:
+
+| File | Size | Usage |
+|------|------|-------|
+| `Subnet-Calculator/assets/favicon-32.png/webp` | 32×32 | Browser tab favicon |
+| `Subnet-Calculator/assets/apple-touch-icon.png/webp` | 180×180 | iOS home screen |
+| `Subnet-Calculator/assets/logo.png/webp` | 512×512 | App header UI (`<picture class="logo">`), OG/Twitter image, README |
+
+The old skeuomorphic calculator icon is preserved at `Subnet-Calculator/assets/old/` but is no longer used.
 
 ### Decision rationale
 
 | Asset | Docs site | App (subnetcalculator.app) |
 |-------|-----------|---------------------------|
-| SC monogram (teal, Space Grotesk) | ✅ header logo | — |
-| Network hierarchy SVG | ✅ favicon | — |
-| Skeuomorphic calculator PNG | — | ✅ favicon, OG image, README |
+| SC monogram on dark square (B1) | ✅ header logo | ✅ logo, apple-touch-icon |
+| Network hierarchy (A) | ✅ favicon | ✅ favicon-32 |
+| Skeuomorphic calculator (retired) | — | `assets/old/` |
 
 ---
 
