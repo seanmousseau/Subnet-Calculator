@@ -128,7 +128,7 @@
             width: 100%;
             max-width: 560px;
             position: relative;
-            overflow: clip;
+            overflow-x: clip;
         }
 
         .title-row {
@@ -972,6 +972,7 @@
         .ula-meta code { font-family: 'Fira Code', 'Courier New', monospace; color: var(--color-text); }
 
         @media (width <= 480px) {
+            .card { overflow: clip; }
             .form-row { flex-direction: column; }
             .split-list { grid-template-columns: 1fr; }
             h1 { font-size: clamp(1.1rem, 5vw, 1.35rem); white-space: nowrap; }
