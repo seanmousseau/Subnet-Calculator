@@ -3,9 +3,6 @@
   "type": "module",
   "devDependencies": {
     "@eslint/js": "^9",
-    "@fontsource/fira-code": "^5.2.7",
-    "@fontsource/plus-jakarta-sans": "^5.2.8",
-    "@fontsource/space-grotesk": "^5.2.10",
     "eslint": "^9",
     "globals": "^15",
     "stylelint": "^16",
