@@ -1,73 +1,117 @@
         @font-face {
-            font-family: 'JetBrains Mono';
-            src: url('fonts/JetBrainsMono-Regular.woff2') format('woff2');
+            font-family: 'Space Grotesk';
+            src: url('fonts/SpaceGrotesk-600.woff2') format('woff2');
+            font-weight: 600;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Space Grotesk';
+            src: url('fonts/SpaceGrotesk-700.woff2') format('woff2');
+            font-weight: 700;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Plus Jakarta Sans';
+            src: url('fonts/PlusJakartaSans-400.woff2') format('woff2');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Plus Jakarta Sans';
+            src: url('fonts/PlusJakartaSans-600.woff2') format('woff2');
+            font-weight: 600;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Fira Code';
+            src: url('fonts/FiraCode-400.woff2') format('woff2');
             font-weight: 400;
             font-style: normal;
             font-display: swap;
         }
 
         :root {
-            /* Page background */
-            --color-bg:           #0f172a;
+            /* Page background — NOTE: --color-bg is used by iframe bg-override JS; do not rename */
+            --color-bg:           #0d1117;
             /* Card & surfaces */
-            --color-surface:      #1e293b;
-            --color-surface-alt:  #111827;
-            --color-border:       #334155;
+            --color-surface:      #161b22;
+            --color-surface-alt:  #0d1117;
+            --color-border:       #21262d;
             /* Text */
-            --color-text:         #e2e8f0;
-            --color-text-heading: #f8fafc;
-            --color-text-muted:   #64748b;
-            --color-text-subtle:  #94a3b8;
-            --color-text-faint:   #475569;
-            /* Inputs — separate from page bg so each can be themed independently */
-            --color-input-bg:     #0f172a;
-            --color-input-text:   #f1f5f9;
-            /* Accents */
-            --color-accent:       #3b82f6;
-            --color-accent-hover: #2563eb;
-            --color-accent-light: #38bdf8;
-            --color-green:        #4ade80;
+            --color-text:         #e6edf3;
+            --color-text-heading: #f0f6fc;
+            --color-text-muted:   #8b949e;
+            --color-text-subtle:  #8b949e;
+            --color-text-faint:   #6e7681;
+            /* Inputs */
+            --color-input-bg:     #0d1117;
+            --color-input-text:   #e6edf3;
+            /* Accents — teal brand colour */
+            --color-accent:       #06d6a0;
+            --color-accent-hover: #4dffd8;
+            --color-accent-light: #06d6a0;
+            --color-green:        #3fb950;
             /* Error */
             --color-error-bg:     #450a0a;
             --color-error-border: #7f1d1d;
             --color-error-text:   #fca5a5;
-            /* Button text */
-            --color-btn-text:     #fff;
+            /* Button text — teal bg needs dark text (not white) */
+            --color-btn-text:     #0a1a12;
         }
 
         html[data-theme="light"] {
             --color-bg:           #fff;
             --color-surface:      #fff;
-            --color-surface-alt:  #f8fafc;
-            --color-border:       #cbd5e1;
-            --color-text:         #1e293b;
+            --color-surface-alt:  #f6f8fa;
+            --color-border:       #d0d7de;
+            --color-text:         #1f2328;
             --color-text-heading: #0f172a;
-            --color-text-muted:   #4b5563;
-            --color-text-subtle:  #475569;
-            --color-text-faint:   #6b7280;
+            --color-text-muted:   #57606a;
+            --color-text-subtle:  #57606a;
+            --color-text-faint:   #6e7781;
             --color-input-bg:     #fff;
-            --color-input-text:   #0f172a;
-            --color-accent:       #3b82f6;
-            --color-accent-hover: #2563eb;
-            --color-accent-light: #1d4ed8;
-            --color-green:        #16a34a;
+            --color-input-text:   #1f2328;
+            /* Teal accent is low-contrast on white — use darkened variant for text/borders */
+            --color-accent:       #06d6a0;
+            --color-accent-hover: #0bb87a;
+            --color-accent-light: #0a7a5c;
+            --color-green:        #1a7f37;
             --color-error-bg:     #fef2f2;
             --color-error-border: #fca5a5;
             --color-error-text:   #dc2626;
-            --color-btn-text:     #fff;
+            /* Light mode: teal bg on Calculate button still needs dark text */
+            --color-btn-text:     #0a1a12;
         }
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
             background: var(--color-bg);
+            background-image:
+                linear-gradient(rgb(6 214 160 / 3%) 1px, transparent 1px),
+                linear-gradient(90deg, rgb(6 214 160 / 3%) 1px, transparent 1px);
+            background-size: 48px 48px;
             color: var(--color-text);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 2rem 1rem;
+        }
+
+        html[data-theme="light"] body {
+            background-image:
+                linear-gradient(rgb(6 214 160 / 1.5%) 1px, transparent 1px),
+                linear-gradient(90deg, rgb(6 214 160 / 1.5%) 1px, transparent 1px);
         }
 
         .skip-link {
@@ -94,7 +138,7 @@
             width: 100%;
             max-width: 560px;
             position: relative;
-            overflow-x: clip;
+            overflow-x: clip; /* y-axis intentionally left unclipped — mobile MQ overrides to full overflow:clip for bottom-sheet drawer; full clip here would cut off vertically-escaping tooltips */
         }
 
         .title-row {
@@ -106,17 +150,18 @@
 
         .logo { width: 48px; height: 48px; flex-shrink: 0; }
 
-        h1 { font-size: 1.5rem; font-weight: 700; color: var(--color-text-heading); }
+        h1 { font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 1.5rem; font-weight: 700; color: var(--color-text-heading); }
 
         .version {
-            font-size: 0.7rem;
-            font-weight: 600;
-            color: var(--color-text-faint);
-            background: var(--color-surface);
-            border: 1px solid var(--color-border);
-            border-radius: 4px;
-            padding: 0.15rem 0.4rem;
-            letter-spacing: 0.04em;
+            font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 0.72rem;
+            font-weight: 400;
+            color: var(--color-accent);
+            background: rgb(6 214 160 / 10%);
+            border: 1px solid rgb(6 214 160 / 28%);
+            border-radius: 999px;
+            padding: 0.28rem 0.8rem;
+            letter-spacing: 0.03em;
         }
 
         /* Tabs */
@@ -134,6 +179,7 @@
             color: var(--color-text-muted);
             cursor: pointer;
             flex: 0;
+            font-family: 'Space Grotesk', system-ui, sans-serif;
             font-size: 0.875rem;
             font-weight: 600;
             margin-bottom: -1px;
@@ -171,7 +217,7 @@
             border: 1px solid var(--color-border);
             border-radius: 6px;
             color: var(--color-input-text);
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 1rem;
             padding: 0.55rem 0.75rem;
             transition: border-color 0.15s;
@@ -195,35 +241,47 @@
             flex: 1;
             background: var(--color-accent);
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             color: var(--color-btn-text);
             cursor: pointer;
-            font-size: 0.95rem;
+            font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+            font-size: 0.875rem;
             font-weight: 600;
-            padding: 0.65rem 1rem;
-            transition: background 0.15s;
+            letter-spacing: -0.01em;
+            padding: 0.72rem 1.6rem;
+            transition: all 0.15s ease;
         }
-
-        button[type="submit"]:hover { background: var(--color-accent-hover); }
+        button[type="submit"]:hover {
+            background: var(--color-accent-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgb(6 214 160 / 30%);
+        }
+        button[type="submit"]:active { transform: translateY(0); box-shadow: none; }
 
         a.btn.reset {
             flex: 1;
-            background: var(--color-input-bg);
+            background: transparent;
             border: 1px solid var(--color-border);
-            border-radius: 6px;
-            color: var(--color-text-subtle);
+            border-radius: 8px;
+            color: var(--color-text);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.95rem;
+            font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+            font-size: 0.875rem;
             font-weight: 600;
-            padding: 0.65rem 1rem;
+            letter-spacing: -0.01em;
+            padding: 0.72rem 1.6rem;
             text-decoration: none;
-            transition: background 0.15s, color 0.15s;
+            transition: all 0.15s ease;
         }
-
-        a.btn.reset:hover { background: var(--color-border); color: var(--color-text); }
+        a.btn.reset:hover {
+            border-color: rgb(6 214 160 / 28%);
+            color: var(--color-accent);
+            transform: translateY(-1px);
+        }
+        a.btn.reset:active { transform: translateY(0); }
 
         /* Error */
         .error {
@@ -247,9 +305,10 @@
         .results-header {
             background: var(--color-input-bg);
             color: var(--color-text-muted);
-            font-size: 0.7rem;
+            font-family: 'Space Grotesk', system-ui, sans-serif;
+            font-size: 0.75rem;
             font-weight: 700;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.06em;
             padding: 0.6rem 1rem;
             text-transform: uppercase;
         }
@@ -266,13 +325,13 @@
         }
 
         .result-row:nth-child(odd) { background: var(--color-surface-alt); }
-        .result-row:hover { background: var(--color-border) !important; }
+        .result-row:hover { background: rgb(6 214 160 / 4%) !important; }
 
         .result-label { color: var(--color-text-subtle); font-size: 0.8rem; }
 
         .result-value {
             color: var(--color-accent-light);
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 0.9rem;
             font-weight: 600;
         }
@@ -373,12 +432,14 @@
 
         .share-url {
             color: var(--color-text-subtle);
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 0.75rem;
             flex: 1;
-            word-break: break-all;
-            overflow-wrap: anywhere;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
             user-select: all;
+            min-width: 0;
         }
 
         .share-copy {
@@ -454,7 +515,7 @@
         }
 
         .bin-value {
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 0.75rem;
             letter-spacing: 0.02em;
             word-break: break-all;
@@ -483,9 +544,10 @@
         .splitter-title {
             background: var(--color-input-bg);
             color: var(--color-text-muted);
-            font-size: 0.7rem;
+            font-family: 'Space Grotesk', system-ui, sans-serif;
+            font-size: 0.75rem;
             font-weight: 700;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.06em;
             padding: 0.6rem 1rem;
             text-transform: uppercase;
         }
@@ -547,7 +609,7 @@
             color: var(--color-accent-light);
             cursor: pointer;
             display: flex;
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 0.78rem;
             justify-content: space-between;
             padding: 0.3rem 0.4rem 0.3rem 0.5rem;
@@ -578,7 +640,7 @@
         .result-row:focus-visible {
             outline: 2px solid var(--color-accent);
             outline-offset: -2px;
-            background: var(--color-border) !important;
+            background: rgb(6 214 160 / 6%) !important;
         }
 
         .split-item:focus-visible {
@@ -687,7 +749,7 @@
 
         .vlsm-subnet-cell {
             cursor: pointer;
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-family: 'Fira Code', 'Courier New', monospace;
         }
 
         .vlsm-subnet-cell:hover { background: var(--color-border); }
@@ -878,7 +940,7 @@
         }
 
         .overlap-none     { color: var(--color-text-faint); }
-        .overlap-identical { color: var(--color-accent); font-weight: 600; }
+        .overlap-identical { color: var(--color-accent-light); font-weight: 600; }
         .overlap-contains { color: #e5a23a; font-weight: 600; }
 
         .multi-overlap-panel { margin-top: 0.75rem; }
@@ -889,7 +951,7 @@
             border: 1px solid var(--color-border);
             border-radius: 6px;
             color: var(--color-input-text);
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 0.85rem;
             padding: 0.5rem 0.75rem;
             resize: vertical;
@@ -917,11 +979,15 @@
             flex-wrap: wrap;
             color: var(--color-text-faint);
         }
-        .ula-meta code { font-family: 'JetBrains Mono', 'Courier New', monospace; color: var(--color-text); }
+        .ula-meta code { font-family: 'Fira Code', 'Courier New', monospace; color: var(--color-text); }
 
         @media (width <= 480px) {
+            .card { overflow: clip; }
             .form-row { flex-direction: column; }
             .split-list { grid-template-columns: 1fr; }
+            h1 { font-size: clamp(1.1rem, 5vw, 1.35rem); white-space: nowrap; }
+            .logo { width: 36px; height: 36px; }
+            .result-value { overflow-wrap: anywhere; }
         }
 
         @media (481px <= width <= 767px) {
@@ -999,6 +1065,7 @@
         html.in-iframe body {
             min-height: 0;
             align-items: flex-start;
+            background-image: none;
         }
 
 /* ── Tool Toolbar ─────────────────────────────────────────────────────────── */
@@ -1015,21 +1082,25 @@
 .tool-trigger {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: 6px;
+    border-radius: 8px;
     color: var(--color-text-subtle);
     cursor: pointer;
+    font-family: 'Fira Code', 'Courier New', monospace;
     font-size: 0.8rem;
-    font-weight: 600;
+    font-weight: 400;
     padding: 0.4rem 0.7rem;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
     white-space: nowrap;
 }
-.tool-trigger:hover { background: var(--color-border); color: var(--color-text); }
+.tool-trigger:hover {
+    border-color: rgb(6 214 160 / 28%);
+    color: var(--color-accent);
+}
 .tool-trigger.active,
 .tool-trigger[aria-expanded="true"] {
     background: var(--color-accent);
     border-color: var(--color-accent);
-    color: #fff;
+    color: var(--color-btn-text);
 }
 .tool-trigger:focus-visible {
     outline: 2px solid var(--color-accent);
@@ -1092,6 +1163,7 @@
 .js-enabled .tool-drawer-header { display: flex; }
 
 .tool-drawer-title {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.06em;

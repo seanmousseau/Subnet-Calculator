@@ -159,6 +159,9 @@ PHP application with a slim entry point (`index.php`) that bootstraps includes a
 - **Theme**: `html[data-theme="light"]` CSS overrides; dark is default; `localStorage` persistence via inline `<script>` in `<head>` (runs before render to avoid flash)
 - **Page landmark**: the outermost card is `<main id="main-content">` — the skip link and any iframe consumers that need to target the content area should use `#main-content`
 - **`help_bubble()` icons**: all icons carry `tabindex="0" role="button" aria-label="Help"` — any new help bubbles created via `help_bubble()` inherit this automatically; the existing `:focus-within` CSS in `app.css` reveals the tooltip on keyboard focus without any JS
+- **`--color-bg` token must not be renamed** — `app.js` calls `document.documentElement.style.setProperty('--color-bg', color)` to implement the iframe background override API (`?bg=…` query param + `postMessage` override). Renaming this CSS custom property breaks all iframe consumers that customise the background.
+- **`--color-btn-text` must stay dark (`#0a1a12`) for teal buttons** — teal `#06d6a0` background with white text fails WCAG AA contrast. Both the dark and light themes keep this token dark. Do not "fix" it to white.
+- **`.card` overflow is intentionally split across breakpoints** — `overflow-x: clip` at the base level preserves vertically-escaping help-bubble tooltips; `overflow: clip` (both axes) is added only in the `@media (width <= 480px)` block to contain the bottom-sheet tool drawer. Setting full `overflow: clip` at the base level would clip tooltip content that extends above/below the card boundary.
 
 ## Branching
 

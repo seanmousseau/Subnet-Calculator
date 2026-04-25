@@ -173,36 +173,37 @@ echo $result['data']['network_cidr'];
 
 Pre-built release archives are available in `releases/`:
 
-| Version | File |
-|---------|------|
-| 2.8.1 | `releases/subnet-calculator-2.8.1.tar.gz` |
-| 2.8.0 | `releases/subnet-calculator-2.8.0.tar.gz` |
-| 2.7.0 | `releases/subnet-calculator-2.7.0.tar.gz` |
-| 2.6.0 | `releases/subnet-calculator-2.6.0.tar.gz` |
-| 2.5.0 | `releases/subnet-calculator-2.5.0.tar.gz` |
-| 2.4.1 | `releases/subnet-calculator-2.4.1.tar.gz` |
-| 2.4.0 | `releases/subnet-calculator-2.4.0.tar.gz` |
-| 2.3.0 | `releases/subnet-calculator-2.3.0.tar.gz` |
-| 2.2.0 | `releases/subnet-calculator-2.2.0.tar.gz` |
-| 2.1.0 | `releases/subnet-calculator-2.1.0.tar.gz` |
-| 2.0.1 | `releases/subnet-calculator-2.0.1.tar.gz` |
-| 2.0.0 | `releases/subnet-calculator-2.0.0.tar.gz` |
-| 1.3.0 | `releases/subnet-calculator-1.3.0.tar.gz` |
-| 1.2.0 | `releases/subnet-calculator-1.2.0.tar.gz` |
-| 1.1.1 | `releases/subnet-calculator-1.1.1.tar.gz` |
-| 1.1.0 | `releases/subnet-calculator-1.1.0.tar.gz` |
-| 1.0.1 | `releases/subnet-calculator-1.0.1.tar.gz` |
-| 1.0.0 | `releases/subnet-calculator-1.0.0.tar.gz` |
-| 0.12.0 | `releases/subnet-calculator-0.12.0.tar.gz` |
-| 0.11.0 | `releases/subnet-calculator-0.11.0.tar.gz` |
-| 0.10.0 | `releases/subnet-calculator-0.10.0.tar.gz` |
-| 0.9.0 | `releases/subnet-calculator-0.9.0.tar.gz` |
-| 0.8.0 | `releases/subnet-calculator-0.8.0.tar.gz` |
+| Version | File | Description |
+|---------|------|-------------|
+| 2.9.0 | [subnet-calculator-2.9.0.tar.gz](releases/subnet-calculator-2.9.0.tar.gz) | UI/UX overhaul: teal accent, Space Grotesk/Plus Jakarta Sans/Fira Code fonts, mobile fixes |
+| 2.8.1 | `releases/subnet-calculator-2.8.1.tar.gz` | |
+| 2.8.0 | `releases/subnet-calculator-2.8.0.tar.gz` | |
+| 2.7.0 | `releases/subnet-calculator-2.7.0.tar.gz` | |
+| 2.6.0 | `releases/subnet-calculator-2.6.0.tar.gz` | |
+| 2.5.0 | `releases/subnet-calculator-2.5.0.tar.gz` | |
+| 2.4.1 | `releases/subnet-calculator-2.4.1.tar.gz` | |
+| 2.4.0 | `releases/subnet-calculator-2.4.0.tar.gz` | |
+| 2.3.0 | `releases/subnet-calculator-2.3.0.tar.gz` | |
+| 2.2.0 | `releases/subnet-calculator-2.2.0.tar.gz` | |
+| 2.1.0 | `releases/subnet-calculator-2.1.0.tar.gz` | |
+| 2.0.1 | `releases/subnet-calculator-2.0.1.tar.gz` | |
+| 2.0.0 | `releases/subnet-calculator-2.0.0.tar.gz` | |
+| 1.3.0 | `releases/subnet-calculator-1.3.0.tar.gz` | |
+| 1.2.0 | `releases/subnet-calculator-1.2.0.tar.gz` | |
+| 1.1.1 | `releases/subnet-calculator-1.1.1.tar.gz` | |
+| 1.1.0 | `releases/subnet-calculator-1.1.0.tar.gz` | |
+| 1.0.1 | `releases/subnet-calculator-1.0.1.tar.gz` | |
+| 1.0.0 | `releases/subnet-calculator-1.0.0.tar.gz` | |
+| 0.12.0 | `releases/subnet-calculator-0.12.0.tar.gz` | |
+| 0.11.0 | `releases/subnet-calculator-0.11.0.tar.gz` | |
+| 0.10.0 | `releases/subnet-calculator-0.10.0.tar.gz` | |
+| 0.9.0 | `releases/subnet-calculator-0.9.0.tar.gz` | |
+| 0.8.0 | `releases/subnet-calculator-0.8.0.tar.gz` | |
 
 Each archive contains the app files at the root level. Extract directly into your webroot to install or upgrade in place:
 
 ```bash
-tar -xzf subnet-calculator-2.8.1.tar.gz -C /var/www/html/subnet-calculator/
+tar -xzf subnet-calculator-2.9.0.tar.gz -C /var/www/html/subnet-calculator/
 ```
 
 ## Embedding

@@ -32,7 +32,7 @@
     <meta name="twitter:description" content="<?= htmlspecialchars($page_description) ?>">
     <meta name="twitter:image"       content="<?= $_si_url ?>">
     <meta name="twitter:image:alt"   content="Subnet Calculator logo">
-    <meta name="theme-color"         content="#0F172A">
+    <meta name="theme-color"         content="#0d1117">
     <meta name="color-scheme"        content="dark light">
     <?php if ($turnstile_curl_missing) : ?>
     <!-- sc-warning: Turnstile is configured but the PHP cURL extension is not loaded.
@@ -188,7 +188,7 @@
             $bin_mask  = array_map(fn($o) => sprintf('%08b', (int)$o), explode('.', $result['netmask_octet']));
             ?>
             <details class="binary-details">
-                <summary>Binary Representation<?= help_bubble('ipv4-binary', 'Shows the network address and mask in binary. Blue bits are the network portion (fixed); grey bits are the host portion (variable). Also shows the network address in hexadecimal and unsigned decimal.') ?></summary>
+                <summary>Binary Representation<?= help_bubble('ipv4-binary', 'Shows the network address and mask in binary. Teal bits are the network portion (fixed); grey bits are the host portion (variable). Also shows the network address in hexadecimal and unsigned decimal.') ?></summary>
                 <div class="binary-grid">
                     <span class="bin-label">Network</span>
                     <code class="bin-value"><?php
@@ -514,7 +514,7 @@ if ($i < 3) {
             }
             if (isset($bin6_ok) && $bin6_ok) : ?>
             <details class="binary-details">
-                <summary>Binary / Hex Representation<?= help_bubble('ipv6-binary', 'Shows the IPv6 address in binary (128 bits), split into network (blue) and interface (grey) portions based on the prefix length. Also displays the address in hexadecimal.') ?></summary>
+                <summary>Binary / Hex Representation<?= help_bubble('ipv6-binary', 'Shows the IPv6 address in binary (128 bits), split into network (teal) and interface (grey) portions based on the prefix length. Also displays the address in hexadecimal.') ?></summary>
                 <div class="binary-grid">
                     <span class="bin-label">Hex</span>
                     <code class="bin-value"><?php

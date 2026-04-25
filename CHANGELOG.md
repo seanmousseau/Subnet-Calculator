@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-04-25
+
+### Changed
+- **Typography** — app now uses Space Grotesk (headings, labels, section headers), Plus Jakarta Sans (body copy), and Fira Code (all monospace: inputs, result values, share bar, binary, VLSM). JetBrains Mono removed.
+- **Colour system** — accent changed from blue (`#3b82f6`) to teal (`#06d6a0`) across all interactive states (Calculate button, active tab, focus rings, tool triggers, result values). Dark mode surfaces aligned to GitHub-dark palette (`bg: #0d1117`, `surface: #161b22`, `border: #21262d`).
+- **Calculate button** — teal background, dark text `#0a1a12`, border-radius `8px`, hover lift with teal shadow
+- **Reset button** — ghost style (transparent bg, border), teal hover (border + text), lift on hover
+- **Version badge** — teal Fira Code pill (border-radius `999px`, teal-dim background)
+- **Tool trigger buttons** — Fira Code font, `border-radius: 8px`, teal active state with dark text
+- **Light mode** — teal accent darkened to `#0a7a5c` for WCAG AA contrast compliance on white (5.2:1)
+- **Body background** — subtle static teal grid (3% dark mode, 1.5% light mode) adds depth
+- **Result row hover** — teal-tinted background `rgb(6 214 160 / 4%)` replaces grey
+
+### Fixed
+- **Mobile: header title wrapping** — "Subnet Calculator" no longer wraps to two lines on 375px viewports; h1 font-size clamped and logo shrunk at `≤480px`
+- **Mobile: tool drawer ghost state** — drawer chrome no longer visible below card when drawer is closed; `overflow: clip` on `.card` contains the absolute-positioned bottom sheet
+- **Mobile: share URL overflow** — share bar URL now truncates with ellipsis instead of wrapping mid-URL
+- **Mobile: Reverse DNS Zone wrapping** — long reverse DNS values use `overflow-wrap: anywhere` at narrow viewports
+
+### Tests
+- New `test_v290_typography` Playwright test group verifies correct font families and teal color on key elements
+- All visual regression baselines regenerated for the new teal color scheme
+
 ## [2.8.1] - 2026-04-23
 
 ### Fixed

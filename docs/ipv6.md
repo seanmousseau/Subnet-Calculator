@@ -20,7 +20,7 @@ Enter an IPv6 address with a prefix length (e.g. `2001:db8::/32` or `fe80::1/64`
 
 ## Binary / Hex Representation
 
-Expand the **Binary / Hex Representation** panel to see the address in binary (blue = network bits, grey = interface bits) and hexadecimal.
+Expand the **Binary / Hex Representation** panel to see the address in binary (teal = network bits, grey = interface bits) and hexadecimal.
 
 ## Subnet Splitter
 
