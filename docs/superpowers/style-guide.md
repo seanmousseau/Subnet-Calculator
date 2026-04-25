@@ -49,7 +49,7 @@ The app uses the same mark system as the docs site:
 |------|------|-------|
 | `Subnet-Calculator/assets/favicon-32.png/webp` | 32×32 | Browser tab favicon |
 | `Subnet-Calculator/assets/apple-touch-icon.png/webp` | 180×180 | iOS home screen |
-| `Subnet-Calculator/assets/logo.png/webp` | 512×512 | OG/Twitter image, README |
+| `Subnet-Calculator/assets/logo.png/webp` | 512×512 | App header UI (`<picture class="logo">`), OG/Twitter image, README |
 
 The old skeuomorphic calculator icon is preserved at `Subnet-Calculator/assets/old/` but is no longer used.
 
