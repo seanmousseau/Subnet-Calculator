@@ -92,7 +92,7 @@
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
             background: var(--color-bg);
             color: var(--color-text);
             min-height: 100vh;
@@ -138,11 +138,12 @@
 
         .logo { width: 48px; height: 48px; flex-shrink: 0; }
 
-        h1 { font-size: 1.5rem; font-weight: 700; color: var(--color-text-heading); }
+        h1 { font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 1.5rem; font-weight: 700; color: var(--color-text-heading); }
 
         .version {
-            font-size: 0.7rem;
-            font-weight: 600;
+            font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 0.72rem;
+            font-weight: 400;
             color: var(--color-text-faint);
             background: var(--color-surface);
             border: 1px solid var(--color-border);
@@ -166,6 +167,7 @@
             color: var(--color-text-muted);
             cursor: pointer;
             flex: 0;
+            font-family: 'Space Grotesk', system-ui, sans-serif;
             font-size: 0.875rem;
             font-weight: 600;
             margin-bottom: -1px;
@@ -203,7 +205,7 @@
             border: 1px solid var(--color-border);
             border-radius: 6px;
             color: var(--color-input-text);
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 1rem;
             padding: 0.55rem 0.75rem;
             transition: border-color 0.15s;
@@ -279,9 +281,10 @@
         .results-header {
             background: var(--color-input-bg);
             color: var(--color-text-muted);
-            font-size: 0.7rem;
+            font-family: 'Space Grotesk', system-ui, sans-serif;
+            font-size: 0.75rem;
             font-weight: 700;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.06em;
             padding: 0.6rem 1rem;
             text-transform: uppercase;
         }
@@ -304,7 +307,7 @@
 
         .result-value {
             color: var(--color-accent-light);
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 0.9rem;
             font-weight: 600;
         }
@@ -405,7 +408,7 @@
 
         .share-url {
             color: var(--color-text-subtle);
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 0.75rem;
             flex: 1;
             word-break: break-all;
@@ -486,7 +489,7 @@
         }
 
         .bin-value {
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 0.75rem;
             letter-spacing: 0.02em;
             word-break: break-all;
@@ -515,9 +518,10 @@
         .splitter-title {
             background: var(--color-input-bg);
             color: var(--color-text-muted);
-            font-size: 0.7rem;
+            font-family: 'Space Grotesk', system-ui, sans-serif;
+            font-size: 0.75rem;
             font-weight: 700;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.06em;
             padding: 0.6rem 1rem;
             text-transform: uppercase;
         }
@@ -579,7 +583,7 @@
             color: var(--color-accent-light);
             cursor: pointer;
             display: flex;
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 0.78rem;
             justify-content: space-between;
             padding: 0.3rem 0.4rem 0.3rem 0.5rem;
@@ -719,7 +723,7 @@
 
         .vlsm-subnet-cell {
             cursor: pointer;
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-family: 'Fira Code', 'Courier New', monospace;
         }
 
         .vlsm-subnet-cell:hover { background: var(--color-border); }
@@ -921,7 +925,7 @@
             border: 1px solid var(--color-border);
             border-radius: 6px;
             color: var(--color-input-text);
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 0.85rem;
             padding: 0.5rem 0.75rem;
             resize: vertical;
@@ -949,7 +953,7 @@
             flex-wrap: wrap;
             color: var(--color-text-faint);
         }
-        .ula-meta code { font-family: 'JetBrains Mono', 'Courier New', monospace; color: var(--color-text); }
+        .ula-meta code { font-family: 'Fira Code', 'Courier New', monospace; color: var(--color-text); }
 
         @media (width <= 480px) {
             .form-row { flex-direction: column; }
@@ -1124,6 +1128,7 @@
 .js-enabled .tool-drawer-header { display: flex; }
 
 .tool-drawer-title {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.06em;
