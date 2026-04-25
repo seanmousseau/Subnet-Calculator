@@ -1,5 +1,5 @@
 site_name: Subnet Calculator
-site_url: https://seanmousseau.github.io/Subnet-Calculator/
+site_url: https://docs.subnetcalculator.app/
 site_author: Sean Mousseau
 site_description: Documentation for the Subnet Calculator — a self-hosted PHP tool for IPv4/IPv6 subnetting, VLSM planning, and network analysis.
 repo_url: https://github.com/seanmousseau/Subnet-Calculator
