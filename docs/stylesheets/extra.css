@@ -782,10 +782,11 @@
   .sc-hero        { padding: 3rem 1.25rem 3rem; }
   .sc-features    { padding: 3.5rem 1.25rem; }
   .sc-quickstart  { padding: 3.5rem 1.25rem; }
-  .sc-grid        { grid-template-columns: 1fr; }
-
   .sc-hero__title { font-size: clamp(2rem, 10vw, 2.6rem) !important; }
+}
 
+@media (max-width: 540px) {
+  .sc-grid        { grid-template-columns: 1fr; }
   .sc-hero__actions  { flex-direction: column; align-items: center; }
   .sc-btn            { width: 100%; justify-content: center; }
   .sc-quickstart__links { flex-direction: column; }
