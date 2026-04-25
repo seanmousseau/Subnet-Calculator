@@ -31,7 +31,7 @@ Works on both dark (`#0a0f16`) and light (`#ffffff`) header backgrounds — teal
 
 A parent network block splitting into two child subnets — literally what the calculator does. Pure SVG paths (no text), readable at 16–32px, teal `#06d6a0` on any background.
 
-```
+```text
 ┌──────────┐
 │  parent  │
 └────┬─────┘
@@ -198,7 +198,7 @@ box-shadow: 0 10px 36px rgb(0 0 0 / 35%);
 
 Icon: `1.75rem × 1.75rem` inline SVG, `color: var(--sc-teal)`. Always `aria-hidden="true"` on the wrapper `<span>`, `focusable="false"` on the `<svg>`.
 
-CTA link: `color: var(--sc-teal)`, `font-size: 0.82rem`, `font-weight: 600`, arrow via content.
+CTA link: `color: var(--sc-teal)`, `font-size: 0.78rem`, `font-family: 'Fira Code'`, arrow via content.
 
 ### Grid
 
@@ -213,8 +213,8 @@ Naturally collapses: 3 columns at ≥960px, 2 columns at ~640–960px, 1 column 
 ### Terminal / Code Block (homepage)
 
 ```css
-/* Terminal chrome bar */
-background: #0d1117;
+/* Terminal chrome bar (.sc-terminal__bar) */
+background: var(--sc-surface);   /* #161b22 */
 border-radius: 10px 10px 0 0;
 ```
 Three dot decorators (red `#ff5f57`, yellow `#febc2e`, green `#28c840`), `bash` label in `var(--sc-faint)`.
@@ -224,9 +224,9 @@ Terminal body: monospace text, `font-size: 0.82rem`, `line-height: 1.9`.
 Syntax colours inside the terminal:
 - Comment: `var(--sc-faint)` / `#6e7681`
 - Prompt `$`: `var(--sc-teal)`
-- Command: `var(--sc-text)`
-- Flag: `var(--sc-muted)`
-- Path: `#79c0ff` (blue)
+- Command: `#c9d1d9` (`.cmd`)
+- Flag: `#79c0ff` (blue, `.flag`)
+- Path: `#ffa657` (orange, `.path`)
 
 ### Code blocks (doc pages, dark mode)
 
@@ -313,7 +313,7 @@ All animations respect `prefers-reduced-motion: reduce` — motion is suppressed
 | Card / button hover | 0.15s | `ease` | `border-color`, `transform`, `box-shadow` |
 | Nav links | 0.15s | — | `color` transition |
 
-`sc-fade-up` keyframe: `from { opacity: 0; transform: translateY(16px); }`.
+`sc-fade-up` keyframe: `from { opacity: 0; transform: translateY(14px); }`.
 
 ---
 
