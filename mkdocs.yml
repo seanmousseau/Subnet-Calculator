@@ -8,6 +8,8 @@ repo_name: seanmousseau/Subnet-Calculator
 theme:
   name: material
   custom_dir: docs/overrides
+  logo: assets/logo-mark.svg
+  favicon: assets/favicon.svg
   font:
     text: Plus Jakarta Sans
     code: Fira Code

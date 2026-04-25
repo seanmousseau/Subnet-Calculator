@@ -12,6 +12,7 @@
     <title><?= htmlspecialchars($page_title) ?></title>
     <link rel="icon" type="image/webp" href="assets/favicon-32.webp">
     <link rel="icon" type="image/png"  href="assets/favicon-32.png">
+    <link rel="apple-touch-icon"       href="assets/apple-touch-icon.png">
     <?php
     // $canonical_url may include a path (e.g. in subdir installs); extract scheme+host
     // so the social image URL always points to the docroot, not a page path.
@@ -22,8 +23,8 @@
     unset($_cu);
     ?>
     <meta property="og:image"        content="<?= $_si_url ?>">
-    <meta property="og:image:width"  content="520">
-    <meta property="og:image:height" content="600">
+    <meta property="og:image:width"  content="512">
+    <meta property="og:image:height" content="512">
     <meta property="og:image:type"   content="image/webp">
     <meta property="og:site_name"    content="Subnet Calculator">
     <meta name="twitter:card"        content="summary">
