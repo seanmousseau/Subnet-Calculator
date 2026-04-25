@@ -128,7 +128,7 @@
             width: 100%;
             max-width: 560px;
             position: relative;
-            overflow-x: clip;
+            overflow-x: clip; /* y-axis intentionally left unclipped — mobile MQ overrides to full overflow:clip for bottom-sheet drawer; full clip here would cut off vertically-escaping tooltips */
         }
 
         .title-row {
