@@ -7,16 +7,20 @@ repo_name: seanmousseau/Subnet-Calculator
 
 theme:
   name: material
+  custom_dir: docs/overrides
+  font:
+    text: Plus Jakarta Sans
+    code: Fira Code
   palette:
     - scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-night
         name: Switch to light mode
     - scheme: default
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-sunny
         name: Switch to dark mode
@@ -26,6 +30,9 @@ theme:
     - navigation.top
     - search.suggest
     - content.code.copy
+
+exclude_docs: |
+  superpowers/
 
 plugins:
   - search
@@ -50,6 +57,9 @@ nav:
     - REST API: api.md
     - PHP Client Library: client.md
     - Operator Config: config.md
+
+extra_css:
+  - stylesheets/extra.css
 
 markdown_extensions:
   - admonition

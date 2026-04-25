@@ -1,0 +1,158 @@
+{% extends "main.html" %}
+
+{% block tabs %}{{ super() }}{% endblock %}
+
+{% block content %}
+<!-- ============================================================
+     HERO
+     ============================================================ -->
+<section class="sc-hero">
+  <div class="sc-hero__inner">
+
+    <div class="sc-badge">
+      <span class="sc-badge__dot"></span>
+      v2.8.1 &nbsp;·&nbsp; AGPL-3.0 &nbsp;·&nbsp; Self-hosted
+    </div>
+
+    <h1 class="sc-hero__title">Subnet<br><em>Calculator</em></h1>
+
+    <p class="sc-hero__tagline">
+      A self-hosted PHP tool for IPv4 &amp; IPv6 subnetting,
+      VLSM planning, overlap checking, and a full REST API.
+    </p>
+
+    <div class="sc-hero__actions">
+      <a href="ipv4/" class="sc-btn sc-btn--primary">Get Started →</a>
+      <a href="api/" class="sc-btn sc-btn--ghost">API Reference</a>
+      <a href="https://subnetcalculator.app" class="sc-btn sc-btn--ghost"
+         target="_blank" rel="noopener noreferrer">Live Demo ↗</a>
+    </div>
+
+    <div class="sc-hero__pills">
+      <span class="sc-pill">PHP 8.1+</span>
+      <span class="sc-pill">Apache · OpenLiteSpeed</span>
+      <span class="sc-pill">SQLite</span>
+      <span class="sc-pill">GMP</span>
+      <span class="sc-pill">OpenAPI 3.1</span>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================================================
+     FEATURE CARDS
+     ============================================================ -->
+<section class="sc-features">
+
+  <p class="sc-section-label">What's included</p>
+  <h2 class="sc-section-title">Everything for IP planning</h2>
+
+  <div class="sc-grid">
+
+    <a href="ipv4/" class="sc-card">
+      <span class="sc-card__icon">🔢</span>
+      <p class="sc-card__title">IPv4 Calculator</p>
+      <p class="sc-card__desc">Subnet details, wildcard mask, broadcast address, host range, reverse-DNS zone, binary/hex representation, and route summarisation.</p>
+      <span class="sc-card__cta">→ read the docs</span>
+    </a>
+
+    <a href="ipv6/" class="sc-card">
+      <span class="sc-card__icon">🌐</span>
+      <p class="sc-card__title">IPv6 Calculator</p>
+      <p class="sc-card__desc">Full 128-bit arithmetic via GMP. Expanded and compressed forms, binary/hex panel, subnet splitter, ULA generator, and overlap checker.</p>
+      <span class="sc-card__cta">→ read the docs</span>
+    </a>
+
+    <a href="vlsm/" class="sc-card">
+      <span class="sc-card__icon">📐</span>
+      <p class="sc-card__title">VLSM Planner</p>
+      <p class="sc-card__desc">Allocate variable-length subnets from a parent block. Export to CSV, JSON, XLSX, or ASCII. Save and restore named sessions.</p>
+      <span class="sc-card__cta">→ read the docs</span>
+    </a>
+
+    <a href="api/" class="sc-card">
+      <span class="sc-card__icon">⚡</span>
+      <p class="sc-card__title">REST API</p>
+      <p class="sc-card__desc">Versioned JSON API for every calculator function. Optional Bearer-token auth, rate limiting, and a machine-readable OpenAPI 3.1 spec.</p>
+      <span class="sc-card__cta">→ read the docs</span>
+    </a>
+
+    <a href="overlap/" class="sc-card">
+      <span class="sc-card__icon">🔍</span>
+      <p class="sc-card__title">Overlap Checker</p>
+      <p class="sc-card__desc">Detect overlapping networks — two CIDRs side-by-side or up to 50 networks at once. Supports both IPv4 and IPv6.</p>
+      <span class="sc-card__cta">→ read the docs</span>
+    </a>
+
+    <a href="sharing/" class="sc-card">
+      <span class="sc-card__icon">🔗</span>
+      <p class="sc-card__title">Shareable URLs &amp; Embeds</p>
+      <p class="sc-card__desc">Every result is linkable via a GET-parameter URL. Embed the calculator in any page as a responsive <code>&lt;iframe&gt;</code> with auto-resize.</p>
+      <span class="sc-card__cta">→ read the docs</span>
+    </a>
+
+    <a href="tree/" class="sc-card">
+      <span class="sc-card__icon">🌲</span>
+      <p class="sc-card__title">Allocation Tree</p>
+      <p class="sc-card__desc">Visualise how subnets nest inside a parent block with gap detection, utilisation summary, and a collapsible tree view.</p>
+      <span class="sc-card__cta">→ read the docs</span>
+    </a>
+
+    <a href="client/" class="sc-card">
+      <span class="sc-card__icon">🐘</span>
+      <p class="sc-card__title">PHP Client Library</p>
+      <p class="sc-card__desc">A lightweight PHP wrapper for the REST API. Supports authenticated requests, VLSM sessions, bulk lookups, and PSR-friendly error handling.</p>
+      <span class="sc-card__cta">→ read the docs</span>
+    </a>
+
+    <a href="config/" class="sc-card">
+      <span class="sc-card__icon">⚙️</span>
+      <p class="sc-card__title">Operator Config</p>
+      <p class="sc-card__desc">All tunable options — API auth, rate limits, Turnstile CAPTCHA, canonical URL, custom branding, and session TTLs — in one place.</p>
+      <span class="sc-card__cta">→ read the docs</span>
+    </a>
+
+  </div>
+
+</section>
+
+<!-- ============================================================
+     QUICK START
+     ============================================================ -->
+<section class="sc-quickstart">
+  <div class="sc-quickstart__inner">
+
+    <p class="sc-section-label">Installation</p>
+    <h2 class="sc-section-title">Up in 30 seconds</h2>
+
+    <div class="sc-terminal">
+      <div class="sc-terminal__bar">
+        <span class="sc-terminal__dot"></span>
+        <span class="sc-terminal__dot"></span>
+        <span class="sc-terminal__dot"></span>
+        <span class="sc-terminal__label">bash</span>
+      </div>
+      <div class="sc-terminal__body">
+        <div><span class="comment"># Option 1 — tarball (recommended)</span></div>
+        <div><span class="prompt">$ </span><span class="cmd">curl -LO </span><span class="path">https://github.com/seanmousseau/Subnet-Calculator/releases/latest/download/subnet-calculator-2.8.1.tar.gz</span></div>
+        <div><span class="prompt">$ </span><span class="cmd">tar -xzf subnet-calculator-2.8.1.tar.gz</span> <span class="flag">-C</span> <span class="path">/var/www/html/subnet-calculator/</span></div>
+        <div>&nbsp;</div>
+        <div><span class="comment"># Option 2 — Docker Compose</span></div>
+        <div><span class="prompt">$ </span><span class="cmd">git clone https://github.com/seanmousseau/Subnet-Calculator.git</span></div>
+        <div><span class="prompt">$ </span><span class="cmd">docker compose up app</span></div>
+      </div>
+    </div>
+
+    <div class="sc-quickstart__links">
+      <a href="ipv4/" class="sc-btn sc-btn--primary">Read the docs →</a>
+      <a href="https://github.com/seanmousseau/Subnet-Calculator/releases"
+         class="sc-btn sc-btn--ghost" target="_blank" rel="noopener noreferrer">GitHub Releases ↗</a>
+      <a href="https://subnetcalculator.app"
+         class="sc-btn sc-btn--ghost" target="_blank" rel="noopener noreferrer">Live Demo ↗</a>
+    </div>
+
+  </div>
+</section>
+{% endblock %}
+
+{% block footer %}{{ super() }}{% endblock %}

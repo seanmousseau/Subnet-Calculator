@@ -1,3 +1,10 @@
+---
+template: home.html
+hide:
+  - navigation
+  - toc
+---
+
 # Subnet Calculator
 
 A self-hosted PHP tool for IPv4 and IPv6 subnetting, VLSM planning, and network analysis.
