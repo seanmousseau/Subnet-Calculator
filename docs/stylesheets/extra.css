@@ -1,10 +1,10 @@
 /* ================================================================
    SUBNET CALCULATOR DOCS — CUSTOM THEME
-   Syne (headings) · Plus Jakarta Sans (body) · Fira Code (mono)
+   Space Grotesk (headings) · Plus Jakarta Sans (body) · Fira Code (mono)
    Primary accent: #06d6a0 electric teal
    ================================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap');
 
 /* ----------------------------------------------------------------
    Custom colour tokens
@@ -71,7 +71,7 @@
 .md-typeset h2,
 .md-typeset h3,
 .md-typeset h4 {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
@@ -119,7 +119,7 @@
 }
 
 .md-header__title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -145,9 +145,19 @@
   opacity: 1 !important;
 }
 
+[data-md-color-scheme="default"] .md-tabs__link {
+  color: #374151;
+  opacity: 1;
+}
+
 [data-md-color-scheme="default"] .md-tabs__link--active,
 [data-md-color-scheme="default"] .md-tabs__link:hover {
   color: #065f46 !important;
+}
+
+[data-md-color-scheme="default"] .md-header .md-header__title,
+[data-md-color-scheme="default"] .md-header .md-ellipsis {
+  color: #111827;
 }
 
 /* ================================================================
@@ -170,7 +180,7 @@
 }
 
 [data-md-color-scheme="slate"] .md-nav__title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-weight: 700;
   font-size: .68rem;
   letter-spacing: .1em;
@@ -235,7 +245,7 @@
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
   background: var(--sc-surface);
   color: var(--sc-text);
-  font-family: 'Syne', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: .75rem;
   letter-spacing: .06em;
   text-transform: uppercase;
@@ -296,7 +306,7 @@
 
 .sc-hero {
   position: relative;
-  padding: 7rem 2rem 5.5rem;
+  padding: 4rem 2rem 4rem;
   text-align: center;
   overflow: hidden;
   background: var(--sc-navy);
@@ -374,11 +384,13 @@
 
 /* Main title */
 .sc-hero__title {
-  font-family: 'Syne', sans-serif !important;
-  font-size: clamp(3.2rem, 9vw, 5.75rem) !important;
-  font-weight: 800 !important;
-  letter-spacing: -0.045em !important;
-  line-height: .97 !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: clamp(2.6rem, 6vw, 4.2rem) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.03em !important;
+  line-height: 1.05 !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
   color: var(--sc-text) !important;
   margin: 0 0 1.4rem !important;
   padding: 0 !important;
@@ -395,9 +407,10 @@
 .sc-hero__tagline {
   font-size: 1.05rem;
   color: var(--sc-muted);
-  max-width: 500px;
+  max-width: 600px;
   margin: 0 auto 2.75rem;
   line-height: 1.65;
+  text-wrap: balance;
   animation: sc-fade-up .5s ease .18s both;
 }
 
@@ -483,7 +496,7 @@
 }
 
 .sc-section-label {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: .68rem;
   font-weight: 700;
   letter-spacing: .14em;
@@ -493,7 +506,7 @@
 }
 
 .sc-section-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: clamp(1.75rem, 4vw, 2.4rem);
   font-weight: 800;
   letter-spacing: -.035em;
@@ -541,14 +554,22 @@
 }
 
 .sc-card__icon {
-  font-size: 1.65rem;
-  margin-bottom: 1rem;
   display: block;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-bottom: 1rem;
+  color: var(--sc-teal);
   position: relative;
 }
 
+.sc-card__icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .sc-card__title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 1rem;
   font-weight: 700;
   color: var(--sc-text);
@@ -758,12 +779,45 @@
    ================================================================ */
 
 @media (max-width: 768px) {
-  .sc-hero      { padding: 5rem 1.25rem 4rem; }
-  .sc-features  { padding: 3.5rem 1.25rem; }
-  .sc-quickstart { padding: 3.5rem 1.25rem; }
-  .sc-grid      { grid-template-columns: 1fr; }
+  .sc-hero        { padding: 3rem 1.25rem 3rem; }
+  .sc-features    { padding: 3.5rem 1.25rem; }
+  .sc-quickstart  { padding: 3.5rem 1.25rem; }
+  .sc-grid        { grid-template-columns: 1fr; }
+
+  .sc-hero__title { font-size: clamp(2rem, 10vw, 2.6rem) !important; }
 
   .sc-hero__actions  { flex-direction: column; align-items: center; }
   .sc-btn            { width: 100%; justify-content: center; }
   .sc-quickstart__links { flex-direction: column; }
+}
+
+/* ================================================================
+   REDUCED MOTION
+   ================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-hero::before,
+  .sc-badge,
+  .sc-badge__dot,
+  .sc-hero__title,
+  .sc-hero__tagline,
+  .sc-hero__actions,
+  .sc-hero__pills { animation: none !important; }
+
+  .sc-btn,
+  .sc-card,
+  .sc-card__cta { transition: none !important; }
+
+  .sc-btn--primary:hover,
+  .sc-btn--ghost:hover,
+  .sc-card:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+
+  .sc-card::before,
+  .sc-card:hover::before {
+    transition: none !important;
+    opacity: 0 !important;
+  }
 }
