@@ -146,12 +146,12 @@
             font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 0.72rem;
             font-weight: 400;
-            color: var(--color-text-faint);
-            background: var(--color-surface);
-            border: 1px solid var(--color-border);
-            border-radius: 4px;
-            padding: 0.15rem 0.4rem;
-            letter-spacing: 0.04em;
+            color: var(--color-accent);
+            background: rgb(6 214 160 / 10%);
+            border: 1px solid rgb(6 214 160 / 28%);
+            border-radius: 999px;
+            padding: 0.28rem 0.8rem;
+            letter-spacing: 0.03em;
         }
 
         /* Tabs */
@@ -231,35 +231,47 @@
             flex: 1;
             background: var(--color-accent);
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             color: var(--color-btn-text);
             cursor: pointer;
-            font-size: 0.95rem;
+            font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+            font-size: 0.875rem;
             font-weight: 600;
-            padding: 0.65rem 1rem;
-            transition: background 0.15s;
+            letter-spacing: -0.01em;
+            padding: 0.72rem 1.6rem;
+            transition: all 0.15s ease;
         }
-
-        button[type="submit"]:hover { background: var(--color-accent-hover); }
+        button[type="submit"]:hover {
+            background: var(--color-accent-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgb(6 214 160 / 30%);
+        }
+        button[type="submit"]:active { transform: translateY(0); box-shadow: none; }
 
         a.btn.reset {
             flex: 1;
-            background: var(--color-input-bg);
+            background: transparent;
             border: 1px solid var(--color-border);
-            border-radius: 6px;
-            color: var(--color-text-subtle);
+            border-radius: 8px;
+            color: var(--color-text);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.95rem;
+            font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+            font-size: 0.875rem;
             font-weight: 600;
-            padding: 0.65rem 1rem;
+            letter-spacing: -0.01em;
+            padding: 0.72rem 1.6rem;
             text-decoration: none;
-            transition: background 0.15s, color 0.15s;
+            transition: all 0.15s ease;
         }
-
-        a.btn.reset:hover { background: var(--color-border); color: var(--color-text); }
+        a.btn.reset:hover {
+            border-color: rgb(6 214 160 / 28%);
+            color: var(--color-accent);
+            transform: translateY(-1px);
+        }
+        a.btn.reset:active { transform: translateY(0); }
 
         /* Error */
         .error {
@@ -1053,21 +1065,25 @@
 .tool-trigger {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: 6px;
+    border-radius: 8px;
     color: var(--color-text-subtle);
     cursor: pointer;
+    font-family: 'Fira Code', 'Courier New', monospace;
     font-size: 0.8rem;
-    font-weight: 600;
+    font-weight: 400;
     padding: 0.4rem 0.7rem;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
     white-space: nowrap;
 }
-.tool-trigger:hover { background: var(--color-border); color: var(--color-text); }
+.tool-trigger:hover {
+    border-color: rgb(6 214 160 / 28%);
+    color: var(--color-accent);
+}
 .tool-trigger.active,
 .tool-trigger[aria-expanded="true"] {
     background: var(--color-accent);
     border-color: var(--color-accent);
-    color: #fff;
+    color: var(--color-btn-text);
 }
 .tool-trigger:focus-visible {
     outline: 2px solid var(--color-accent);
