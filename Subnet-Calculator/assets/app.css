@@ -128,7 +128,7 @@
             width: 100%;
             max-width: 560px;
             position: relative;
-            overflow-x: clip;
+            overflow: clip;
         }
 
         .title-row {
@@ -425,9 +425,11 @@
             font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 0.75rem;
             flex: 1;
-            word-break: break-all;
-            overflow-wrap: anywhere;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
             user-select: all;
+            min-width: 0;
         }
 
         .share-copy {
@@ -972,6 +974,9 @@
         @media (width <= 480px) {
             .form-row { flex-direction: column; }
             .split-list { grid-template-columns: 1fr; }
+            h1 { font-size: clamp(1.1rem, 5vw, 1.35rem); white-space: nowrap; }
+            .logo { width: 36px; height: 36px; }
+            .result-value { overflow-wrap: anywhere; }
         }
 
         @media (481px <= width <= 767px) {
