@@ -58,6 +58,9 @@ nav:
     - PHP Client Library: client.md
     - Operator Config: config.md
 
+extra:
+  version: "2.8.1"
+
 extra_css:
   - stylesheets/extra.css
 
