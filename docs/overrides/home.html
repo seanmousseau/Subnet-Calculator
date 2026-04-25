@@ -134,7 +134,8 @@
       </div>
       <div class="sc-terminal__body">
         <div><span class="comment"># Option 1 — tarball (recommended)</span></div>
-        <div><span class="prompt">$ </span><span class="cmd">curl -LO </span><span class="path">https://github.com/seanmousseau/Subnet-Calculator/releases/latest/download/subnet-calculator-{{ config.extra.version }}.tar.gz</span></div>
+        <div><span class="prompt">$ </span><span class="cmd">curl -LO </span><span class="path">https://github.com/seanmousseau/Subnet-Calculator/releases/download/{{ config.extra.version }}/subnet-calculator-{{ config.extra.version }}.tar.gz</span></div>
+        <div><span class="prompt">$ </span><span class="cmd">mkdir -p </span><span class="path">/var/www/html/subnet-calculator</span></div>
         <div><span class="prompt">$ </span><span class="cmd">tar -xzf subnet-calculator-{{ config.extra.version }}.tar.gz</span> <span class="flag">-C</span> <span class="path">/var/www/html/subnet-calculator/</span></div>
         <div>&nbsp;</div>
         <div><span class="comment"># Option 2 — Docker Compose</span></div>
