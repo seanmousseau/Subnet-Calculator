@@ -916,7 +916,7 @@
         }
 
         .overlap-none     { color: var(--color-text-faint); }
-        .overlap-identical { color: var(--color-accent); font-weight: 600; }
+        .overlap-identical { color: var(--color-accent-light); font-weight: 600; }
         .overlap-contains { color: #e5a23a; font-weight: 600; }
 
         .multi-overlap-panel { margin-top: 0.75rem; }
