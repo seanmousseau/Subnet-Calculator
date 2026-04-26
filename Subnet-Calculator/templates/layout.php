@@ -64,9 +64,10 @@
 <a href="#main-content" class="skip-link">Skip to main content</a>
 <main class="card" id="main-content">
     <div class="title-row">
+        <?php $logo_v = htmlspecialchars($app_version) . '-2'; ?>
         <picture>
-            <source srcset="assets/logo.webp?v=<?= htmlspecialchars($app_version) ?>-2" type="image/webp">
-            <img src="assets/logo.png?v=<?= htmlspecialchars($app_version) ?>-2" alt="Subnet Calculator logo" class="logo">
+            <source srcset="assets/logo.webp?v=<?= $logo_v ?>" type="image/webp">
+            <img src="assets/logo.png?v=<?= $logo_v ?>" alt="Subnet Calculator logo" class="logo">
         </picture>
         <h1><?= htmlspecialchars($page_title) ?></h1>
         <span class="version">v<?= htmlspecialchars($app_version) ?></span>
