@@ -10,9 +10,9 @@
     <meta property="og:url"         content="<?= $canonical_url ?>">
     <link rel="canonical" href="<?= $canonical_url ?>">
     <title><?= htmlspecialchars($page_title) ?></title>
-    <link rel="icon" type="image/webp" href="assets/favicon-32.webp">
-    <link rel="icon" type="image/png"  href="assets/favicon-32.png">
-    <link rel="apple-touch-icon"       href="assets/apple-touch-icon.png">
+    <link rel="icon" type="image/webp" href="assets/favicon-32.webp?v=<?= htmlspecialchars($app_version) ?>">
+    <link rel="icon" type="image/png"  href="assets/favicon-32.png?v=<?= htmlspecialchars($app_version) ?>">
+    <link rel="apple-touch-icon"       href="assets/apple-touch-icon.png?v=<?= htmlspecialchars($app_version) ?>">
     <?php
     // $canonical_url may include a path (e.g. in subdir installs); extract scheme+host
     // so the social image URL always points to the docroot, not a page path.
