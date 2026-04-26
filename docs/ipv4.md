@@ -28,7 +28,7 @@ Click any result row to copy its value to the clipboard.
 
 Expand the **Binary Representation** panel to see:
 
-- Network address in binary (blue = network bits, grey = host bits)
+- Network address in binary (teal = network bits, grey = host bits)
 - Subnet mask in binary
 - Network address in hexadecimal and unsigned decimal
 

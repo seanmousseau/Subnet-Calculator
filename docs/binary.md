@@ -4,7 +4,7 @@ Expand the **Binary Representation** (IPv4) or **Binary / Hex Representation** (
 
 ## IPv4
 
-- **Network row** — 32-bit binary address; **blue** bits are the network portion (determined by the prefix length), **grey** bits are the host portion.
+- **Network row** — 32-bit binary address; **teal** bits are the network portion (determined by the prefix length), **grey** bits are the host portion.
 - **Mask row** — 32-bit binary subnet mask.
 - **Hex** — network address in dotted-hex notation (e.g. `C0.A8.01.00` for `192.168.1.0`).
 - **Decimal** — network address as an unsigned 32-bit integer.
@@ -14,7 +14,7 @@ Click the Hex or Decimal values to copy them.
 
 ## IPv6
 
-- **Address rows** — 128-bit binary; blue = network bits (prefix), grey = interface bits.
+- **Address rows** — 128-bit binary; teal = network bits (prefix), grey = interface bits.
 - **Hex rows** — the address in full uncompressed hexadecimal.
 
 ## Use cases

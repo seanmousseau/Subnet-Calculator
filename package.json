@@ -9,8 +9,8 @@
     "stylelint-config-standard": "^36"
   },
   "scripts": {
-    "lint:js":  "eslint Subnet-Calculator/assets/app.js",
+    "lint:js": "eslint Subnet-Calculator/assets/app.js",
     "lint:css": "stylelint Subnet-Calculator/assets/app.css",
-    "lint":     "npm run lint:js && npm run lint:css"
+    "lint": "npm run lint:js && npm run lint:css"
   }
 }

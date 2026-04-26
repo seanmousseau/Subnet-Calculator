@@ -3047,6 +3047,63 @@ async def test_vlsm_keyboard_delete(page: Page) -> None:
     )
 
 
+async def test_v290_typography(page: Page) -> None:
+    """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
+    section("v2.9.0 — typography verification")
+
+    await navigate(page, APP_URL)
+
+    h1_font = await page.evaluate(
+        "() => getComputedStyle(document.querySelector('h1')).fontFamily"
+    )
+    assert_true(
+        "h1 uses Space Grotesk",
+        "Space Grotesk" in h1_font,
+        f"h1 fontFamily: {h1_font}"
+    )
+
+    body_font = await page.evaluate(
+        "() => getComputedStyle(document.body).fontFamily"
+    )
+    assert_true(
+        "body uses Plus Jakarta Sans",
+        "Plus Jakarta Sans" in body_font,
+        f"body fontFamily: {body_font}"
+    )
+
+    input_font = await page.evaluate(
+        '() => getComputedStyle(document.querySelector(\'input[type="text"]\')).fontFamily'
+    )
+    assert_true(
+        "input uses Fira Code",
+        "Fira Code" in input_font,
+        f"input fontFamily: {input_font}"
+    )
+    assert_true(
+        "input does NOT use JetBrains Mono",
+        "JetBrains" not in input_font,
+        f"input fontFamily: {input_font}"
+    )
+
+    calc_bg = await page.evaluate(
+        '() => getComputedStyle(document.querySelector(\'button[type="submit"]\')).backgroundColor'
+    )
+    assert_true(
+        "Calculate button background is teal (not blue)",
+        "6, 214, 160" in calc_bg or "06d6a0" in calc_bg.lower(),
+        f"button bg: {calc_bg}"
+    )
+
+    badge_color = await page.evaluate(
+        "() => getComputedStyle(document.querySelector('.version')).color"
+    )
+    assert_true(
+        "version badge text is teal",
+        "6, 214, 160" in badge_color,
+        f"badge color: {badge_color}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -3169,6 +3226,7 @@ async def main() -> None:
             await test_a11y_help_bubble_keyboard(page)
             await test_a11y_reduced_motion_css(page)
             await test_vlsm_keyboard_delete(page)
+            await test_v290_typography(page)
         finally:
             await context.close()
             await browser.close()

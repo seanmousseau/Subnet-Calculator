@@ -1,5 +1,5 @@
 site_name: Subnet Calculator
-site_url: https://seanmousseau.github.io/Subnet-Calculator/
+site_url: https://docs.subnetcalculator.app/
 site_author: Sean Mousseau
 site_description: Documentation for the Subnet Calculator — a self-hosted PHP tool for IPv4/IPv6 subnetting, VLSM planning, and network analysis.
 repo_url: https://github.com/seanmousseau/Subnet-Calculator
@@ -7,16 +7,22 @@ repo_name: seanmousseau/Subnet-Calculator
 
 theme:
   name: material
+  custom_dir: docs/overrides
+  logo: assets/logo-mark.svg
+  favicon: assets/favicon.svg
+  font:
+    text: Plus Jakarta Sans
+    code: Fira Code
   palette:
     - scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-night
         name: Switch to light mode
     - scheme: default
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-sunny
         name: Switch to dark mode
@@ -26,6 +32,9 @@ theme:
     - navigation.top
     - search.suggest
     - content.code.copy
+
+exclude_docs: |
+  superpowers/
 
 plugins:
   - search
@@ -50,6 +59,12 @@ nav:
     - REST API: api.md
     - PHP Client Library: client.md
     - Operator Config: config.md
+
+extra:
+  version: "2.9.1"
+
+extra_css:
+  - stylesheets/extra.css
 
 markdown_extensions:
   - admonition

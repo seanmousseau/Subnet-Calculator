@@ -1,3 +1,10 @@
+---
+template: home.html
+hide:
+  - navigation
+  - toc
+---
+
 # Subnet Calculator
 
 A self-hosted PHP tool for IPv4 and IPv6 subnetting, VLSM planning, and network analysis.
@@ -35,7 +42,7 @@ Switch to the **IPv6** tab for IPv6 calculations, and to the **VLSM** tab to pla
 Download the latest release tarball from the [GitHub releases page](https://github.com/seanmousseau/Subnet-Calculator/releases) and extract it into your web root:
 
 ```bash
-tar -xzf subnet-calculator-2.8.1.tar.gz -C /var/www/html/subnet-calculator/
+tar -xzf subnet-calculator-2.9.1.tar.gz -C /var/www/html/subnet-calculator/
 ```
 
 ### Option 2 — Docker

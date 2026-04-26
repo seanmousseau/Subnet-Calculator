@@ -10,8 +10,9 @@
     <meta property="og:url"         content="<?= $canonical_url ?>">
     <link rel="canonical" href="<?= $canonical_url ?>">
     <title><?= htmlspecialchars($page_title) ?></title>
-    <link rel="icon" type="image/webp" href="assets/favicon-32.webp">
-    <link rel="icon" type="image/png"  href="assets/favicon-32.png">
+    <link rel="icon" type="image/webp" href="assets/favicon-32.webp?v=<?= htmlspecialchars($app_version) ?>">
+    <link rel="icon" type="image/png"  href="assets/favicon-32.png?v=<?= htmlspecialchars($app_version) ?>">
+    <link rel="apple-touch-icon"       href="assets/apple-touch-icon.png?v=<?= htmlspecialchars($app_version) ?>">
     <?php
     // $canonical_url may include a path (e.g. in subdir installs); extract scheme+host
     // so the social image URL always points to the docroot, not a page path.
@@ -22,8 +23,8 @@
     unset($_cu);
     ?>
     <meta property="og:image"        content="<?= $_si_url ?>">
-    <meta property="og:image:width"  content="520">
-    <meta property="og:image:height" content="600">
+    <meta property="og:image:width"  content="512">
+    <meta property="og:image:height" content="512">
     <meta property="og:image:type"   content="image/webp">
     <meta property="og:site_name"    content="Subnet Calculator">
     <meta name="twitter:card"        content="summary">
@@ -31,7 +32,7 @@
     <meta name="twitter:description" content="<?= htmlspecialchars($page_description) ?>">
     <meta name="twitter:image"       content="<?= $_si_url ?>">
     <meta name="twitter:image:alt"   content="Subnet Calculator logo">
-    <meta name="theme-color"         content="#0F172A">
+    <meta name="theme-color"         content="#0d1117">
     <meta name="color-scheme"        content="dark light">
     <?php if ($turnstile_curl_missing) : ?>
     <!-- sc-warning: Turnstile is configured but the PHP cURL extension is not loaded.
@@ -63,9 +64,10 @@
 <a href="#main-content" class="skip-link">Skip to main content</a>
 <main class="card" id="main-content">
     <div class="title-row">
+        <?php $logo_v = htmlspecialchars($app_version) . '-2'; ?>
         <picture>
-            <source srcset="assets/logo.webp" type="image/webp">
-            <img src="assets/logo.png" alt="Subnet Calculator logo" class="logo">
+            <source srcset="assets/logo.webp?v=<?= $logo_v ?>" type="image/webp">
+            <img src="assets/logo.png?v=<?= $logo_v ?>" alt="Subnet Calculator logo" class="logo">
         </picture>
         <h1><?= htmlspecialchars($page_title) ?></h1>
         <span class="version">v<?= htmlspecialchars($app_version) ?></span>
@@ -187,7 +189,7 @@
             $bin_mask  = array_map(fn($o) => sprintf('%08b', (int)$o), explode('.', $result['netmask_octet']));
             ?>
             <details class="binary-details">
-                <summary>Binary Representation<?= help_bubble('ipv4-binary', 'Shows the network address and mask in binary. Blue bits are the network portion (fixed); grey bits are the host portion (variable). Also shows the network address in hexadecimal and unsigned decimal.') ?></summary>
+                <summary>Binary Representation<?= help_bubble('ipv4-binary', 'Shows the network address and mask in binary. Teal bits are the network portion (fixed); grey bits are the host portion (variable). Also shows the network address in hexadecimal and unsigned decimal.') ?></summary>
                 <div class="binary-grid">
                     <span class="bin-label">Network</span>
                     <code class="bin-value"><?php
@@ -513,7 +515,7 @@ if ($i < 3) {
             }
             if (isset($bin6_ok) && $bin6_ok) : ?>
             <details class="binary-details">
-                <summary>Binary / Hex Representation<?= help_bubble('ipv6-binary', 'Shows the IPv6 address in binary (128 bits), split into network (blue) and interface (grey) portions based on the prefix length. Also displays the address in hexadecimal.') ?></summary>
+                <summary>Binary / Hex Representation<?= help_bubble('ipv6-binary', 'Shows the IPv6 address in binary (128 bits), split into network (teal) and interface (grey) portions based on the prefix length. Also displays the address in hexadecimal.') ?></summary>
                 <div class="binary-grid">
                     <span class="bin-label">Hex</span>
                     <code class="bin-value"><?php
