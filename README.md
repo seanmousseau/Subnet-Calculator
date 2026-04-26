@@ -175,6 +175,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File | Description |
 |---------|------|-------------|
+| 2.9.1 | [subnet-calculator-2.9.1.tar.gz](releases/subnet-calculator-2.9.1.tar.gz) | Bug fixes: VLSM dark inputs, mobile toggle clip, IPv6 overflow, logo transparency, favicon cache-bust |
 | 2.9.0 | [subnet-calculator-2.9.0.tar.gz](releases/subnet-calculator-2.9.0.tar.gz) | UI/UX overhaul: teal accent, Space Grotesk/Plus Jakarta Sans/Fira Code fonts, mobile fixes |
 | 2.8.1 | `releases/subnet-calculator-2.8.1.tar.gz` | |
 | 2.8.0 | `releases/subnet-calculator-2.8.0.tar.gz` | |

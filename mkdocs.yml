@@ -61,7 +61,7 @@ nav:
     - Operator Config: config.md
 
 extra:
-  version: "2.9.0"
+  version: "2.9.1"
 
 extra_css:
   - stylesheets/extra.css

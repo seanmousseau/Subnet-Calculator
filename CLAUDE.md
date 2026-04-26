@@ -59,9 +59,10 @@ rm Subnet-Calculator/CHANGELOG.md
 1. Bump `$app_version` in `Subnet-Calculator/includes/config.php`
 2. Update `CHANGELOG.md` with new release section
 3. Add row to `README.md` downloads table
-4. Build tarball (see Development block above)
-5. Commit, push, verify on GitHub
-6. Create PR `dev → main`
+4. Update docs: bump `extra.version` in `mkdocs.yml`; update tarball filename in `docs/index.md`
+5. Build tarball (see Development block above)
+6. Commit, push, verify on GitHub
+7. Create PR `dev → main`
 
 (Or run `/release` to automate steps 1–7.)
 
