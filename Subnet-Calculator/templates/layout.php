@@ -10,9 +10,9 @@
     <meta property="og:url"         content="<?= $canonical_url ?>">
     <link rel="canonical" href="<?= $canonical_url ?>">
     <title><?= htmlspecialchars($page_title) ?></title>
-    <link rel="icon" type="image/webp" href="assets/favicon-32.webp">
-    <link rel="icon" type="image/png"  href="assets/favicon-32.png">
-    <link rel="apple-touch-icon"       href="assets/apple-touch-icon.png">
+    <link rel="icon" type="image/webp" href="assets/favicon-32.webp?v=<?= htmlspecialchars($app_version) ?>">
+    <link rel="icon" type="image/png"  href="assets/favicon-32.png?v=<?= htmlspecialchars($app_version) ?>">
+    <link rel="apple-touch-icon"       href="assets/apple-touch-icon.png?v=<?= htmlspecialchars($app_version) ?>">
     <?php
     // $canonical_url may include a path (e.g. in subdir installs); extract scheme+host
     // so the social image URL always points to the docroot, not a page path.
@@ -64,9 +64,10 @@
 <a href="#main-content" class="skip-link">Skip to main content</a>
 <main class="card" id="main-content">
     <div class="title-row">
+        <?php $logo_v = htmlspecialchars($app_version) . '-2'; ?>
         <picture>
-            <source srcset="assets/logo.webp?v=<?= htmlspecialchars($app_version) ?>" type="image/webp">
-            <img src="assets/logo.png?v=<?= htmlspecialchars($app_version) ?>" alt="Subnet Calculator logo" class="logo">
+            <source srcset="assets/logo.webp?v=<?= $logo_v ?>" type="image/webp">
+            <img src="assets/logo.png?v=<?= $logo_v ?>" alt="Subnet Calculator logo" class="logo">
         </picture>
         <h1><?= htmlspecialchars($page_title) ?></h1>
         <span class="version">v<?= htmlspecialchars($app_version) ?></span>
