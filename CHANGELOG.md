@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1] - 2026-04-26
+
+### Fixed
+- **VLSM dark mode inputs** — `input[type="number"]` (VLSM host fields) now inherit the same dark-mode background, border, and text colour tokens as `input[type="text"]` — closes #276
+- **Mobile theme toggle clipped** — theme toggle button is no longer cropped on 375 px viewports; `flex-shrink: 0` prevents it from being squeezed by the h1 — closes #277
+- **Long IPv6 overflow** — expanded IPv6 addresses now wrap at character boundaries (`overflow-wrap: anywhere`) instead of overflowing the result card — closes #278
+- **Logo transparency** — SC monogram `logo.png` / `logo.webp` had premultiplied-alpha white fringe at rounded corners; rebuilt with clean transparency
+- **Favicon/asset cache-busting** — `?v=` query params added to favicon and apple-touch-icon `<link>` tags so browsers fetch updated assets after upgrade
+
 ## [2.9.0] - 2026-04-25
 
 ### Changed
