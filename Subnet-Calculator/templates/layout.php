@@ -10,8 +10,12 @@
     <meta property="og:url"         content="<?= $canonical_url ?>">
     <link rel="canonical" href="<?= $canonical_url ?>">
     <title><?= htmlspecialchars($page_title) ?></title>
-    <link rel="icon" type="image/webp" href="assets/favicon-32.webp?v=<?= htmlspecialchars($app_version) ?>">
-    <link rel="icon" type="image/png"  href="assets/favicon-32.png?v=<?= htmlspecialchars($app_version) ?>">
+    <link rel="icon" type="image/webp" href="assets/favicon-32-dark.webp?v=<?= htmlspecialchars($app_version) ?>" media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/png"  href="assets/favicon-32-dark.png?v=<?= htmlspecialchars($app_version) ?>"  media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/webp" href="assets/favicon-32-light.webp?v=<?= htmlspecialchars($app_version) ?>" media="(prefers-color-scheme: light)">
+    <link rel="icon" type="image/png"  href="assets/favicon-32-light.png?v=<?= htmlspecialchars($app_version) ?>"  media="(prefers-color-scheme: light)">
+    <link rel="icon" type="image/webp" href="assets/favicon-32-dark.webp?v=<?= htmlspecialchars($app_version) ?>">
+    <link rel="icon" type="image/png"  href="assets/favicon-32-dark.png?v=<?= htmlspecialchars($app_version) ?>">
     <link rel="apple-touch-icon"       href="assets/apple-touch-icon.png?v=<?= htmlspecialchars($app_version) ?>">
     <?php
     // $canonical_url may include a path (e.g. in subdir installs); extract scheme+host

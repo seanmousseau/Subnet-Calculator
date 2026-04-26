@@ -1,12 +1,22 @@
-<img width="125" src="https://media.seanmousseau.com/file/seanmousseau/assets/logos/sc/logo.webp" alt="Subnet Calculator" />
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="logo/logo-dark.webp">
+    <source media="(prefers-color-scheme: light)" srcset="logo/logo-light.webp">
+    <img width="120" src="logo/logo-dark.webp" alt="Subnet Calculator">
+  </picture>
+  <br>
+  Subnet Calculator
+</h1>
 
-# Subnet Calculator
+<p align="center">
+  A lightweight, web-based subnet calculator written in PHP supporting both IPv4 and IPv6.
+</p>
 
-A lightweight, web-based subnet calculator written in PHP supporting both IPv4 and IPv6.
-
-https://subnetcalculator.app
-
-**[Documentation](https://seanmousseau.github.io/Subnet-Calculator/)**
+<p align="center">
+  <a href="https://subnetcalculator.app"><strong>Live app</strong></a> ·
+  <a href="https://seanmousseau.github.io/Subnet-Calculator/"><strong>Documentation</strong></a> ·
+  <a href="CHANGELOG.md"><strong>Changelog</strong></a>
+</p>
 
 ## Features
 
@@ -175,6 +185,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File | Description |
 |---------|------|-------------|
+| 2.9.2 | [subnet-calculator-2.9.2.tar.gz](releases/subnet-calculator-2.9.2.tar.gz) | Light + dark logo variants; adaptive favicon (prefers-color-scheme); apple-touch-icon WebP fix; refreshed README header |
 | 2.9.1 | [subnet-calculator-2.9.1.tar.gz](releases/subnet-calculator-2.9.1.tar.gz) | Bug fixes: VLSM dark inputs, mobile toggle clip, IPv6 overflow, logo transparency, favicon cache-bust |
 | 2.9.0 | [subnet-calculator-2.9.0.tar.gz](releases/subnet-calculator-2.9.0.tar.gz) | UI/UX overhaul: teal accent, Space Grotesk/Plus Jakarta Sans/Fira Code fonts, mobile fixes |
 | 2.8.1 | `releases/subnet-calculator-2.8.1.tar.gz` | |

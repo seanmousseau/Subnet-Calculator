@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.2] - 2026-04-26
+
+### Added
+- **Light + dark mode logo variants** — every brand asset (`logo`, `favicon-32`, `apple-touch-icon`) now ships in both light and dark variants, in PNG and WebP. Canonical sources live in `/logo/`; previous versions archived to `/logo/old/`.
+- **Adaptive favicon** — browser tab icon now switches between dark-mode (teal on transparent) and light-mode (navy on transparent) automatically via `prefers-color-scheme` media queries on the `<link rel="icon">` tags.
+
+### Fixed
+- **`apple-touch-icon.webp` white background** — the WebP variant was carrying an opaque white background while the PNG variant was correct (`#0a1a12` baked bg). WebP regenerated to match the PNG.
+- **README header** — refreshed to v2.9.x style guide with light/dark logo switching via `<picture>` + `prefers-color-scheme`.
+
 ## [2.9.1] - 2026-04-26
 
 ### Fixed
