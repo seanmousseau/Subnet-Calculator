@@ -11,6 +11,9 @@ Run the full Subnet Calculator release workflow:
 3. Update the version string in `Subnet-Calculator/templates/layout.php`.
 4. Add a new release section to `CHANGELOG.md` (summarize changes since last release from `git log --oneline` since the last tag).
 5. Add a row to the downloads table in `README.md`.
-6. Build the release tarball: `tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .`
-7. Commit all changes with message: `release: vX.Y.Z`
-8. Confirm with user before pushing and opening a PR from `dev → main`.
+6. Update docs to reflect the new version:
+   - Bump `extra.version` in `mkdocs.yml` to `"X.Y.Z"`.
+   - Update the tarball filename in `docs/index.md` (the `tar -xzf` install snippet).
+7. Build the release tarball: `tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .`
+8. Commit all changes with message: `release: vX.Y.Z`
+9. Confirm with user before pushing and opening a PR from `dev → main`.
