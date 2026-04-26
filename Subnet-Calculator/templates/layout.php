@@ -65,8 +65,8 @@
 <main class="card" id="main-content">
     <div class="title-row">
         <picture>
-            <source srcset="assets/logo.webp" type="image/webp">
-            <img src="assets/logo.png" alt="Subnet Calculator logo" class="logo">
+            <source srcset="assets/logo.webp?v=<?= htmlspecialchars($app_version) ?>" type="image/webp">
+            <img src="assets/logo.png?v=<?= htmlspecialchars($app_version) ?>" alt="Subnet Calculator logo" class="logo">
         </picture>
         <h1><?= htmlspecialchars($page_title) ?></h1>
         <span class="version">v<?= htmlspecialchars($app_version) ?></span>
