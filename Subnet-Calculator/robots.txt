@@ -4,3 +4,5 @@ Disallow: /templates/
 Disallow: /config.php
 Disallow: /config.php.example
 Allow: /
+
+Sitemap: https://subnetcalculator.app/sitemap.xml

@@ -1512,6 +1512,24 @@ async def test_docs_footer_link(page: Page) -> None:
                 target == "_blank", str(target))
 
 
+async def test_sitemap_and_robots(_page: Page) -> None:
+    section("sitemap.xml + robots.txt")
+
+    status, hdrs, body = _http_get("sitemap.xml")
+    assert_eq("sitemap.xml HTTP 200", status, 200)
+    assert_contains("sitemap.xml is XML", hdrs.get("content-type", ""), "xml")
+    assert_contains("sitemap.xml has <urlset>", body, "<urlset")
+    assert_contains("sitemap.xml lists app root",
+                    body, "https://subnetcalculator.app/")
+    assert_contains("sitemap.xml lists docs site",
+                    body, "https://docs.subnetcalculator.app/")
+
+    rstatus, _, robots = _http_get("robots.txt")
+    assert_eq("robots.txt HTTP 200", rstatus, 200)
+    assert_contains("robots.txt advertises sitemap",
+                    robots, "Sitemap: https://subnetcalculator.app/sitemap.xml")
+
+
 # ---------------------------------------------------------------------------
 # REST API — direct HTTP tests
 # ---------------------------------------------------------------------------
@@ -3184,6 +3202,7 @@ async def main() -> None:
             await test_tool_drawer_switch_tools(page)
             await test_visual_regression(page)
             await test_docs_footer_link(page)
+            await test_sitemap_and_robots(page)
             await test_api_meta(page)
             await test_api_ipv4(page)
             await test_api_ipv6(page)
