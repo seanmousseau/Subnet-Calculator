@@ -19,6 +19,7 @@ require $base . 'functions-ipv6.php';
 require $base . 'functions-split.php';
 require $base . 'functions-util.php';
 require $base . 'functions-vlsm.php';
+require $base . 'functions-vlsm6.php';
 require $base . 'functions-supernet.php';
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';

@@ -7,6 +7,7 @@ require __DIR__ . '/includes/functions-ipv6.php';
 require __DIR__ . '/includes/functions-split.php';
 require __DIR__ . '/includes/functions-util.php';
 require __DIR__ . '/includes/functions-vlsm.php';
+require __DIR__ . '/includes/functions-vlsm6.php';
 require __DIR__ . '/includes/functions-supernet.php';
 require __DIR__ . '/includes/functions-ula.php';
 require __DIR__ . '/includes/functions-session.php';
