@@ -59,6 +59,8 @@ tags:
     description: Wildcard mask ↔ CIDR conversion
   - name: Lookup
     description: Inverse subnet lookup (find which CIDRs contain each IP)
+  - name: Diff
+    description: Subnet aggregation diff (compare two CIDR lists)
   - name: Changelog
     description: API changelog
 
@@ -1246,6 +1248,91 @@ paths:
                       matches: ["2001:db8::/32"]
                       deepest: "2001:db8::/32"
         "400": { description: "Missing/invalid input or out-of-range cap", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+
+  /diff:
+    post:
+      operationId: subnetDiff
+      tags: [Diff]
+      summary: Compare two CIDR lists and report added / removed / changed / unchanged
+      description: |
+        Computes a structural diff between a "before" and an "after" list of
+        CIDRs. Each input CIDR is normalised to canonical form before comparison
+        (host bits zeroed; IPv6 lowercased and compressed). Result categories:
+
+        - `unchanged`: CIDRs present in both lists with the same prefix length.
+        - `removed`:   CIDRs only in `before` (sorted; IPv4 first, then IPv6).
+        - `added`:     CIDRs only in `after`  (sorted; IPv4 first, then IPv6).
+        - `changed`:   pairs where the network address matches but the prefix
+                       length differs (e.g. `10.0.0.0/24` → `10.0.0.0/23`).
+
+        Cap: max 1000 entries per list.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [before, after]
+              properties:
+                before:
+                  type: array
+                  maxItems: 1000
+                  description: CIDR list representing the prior state.
+                  items: { type: string, example: "10.0.0.0/24" }
+                after:
+                  type: array
+                  maxItems: 1000
+                  description: CIDR list representing the desired state.
+                  items: { type: string, example: "10.0.0.0/23" }
+            example:
+              before: ["10.0.0.0/24", "10.0.1.0/24", "192.168.0.0/24"]
+              after:  ["10.0.0.0/23", "10.0.1.0/24", "192.168.1.0/24"]
+      responses:
+        "200":
+          description: Diff result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [added, removed, unchanged, changed]
+                        properties:
+                          added:
+                            type: array
+                            items: { type: string }
+                          removed:
+                            type: array
+                            items: { type: string }
+                          unchanged:
+                            type: array
+                            items: { type: string }
+                          changed:
+                            type: array
+                            items:
+                              type: object
+                              required: [from, to, reason]
+                              properties:
+                                from:   { type: string, example: "10.0.0.0/24" }
+                                to:     { type: string, example: "10.0.0.0/23" }
+                                reason: { type: string, example: "prefix changed /24 → /23" }
+              example:
+                ok: true
+                data:
+                  added:     ["192.168.1.0/24"]
+                  removed:   ["192.168.0.0/24"]
+                  unchanged: ["10.0.1.0/24"]
+                  changed:
+                    - from: "10.0.0.0/24"
+                      to:   "10.0.0.0/23"
+                      reason: "prefix changed /24 → /23"
+        "400": { description: "Missing field, invalid CIDR, or list too large", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }

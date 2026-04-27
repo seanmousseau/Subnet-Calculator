@@ -14,6 +14,7 @@ require __DIR__ . '/includes/functions-session.php';
 require __DIR__ . '/includes/functions-range.php';
 require __DIR__ . '/includes/functions-tree.php';
 require __DIR__ . '/includes/functions-lookup.php';
+require __DIR__ . '/includes/functions-diff.php';
 
 // ─── Security headers ─────────────────────────────────────────────────────────
 
