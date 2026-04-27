@@ -1512,6 +1512,46 @@ async def test_docs_footer_link(page: Page) -> None:
                 target == "_blank", str(target))
 
 
+async def test_print_stylesheet_dark_mode(page: Page) -> None:
+    section("Print stylesheet (dark mode)")
+
+    await navigate(page, APP_URL)
+    await page.evaluate(
+        "document.documentElement.setAttribute('data-theme','dark')"
+    )
+    await page.emulate_media(media="print")
+
+    body_bg = await page.evaluate(
+        "getComputedStyle(document.body).backgroundColor"
+    )
+    assert_true(
+        "print body bg is white in dark mode",
+        body_bg in ("rgb(255, 255, 255)", "rgba(0, 0, 0, 0)"),
+        body_bg,
+    )
+
+    main_color = await page.evaluate(
+        "getComputedStyle(document.querySelector('main#main-content') "
+        "|| document.querySelector('.card')).color"
+    )
+    m = re.match(r"rgba?\((\d+),\s*(\d+),\s*(\d+)", main_color)
+    assert_true(
+        "print main color parseable",
+        m is not None,
+        main_color,
+    )
+    if m:
+        r, g, b = (int(x) for x in m.groups())
+        assert_true(
+            "print main color is dark ink (max channel < 80)",
+            max(r, g, b) < 80,
+            main_color,
+        )
+
+    # Restore default emulation so subsequent tests see a normal viewport
+    await page.emulate_media(media="screen")
+
+
 async def test_sitemap_and_robots(_page: Page) -> None:
     section("sitemap.xml + robots.txt")
 
@@ -3203,6 +3243,7 @@ async def main() -> None:
             await test_visual_regression(page)
             await test_docs_footer_link(page)
             await test_sitemap_and_robots(page)
+            await test_print_stylesheet_dark_mode(page)
             await test_api_meta(page)
             await test_api_ipv4(page)
             await test_api_ipv6(page)
