@@ -691,7 +691,10 @@ toolDrawer.init();
             var hostsInput = row.querySelector('.vlsm6-hosts-input');
             if (!hostsInput) return;
             var v = (hostsInput.value || '').trim();
-            var ok = /^\d+$/.test(v) ? parseInt(v, 10) >= 1 : /^2\^(\d{1,3})$/.test(v);
+            var powMatch = v.match(/^2\^(\d{1,3})$/);
+            var ok = /^\d+$/.test(v)
+                ? parseInt(v, 10) >= 1
+                : (powMatch !== null && parseInt(powMatch[1], 10) <= 128);
             if (!ok) {
                 hasError = true;
                 var msg = document.createElement('span');

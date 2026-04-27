@@ -28,9 +28,12 @@ foreach ($reqs as $req) {
     if (!is_array($req)) {
         json_err('Each requirement must be an object with "name" and "hosts".');
     }
-    $name  = mb_substr(trim((string)($req['name']  ?? '')), 0, 100);
+    $name  = trim((string)($req['name']  ?? ''));
     $hosts = (int)($req['hosts'] ?? 0);
-    if ($name === '' || $hosts < 1) {
+    if ($name === '' || mb_strlen($name) > 100) {
+        json_err('Each requirement needs a non-empty "name" up to 100 characters.');
+    }
+    if ($hosts < 1) {
         json_err('Each requirement needs a non-empty "name" and "hosts" >= 1.');
     }
     $clean_reqs[] = ['name' => $name, 'hosts' => $hosts];

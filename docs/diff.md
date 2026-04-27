@@ -146,4 +146,8 @@ curl -sS https://subnetcalculator.app/api/v1/diff \
 
 `405 Method Not Allowed` is returned for any non-`POST` method.
 
+`401 Unauthorized` is returned by the API router (before dispatch) when the request is missing or has an invalid Bearer token, if `$api_require_auth` is enabled.
+
+`429 Too Many Requests` is returned by the router when the per-IP rate limit is exceeded.
+
 See [REST API → POST /api/v1/diff](api.md#post-apiv1diff) for the full endpoint reference.

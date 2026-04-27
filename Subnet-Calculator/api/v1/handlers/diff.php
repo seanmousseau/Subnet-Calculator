@@ -20,6 +20,9 @@ if (!is_array($after)) {
 }
 
 $max = 1000;
+if ($before === [] && $after === []) {
+    json_err('At least one of "before" or "after" must contain a CIDR.');
+}
 if (count($before) > $max) {
     json_err('Too many CIDRs in "before" (max ' . $max . ').');
 }

@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+// phpcs:disable PSR1.Files.SideEffects -- explicit dependency on ipv6_to_gmp().
+require_once __DIR__ . '/functions-ipv6.php';
+// phpcs:enable PSR1.Files.SideEffects
+
 // ─── Inverse subnet lookup ────────────────────────────────────────────────────
 
 /**

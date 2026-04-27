@@ -109,6 +109,10 @@ function sc_run_lookup(
     int $max_cidrs = 100,
     int $max_ips = 1000
 ): void {
+    // Enforce absolute safety ceilings (hard caps documented in OpenAPI spec).
+    $max_cidrs = max(1, min($max_cidrs, 1000));
+    $max_ips   = max(1, min($max_ips, 10000));
+
     $cidr_lines = array_values(array_filter(array_map('trim', explode("\n", $cidrs_input))));
     $ip_lines   = array_values(array_filter(array_map('trim', explode("\n", $ips_input))));
     if ($cidr_lines === []) {
@@ -271,9 +275,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_lookup        = isset($_POST['lookup_cidrs']) || isset($_POST['lookup_ips']);
     $is_diff          = isset($_POST['diff_before']) || isset($_POST['diff_after']);
 
+    // v2.11.0 review fix: vlsm6/lookup/diff perform meaningful work (large
+    // allocations, bulk lookups, list comparisons) and must remain subject to
+    // honeypot/CAPTCHA protection. Lighter tool drawers (splitter, overlap,
+    // supernet, ULA, range, tree, wildcard, vlsm v4, session save) keep the
+    // pre-existing exemption.
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
-        || $is_vlsm6 || $is_supernet || $is_ula || $is_session_save || $is_range
-        || $is_tree || $is_wildcard || $is_lookup || $is_diff;
+        || $is_supernet || $is_ula || $is_session_save || $is_range
+        || $is_tree || $is_wildcard;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {

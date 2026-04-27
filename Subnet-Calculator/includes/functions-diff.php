@@ -53,17 +53,20 @@ function subnet_diff(array $before, array $after): array
     $b_set = array_values(array_unique($b));
     $a_set = array_values(array_unique($a));
 
-    // Index by network address (everything left of the slash) for the "changed"
-    // detection: same network, different prefix length.
+    // Index by network address (everything left of the slash). Each network
+    // may map to multiple distinct prefix lengths (e.g. 10.0.0.0/24 and
+    // 10.0.0.0/25 share the same network address but are different CIDRs).
+    /** @var array<string, list<array{cidr: string, prefix: int}>> $b_by_net */
     $b_by_net = [];
     foreach ($b_set as $cidr) {
         [$net, $pfx] = explode('/', $cidr, 2);
-        $b_by_net[$net] = ['cidr' => $cidr, 'prefix' => (int)$pfx];
+        $b_by_net[$net][] = ['cidr' => $cidr, 'prefix' => (int)$pfx];
     }
+    /** @var array<string, list<array{cidr: string, prefix: int}>> $a_by_net */
     $a_by_net = [];
     foreach ($a_set as $cidr) {
         [$net, $pfx] = explode('/', $cidr, 2);
-        $a_by_net[$net] = ['cidr' => $cidr, 'prefix' => (int)$pfx];
+        $a_by_net[$net][] = ['cidr' => $cidr, 'prefix' => (int)$pfx];
     }
 
     $unchanged = [];
@@ -71,32 +74,68 @@ function subnet_diff(array $before, array $after): array
     $added     = [];
     $removed   = [];
 
-    // First: walk before-side networks.
-    foreach ($b_by_net as $net => $row) {
-        if (isset($a_by_net[$net])) {
-            $a_row = $a_by_net[$net];
-            if ($a_row['prefix'] === $row['prefix']) {
-                $unchanged[] = $row['cidr'];
-            } else {
-                $changed[] = [
-                    'from'   => $row['cidr'],
-                    'to'     => $a_row['cidr'],
-                    'reason' => sprintf(
-                        'prefix changed /%d → /%d',
-                        $row['prefix'],
-                        $a_row['prefix']
-                    ),
-                ];
+    // Walk every network that appears on the before side.
+    foreach ($b_by_net as $net => $b_rows) {
+        $a_rows = $a_by_net[$net] ?? [];
+
+        // Step 1: pull out exact matches (same network AND same prefix) → unchanged.
+        $b_remaining = [];
+        $a_used      = [];
+        foreach ($b_rows as $b_row) {
+            $matched = false;
+            foreach ($a_rows as $i => $a_row) {
+                if (isset($a_used[$i])) {
+                    continue;
+                }
+                if ($a_row['prefix'] === $b_row['prefix']) {
+                    $unchanged[] = $b_row['cidr'];
+                    $a_used[$i] = true;
+                    $matched = true;
+                    break;
+                }
             }
-        } else {
-            $removed[] = $row['cidr'];
+            if (!$matched) {
+                $b_remaining[] = $b_row;
+            }
+        }
+        $a_remaining = [];
+        foreach ($a_rows as $i => $a_row) {
+            if (!isset($a_used[$i])) {
+                $a_remaining[] = $a_row;
+            }
+        }
+
+        // Step 2: pair leftover before/after rows for this network as "changed"
+        // (sorted by prefix so the pairing is stable). Any unpaired remainder
+        // falls through to removed/added below.
+        usort($b_remaining, static fn(array $x, array $y): int => $x['prefix'] <=> $y['prefix']);
+        usort($a_remaining, static fn(array $x, array $y): int => $x['prefix'] <=> $y['prefix']);
+        $pair_count = min(count($b_remaining), count($a_remaining));
+        for ($i = 0; $i < $pair_count; $i++) {
+            $changed[] = [
+                'from'   => $b_remaining[$i]['cidr'],
+                'to'     => $a_remaining[$i]['cidr'],
+                'reason' => sprintf(
+                    'prefix changed /%d → /%d',
+                    $b_remaining[$i]['prefix'],
+                    $a_remaining[$i]['prefix']
+                ),
+            ];
+        }
+        for ($i = $pair_count; $i < count($b_remaining); $i++) {
+            $removed[] = $b_remaining[$i]['cidr'];
+        }
+        for ($i = $pair_count; $i < count($a_remaining); $i++) {
+            $added[] = $a_remaining[$i]['cidr'];
         }
     }
 
-    // Second: walk after-side networks for pure additions.
-    foreach ($a_by_net as $net => $row) {
+    // Networks that only exist on the after side are pure additions.
+    foreach ($a_by_net as $net => $a_rows) {
         if (!isset($b_by_net[$net])) {
-            $added[] = $row['cidr'];
+            foreach ($a_rows as $a_row) {
+                $added[] = $a_row['cidr'];
+            }
         }
     }
 

@@ -2054,7 +2054,7 @@ async def _install_clipboard_spy(page: Page) -> None:
     The app is served over plain HTTP inside Docker (http://app:8080), which is
     not a secure context, so the real navigator.clipboard API is unavailable
     in chromium. We install a spy via addInitScript that records the most
-    recent writeText() payload on window.__lastCopy and resolves successfully,
+    recent writeText() payload on window.__lastClipboard and resolves successfully,
     exercising the production clipboard branch in app.js (which prefers
     navigator.clipboard.writeText over the document.execCommand fallback).
     """
@@ -2067,11 +2067,11 @@ async def _install_clipboard_spy(page: Page) -> None:
                     get: function () {
                         return {
                             writeText: function (txt) {
-                                window.__lastCopy = String(txt);
+                                window.__lastClipboard = String(txt);
                                 return Promise.resolve();
                             },
                             readText: function () {
-                                return Promise.resolve(window.__lastCopy || '');
+                                return Promise.resolve(window.__lastClipboard || '');
                             },
                         };
                     },
@@ -2083,7 +2083,7 @@ async def _install_clipboard_spy(page: Page) -> None:
 
 
 async def _read_clipboard(page: Page) -> str:
-    return await page.evaluate("window.__lastCopy || ''")
+    return await page.evaluate("window.__lastClipboard || ''")
 
 
 async def test_copy_as_markdown_ipv4(page: Page) -> None:

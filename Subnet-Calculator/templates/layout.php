@@ -1284,16 +1284,21 @@ if ($i < 3) {
             $vlsm6_remaining = gmp_sub($vlsm6_parent_total, $vlsm6_total_allocated);
 
             $vlsm6_fmt_count = static function (\GMP $g): string {
-                $threshold = gmp_pow(gmp_init(2), 31);
-                if (gmp_cmp($g, $threshold) < 0) {
-                    return format_number((int)gmp_strval($g));
+                $s = gmp_strval($g);
+                if ($s === '0') {
+                    return '0';
                 }
-                for ($n = 31; $n <= 128; $n++) {
-                    if (gmp_cmp(gmp_pow(gmp_init(2), $n), $g) >= 0) {
-                        return '2^' . $n;
-                    }
+                // Native int range — show the exact comma-formatted decimal.
+                if (strlen($s) <= 15) {
+                    return format_number((int)$s);
                 }
-                return '2^128';
+                // Otherwise, only use 2^N shorthand when the value is exactly
+                // a power of two; never round non-powers up to the next 2^N.
+                $bin = gmp_strval($g, 2);
+                if (preg_match('/^10+$/', $bin) === 1) {
+                    return '2^' . (strlen($bin) - 1);
+                }
+                return preg_replace('/\B(?=(\d{3})+(?!\d))/', ',', $s) ?? $s;
             };
 
             // Utilisation %: when both fit in float, compute exact; else show approximation
