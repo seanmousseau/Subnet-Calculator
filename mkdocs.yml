@@ -55,6 +55,7 @@ nav:
     - Allocation Tree: tree.md
     - Wildcard ↔ CIDR: wildcard.md
     - IP Lookup: lookup.md
+    - Subnet Diff: diff.md
   - Features:
     - VLSM Sessions: sessions.md
     - Shareable URLs & Embedding: sharing.md

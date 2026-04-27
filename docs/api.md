@@ -203,6 +203,20 @@ Response: `{"ok":true,"data":{"results":[{"ip":"10.1.2.3","matches":["10.0.0.0/8
 
 Mixed IPv4/IPv6 inputs are allowed; CIDRs only match IPs of the same family. Caps default to 100 CIDRs and 1000 IPs per request (operator-tunable via `$lookup_max_cidrs` / `$lookup_max_ips`). See the [IP Lookup](lookup.md) page for full reference.
 
+### POST /api/v1/diff
+
+Subnet aggregation diff — compare a `before` and `after` CIDR list and return what was added, removed, kept unchanged, or had its prefix length changed.
+
+```bash
+curl -X POST https://example.com/subnet-calculator/api/v1/diff \
+  -H 'Content-Type: application/json' \
+  -d '{"before":["10.0.0.0/24","192.168.0.0/24"],"after":["10.0.0.0/23","192.168.1.0/24"]}'
+```
+
+Response: `{"ok":true,"data":{"added":["192.168.1.0/24"],"removed":["192.168.0.0/24"],"unchanged":[],"changed":[{"from":"10.0.0.0/24","to":"10.0.0.0/23","reason":"prefix changed /24 → /23"}]}}`
+
+Each input CIDR is canonicalised (host bits zeroed, IPv6 lowercased + compressed) before comparison. Mixed IPv4/IPv6 inputs are allowed. Cap of 1000 entries per side. See the [Subnet Diff](diff.md) page for full reference.
+
 ### POST /api/v1/bulk
 
 Run multiple subnet calculations in a single request (up to 50 CIDRs). Pass a `cidrs` array and an optional `type` (`auto`, `ipv4`, or `ipv6`; defaults to `auto`).

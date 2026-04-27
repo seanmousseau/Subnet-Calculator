@@ -236,6 +236,7 @@ if ($i < 3) {
         elseif ($tree_result !== null || $tree_error !== null) { $open_tool_ipv4 = 'tree'; }
         elseif ($wildcard_result !== null || $wildcard_error !== null) { $open_tool_ipv4 = 'wildcard'; }
         elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'lookup'; }
+        elseif (($diff_result !== null || $diff_error !== null) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'diff'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv4 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv4) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split" aria-expanded="false">Split Subnet</button>
@@ -244,6 +245,7 @@ if ($i < 3) {
             <button type="button" class="tool-trigger" data-tool="tree" aria-expanded="false">Subnet Tree</button>
             <button type="button" class="tool-trigger" data-tool="wildcard" aria-expanded="false">Wildcard&harr;CIDR</button>
             <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
+            <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
         </div>
 
         <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv4">
@@ -527,6 +529,33 @@ if ($i < 3) {
                     <?php endif; ?>
                 </div>
             </div>
+
+            <div class="tool-panel" data-tool="diff">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Subnet Diff<?= help_bubble('ipv4-diff', 'Compares two CIDR lists. Inputs are canonicalised (host bits zeroed, IPv6 lowercased) before comparison. Reports added, removed, unchanged, and changed (same network address but different prefix length). Mixed IPv4/IPv6 inputs are allowed. Cap: 1000 entries per side.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv4">
+                        <div class="lookup-form-grid">
+                            <label for="diff_before_v4" class="lookup-form-label">Before <span class="lookup-form-hint">(one CIDR per line)</span></label>
+                            <textarea id="diff_before_v4" name="diff_before" rows="4" class="multi-overlap-input"
+                                      placeholder="10.0.0.0/24&#10;10.0.1.0/24&#10;10.0.2.0/24"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv4' ? $diff_before_input : '') ?></textarea>
+                            <label for="diff_after_v4" class="lookup-form-label">After <span class="lookup-form-hint">(one CIDR per line)</span></label>
+                            <textarea id="diff_after_v4" name="diff_after" rows="4" class="multi-overlap-input"
+                                      placeholder="10.0.0.0/23&#10;10.0.2.0/24&#10;10.0.3.0/24"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv4' ? $diff_after_input : '') ?></textarea>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Diff</button>
+                        </div>
+                    </form>
+                    <?php if ($active_tab === 'ipv4' && $diff_error) : ?>
+                        <div class="error"><?= htmlspecialchars($diff_error) ?></div>
+                    <?php elseif ($active_tab === 'ipv4' && $diff_result !== null) : ?>
+                        <?php include __DIR__ . '/_diff_result.php'; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -679,11 +708,13 @@ if ($i < 3) {
         if ($split_result6 !== null || $split_error6 !== null) { $open_tool_ipv6 = 'split6'; }
         elseif ($ula_result !== null || $ula_error !== null) { $open_tool_ipv6 = 'ula'; }
         elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
+        elseif (($diff_result !== null || $diff_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'diff'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv6 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv6) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split6" aria-expanded="false">Split Subnet</button>
             <button type="button" class="tool-trigger" data-tool="ula" aria-expanded="false">ULA Generator</button>
             <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
+            <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
         </div>
 
         <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv6">
@@ -839,6 +870,33 @@ if ($i < 3) {
                             </div>
                             <div class="split-more"><?= count($lookup_result) ?> IP<?= count($lookup_result) !== 1 ? 's' : '' ?> looked up</div>
                         </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="diff">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Subnet Diff<?= help_bubble('ipv6-diff', 'Compares two CIDR lists. Inputs are canonicalised (host bits zeroed, IPv6 lowercased) before comparison. Reports added, removed, unchanged, and changed (same network address but different prefix length). Mixed IPv4/IPv6 inputs are allowed. Cap: 1000 entries per side.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="lookup-form-grid">
+                            <label for="diff_before_v6" class="lookup-form-label">Before <span class="lookup-form-hint">(one CIDR per line)</span></label>
+                            <textarea id="diff_before_v6" name="diff_before" rows="4" class="multi-overlap-input"
+                                      placeholder="2001:db8::/48&#10;2001:db8:1::/48&#10;2001:db8:2::/48"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv6' ? $diff_before_input : '') ?></textarea>
+                            <label for="diff_after_v6" class="lookup-form-label">After <span class="lookup-form-hint">(one CIDR per line)</span></label>
+                            <textarea id="diff_after_v6" name="diff_after" rows="4" class="multi-overlap-input"
+                                      placeholder="2001:db8::/47&#10;2001:db8:2::/48&#10;2001:db8:3::/48"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv6' ? $diff_after_input : '') ?></textarea>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Diff</button>
+                        </div>
+                    </form>
+                    <?php if ($active_tab === 'ipv6' && $diff_error) : ?>
+                        <div class="error"><?= htmlspecialchars($diff_error) ?></div>
+                    <?php elseif ($active_tab === 'ipv6' && $diff_result !== null) : ?>
+                        <?php include __DIR__ . '/_diff_result.php'; ?>
                     <?php endif; ?>
                 </div>
             </div>

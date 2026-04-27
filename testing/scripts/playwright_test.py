@@ -1935,6 +1935,119 @@ async def test_lookup_shareable_url(page: Page) -> None:
                     ips_val, "10.1.2.3")
 
 
+async def test_diff_api_endpoint(_page: Page) -> None:
+    section("Diff API — POST /api/v1/diff")
+
+    status, data = _api_post("diff", {
+        "before": ["10.0.0.0/24", "10.0.1.0/24", "192.168.0.0/24"],
+        "after":  ["10.0.0.0/23", "10.0.1.0/24", "192.168.1.0/24"],
+    })
+    assert_eq("api diff: HTTP 200", status, 200)
+    assert_true("api diff: ok=true", data.get("ok") is True, str(data))
+    d = data.get("data", {})
+    assert_eq("api diff: added", d.get("added"), ["192.168.1.0/24"])
+    assert_eq("api diff: removed", d.get("removed"), ["192.168.0.0/24"])
+    assert_eq("api diff: unchanged", d.get("unchanged"), ["10.0.1.0/24"])
+    changed = d.get("changed") or []
+    assert_eq("api diff: 1 changed entry", len(changed), 1)
+    assert_eq("api diff: changed.from", changed[0].get("from"), "10.0.0.0/24")
+    assert_eq("api diff: changed.to",   changed[0].get("to"),   "10.0.0.0/23")
+    assert_contains("api diff: changed.reason mentions /24",
+                    changed[0].get("reason", ""), "/24")
+
+    # Missing field → 400
+    status_b, _ = _api_post("diff", {"before": ["10.0.0.0/24"]})
+    assert_eq("api diff: missing after → 400", status_b, 400)
+
+    # Invalid CIDR → 400
+    status_c, _ = _api_post("diff", {
+        "before": ["10.0.0.0/24"],
+        "after":  ["not-a-cidr"],
+    })
+    assert_eq("api diff: invalid cidr → 400", status_c, 400)
+
+
+async def test_diff_ui(page: Page) -> None:
+    section("Subnet Diff — UI (IPv4 tab)")
+
+    await navigate(page, APP_URL)
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='diff']")
+    await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
+    await page.fill("#diff_before_v4",
+                    "10.0.0.0/24\n10.0.1.0/24\n192.168.0.0/24")
+    await page.fill("#diff_after_v4",
+                    "10.0.0.0/23\n10.0.1.0/24\n192.168.1.0/24")
+    await page.click(
+        "#panel-ipv4 .tool-panel[data-tool='diff'] button[type='submit']"
+    )
+    await page.wait_for_load_state("load")
+    await page.wait_for_selector("#panel-ipv4 .diff-results")
+
+    added_text = await page.locator(
+        "#panel-ipv4 .diff-results .diff-group--added"
+    ).text_content()
+    removed_text = await page.locator(
+        "#panel-ipv4 .diff-results .diff-group--removed"
+    ).text_content()
+    changed_text = await page.locator(
+        "#panel-ipv4 .diff-results .diff-group--changed"
+    ).text_content()
+    unchanged_text = await page.locator(
+        "#panel-ipv4 .diff-results .diff-group--unchanged"
+    ).text_content()
+
+    assert_contains("diff ui: added contains 192.168.1.0/24",
+                    added_text or "", "192.168.1.0/24")
+    assert_contains("diff ui: removed contains 192.168.0.0/24",
+                    removed_text or "", "192.168.0.0/24")
+    assert_contains("diff ui: changed contains /24 → /23",
+                    changed_text or "", "/24")
+    assert_contains("diff ui: changed contains 10.0.0.0/23",
+                    changed_text or "", "10.0.0.0/23")
+    assert_contains("diff ui: unchanged contains 10.0.1.0/24",
+                    unchanged_text or "", "10.0.1.0/24")
+
+
+async def test_diff_shareable_url(page: Page) -> None:
+    section("Subnet Diff — shareable GET URL auto-populates and calculates")
+
+    url = (APP_URL + "?tab=ipv4"
+           "&diff_before=10.0.0.0%2F24%0A192.168.0.0%2F24"
+           "&diff_after=10.0.0.0%2F23%0A192.168.1.0%2F24")
+    await navigate(page, url)
+
+    assert_true(
+        "diff share: tool drawer open",
+        await page.locator("#panel-ipv4 .tool-drawer.open").count() > 0,
+    )
+    assert_true(
+        "diff share: diff tool-panel active",
+        await page.locator(
+            "#panel-ipv4 .tool-panel[data-tool='diff'].active"
+        ).count() > 0,
+    )
+
+    await page.wait_for_selector("#panel-ipv4 .diff-results")
+    added_text = await page.locator(
+        "#panel-ipv4 .diff-results .diff-group--added"
+    ).text_content()
+    changed_text = await page.locator(
+        "#panel-ipv4 .diff-results .diff-group--changed"
+    ).text_content()
+
+    assert_contains("diff share: added contains 192.168.1.0/24",
+                    added_text or "", "192.168.1.0/24")
+    assert_contains("diff share: changed contains 10.0.0.0/23",
+                    changed_text or "", "10.0.0.0/23")
+
+    before_val = await page.input_value("#diff_before_v4")
+    assert_contains("diff share: before textarea hydrated",
+                    before_val, "10.0.0.0/24")
+    after_val = await page.input_value("#diff_after_v4")
+    assert_contains("diff share: after textarea hydrated",
+                    after_val, "10.0.0.0/23")
+
+
 async def test_print_stylesheet_dark_mode(page: Page) -> None:
     section("Print stylesheet (dark mode)")
 
@@ -3731,6 +3844,9 @@ async def main() -> None:
             await test_lookup_ui(page)
             await test_lookup_ui_ipv6_tab(page)
             await test_lookup_shareable_url(page)
+            await test_diff_api_endpoint(page)
+            await test_diff_ui(page)
+            await test_diff_shareable_url(page)
             await test_api_meta(page)
             await test_api_ipv4(page)
             await test_api_ipv6(page)

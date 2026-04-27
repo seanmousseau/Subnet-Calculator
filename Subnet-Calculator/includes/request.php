@@ -134,6 +134,44 @@ function sc_run_lookup(
     }
 }
 
+// ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
+
+/**
+ * Run subnet_diff against the given raw textarea inputs and write the outcome
+ * into $result_out / $error_out by reference. Used by both the POST handler
+ * and the GET shareable-URL hydration path.
+ *
+ * @param array{added: list<string>, removed: list<string>, unchanged: list<string>,
+ *               changed: list<array{from: string, to: string, reason: string}>}|null $result_out
+ */
+function sc_run_diff(
+    string $before_input,
+    string $after_input,
+    ?array &$result_out,
+    ?string &$error_out,
+    int $max_entries = 1000
+): void {
+    $before_lines = array_values(array_filter(array_map('trim', explode("\n", $before_input))));
+    $after_lines  = array_values(array_filter(array_map('trim', explode("\n", $after_input))));
+    if ($before_lines === [] && $after_lines === []) {
+        $error_out = 'At least one CIDR is required in either Before or After.';
+        return;
+    }
+    if (count($before_lines) > $max_entries) {
+        $error_out = 'Too many CIDRs in Before (max ' . $max_entries . ').';
+        return;
+    }
+    if (count($after_lines) > $max_entries) {
+        $error_out = 'Too many CIDRs in After (max ' . $max_entries . ').';
+        return;
+    }
+    try {
+        $result_out = subnet_diff($before_lines, $after_lines);
+    } catch (\InvalidArgumentException $e) {
+        $error_out = $e->getMessage();
+    }
+}
+
 // ─── Request handling ─────────────────────────────────────────────────────────
 
 $get_tab    = $_GET['tab'] ?? $default_tab;
@@ -208,6 +246,12 @@ $lookup_ips_input   = '';
 $lookup_result = null;
 $lookup_error  = null;
 
+$diff_before_input = '';
+$diff_after_input  = '';
+/** @var array{added: list<string>, removed: list<string>, unchanged: list<string>, changed: list<array{from: string, to: string, reason: string}>}|null $diff_result */
+$diff_result = null;
+$diff_error  = null;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $post_tab   = $_POST['tab'] ?? $default_tab;
     $active_tab = in_array($post_tab, ['ipv4', 'ipv6', 'vlsm', 'vlsm6'], true) ? $post_tab : 'ipv4';
@@ -225,10 +269,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_tree          = isset($_POST['tree_parent']);
     $is_wildcard      = isset($_POST['wildcard_input']);
     $is_lookup        = isset($_POST['lookup_cidrs']) || isset($_POST['lookup_ips']);
+    $is_diff          = isset($_POST['diff_before']) || isset($_POST['diff_after']);
 
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
         || $is_vlsm6 || $is_supernet || $is_ula || $is_session_save || $is_range
-        || $is_tree || $is_wildcard || $is_lookup;
+        || $is_tree || $is_wildcard || $is_lookup || $is_diff;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -686,6 +731,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
     }
 
+    if ($is_diff && !$form_blocked) {
+        $diff_before_input = (string)($_POST['diff_before'] ?? '');
+        $diff_after_input  = (string)($_POST['diff_after']  ?? '');
+        sc_run_diff(
+            $diff_before_input,
+            $diff_after_input,
+            $diff_result,
+            $diff_error,
+        );
+    }
+
     if ($is_tree && !$form_blocked) {
         $tree_parent   = trim((string)($_POST['tree_parent']   ?? ''));
         $tree_children = trim((string)($_POST['tree_children'] ?? ''));
@@ -771,6 +827,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $lookup_error,
             isset($lookup_max_cidrs) ? (int)$lookup_max_cidrs : 100,
             isset($lookup_max_ips)   ? (int)$lookup_max_ips   : 1000,
+        );
+    }
+
+    // Subnet Diff shareable GET URL (works on both ipv4 and ipv6 tabs)
+    if (
+        ($active_tab === 'ipv4' || $active_tab === 'ipv6')
+        && (isset($_GET['diff_before']) || isset($_GET['diff_after']))
+    ) {
+        $diff_before_input = (string)($_GET['diff_before'] ?? '');
+        $diff_after_input  = (string)($_GET['diff_after']  ?? '');
+        sc_run_diff(
+            $diff_before_input,
+            $diff_after_input,
+            $diff_result,
+            $diff_error,
         );
     }
 
