@@ -1714,6 +1714,50 @@ async def test_api_vlsm(page: Page) -> None:
               "subnet" in allocs[0] if allocs else False, True)
 
 
+async def test_vlsm6_api_endpoint(_page: Page) -> None:
+    section("API — IPv6 VLSM (POST /api/v1/vlsm6)")
+    status, data = _api_post("vlsm6", {
+        "network": "2001:db8::",
+        "cidr": "32",
+        "requirements": [
+            {"name": "site-a", "hosts": 256},
+            {"name": "site-b", "hosts": 4},
+        ],
+    })
+    assert_eq("api vlsm6: HTTP 200", status, 200)
+    assert_eq("api vlsm6: ok=true", data.get("ok"), True)
+    allocs = data.get("data", {}).get("allocations", [])
+    assert_eq("api vlsm6: 2 allocations", len(allocs), 2)
+    names = {a.get("name") for a in allocs}
+    assert_true("api vlsm6: names round-trip",
+                names == {"site-a", "site-b"}, str(names))
+    # Largest-first: site-a (256 hosts) → /120 block
+    site_a = next(a for a in allocs if a["name"] == "site-a")
+    assert_eq("api vlsm6: site-a subnet", site_a.get("subnet"), "2001:db8::/120")
+    assert_eq("api vlsm6: site-a usable", site_a.get("usable"), 256)
+
+    # 2^N huge-host string round-trip
+    status2, data2 = _api_post("vlsm6", {
+        "network": "2001:db8::",
+        "cidr": "32",
+        "requirements": [{"name": "huge", "hosts": "2^96"}],
+    })
+    assert_eq("api vlsm6 (2^N): HTTP 200", status2, 200)
+    allocs2 = data2.get("data", {}).get("allocations", [])
+    assert_eq("api vlsm6 (2^N): 1 allocation", len(allocs2), 1)
+    assert_eq("api vlsm6 (2^N): subnet", allocs2[0].get("subnet"), "2001:db8::/32")
+    assert_eq("api vlsm6 (2^N): usable as 2^N", allocs2[0].get("usable"), "2^96")
+
+    # Insufficient space -> error
+    status3, data3 = _api_post("vlsm6", {
+        "network": "2001:db8::",
+        "cidr": "126",
+        "requirements": [{"name": "x", "hosts": 32}],
+    })
+    assert_eq("api vlsm6 (over): HTTP 400", status3, 400)
+    assert_true("api vlsm6 (over): ok=false", data3.get("ok") is False, str(data3))
+
+
 async def test_api_overlap(page: Page) -> None:
     section("API — Overlap")
     # cidr_b must be network-aligned to the inner prefix for contains to detect correctly
@@ -3323,6 +3367,7 @@ async def main() -> None:
             await test_api_ipv4(page)
             await test_api_ipv6(page)
             await test_api_vlsm(page)
+            await test_vlsm6_api_endpoint(page)
             await test_api_overlap(page)
             await test_api_split(page)
             await test_api_supernet(page)

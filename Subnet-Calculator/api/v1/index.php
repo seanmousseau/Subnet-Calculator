@@ -60,6 +60,7 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/ipv4',
             'POST /api/v1/ipv6',
             'POST /api/v1/vlsm',
+            'POST /api/v1/vlsm6',
             'POST /api/v1/overlap',
             'POST /api/v1/split/ipv4',
             'POST /api/v1/split/ipv6',
@@ -111,6 +112,9 @@ switch ($route_key) {
         break;
     case 'POST /vlsm':
         require __DIR__ . '/handlers/vlsm.php';
+        break;
+    case 'POST /vlsm6':
+        require __DIR__ . '/handlers/vlsm6.php';
         break;
     case 'POST /overlap':
         require __DIR__ . '/handlers/overlap.php';
