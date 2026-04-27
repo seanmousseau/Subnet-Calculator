@@ -225,7 +225,11 @@ document.addEventListener('click', function (e) {
             });
         }
     } else if (target === 'vlsm') {
-        document.querySelectorAll('.vlsm-subnet-cell[data-copy]').forEach(function (cell) {
+        document.querySelectorAll('.vlsm-table:not(.vlsm6-table) .vlsm-subnet-cell[data-copy]').forEach(function (cell) {
+            texts.push(cell.dataset.copy);
+        });
+    } else if (target === 'vlsm6') {
+        document.querySelectorAll('.vlsm6-table .vlsm-subnet-cell[data-copy]').forEach(function (cell) {
             texts.push(cell.dataset.copy);
         });
     } else if (target === 'supernet' || target === 'ula') {
@@ -233,6 +237,17 @@ document.addEventListener('click', function (e) {
         if (list2) {
             list2.querySelectorAll('.split-item[data-copy]').forEach(function (item) {
                 texts.push(item.dataset.copy);
+            });
+        }
+    } else if (target === 'lookup') {
+        var results = btn.closest('.lookup-results');
+        if (results) {
+            results.querySelectorAll('.lookup-table tbody tr').forEach(function (tr) {
+                var cells = tr.querySelectorAll('td');
+                var ip      = (cells[0]?.textContent || '').trim();
+                var deepest = (cells[1]?.textContent || '').trim();
+                var all     = (cells[2]?.textContent || '').trim();
+                texts.push(ip + '\t' + deepest + '\t' + all);
             });
         }
     }
@@ -607,6 +622,372 @@ const toolDrawer = {
 };
 
 toolDrawer.init();
+
+// ── VLSM6: dynamic requirement rows ──────────────────────────────────────────
+(function () {
+    const reqs = document.getElementById('vlsm6-reqs');
+    if (!reqs) return;
+
+    function makeRow() {
+        const row = document.createElement('div');
+        row.className = 'vlsm-req-row';
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.name = 'vlsm6_name[]';
+        nameInput.className = 'vlsm6-name-input';
+        nameInput.placeholder = 'e.g. Site A';
+        nameInput.autocomplete = 'off';
+        const hostsInput = document.createElement('input');
+        hostsInput.type = 'text';
+        hostsInput.name = 'vlsm6_hosts[]';
+        hostsInput.className = 'vlsm6-hosts-input';
+        hostsInput.placeholder = 'e.g. 256 or 2^64';
+        hostsInput.autocomplete = 'off';
+        hostsInput.spellcheck = false;
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'vlsm-remove-row';
+        removeBtn.setAttribute('aria-label', 'Remove row');
+        removeBtn.textContent = '×';
+        row.appendChild(nameInput);
+        row.appendChild(hostsInput);
+        row.appendChild(removeBtn);
+        return row;
+    }
+
+    document.querySelector('.vlsm6-add-row')?.addEventListener('click', () => {
+        reqs.appendChild(makeRow());
+    });
+
+    reqs.addEventListener('click', e => {
+        const btn = e.target.closest('.vlsm-remove-row');
+        if (!btn) return;
+        const rows = reqs.querySelectorAll('.vlsm-req-row');
+        if (rows.length > 1) btn.closest('.vlsm-req-row').remove();
+    });
+
+    reqs.addEventListener('keydown', function (e) {
+        if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+        const btn = e.target.closest('.vlsm-remove-row');
+        if (!btn) return;
+        e.preventDefault();
+        const rows = [...reqs.querySelectorAll('.vlsm-req-row')];
+        if (rows.length <= 1) return;
+        const idx = rows.indexOf(btn.closest('.vlsm-req-row'));
+        btn.closest('.vlsm-req-row').remove();
+        const remaining = reqs.querySelectorAll('.vlsm6-name-input');
+        (remaining[idx] || remaining[idx - 1])?.focus();
+    });
+})();
+
+// ── VLSM6: submit validation + loading state ─────────────────────────────────
+(function () {
+    const form = document.querySelector('.vlsm6-form');
+    if (!form) return;
+    form.addEventListener('submit', function (e) {
+        form.querySelectorAll('.vlsm-inline-error').forEach(function (el) { el.remove(); });
+        var hasError = false;
+        form.querySelectorAll('.vlsm-req-row').forEach(function (row) {
+            var hostsInput = row.querySelector('.vlsm6-hosts-input');
+            if (!hostsInput) return;
+            var v = (hostsInput.value || '').trim();
+            var powMatch = v.match(/^2\^(\d{1,3})$/);
+            var ok = /^\d+$/.test(v)
+                ? parseInt(v, 10) >= 1
+                : (powMatch !== null && parseInt(powMatch[1], 10) <= 128);
+            if (!ok) {
+                hasError = true;
+                var msg = document.createElement('span');
+                msg.className = 'vlsm-inline-error';
+                msg.textContent = 'Use a positive integer or 2^N';
+                hostsInput.after(msg);
+            }
+        });
+        if (hasError) { e.preventDefault(); return; }
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Calculating…'; }
+    });
+})();
+
+// ── VLSM6: CSV export ────────────────────────────────────────────────────────
+document.getElementById('vlsm6-export-csv')?.addEventListener('click', function () {
+    var table = document.querySelector('.vlsm6-table');
+    if (!table) return;
+    var rows = table.querySelectorAll('tbody tr');
+    var networkVal = (document.getElementById('vlsm6_network')?.value || 'network').replace(/[^0-9a-fA-F:]/g, '');
+    var cidrVal    = (document.getElementById('vlsm6_cidr')?.value    || '0').replace(/[^0-9]/g, '');
+    var filename = 'vlsm6-' + (networkVal || 'network') + '-' + cidrVal + '.csv';
+    var headers = ['Name', 'Hosts Needed', 'Allocated Subnet', 'Usable'];
+    var lines = [headers.join(',')];
+    rows.forEach(function (tr) {
+        var cells = tr.querySelectorAll('td');
+        var name      = (cells[0]?.textContent || '').trim().replace(/,/g, ' ');
+        var hostsNeed = (cells[1]?.textContent || '').trim().replace(/,/g, '');
+        var subnet    = (tr.querySelector('.vlsm-subnet-cell code')?.textContent || '').trim();
+        var usable    = (cells[3]?.textContent || '').trim().replace(/,/g, '');
+        lines.push([name, hostsNeed, subnet, usable].join(','));
+    });
+    var csv = lines.join('\r\n');
+    var blob = new Blob([csv], {type: 'text/csv'});
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = filename; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+});
+
+// ── VLSM6: JSON export ───────────────────────────────────────────────────────
+document.getElementById('vlsm6-export-json')?.addEventListener('click', function () {
+    var table = document.querySelector('.vlsm6-table');
+    if (!table) return;
+    var rows = table.querySelectorAll('tbody tr');
+    var networkVal = (document.getElementById('vlsm6_network')?.value || 'network').replace(/[^0-9a-fA-F:]/g, '');
+    var cidrVal    = (document.getElementById('vlsm6_cidr')?.value    || '0').replace(/[^0-9]/g, '');
+    var filename = 'vlsm6-' + (networkVal || 'network') + '-' + cidrVal + '.json';
+    var data = [];
+    rows.forEach(function (tr) {
+        var cells = tr.querySelectorAll('td');
+        data.push({
+            name:             (cells[0]?.textContent || '').trim(),
+            hosts_needed:     (cells[1]?.textContent || '').trim(),
+            allocated_subnet: (tr.querySelector('.vlsm-subnet-cell code')?.textContent || '').trim(),
+            usable:           (cells[3]?.textContent || '').trim()
+        });
+    });
+    var json = JSON.stringify(data, null, 2);
+    var blob = new Blob([json], {type: 'application/json'});
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = filename; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+});
+
+// ── VLSM6: ASCII export ──────────────────────────────────────────────────────
+document.getElementById('vlsm6-export-ascii')?.addEventListener('click', function () {
+    var table = document.querySelector('.vlsm6-table');
+    if (!table) return;
+    var networkVal = (document.getElementById('vlsm6_network')?.value || '').trim();
+    var cidrVal    = (document.getElementById('vlsm6_cidr')?.value    || '').trim();
+    var parent = networkVal && cidrVal ? networkVal + '/' + cidrVal.replace(/^\//, '') : networkVal;
+    var rows   = Array.prototype.map.call(table.querySelectorAll('tbody tr'), function (tr) {
+        var cells = tr.querySelectorAll('td');
+        return {
+            cidr: (tr.querySelector('.vlsm-subnet-cell code')?.textContent || '').trim(),
+            name: (cells[0]?.textContent || '').trim()
+        };
+    });
+    var diagram = buildAsciiDiagram(parent, rows);
+    copyText(diagram, 'ASCII copied!');
+});
+
+// ── Copy as Markdown / Cisco exports ─────────────────────────────────────────
+//
+// buildMarkdown(kind, data) and buildCiscoConfig(kind, data) are pure
+// (no DOM access). The click handler below extracts data from the existing
+// result-row / table DOM nodes and feeds it in.
+//
+// Cisco output is intentionally generic IOS-style ("interface " stanza +
+// "ip address …") — vendor-specific tweaks may be required for non-Cisco
+// gear (Juniper, Arista, Mikrotik, etc.). This is documented in docs/exports.md
+// and surfaced via help_bubble() tooltips next to each Copy as Cisco button.
+
+function _cidrToMask4(cidr) {
+    var c = Math.max(0, Math.min(32, parseInt(String(cidr).replace(/^\//, ''), 10) || 0));
+    var m = c === 0 ? 0 : (0xFFFFFFFF << (32 - c)) >>> 0;
+    return [(m >>> 24) & 0xFF, (m >>> 16) & 0xFF, (m >>> 8) & 0xFF, m & 0xFF].join('.');
+}
+
+function _slug(name, idx) {
+    var s = String(name || '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return s || ('Net' + (idx + 1));
+}
+
+function buildMarkdown(kind, data) {
+    function table(headers, rows) {
+        var head = '| ' + headers.join(' | ') + ' |';
+        var sep  = '| ' + headers.map(function () { return '---'; }).join(' | ') + ' |';
+        var body = rows.map(function (r) { return '| ' + r.join(' | ') + ' |'; }).join('\n');
+        return head + '\n' + sep + '\n' + body + '\n';
+    }
+    if (kind === 'ipv4' || kind === 'ipv6') {
+        var rows = data.rows.map(function (r) { return [r.label, r.value]; });
+        return table(['Field', 'Value'], rows);
+    }
+    if (kind === 'vlsm') {
+        var headers = ['Name', 'Hosts Needed', 'Allocated Subnet', 'Usable IPs', 'Waste'];
+        return table(headers, data.rows);
+    }
+    if (kind === 'vlsm6') {
+        var headers6 = ['Name', 'Hosts Needed', 'Allocated Subnet', 'Usable Addresses'];
+        return table(headers6, data.rows);
+    }
+    if (kind === 'split4' || kind === 'split6') {
+        return table(['#', 'Subnet'], data.subnets.map(function (s, i) { return [i + 1, s]; }));
+    }
+    return '';
+}
+
+function buildCiscoConfig(kind, data) {
+    // Generic IOS-style output. NOT a complete config — only the pieces
+    // unambiguously implied by the calculator output.
+    var lines = ['! Generic Cisco IOS-style configuration',
+                 '! Generated by Subnet Calculator — vendor-specific tweaks may apply',
+                 ''];
+    if (kind === 'ipv4') {
+        var parts = String(data.cidr).split('/');
+        var ip   = parts[0];
+        var mask = _cidrToMask4(parts[1] || '0');
+        lines.push('interface GigabitEthernet0/0');
+        lines.push(' description ' + (data.description || 'Subnet Calculator export'));
+        lines.push(' ip address ' + ip + ' ' + mask);
+        lines.push(' no shutdown');
+        lines.push('!');
+        return lines.join('\n') + '\n';
+    }
+    if (kind === 'ipv6') {
+        lines.push('interface GigabitEthernet0/0');
+        lines.push(' description ' + (data.description || 'Subnet Calculator export'));
+        lines.push(' ipv6 address ' + data.cidr);
+        lines.push(' no shutdown');
+        lines.push('!');
+        return lines.join('\n') + '\n';
+    }
+    if (kind === 'vlsm') {
+        data.allocations.forEach(function (a, i) {
+            var p = String(a.subnet).split('/');
+            var first = a.firstUsable || p[0];
+            var mask  = _cidrToMask4(p[1] || '0');
+            lines.push('interface GigabitEthernet0/' + i);
+            lines.push(' description ' + _slug(a.name, i));
+            lines.push(' ip address ' + first + ' ' + mask);
+            lines.push(' no shutdown');
+            lines.push('!');
+        });
+        return lines.join('\n') + '\n';
+    }
+    if (kind === 'vlsm6') {
+        data.allocations.forEach(function (a, i) {
+            lines.push('interface GigabitEthernet0/' + i);
+            lines.push(' description ' + _slug(a.name, i));
+            lines.push(' ipv6 address ' + a.subnet);
+            lines.push(' no shutdown');
+            lines.push('!');
+        });
+        return lines.join('\n') + '\n';
+    }
+    if (kind === 'split4') {
+        data.subnets.forEach(function (s, i) {
+            var p = String(s).split('/');
+            var mask = _cidrToMask4(p[1] || '0');
+            lines.push('interface GigabitEthernet0/' + i);
+            lines.push(' description Split-' + (i + 1));
+            lines.push(' ip address ' + p[0] + ' ' + mask);
+            lines.push(' no shutdown');
+            lines.push('!');
+        });
+        return lines.join('\n') + '\n';
+    }
+    if (kind === 'split6') {
+        data.subnets.forEach(function (s, i) {
+            lines.push('interface GigabitEthernet0/' + i);
+            lines.push(' description Split-' + (i + 1));
+            lines.push(' ipv6 address ' + s);
+            lines.push(' no shutdown');
+            lines.push('!');
+        });
+        return lines.join('\n') + '\n';
+    }
+    return '';
+}
+
+function _collectIPv4Data() {
+    var panel = document.getElementById('panel-ipv4');
+    if (!panel) return null;
+    var rows = [];
+    panel.querySelectorAll('.results .result-row').forEach(function (r) {
+        var label = (r.querySelector('.result-label')?.textContent || '').trim();
+        var value = (r.querySelector('.result-value')?.textContent || '').trim();
+        if (label && value) rows.push({ label: label, value: value });
+    });
+    var cidr = '';
+    rows.forEach(function (r) { if (/^Subnet/i.test(r.label)) cidr = r.value; });
+    return { rows: rows, cidr: cidr, description: 'IPv4 ' + cidr };
+}
+
+function _collectIPv6Data() {
+    var panel = document.getElementById('panel-ipv6');
+    if (!panel) return null;
+    var rows = [];
+    panel.querySelectorAll('.results .result-row').forEach(function (r) {
+        var label = (r.querySelector('.result-label')?.textContent || '').trim();
+        var value = (r.querySelector('.result-value')?.textContent || '').trim();
+        if (label && value) rows.push({ label: label, value: value });
+    });
+    var cidr = '';
+    rows.forEach(function (r) { if (/^Network/i.test(r.label)) cidr = r.value; });
+    return { rows: rows, cidr: cidr, description: 'IPv6 ' + cidr };
+}
+
+function _collectVlsmData(v6) {
+    var sel = v6 ? '.vlsm6-table' : '.vlsm-table:not(.vlsm6-table)';
+    var table = document.querySelector(sel);
+    if (!table) return null;
+    var rows = [];
+    var allocations = [];
+    table.querySelectorAll('tbody tr').forEach(function (tr) {
+        var cells = tr.querySelectorAll('td');
+        var name      = (cells[0]?.textContent || '').trim();
+        var hostsNeed = (cells[1]?.textContent || '').trim();
+        var subnet    = (tr.querySelector('.vlsm-subnet-cell code')?.textContent || '').trim();
+        var usable    = (cells[3]?.textContent || '').trim();
+        if (v6) {
+            rows.push([name, hostsNeed, subnet, usable]);
+            allocations.push({ name: name, subnet: subnet });
+        } else {
+            var waste = (cells[4]?.textContent || '').trim();
+            rows.push([name, hostsNeed, subnet, usable, waste]);
+            allocations.push({
+                name: name,
+                subnet: subnet,
+                firstUsable: (tr.dataset.first || '').trim(),
+            });
+        }
+    });
+    return { rows: rows, allocations: allocations };
+}
+
+function _collectSplitData(panelId) {
+    var panel = document.getElementById(panelId);
+    if (!panel) return null;
+    var subnets = [];
+    panel.querySelectorAll('.split-list .split-item[data-copy]').forEach(function (item) {
+        subnets.push(item.dataset.copy);
+    });
+    return { subnets: subnets };
+}
+
+document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.copy-md-btn, .copy-cisco-btn');
+    if (!btn) return;
+    var isCisco = btn.classList.contains('copy-cisco-btn');
+    var target  = btn.dataset.target;
+    var data    = null;
+    var kind    = target;
+
+    if (target === 'ipv4')        data = _collectIPv4Data();
+    else if (target === 'ipv6')   data = _collectIPv6Data();
+    else if (target === 'vlsm')   data = _collectVlsmData(false);
+    else if (target === 'vlsm6')  data = _collectVlsmData(true);
+    else if (target === 'split4') data = _collectSplitData('panel-ipv4');
+    else if (target === 'split6') data = _collectSplitData('panel-ipv6');
+
+    if (!data) { showToast('No data to copy'); return; }
+
+    var output = isCisco ? buildCiscoConfig(kind, data) : buildMarkdown(kind, data);
+    if (!output) { showToast('Nothing to copy'); return; }
+    copyText(output, isCisco ? 'Cisco config copied!' : 'Markdown copied!');
+});
 
 // ── Service Worker registration ───────────────────────────────────────────
 if (window.self === window.top && 'serviceWorker' in navigator) {

@@ -6,11 +6,13 @@ declare(strict_types=1);
 // These are the built-in defaults. To override, copy config.php.example to
 // config.php alongside this file — config.php is never overwritten by upgrades.
 
-$app_version          = '2.10.0';
+$app_version          = '2.11.0';
 $locale               = 'en'; // BCP 47 locale tag for number formatting (e.g. 'de', 'fr')
 $fixed_bg_color       = 'null';
 $default_tab          = 'ipv4'; // 'ipv4', 'ipv6', or 'vlsm'
 $split_max_subnets    = 16;
+$lookup_max_cidrs     = 100;  // Inverse subnet lookup: max CIDRs per request
+$lookup_max_ips       = 1000; // Inverse subnet lookup: max IPs per request
 $form_protection      = 'none';
 $turnstile_site_key   = '';
 $turnstile_secret_key = '';
@@ -49,6 +51,8 @@ if (file_exists(__DIR__ . '/../config.php')) {
 
 // Sanitise config values
 $split_max_subnets = max(1, min((int)$split_max_subnets, 256));
+$lookup_max_cidrs  = max(1, min((int)$lookup_max_cidrs, 1000));
+$lookup_max_ips    = max(1, min((int)$lookup_max_ips, 10000));
 $fa = trim(preg_replace('/[\r\n]/', '', (string)$frame_ancestors));
 if (!preg_match('/^(\*|\'none\'|\'self\'|(\s*(https?:\/\/[^\s;,]+))+)$/', $fa)) {
     error_log('sc: invalid $frame_ancestors value — reset to *');

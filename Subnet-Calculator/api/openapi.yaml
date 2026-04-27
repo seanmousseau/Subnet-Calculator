@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Subnet Calculator API
-  version: "2.10.0"
+  version: "2.11.0"
   description: |
     JSON REST API for IPv4/IPv6 subnet calculation, VLSM allocation,
     overlap detection, subnet splitting, route summarisation, ULA prefix
@@ -55,6 +55,12 @@ tags:
     description: IP address range to CIDR conversion
   - name: Tree
     description: Subnet allocation tree
+  - name: Wildcard
+    description: Wildcard mask ↔ CIDR conversion
+  - name: Lookup
+    description: Inverse subnet lookup (find which CIDRs contain each IP)
+  - name: Diff
+    description: Subnet aggregation diff (compare two CIDR lists)
   - name: Changelog
     description: API changelog
 
@@ -135,6 +141,25 @@ components:
         host_max:     { type: string, example: "10.0.0.62" }
         usable:       { type: integer, example: 62 }
         waste:        { type: integer, example: 12 }
+
+    Vlsm6Allocation:
+      type: object
+      required: [name, hosts_needed, subnet, usable]
+      properties:
+        name:         { type: string, example: "site-a" }
+        hosts_needed:
+          oneOf:
+            - type: integer
+            - type: string
+          description: Echo of the input host count (integer or "2^N" string).
+          example: 256
+        subnet:       { type: string, example: "2001:db8::/120", description: "RFC 5952 compressed IPv6 CIDR." }
+        usable:
+          oneOf:
+            - type: integer
+            - type: string
+          description: Usable address count; "2^N" string when the value would overflow a 32-bit integer.
+          example: 256
 
     SplitResult:
       type: object
@@ -370,6 +395,82 @@ paths:
                       host_max: "10.0.0.78"
                       usable: 14
                       waste: 0
+        "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+
+  /vlsm6:
+    post:
+      operationId: calcVlsm6
+      tags: [VLSM]
+      summary: IPv6 VLSM subnet allocation
+      description: >
+        Allocates IPv6 subnets from a parent network using Variable Length Subnet
+        Masking. Requirements are sorted largest-first and packed greedily.
+        Every IPv6 address is usable (no broadcast / network reservation), so
+        the smallest prefix /p that satisfies "2^(128-p) >= hosts" is selected
+        for each requirement. Host counts may be a positive integer or a
+        "2^N" string (e.g. "2^96") for very large IPv6 sizings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [network, requirements]
+              properties:
+                network:
+                  type: string
+                  example: "2001:db8::"
+                cidr:
+                  type: string
+                  example: "32"
+                  description: "IPv6 prefix length 0-128."
+                requirements:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [name, hosts]
+                    properties:
+                      name:  { type: string, example: "site-a" }
+                      hosts:
+                        oneOf:
+                          - type: integer
+                            minimum: 1
+                          - type: string
+                            pattern: "^(\\d+|2\\^\\d{1,3})$"
+                        example: 256
+                        description: Positive integer or "2^N" string (e.g. "2^96").
+      responses:
+        "200":
+          description: IPv6 VLSM allocations
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          allocations:
+                            type: array
+                            items: { $ref: "#/components/schemas/Vlsm6Allocation" }
+              example:
+                ok: true
+                data:
+                  allocations:
+                    - name: "site-a"
+                      hosts_needed: 256
+                      subnet: "2001:db8::/120"
+                      usable: 256
+                    - name: "site-b"
+                      hosts_needed: 4
+                      subnet: "2001:db8::100/126"
+                      usable: 4
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
@@ -1065,6 +1166,174 @@ paths:
                   cidr: "/24"
                   wildcard: "0.0.0.255"
         "400": { description: "Missing value, malformed input, or non-contiguous wildcard", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+
+  /lookup:
+    post:
+      operationId: lookupIps
+      tags: [Lookup]
+      summary: Inverse subnet lookup — find which CIDRs contain each IP
+      description: |
+        For each IP in `ips`, returns every CIDR from `cidrs` that contains it
+        and identifies the deepest (longest-prefix) match. IPv4 and IPv6 inputs
+        may be mixed; a CIDR only matches an IP of the same family. Result rows
+        are returned in the same order as the input `ips` array.
+
+        Defaults are 100 CIDRs and 1000 IPs per request; operators may raise
+        them up to hard ceilings of 1000 and 10000 via
+        `$lookup_max_cidrs` / `$lookup_max_ips`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cidrs, ips]
+              properties:
+                cidrs:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  description: CIDR networks to test against (IPv4 and/or IPv6). Default cap 100; hard ceiling 1000 (operator-tunable via `$lookup_max_cidrs`).
+                  items: { type: string, example: "10.0.0.0/8" }
+                ips:
+                  type: array
+                  minItems: 1
+                  maxItems: 10000
+                  description: IP addresses to look up. Default cap 1000; hard ceiling 10000 (operator-tunable via `$lookup_max_ips`).
+                  items: { type: string, example: "10.1.2.3" }
+            example:
+              cidrs: ["10.0.0.0/8", "10.1.0.0/16", "2001:db8::/32"]
+              ips:   ["10.1.2.3", "8.8.8.8", "2001:db8::1"]
+      responses:
+        "200":
+          description: Lookup results, one row per IP
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [results]
+                        properties:
+                          results:
+                            type: array
+                            items:
+                              type: object
+                              required: [ip, matches, deepest]
+                              properties:
+                                ip:      { type: string, example: "10.1.2.3" }
+                                matches:
+                                  type: array
+                                  items: { type: string }
+                                  description: Every CIDR that contains the IP.
+                                deepest:
+                                  type: [string, "null"]
+                                  description: Longest-prefix match, or null if no match.
+              example:
+                ok: true
+                data:
+                  results:
+                    - ip: "10.1.2.3"
+                      matches: ["10.0.0.0/8", "10.1.0.0/16"]
+                      deepest: "10.1.0.0/16"
+                    - ip: "8.8.8.8"
+                      matches: []
+                      deepest: null
+                    - ip: "2001:db8::1"
+                      matches: ["2001:db8::/32"]
+                      deepest: "2001:db8::/32"
+        "400": { description: "Missing/invalid input or out-of-range cap", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+
+  /diff:
+    post:
+      operationId: subnetDiff
+      tags: [Diff]
+      summary: Compare two CIDR lists and report added / removed / changed / unchanged
+      description: |
+        Computes a structural diff between a "before" and an "after" list of
+        CIDRs. Each input CIDR is normalised to canonical form before comparison
+        (host bits zeroed; IPv6 lowercased and compressed). Result categories:
+
+        - `unchanged`: CIDRs present in both lists with the same prefix length.
+        - `removed`:   CIDRs only in `before` (sorted; IPv4 first, then IPv6).
+        - `added`:     CIDRs only in `after`  (sorted; IPv4 first, then IPv6).
+        - `changed`:   pairs where the network address matches but the prefix
+                       length differs (e.g. `10.0.0.0/24` → `10.0.0.0/23`).
+
+        Cap: max 1000 entries per list.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [before, after]
+              properties:
+                before:
+                  type: array
+                  maxItems: 1000
+                  description: CIDR list representing the prior state.
+                  items: { type: string, example: "10.0.0.0/24" }
+                after:
+                  type: array
+                  maxItems: 1000
+                  description: CIDR list representing the desired state.
+                  items: { type: string, example: "10.0.0.0/23" }
+            example:
+              before: ["10.0.0.0/24", "10.0.1.0/24", "192.168.0.0/24"]
+              after:  ["10.0.0.0/23", "10.0.1.0/24", "192.168.1.0/24"]
+      responses:
+        "200":
+          description: Diff result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [added, removed, unchanged, changed]
+                        properties:
+                          added:
+                            type: array
+                            items: { type: string }
+                          removed:
+                            type: array
+                            items: { type: string }
+                          unchanged:
+                            type: array
+                            items: { type: string }
+                          changed:
+                            type: array
+                            items:
+                              type: object
+                              required: [from, to, reason]
+                              properties:
+                                from:   { type: string, example: "10.0.0.0/24" }
+                                to:     { type: string, example: "10.0.0.0/23" }
+                                reason: { type: string, example: "prefix changed /24 → /23" }
+              example:
+                ok: true
+                data:
+                  added:     ["192.168.1.0/24"]
+                  removed:   ["192.168.0.0/24"]
+                  unchanged: ["10.0.1.0/24"]
+                  changed:
+                    - from: "10.0.0.0/24"
+                      to:   "10.0.0.0/23"
+                      reason: "prefix changed /24 → /23"
+        "400": { description: "Missing field, invalid CIDR, or list too large", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }

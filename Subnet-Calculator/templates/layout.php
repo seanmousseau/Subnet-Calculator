@@ -97,6 +97,11 @@
                 aria-selected="<?= $active_tab === 'vlsm' ? 'true' : 'false' ?>"
                 aria-controls="panel-vlsm"
                 data-tab="vlsm">VLSM</button>
+        <button class="tab-btn<?= $active_tab === 'vlsm6' ? ' active' : '' ?>"
+                role="tab" id="tab-vlsm6"
+                aria-selected="<?= $active_tab === 'vlsm6' ? 'true' : 'false' ?>"
+                aria-controls="panel-vlsm6"
+                data-tab="vlsm6">VLSM IPv6</button>
     </div>
 
     <!-- IPv4 Panel -->
@@ -187,6 +192,10 @@
                     <span class="result-value"><?= htmlspecialchars($result['ptr_zone']) ?></span>
                 </div>
             </div>
+            <div class="copy-actions" data-kind="ipv4">
+                <button type="button" class="copy-all-btn copy-md-btn" data-target="ipv4">Copy as Markdown</button>
+                <button type="button" class="copy-all-btn copy-cisco-btn" data-target="ipv4">Copy as Cisco</button><?= help_bubble('copy-cisco-ipv4', 'Cisco output is generic IOS-style: an interface stanza with ip address. Vendor-specific tweaks (e.g. Juniper, Arista) may be required.') ?>
+            </div>
             <?php
             $bin_cidr  = (int)ltrim($result['netmask_cidr'], '/');
             $bin_net   = array_map(fn($o) => sprintf('%08b', (int)$o), explode('.', explode('/', $result['network_cidr'])[0]));
@@ -230,6 +239,8 @@ if ($i < 3) {
         elseif ($range_result !== null || $range_error !== null) { $open_tool_ipv4 = 'range'; }
         elseif ($tree_result !== null || $tree_error !== null) { $open_tool_ipv4 = 'tree'; }
         elseif ($wildcard_result !== null || $wildcard_error !== null) { $open_tool_ipv4 = 'wildcard'; }
+        elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'lookup'; }
+        elseif (($diff_result !== null || $diff_error !== null) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'diff'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv4 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv4) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split" aria-expanded="false">Split Subnet</button>
@@ -237,6 +248,8 @@ if ($i < 3) {
             <button type="button" class="tool-trigger" data-tool="range" aria-expanded="false">Range&rarr;CIDR</button>
             <button type="button" class="tool-trigger" data-tool="tree" aria-expanded="false">Subnet Tree</button>
             <button type="button" class="tool-trigger" data-tool="wildcard" aria-expanded="false">Wildcard&harr;CIDR</button>
+            <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
+            <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
         </div>
 
         <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv4">
@@ -266,6 +279,8 @@ if ($i < 3) {
                     <?php elseif ($split_result && $split_result['showing'] > 0) : ?>
                         <div class="split-list" data-parent="<?= htmlspecialchars($result['cidr'] ?? '') ?>">
                             <button type="button" class="copy-all-btn" data-target="split">Copy All</button>
+                            <button type="button" class="copy-all-btn copy-md-btn" data-target="split4">Copy as Markdown</button>
+                            <button type="button" class="copy-all-btn copy-cisco-btn" data-target="split4">Copy as Cisco</button><?= help_bubble('copy-cisco-split4', 'Cisco output is generic IOS-style — one interface stanza per split subnet. Vendor-specific tweaks may be required.') ?>
                             <button type="button" class="ascii-export-btn">Export ASCII</button>
                             <?php foreach ($split_result['subnets'] as $s) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
@@ -458,6 +473,95 @@ if ($i < 3) {
                     <?php endif; ?>
                 </div>
             </div>
+
+            <div class="tool-panel" data-tool="lookup">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IP Lookup<?= help_bubble('ipv4-lookup', 'For each IP, finds every CIDR that contains it. The "Deepest" column is the longest-prefix (most specific) match. Mixed IPv4/IPv6 inputs are allowed; CIDRs only match IPs of the same family. Caps: 100 CIDRs, 1000 IPs.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv4">
+                        <div class="lookup-form-grid">
+                            <label for="lookup_cidrs_v4" class="lookup-form-label">CIDRs <span class="lookup-form-hint">(one per line, max 100)</span></label>
+                            <textarea id="lookup_cidrs_v4" name="lookup_cidrs" rows="4" class="multi-overlap-input"
+                                      placeholder="10.0.0.0/8&#10;10.1.0.0/16&#10;2001:db8::/32"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv4' ? $lookup_cidrs_input : '') ?></textarea>
+                            <label for="lookup_ips_v4" class="lookup-form-label">IPs <span class="lookup-form-hint">(one per line, max 1000)</span></label>
+                            <textarea id="lookup_ips_v4" name="lookup_ips" rows="4" class="multi-overlap-input"
+                                      placeholder="10.1.2.3&#10;8.8.8.8&#10;2001:db8::1"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv4' ? $lookup_ips_input : '') ?></textarea>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Lookup</button>
+                        </div>
+                    </form>
+                    <?php if ($active_tab === 'ipv4' && $lookup_error) : ?>
+                        <div class="error"><?= htmlspecialchars($lookup_error) ?></div>
+                    <?php elseif ($active_tab === 'ipv4' && $lookup_result !== null) : ?>
+                        <div class="lookup-results">
+                            <button type="button" class="copy-all-btn" data-target="lookup">Copy All</button>
+                            <div class="lookup-table-wrap">
+                                <table class="lookup-table" aria-label="IP lookup results">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">IP</th>
+                                            <th scope="col">Deepest match</th>
+                                            <th scope="col">All matches</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($lookup_result as $row) : ?>
+                                            <tr>
+                                                <td class="lookup-table__cell" data-label="IP"><code><?= htmlspecialchars($row['ip']) ?></code></td>
+                                                <td class="lookup-table__cell" data-label="Deepest match">
+                                                    <?php if ($row['deepest'] !== null) : ?>
+                                                        <code><?= htmlspecialchars($row['deepest']) ?></code>
+                                                    <?php else : ?>
+                                                        <span class="lookup-table__empty" aria-label="no match">&mdash;</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="lookup-table__cell" data-label="All matches">
+                                                    <?php if ($row['matches'] !== []) : ?>
+                                                        <code><?= htmlspecialchars(implode(', ', $row['matches'])) ?></code>
+                                                    <?php else : ?>
+                                                        <span class="lookup-table__empty" aria-label="no matches">&mdash;</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="split-more"><?= count($lookup_result) ?> IP<?= count($lookup_result) !== 1 ? 's' : '' ?> looked up</div>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="diff">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Subnet Diff<?= help_bubble('ipv4-diff', 'Compares two CIDR lists. Inputs are canonicalised (host bits zeroed, IPv6 lowercased) before comparison. Reports added, removed, unchanged, and changed (same network address but different prefix length). Mixed IPv4/IPv6 inputs are allowed. Cap: 1000 entries per side.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv4">
+                        <div class="lookup-form-grid">
+                            <label for="diff_before_v4" class="lookup-form-label">Before <span class="lookup-form-hint">(one CIDR per line)</span></label>
+                            <textarea id="diff_before_v4" name="diff_before" rows="4" class="multi-overlap-input"
+                                      placeholder="10.0.0.0/24&#10;10.0.1.0/24&#10;10.0.2.0/24"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv4' ? $diff_before_input : '') ?></textarea>
+                            <label for="diff_after_v4" class="lookup-form-label">After <span class="lookup-form-hint">(one CIDR per line)</span></label>
+                            <textarea id="diff_after_v4" name="diff_after" rows="4" class="multi-overlap-input"
+                                      placeholder="10.0.0.0/23&#10;10.0.2.0/24&#10;10.0.3.0/24"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv4' ? $diff_after_input : '') ?></textarea>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Diff</button>
+                        </div>
+                    </form>
+                    <?php if ($active_tab === 'ipv4' && $diff_error) : ?>
+                        <div class="error"><?= htmlspecialchars($diff_error) ?></div>
+                    <?php elseif ($active_tab === 'ipv4' && $diff_result !== null) : ?>
+                        <?php include __DIR__ . '/_diff_result.php'; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -547,6 +651,10 @@ if ($i < 3) {
                 </div>
                 <?php endif; ?>
             </div>
+            <div class="copy-actions" data-kind="ipv6">
+                <button type="button" class="copy-all-btn copy-md-btn" data-target="ipv6">Copy as Markdown</button>
+                <button type="button" class="copy-all-btn copy-cisco-btn" data-target="ipv6">Copy as Cisco</button><?= help_bubble('copy-cisco-ipv6', 'Cisco output is generic IOS-style: ipv6 address on an interface stanza. Vendor-specific tweaks may be required.') ?>
+            </div>
             <?php
             try {
                 $bin6_prefix_int = (int)ltrim($result6['prefix'], '/');
@@ -609,10 +717,14 @@ if ($i < 3) {
         $open_tool_ipv6 = null;
         if ($split_result6 !== null || $split_error6 !== null) { $open_tool_ipv6 = 'split6'; }
         elseif ($ula_result !== null || $ula_error !== null) { $open_tool_ipv6 = 'ula'; }
+        elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
+        elseif (($diff_result !== null || $diff_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'diff'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv6 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv6) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split6" aria-expanded="false">Split Subnet</button>
             <button type="button" class="tool-trigger" data-tool="ula" aria-expanded="false">ULA Generator</button>
+            <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
+            <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
         </div>
 
         <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv6">
@@ -642,6 +754,8 @@ if ($i < 3) {
                     <?php elseif ($split_result6 && $split_result6['showing'] > 0) : ?>
                         <div class="split-list" data-parent="<?= htmlspecialchars($result6['network_cidr'] ?? '') ?>">
                             <button type="button" class="copy-all-btn" data-target="split">Copy All</button>
+                            <button type="button" class="copy-all-btn copy-md-btn" data-target="split6">Copy as Markdown</button>
+                            <button type="button" class="copy-all-btn copy-cisco-btn" data-target="split6">Copy as Cisco</button><?= help_bubble('copy-cisco-split6', 'Cisco output is generic IOS-style — one interface stanza per split IPv6 subnet using ipv6 address. Vendor-specific tweaks may be required.') ?>
                             <button type="button" class="ascii-export-btn">Export ASCII</button>
                             <?php foreach ($split_result6['subnets'] as $s) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
@@ -706,6 +820,95 @@ if ($i < 3) {
                             </div>
                             <?php endif; ?>
                         </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="lookup">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IP Lookup<?= help_bubble('ipv6-lookup', 'For each IP, finds every CIDR that contains it. The "Deepest" column is the longest-prefix (most specific) match. Mixed IPv4/IPv6 inputs are allowed; CIDRs only match IPs of the same family. Caps: 100 CIDRs, 1000 IPs.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="lookup-form-grid">
+                            <label for="lookup_cidrs_v6" class="lookup-form-label">CIDRs <span class="lookup-form-hint">(one per line, max 100)</span></label>
+                            <textarea id="lookup_cidrs_v6" name="lookup_cidrs" rows="4" class="multi-overlap-input"
+                                      placeholder="2001:db8::/32&#10;2001:db8:1::/48&#10;10.0.0.0/8"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv6' ? $lookup_cidrs_input : '') ?></textarea>
+                            <label for="lookup_ips_v6" class="lookup-form-label">IPs <span class="lookup-form-hint">(one per line, max 1000)</span></label>
+                            <textarea id="lookup_ips_v6" name="lookup_ips" rows="4" class="multi-overlap-input"
+                                      placeholder="2001:db8::1&#10;2001:db8:1::5&#10;10.1.2.3"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv6' ? $lookup_ips_input : '') ?></textarea>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Lookup</button>
+                        </div>
+                    </form>
+                    <?php if ($active_tab === 'ipv6' && $lookup_error) : ?>
+                        <div class="error"><?= htmlspecialchars($lookup_error) ?></div>
+                    <?php elseif ($active_tab === 'ipv6' && $lookup_result !== null) : ?>
+                        <div class="lookup-results">
+                            <button type="button" class="copy-all-btn" data-target="lookup">Copy All</button>
+                            <div class="lookup-table-wrap">
+                                <table class="lookup-table" aria-label="IP lookup results">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">IP</th>
+                                            <th scope="col">Deepest match</th>
+                                            <th scope="col">All matches</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($lookup_result as $row) : ?>
+                                            <tr>
+                                                <td class="lookup-table__cell" data-label="IP"><code><?= htmlspecialchars($row['ip']) ?></code></td>
+                                                <td class="lookup-table__cell" data-label="Deepest match">
+                                                    <?php if ($row['deepest'] !== null) : ?>
+                                                        <code><?= htmlspecialchars($row['deepest']) ?></code>
+                                                    <?php else : ?>
+                                                        <span class="lookup-table__empty" aria-label="no match">&mdash;</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="lookup-table__cell" data-label="All matches">
+                                                    <?php if ($row['matches'] !== []) : ?>
+                                                        <code><?= htmlspecialchars(implode(', ', $row['matches'])) ?></code>
+                                                    <?php else : ?>
+                                                        <span class="lookup-table__empty" aria-label="no matches">&mdash;</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="split-more"><?= count($lookup_result) ?> IP<?= count($lookup_result) !== 1 ? 's' : '' ?> looked up</div>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="diff">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Subnet Diff<?= help_bubble('ipv6-diff', 'Compares two CIDR lists. Inputs are canonicalised (host bits zeroed, IPv6 lowercased) before comparison. Reports added, removed, unchanged, and changed (same network address but different prefix length). Mixed IPv4/IPv6 inputs are allowed. Cap: 1000 entries per side.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="lookup-form-grid">
+                            <label for="diff_before_v6" class="lookup-form-label">Before <span class="lookup-form-hint">(one CIDR per line)</span></label>
+                            <textarea id="diff_before_v6" name="diff_before" rows="4" class="multi-overlap-input"
+                                      placeholder="2001:db8::/48&#10;2001:db8:1::/48&#10;2001:db8:2::/48"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv6' ? $diff_before_input : '') ?></textarea>
+                            <label for="diff_after_v6" class="lookup-form-label">After <span class="lookup-form-hint">(one CIDR per line)</span></label>
+                            <textarea id="diff_after_v6" name="diff_after" rows="4" class="multi-overlap-input"
+                                      placeholder="2001:db8::/47&#10;2001:db8:2::/48&#10;2001:db8:3::/48"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv6' ? $diff_after_input : '') ?></textarea>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Diff</button>
+                        </div>
+                    </form>
+                    <?php if ($active_tab === 'ipv6' && $diff_error) : ?>
+                        <div class="error"><?= htmlspecialchars($diff_error) ?></div>
+                    <?php elseif ($active_tab === 'ipv6' && $diff_result !== null) : ?>
+                        <?php include __DIR__ . '/_diff_result.php'; ?>
                     <?php endif; ?>
                 </div>
             </div>
@@ -795,7 +998,11 @@ if ($i < 3) {
                     </tbody>
                 </table>
             </div>
-            <button type="button" class="copy-all-btn" data-target="vlsm">Copy All</button>
+            <div class="copy-actions" data-kind="vlsm">
+                <button type="button" class="copy-all-btn" data-target="vlsm">Copy All</button>
+                <button type="button" class="copy-all-btn copy-md-btn" data-target="vlsm">Copy as Markdown</button>
+                <button type="button" class="copy-all-btn copy-cisco-btn" data-target="vlsm">Copy as Cisco</button><?= help_bubble('copy-cisco-vlsm', 'Cisco output is generic IOS-style — one interface stanza per VLSM allocation. Vendor-specific tweaks may be required.') ?>
+            </div>
             <?php
             $vlsm_total_hosts_req = 0;
             $vlsm_total_allocated = 0;
@@ -970,8 +1177,178 @@ if ($i < 3) {
         </div>
     </div>
 
+    <!-- VLSM IPv6 Panel -->
+    <div id="panel-vlsm6" class="panel<?= $active_tab === 'vlsm6' ? ' active' : '' ?>"
+         role="tabpanel" aria-labelledby="tab-vlsm6" tabindex="-1">
+        <form method="post" class="vlsm6-form" novalidate>
+            <input type="hidden" name="tab" value="vlsm6">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="vlsm6_network">Parent Network</label>
+                    <input type="text" id="vlsm6_network" name="vlsm6_network"
+                           value="<?= htmlspecialchars($vlsm6_network) ?>"
+                           placeholder="2001:db8::" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="form-group form-group--mask">
+                    <label for="vlsm6_cidr">Prefix</label>
+                    <input type="text" id="vlsm6_cidr" name="vlsm6_cidr"
+                           value="<?= htmlspecialchars($vlsm6_cidr_input) ?>"
+                           placeholder="/48" autocomplete="off" spellcheck="false">
+                </div>
+            </div>
+            <div class="vlsm-reqs" id="vlsm6-reqs">
+                <div class="vlsm-reqs-header">
+                    <span class="vlsm-col-name">Name</span>
+                    <span class="vlsm-col-hosts">Hosts Needed<?= help_bubble('vlsm6-hosts-input', 'Enter a positive integer (e.g. 50) or a power-of-two expression (e.g. 2^64) for very large IPv6 sizings.') ?></span>
+                </div>
+                <?php if ($vlsm6_requirements) : ?>
+                    <?php foreach ($vlsm6_requirements as $req6) : ?>
+                    <div class="vlsm-req-row">
+                        <input type="text" name="vlsm6_name[]" class="vlsm6-name-input"
+                               value="<?= htmlspecialchars($req6['name']) ?>" placeholder="e.g. Site A" autocomplete="off">
+                        <input type="text" name="vlsm6_hosts[]" class="vlsm6-hosts-input"
+                               value="<?= htmlspecialchars((string)$req6['hosts']) ?>" placeholder="e.g. 256 or 2^64" autocomplete="off" spellcheck="false">
+                        <button type="button" class="vlsm-remove-row" aria-label="Remove row">&times;</button>
+                    </div>
+                    <?php endforeach; ?>
+                <?php else : ?>
+                    <div class="vlsm-req-row">
+                        <input type="text" name="vlsm6_name[]" class="vlsm6-name-input" placeholder="e.g. Site A" autocomplete="off">
+                        <input type="text" name="vlsm6_hosts[]" class="vlsm6-hosts-input" placeholder="e.g. 256 or 2^64" autocomplete="off" spellcheck="false">
+                        <button type="button" class="vlsm-remove-row" aria-label="Remove row">&times;</button>
+                    </div>
+                <?php endif; ?>
+            </div>
+            <div class="vlsm-actions">
+                <button type="button" class="vlsm6-add-row">+ Add Subnet</button>
+                <button type="submit" class="btn">Calculate</button>
+                <a href="?tab=vlsm6" class="btn reset">Reset</a>
+            </div>
+        </form>
+        <?php if ($vlsm6_error) : ?>
+            <div class="error"><?= htmlspecialchars($vlsm6_error) ?></div>
+        <?php elseif ($vlsm6_result !== null) : ?>
+            <div class="vlsm-results">
+                <p class="vlsm-sort-note">Results sorted largest-first for efficient allocation.<?= help_bubble('vlsm6-sort', 'Subnets are allocated from largest to smallest so that larger blocks can be placed at aligned boundaries without wasting address space.') ?></p>
+                <table class="vlsm-table vlsm6-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Hosts Needed<?= help_bubble('vlsm6-hosts', 'The number of usable host addresses you requested. Every IPv6 address in the allocated block is usable (no broadcast / network reservation).') ?></th>
+                            <th>Allocated Subnet</th>
+                            <th>Usable<?= help_bubble('vlsm6-usable', 'Total addresses in the allocated block. For very large blocks, the count is shown as 2^N.') ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($vlsm6_result as $alloc6) : ?>
+                        <tr>
+                            <td><?= htmlspecialchars($alloc6['name']) ?></td>
+                            <td><?= htmlspecialchars((string)$alloc6['hosts_needed']) ?></td>
+                            <td class="vlsm-subnet-cell vlsm6-subnet-cell" tabindex="0" role="button"
+                                title="Click to copy" data-copy="<?= htmlspecialchars($alloc6['subnet']) ?>">
+                                <code><?= htmlspecialchars($alloc6['subnet']) ?></code>
+                            </td>
+                            <td><?= htmlspecialchars((string)$alloc6['usable']) ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="copy-actions" data-kind="vlsm6">
+                <button type="button" class="copy-all-btn" data-target="vlsm6">Copy All</button>
+                <button type="button" class="copy-all-btn copy-md-btn" data-target="vlsm6">Copy as Markdown</button>
+                <button type="button" class="copy-all-btn copy-cisco-btn" data-target="vlsm6">Copy as Cisco</button><?= help_bubble('copy-cisco-vlsm6', 'Cisco output is generic IOS-style — one interface stanza per IPv6 VLSM allocation using ipv6 address. Vendor-specific tweaks may be required.') ?>
+            </div>
+            <?php
+            $vlsm6_parent_cidr_int = (int)ltrim((string)$vlsm6_cidr_input, '/');
+            $vlsm6_parent_total    = gmp_pow(gmp_init(2), 128 - $vlsm6_parent_cidr_int);
+            $vlsm6_total_allocated = gmp_init(0);
+            $vlsm6_total_hosts_req = gmp_init(0);
+            foreach ($vlsm6_result as $alloc6) {
+                [, $vlsm6_alloc_pfx_str] = explode('/', $alloc6['subnet']);
+                $vlsm6_alloc_pfx = (int)$vlsm6_alloc_pfx_str;
+                $vlsm6_total_allocated = gmp_add(
+                    $vlsm6_total_allocated,
+                    gmp_pow(gmp_init(2), 128 - $vlsm6_alloc_pfx)
+                );
+                $vlsm6_hosts_raw = (string)$alloc6['hosts_needed'];
+                if (preg_match('/^2\^(\d+)$/', $vlsm6_hosts_raw, $m_hr) === 1) {
+                    $vlsm6_total_hosts_req = gmp_add(
+                        $vlsm6_total_hosts_req,
+                        gmp_pow(gmp_init(2), (int)$m_hr[1])
+                    );
+                } elseif (preg_match('/^\d+$/', $vlsm6_hosts_raw) === 1) {
+                    $vlsm6_total_hosts_req = gmp_add($vlsm6_total_hosts_req, gmp_init($vlsm6_hosts_raw));
+                }
+            }
+            $vlsm6_remaining = gmp_sub($vlsm6_parent_total, $vlsm6_total_allocated);
+
+            $vlsm6_fmt_count = static function (\GMP $g): string {
+                $s = gmp_strval($g);
+                if ($s === '0') {
+                    return '0';
+                }
+                // Native int range — show the exact comma-formatted decimal.
+                if (strlen($s) <= 15) {
+                    return format_number((int)$s);
+                }
+                // Otherwise, only use 2^N shorthand when the value is exactly
+                // a power of two; never round non-powers up to the next 2^N.
+                $bin = gmp_strval($g, 2);
+                if (preg_match('/^10+$/', $bin) === 1) {
+                    return '2^' . (strlen($bin) - 1);
+                }
+                return preg_replace('/\B(?=(\d{3})+(?!\d))/', ',', $s) ?? $s;
+            };
+
+            // Utilisation %: when both fit in float, compute exact; else show approximation
+            // via log2 difference: 100 * 2^(log2(allocated) - log2(parent_total)).
+            $vlsm6_float_safe = gmp_cmp($vlsm6_parent_total, gmp_pow(gmp_init(2), 53)) <= 0;
+            if (gmp_cmp($vlsm6_parent_total, gmp_init(0)) <= 0) {
+                $vlsm6_util_display = '0%';
+            } elseif ($vlsm6_float_safe) {
+                $pct = ((float)gmp_strval($vlsm6_total_allocated) / (float)gmp_strval($vlsm6_parent_total)) * 100.0;
+                $vlsm6_util_display = round($pct, 6) . '%';
+            } else {
+                // Approximate: ratio = allocated / parent_total. Compute via shifting down to a safe magnitude.
+                $shift = 0;
+                $denom = $vlsm6_parent_total;
+                $numer = $vlsm6_total_allocated;
+                $cap = gmp_pow(gmp_init(2), 53);
+                while (gmp_cmp($denom, $cap) > 0) {
+                    $denom = gmp_div_q($denom, gmp_init(2));
+                    $numer = gmp_div_q($numer, gmp_init(2));
+                    $shift++;
+                }
+                $denom_f = (float)gmp_strval($denom);
+                $numer_f = (float)gmp_strval($numer);
+                $pct = $denom_f > 0 ? ($numer_f / $denom_f) * 100.0 : 0.0;
+                $vlsm6_util_display = '~' . round($pct, 6) . '%';
+            }
+            ?>
+            <div class="vlsm-summary">
+                <span>Hosts requested: <strong><?= htmlspecialchars($vlsm6_fmt_count($vlsm6_total_hosts_req)) ?></strong></span>
+                <span>Allocated: <strong><?= htmlspecialchars($vlsm6_fmt_count($vlsm6_total_allocated)) ?></strong> addresses</span>
+                <span>Remaining: <strong><?= htmlspecialchars($vlsm6_fmt_count($vlsm6_remaining)) ?></strong></span>
+                <span>Utilisation: <strong><?= htmlspecialchars($vlsm6_util_display) ?></strong><?= help_bubble('vlsm6-util', 'Total allocated addresses ÷ total addresses in the parent /N × 100. For very large IPv6 totals (parent &gt; 2^53), the percentage is shown as an approximation prefixed with ~.') ?></span>
+            </div>
+            <div class="export-btn-group">
+                <button type="button" id="vlsm6-export-csv">Export CSV</button>
+                <button type="button" id="vlsm6-export-json">Export JSON</button>
+                <button type="button" id="vlsm6-export-ascii">Export ASCII</button>
+            </div>
+            <?php if ($show_share_bar && $share_url !== '') : ?>
+            <div class="share-bar">
+                <span class="share-label">Share</span>
+                <code class="share-url"><?= htmlspecialchars($share_url_abs) ?></code>
+                <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
+            </div>
+            <?php endif; ?>
+        <?php endif; ?>
+    </div>
+
     <footer>
-        <a href="https://github.com/seanmousseau/Subnet-Calculator" target="_blank" rel="noopener noreferrer">github.com/seanmousseau/Subnet-Calculator</a>
+        <a href="https://github.com/seanmousseau/Subnet-Calculator" target="_blank" rel="noopener noreferrer">GitHub</a>
         &nbsp;&middot;&nbsp;
         <a href="https://docs.subnetcalculator.app/" target="_blank" rel="noreferrer">Docs</a>
     </footer>

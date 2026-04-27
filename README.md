@@ -50,6 +50,21 @@
 - **ASCII diagram export** — copy a Unicode box-drawing tree of the allocated subnets
 - Client-side validation with inline errors; loading state on submit
 - **Session save/restore** (opt-in) — save VLSM state to SQLite and restore via a short shareable URL
+- **IPv6 VLSM Planner** (v2.11.0) — full parity with the IPv4 planner on the IPv6 tab; GMP-backed allocator supports `2^N` host counts; CSV / JSON / ASCII exports (XLSX intentionally omitted)
+
+**Inverse Subnet Lookup** (v2.11.0)
+- Paste a list of CIDRs and a list of IPs — the tool returns every CIDR that contains each IP plus the deepest (longest-prefix) match
+- Supports mixed IPv4 / IPv6 input; shareable GET URLs
+- Available on both the IPv4 and IPv6 tabs via the tool drawer
+
+**Subnet Aggregation Diff** (v2.11.0)
+- Compare a "before" and "after" CIDR list and see what was added, removed, kept, or had its prefix length changed
+- Each input is canonicalised (host bits zeroed; IPv6 lowercased + compressed) before comparison
+- Colour-coded result groups; shareable GET URLs
+
+**Copy-as-Markdown / Copy-as-Cisco** (v2.11.0)
+- IPv4, IPv6, VLSM, and splitter result panels gain `Copy as Markdown` and `Copy as Cisco` buttons
+- Cisco output is generic IOS-style — adapt to your platform as needed
 
 **Subnet Overlap Checker**
 - Compare any two IPv4 or IPv6 CIDRs and report their relationship: no overlap, identical, or containment (A contains B / B contains A)
@@ -163,6 +178,10 @@ All POST endpoints accept and return JSON. Responses are enveloped:
 | `POST` | `/api/v1/tree` | Build subnet allocation tree from parent + child CIDRs |
 | `GET` | `/api/v1/changelog` | Returns the application CHANGELOG as plain text |
 | `POST` | `/api/v1/bulk` | Run up to 50 operations in a single request |
+| `POST` | `/api/v1/vlsm6` | IPv6 VLSM allocation (v2.11.0) |
+| `POST` | `/api/v1/lookup` | Inverse subnet lookup — find which CIDRs contain each IP (v2.11.0) |
+| `POST` | `/api/v1/diff` | Subnet aggregation diff — added / removed / changed / unchanged (v2.11.0) |
+| `POST` | `/api/v1/wildcard` | Bidirectional wildcard ↔ CIDR converter |
 
 See `api/openapi.yaml` for the full OpenAPI 3.1 specification.
 
@@ -185,6 +204,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File | Description |
 | --- | --- | --- |
+| 2.11.0 | [subnet-calculator-2.11.0.tar.gz](releases/subnet-calculator-2.11.0.tar.gz) | IPv6 VLSM planner (UI + `POST /api/v1/vlsm6`); inverse subnet lookup (`POST /api/v1/lookup`); subnet aggregation diff (`POST /api/v1/diff`); copy-as-Markdown and copy-as-Cisco exports |
 | 2.10.0 | [subnet-calculator-2.10.0.tar.gz](releases/subnet-calculator-2.10.0.tar.gz) | Wildcard ↔ CIDR converter; sitemap.xml; PHP 8.2–8.4 CI matrix; dark-mode print stylesheet; docs URL → docs.subnetcalculator.app |
 | 2.9.2 | [subnet-calculator-2.9.2.tar.gz](releases/subnet-calculator-2.9.2.tar.gz) | Light + dark logo variants; adaptive favicon (prefers-color-scheme); apple-touch-icon WebP fix; refreshed README header |
 | 2.9.1 | [subnet-calculator-2.9.1.tar.gz](releases/subnet-calculator-2.9.1.tar.gz) | Bug fixes: VLSM dark inputs, mobile toggle clip, IPv6 overflow, logo transparency, favicon cache-bust |
@@ -336,6 +356,8 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 | Version | Notes |
 |---------|-------|
+| 2.11.0 | IPv6 VLSM planner (UI + `POST /api/v1/vlsm6`, GMP-backed, supports `2^N` host counts); inverse subnet lookup (`POST /api/v1/lookup`) with shareable URLs; subnet aggregation diff (`POST /api/v1/diff`) with canonical-form normalisation; copy-as-Markdown and copy-as-Cisco exports across IPv4/IPv6/VLSM/splitter result panels; footer GitHub link trimmed to "GitHub" |
+| 2.10.0 | Wildcard ↔ CIDR converter (`POST /api/v1/wildcard`); sitemap.xml; PHP 8.2–8.4 CI matrix; dark-mode print stylesheet; docs URL → docs.subnetcalculator.app |
 | 2.5.0 | Accessibility & UX hardening: skip link, `<main>` landmark, input focus rings, button focus-visible, light mode color contrast, prefers-reduced-motion, help bubble touch target + keyboard access, VLSM keyboard Delete; 6 new a11y test groups (529 assertions) |
 | 2.4.1 | Patch: supernet tooltip fix (moved out of button elements), PHP type correctness fixes (`ip2long`/`inet_pton`/`unpack` false-return handling), PHPStan expanded to all handler and function files, Semgrep rules, 4 new Playwright test groups (517 assertions) |
 | 2.4.0 | `$locale` config for locale-aware number formatting, ESLint + Stylelint tooling, OpenAPI example responses, CSP inline-style fix, tooltip visual polish, VLSM print stylesheet, mobile overflow fix |

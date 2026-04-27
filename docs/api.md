@@ -71,6 +71,18 @@ curl -X POST https://example.com/subnet-calculator/api/v1/vlsm \
   -d '{"network":"10.0.0.0","cidr":24,"subnets":[{"name":"LAN","hosts":50}]}'
 ```
 
+### POST /api/v1/vlsm6
+
+IPv6 VLSM planner — allocate variable-length IPv6 subnets from a parent block. Each `hosts` value is a positive integer or a `"2^N"` string (N is 0–128) for very large IPv6 sizings. Every IPv6 address in an allocated block is usable.
+
+```bash
+curl -X POST https://example.com/subnet-calculator/api/v1/vlsm6 \
+  -H 'Content-Type: application/json' \
+  -d '{"network":"2001:db8::","cidr":"32","requirements":[{"name":"site-a","hosts":256},{"name":"huge","hosts":"2^96"}]}'
+```
+
+Response `data.allocations[]` items have `name`, `hosts_needed`, `subnet`, and `usable` (an integer or `"2^N"` string).
+
 ### POST /api/v1/overlap
 
 Two-CIDR overlap check.
@@ -176,6 +188,34 @@ curl -X POST https://example.com/subnet-calculator/api/v1/wildcard \
 Response: `{"ok":true,"data":{"input":"/24","cidr":"/24","wildcard":"0.0.0.255"}}`
 
 Non-contiguous wildcard masks (e.g. `0.0.255.0`) and out-of-range CIDR prefixes are rejected with HTTP 400. See the [Wildcard ↔ CIDR Converter](wildcard.md) page for full reference.
+
+### POST /api/v1/lookup
+
+Inverse subnet lookup — for each IP, return every CIDR (from the supplied list) that contains it, plus the deepest (longest-prefix) match.
+
+```bash
+curl -X POST https://example.com/subnet-calculator/api/v1/lookup \
+  -H 'Content-Type: application/json' \
+  -d '{"cidrs":["10.0.0.0/8","10.1.0.0/16","10.1.2.0/24"],"ips":["10.1.2.3","8.8.8.8"]}'
+```
+
+Response: `{"ok":true,"data":{"results":[{"ip":"10.1.2.3","matches":["10.0.0.0/8","10.1.0.0/16","10.1.2.0/24"],"deepest":"10.1.2.0/24"},{"ip":"8.8.8.8","matches":[],"deepest":null}]}}`
+
+Mixed IPv4/IPv6 inputs are allowed; CIDRs only match IPs of the same family. Result rows are returned in the same order as the input `ips` array, and `deepest` is `null` when no CIDR matches. Caps default to 100 CIDRs and 1000 IPs per request (operator-tunable via `$lookup_max_cidrs` / `$lookup_max_ips`; hard ceilings 1000 / 10000). Errors: `400` (missing/empty array, malformed CIDR/IP, cap exceeded), `401` (invalid token), `405` (non-POST), `429` (rate-limit). See the [IP Lookup](lookup.md) page for full reference.
+
+### POST /api/v1/diff
+
+Subnet aggregation diff — compare a `before` and `after` CIDR list and return what was added, removed, kept unchanged, or had its prefix length changed.
+
+```bash
+curl -X POST https://example.com/subnet-calculator/api/v1/diff \
+  -H 'Content-Type: application/json' \
+  -d '{"before":["10.0.0.0/24","192.168.0.0/24"],"after":["10.0.0.0/23","192.168.1.0/24"]}'
+```
+
+Response: `{"ok":true,"data":{"added":["192.168.1.0/24"],"removed":["192.168.0.0/24"],"unchanged":[],"changed":[{"from":"10.0.0.0/24","to":"10.0.0.0/23","reason":"prefix changed /24 → /23"}]}}`
+
+Each input CIDR is canonicalised (host bits zeroed, IPv6 lowercased + compressed) before comparison. Mixed IPv4/IPv6 inputs are allowed. Cap of 1000 entries per side. `added`/`removed` rows are sorted (IPv4 first, then IPv6); `changed` rows record the prefix-length transition in `reason`. Errors: `400` (missing field, both sides empty, invalid CIDR, cap exceeded), `401` (invalid token), `405` (non-POST), `429` (rate-limit). See the [Subnet Diff](diff.md) page for full reference.
 
 ### POST /api/v1/bulk
 

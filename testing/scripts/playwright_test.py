@@ -1046,6 +1046,236 @@ async def test_vlsm_sort_note(page: Page) -> None:
     assert_contains("Sort note mentions largest-first", note.lower(), "largest")
 
 
+async def test_vlsm6_basic(page: Page) -> None:
+    section("VLSM6 — IPv6 planner basic allocation")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.wait_for_selector("#panel-vlsm6.active")
+
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "32")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'site-a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '256'")
+    await submit_form(page, ".vlsm6-form")
+
+    assert_true("VLSM6 results table exists",
+                await page.locator(".vlsm6-table").count() > 0)
+    subnet = await page.text_content(".vlsm6-table .vlsm-subnet-cell code") or ""
+    assert_contains("VLSM6 allocates IPv6 /N block", subnet, "/")
+    assert_contains("VLSM6 allocates within parent", subnet, "2001:db8")
+
+
+async def test_vlsm6_2pow_n(page: Page) -> None:
+    section("VLSM6 — 2^N huge host count")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "32")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'huge'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '2^96'")
+    await submit_form(page, ".vlsm6-form")
+
+    rows = await page.locator(".vlsm6-table tbody tr").count()
+    assert_eq("VLSM6 2^N: one row", rows, 1)
+    usable = await page.text_content(".vlsm6-table tbody tr td:nth-child(4)") or ""
+    assert_contains("VLSM6 2^N usable shown as 2^N string", usable, "2^")
+
+
+async def test_vlsm6_non_power_of_two(page: Page) -> None:
+    section("VLSM6 — non-power-of-two host count rounds up to allocated block")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "120")
+    # 100 hosts → next-fit /121 block (128 usable) — pins the regression where
+    # an exact "100 → 100" string would have leaked through instead of the
+    # allocated block size.
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'odd'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '100'")
+    await submit_form(page, ".vlsm6-form")
+    rows = await page.locator(".vlsm6-table tbody tr").count()
+    if not assert_eq("VLSM6 non-2^N: one row", rows, 1):
+        return
+    usable = (await page.text_content(".vlsm6-table tbody tr td:nth-child(4)") or "").strip()
+    assert_eq("VLSM6 non-2^N usable equals allocated block 128", usable, "128")
+
+
+async def test_vlsm6_overcapacity_error(page: Page) -> None:
+    section("VLSM6 — error when over capacity")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "126")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'big'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '32'")
+    await submit_form(page, ".vlsm6-form")
+    err = await page.text_content("#panel-vlsm6 .error") or ""
+    assert_true("VLSM6 over-capacity error shown", len(err) > 0, err)
+
+
+async def test_vlsm6_shareable_url(page: Page) -> None:
+    section("VLSM6 — shareable URL auto-populates and calculates")
+
+    url = (APP_URL + "?tab=vlsm6&vlsm6_network=2001:db8::&vlsm6_cidr=32"
+           "&vlsm6_name%5B0%5D=site-a&vlsm6_hosts%5B0%5D=256")
+    await navigate(page, url)
+    assert_true("VLSM6 results table after GET",
+                await page.locator(".vlsm6-table").count() > 0)
+    subnet = await page.text_content(".vlsm6-table .vlsm-subnet-cell code") or ""
+    assert_contains("VLSM6 GET auto-calc subnet", subnet, "/")
+    share = await page.text_content("#panel-vlsm6 .share-url") or ""
+    assert_contains("VLSM6 share URL contains vlsm6_network", share, "vlsm6_network")
+    network_val = await page.input_value("#vlsm6_network")
+    assert_eq("VLSM6 network field pre-filled from GET", network_val, "2001:db8::")
+
+
+async def test_vlsm6_dynamic_rows(page: Page) -> None:
+    section("VLSM6 — dynamic add/remove requirement rows")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.click(".vlsm6-add-row")
+    await page.click(".vlsm6-add-row")
+    rows = await page.locator("#vlsm6-reqs .vlsm-req-row").count()
+    assert_eq("VLSM6 add-row produces 3 rows total", rows, 3)
+    # Remove one
+    await page.click("#vlsm6-reqs .vlsm-req-row:last-child .vlsm-remove-row")
+    rows2 = await page.locator("#vlsm6-reqs .vlsm-req-row").count()
+    assert_eq("VLSM6 remove-row reduces to 2", rows2, 2)
+
+
+async def test_vlsm6_validation_inline(page: Page) -> None:
+    section("VLSM6 — inline validation rejects junk hosts input")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "32")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'site-a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = 'abc'")
+    # JS preventDefault should keep us on the page; click submit directly
+    await page.click(".vlsm6-form button[type='submit']")
+    inline = await page.locator(".vlsm6-form .vlsm-inline-error").count()
+    assert_true("VLSM6 inline validation flags junk input", inline > 0,
+                "expected at least one .vlsm-inline-error")
+
+
+async def test_vlsm6_copy_all(page: Page) -> None:
+    section("VLSM6 — Copy All button present")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "32")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '256'")
+    await submit_form(page, ".vlsm6-form")
+    assert_true("VLSM6 Copy All button rendered",
+                await page.locator("#panel-vlsm6 .copy-all-btn[data-target='vlsm6']").count() > 0)
+    assert_true("VLSM6 export buttons present",
+                await page.locator("#vlsm6-export-csv").count() > 0
+                and await page.locator("#vlsm6-export-json").count() > 0
+                and await page.locator("#vlsm6-export-ascii").count() > 0)
+
+
+async def test_vlsm6_csv_export(page: Page) -> None:
+    section("VLSM6 — CSV export button and table content")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "32")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'site-a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '256'")
+    await submit_form(page, ".vlsm6-form")
+    assert_true("VLSM6 Export CSV button present",
+                await page.locator("#vlsm6-export-csv").count() > 0)
+    # Verify a result row exists with an IPv6 subnet (contains a colon)
+    subnet = await page.text_content(".vlsm6-table .vlsm-subnet-cell code") or ""
+    assert_true("VLSM6 result row present with IPv6 subnet",
+                ":" in subnet and "/" in subnet, subnet)
+
+
+async def test_vlsm6_json_export(page: Page) -> None:
+    section("VLSM6 — JSON export download")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "32")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'site-a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '256'")
+    await submit_form(page, ".vlsm6-form")
+    assert_true("VLSM6 Export JSON button present",
+                await page.locator("#vlsm6-export-json").count() > 0)
+    async with page.expect_download() as dl_info:
+        await page.click("#vlsm6-export-json")
+    download = await dl_info.value
+    assert_true("VLSM6 JSON download filename ends with .json",
+                (download.suggested_filename or "").endswith(".json"),
+                download.suggested_filename)
+
+
+async def test_vlsm6_reset(page: Page) -> None:
+    section("VLSM6 — Reset button clears form and results")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "32")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'site-a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '256'")
+    await submit_form(page, ".vlsm6-form")
+    assert_true("VLSM6 table shown before reset",
+                await page.locator(".vlsm6-table").count() > 0)
+    async with page.expect_navigation(wait_until="load"):
+        await page.click("#panel-vlsm6 a.reset")
+    assert_true("VLSM6 table gone after reset",
+                await page.locator(".vlsm6-table").count() == 0)
+    assert_eq("VLSM6 network field cleared", await page.input_value("#vlsm6_network"), "")
+
+
+async def test_vlsm6_keyboard_delete(page: Page) -> None:
+    section("VLSM6 — keyboard Delete on focused row removes it")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    # Add two rows to start with three total
+    await page.click(".vlsm6-add-row")
+    await page.click(".vlsm6-add-row")
+    rows_before = await page.locator("#vlsm6-reqs .vlsm-req-row").count()
+    assert_eq("Three VLSM6 rows present before delete", rows_before, 3)
+    # Focus the remove button of the last row and press Delete
+    await page.focus("#vlsm6-reqs .vlsm-req-row:last-child .vlsm-remove-row")
+    await page.keyboard.press("Delete")
+    rows_after = await page.locator("#vlsm6-reqs .vlsm-req-row").count()
+    assert_eq("VLSM6 row removed by keyboard Delete", rows_after, 2)
+
+
+async def test_vlsm6_utilisation_summary(page: Page) -> None:
+    section("VLSM6 — utilisation summary")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "120")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'site-a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '64'")
+    await submit_form(page, ".vlsm6-form")
+    assert_true("VLSM6 utilisation summary present",
+                await page.locator("#panel-vlsm6 .vlsm-summary").count() > 0)
+    summary = await page.text_content("#panel-vlsm6 .vlsm-summary") or ""
+    assert_contains("VLSM6 summary shows Hosts requested", summary, "Hosts requested")
+    assert_contains("VLSM6 summary shows Allocated",      summary, "Allocated")
+    assert_contains("VLSM6 summary shows Remaining",      summary, "Remaining")
+    assert_contains("VLSM6 summary shows Utilisation",    summary, "Utilisation")
+    assert_contains("VLSM6 summary shows %",              summary, "%")
+
+
 async def test_ipv6_overlap(page: Page) -> None:
     section("VLSM tab — IPv6 overlap checker")
 
@@ -1583,6 +1813,515 @@ async def test_wildcard_api_endpoint(_page: Page) -> None:
     assert_true("ok=false", data3.get("ok") is False, str(data3))
 
 
+async def test_lookup_api_endpoint(_page: Page) -> None:
+    section("Lookup API — POST /api/v1/lookup")
+
+    status, data = _api_post("lookup", {
+        "cidrs": ["10.0.0.0/8", "10.1.0.0/16", "10.1.2.0/24", "2001:db8::/32"],
+        "ips":   ["10.1.2.3", "8.8.8.8", "2001:db8::1"],
+    })
+    assert_eq("api lookup: HTTP 200", status, 200)
+    assert_true("api lookup: ok=true", data.get("ok") is True, str(data))
+    results = data.get("data", {}).get("results") or []
+    if not assert_eq("api lookup: 3 result rows", len(results), 3):
+        return
+
+    # Row 0: 10.1.2.3 — deepest is /24, all 3 v4 CIDRs match
+    row0 = results[0]
+    assert_eq("api lookup: row[0].ip", row0.get("ip"), "10.1.2.3")
+    assert_eq("api lookup: row[0].deepest is /24",
+              row0.get("deepest"), "10.1.2.0/24")
+    assert_eq("api lookup: row[0] has 3 matches",
+              len(row0.get("matches") or []), 3)
+
+    # Row 1: 8.8.8.8 — no match
+    row1 = results[1]
+    assert_eq("api lookup: row[1].deepest is null",
+              row1.get("deepest"), None)
+    assert_eq("api lookup: row[1].matches is empty",
+              row1.get("matches"), [])
+
+    # Row 2: 2001:db8::1 — matches v6 only
+    row2 = results[2]
+    assert_eq("api lookup: row[2].deepest is /32",
+              row2.get("deepest"), "2001:db8::/32")
+
+    # Missing cidrs → 400
+    status_b, _ = _api_post("lookup", {"ips": ["10.0.0.1"]})
+    assert_eq("api lookup: missing cidrs → 400", status_b, 400)
+
+    # Invalid IP → 400
+    status_c, _ = _api_post("lookup", {
+        "cidrs": ["10.0.0.0/8"],
+        "ips":   ["not-an-ip"],
+    })
+    assert_eq("api lookup: invalid ip → 400", status_c, 400)
+
+    # Hard-ceiling enforcement: cidrs over documented max → 400
+    status_d, _ = _api_post("lookup", {
+        "cidrs": [f"10.{i // 256}.{i % 256}.0/24" for i in range(101)],
+        "ips":   ["10.0.0.1"],
+    })
+    assert_eq("api lookup: cidrs over hard cap → 400", status_d, 400)
+
+
+async def test_lookup_ui(page: Page) -> None:
+    section("IP Lookup — UI (IPv4 tab)")
+
+    await navigate(page, APP_URL)
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='lookup']")
+    await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
+    await page.fill("#lookup_cidrs_v4",
+                    "10.0.0.0/8\n10.1.0.0/16\n10.1.2.0/24")
+    await page.fill("#lookup_ips_v4", "10.1.2.3\n8.8.8.8")
+    await page.click(
+        "#panel-ipv4 .tool-panel[data-tool='lookup'] button[type='submit']"
+    )
+    await page.wait_for_load_state("load")
+    await page.wait_for_selector(".lookup-table tbody tr")
+
+    rows = await page.locator(".lookup-table tbody tr").all_text_contents()
+    if not assert_eq("lookup ui: 2 result rows", len(rows), 2):
+        return
+    assert_contains("lookup ui: row 0 contains 10.1.2.3", rows[0], "10.1.2.3")
+    assert_contains("lookup ui: row 0 deepest is /24", rows[0], "10.1.2.0/24")
+    assert_contains("lookup ui: row 1 contains 8.8.8.8", rows[1], "8.8.8.8")
+    # No-match row renders em-dash (—)
+    assert_contains("lookup ui: row 1 has em-dash for no match",
+                    rows[1], "—")
+
+
+async def test_lookup_ui_ipv6_tab(page: Page) -> None:
+    section("IP Lookup — UI (IPv6 tab)")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='lookup']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#lookup_cidrs_v6",
+                    "2001:db8::/32\n2001:db8:1::/48")
+    await page.fill("#lookup_ips_v6",
+                    "2001:db8:1::5\n2001:db9::1")
+    await page.click(
+        "#panel-ipv6 .tool-panel[data-tool='lookup'] button[type='submit']"
+    )
+    await page.wait_for_load_state("load")
+    await page.wait_for_selector(
+        "#panel-ipv6 .lookup-table tbody tr"
+    )
+
+    rows = await page.locator(
+        "#panel-ipv6 .lookup-table tbody tr"
+    ).all_text_contents()
+    if not assert_eq("lookup ui v6: 2 result rows", len(rows), 2):
+        return
+    assert_contains("lookup ui v6: row 0 deepest is /48",
+                    rows[0], "2001:db8:1::/48")
+    assert_contains("lookup ui v6: row 1 has em-dash for no match",
+                    rows[1], "—")
+
+
+async def test_lookup_shareable_url(page: Page) -> None:
+    section("IP Lookup — shareable GET URL auto-populates and calculates")
+
+    url = (APP_URL + "?tab=ipv4"
+           "&lookup_cidrs=10.0.0.0%2F8%0A10.1.0.0%2F16%0A10.1.2.0%2F24"
+           "&lookup_ips=10.1.2.3%0A8.8.8.8")
+    await navigate(page, url)
+
+    # Drawer should be auto-opened on the lookup tool
+    assert_true(
+        "lookup share: tool drawer open",
+        await page.locator("#panel-ipv4 .tool-drawer.open").count() > 0,
+    )
+    assert_true(
+        "lookup share: lookup tool-panel active",
+        await page.locator(
+            "#panel-ipv4 .tool-panel[data-tool='lookup'].active"
+        ).count() > 0,
+    )
+
+    # Results table should be rendered from GET parameters
+    await page.wait_for_selector("#panel-ipv4 .lookup-table tbody tr")
+    rows = await page.locator(
+        "#panel-ipv4 .lookup-table tbody tr"
+    ).all_text_contents()
+    if not assert_eq("lookup share: 2 result rows", len(rows), 2):
+        return
+    assert_contains("lookup share: row 0 contains 10.1.2.3",
+                    rows[0], "10.1.2.3")
+    assert_contains("lookup share: row 0 deepest is /24",
+                    rows[0], "10.1.2.0/24")
+    assert_contains("lookup share: row 1 contains 8.8.8.8",
+                    rows[1], "8.8.8.8")
+    assert_contains("lookup share: row 1 has em-dash for no match",
+                    rows[1], "—")
+
+    # Textareas should be hydrated with GET values
+    cidrs_val = await page.input_value("#lookup_cidrs_v4")
+    assert_contains("lookup share: cidrs textarea hydrated",
+                    cidrs_val, "10.0.0.0/8")
+    ips_val = await page.input_value("#lookup_ips_v4")
+    assert_contains("lookup share: ips textarea hydrated",
+                    ips_val, "10.1.2.3")
+
+
+async def test_diff_api_endpoint(_page: Page) -> None:
+    section("Diff API — POST /api/v1/diff")
+
+    status, data = _api_post("diff", {
+        "before": ["10.0.0.0/24", "10.0.1.0/24", "192.168.0.0/24"],
+        "after":  ["10.0.0.0/23", "10.0.1.0/24", "192.168.1.0/24"],
+    })
+    assert_eq("api diff: HTTP 200", status, 200)
+    assert_true("api diff: ok=true", data.get("ok") is True, str(data))
+    d = data.get("data", {})
+    assert_eq("api diff: added", d.get("added"), ["192.168.1.0/24"])
+    assert_eq("api diff: removed", d.get("removed"), ["192.168.0.0/24"])
+    assert_eq("api diff: unchanged", d.get("unchanged"), ["10.0.1.0/24"])
+    changed = d.get("changed") or []
+    if not assert_eq("api diff: 1 changed entry", len(changed), 1):
+        return
+    assert_eq("api diff: changed.from", changed[0].get("from"), "10.0.0.0/24")
+    assert_eq("api diff: changed.to",   changed[0].get("to"),   "10.0.0.0/23")
+    assert_contains("api diff: changed.reason mentions /24",
+                    changed[0].get("reason", ""), "/24")
+
+    # Missing field → 400
+    status_b, _ = _api_post("diff", {"before": ["10.0.0.0/24"]})
+    assert_eq("api diff: missing after → 400", status_b, 400)
+
+    # Invalid CIDR → 400
+    status_c, _ = _api_post("diff", {
+        "before": ["10.0.0.0/24"],
+        "after":  ["not-a-cidr"],
+    })
+    assert_eq("api diff: invalid cidr → 400", status_c, 400)
+
+    # All-empty request → 400 (both before and after empty is invalid)
+    status_d, _ = _api_post("diff", {"before": [], "after": []})
+    assert_eq("api diff: all-empty → 400", status_d, 400)
+
+
+async def test_diff_ui(page: Page) -> None:
+    section("Subnet Diff — UI (IPv4 tab)")
+
+    await navigate(page, APP_URL)
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='diff']")
+    await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
+    await page.fill("#diff_before_v4",
+                    "10.0.0.0/24\n10.0.1.0/24\n192.168.0.0/24")
+    await page.fill("#diff_after_v4",
+                    "10.0.0.0/23\n10.0.1.0/24\n192.168.1.0/24")
+    await page.click(
+        "#panel-ipv4 .tool-panel[data-tool='diff'] button[type='submit']"
+    )
+    await page.wait_for_load_state("load")
+    await page.wait_for_selector("#panel-ipv4 .diff-results")
+
+    added_text = await page.locator(
+        "#panel-ipv4 .diff-results .diff-group--added"
+    ).text_content()
+    removed_text = await page.locator(
+        "#panel-ipv4 .diff-results .diff-group--removed"
+    ).text_content()
+    changed_text = await page.locator(
+        "#panel-ipv4 .diff-results .diff-group--changed"
+    ).text_content()
+    unchanged_text = await page.locator(
+        "#panel-ipv4 .diff-results .diff-group--unchanged"
+    ).text_content()
+
+    assert_contains("diff ui: added contains 192.168.1.0/24",
+                    added_text or "", "192.168.1.0/24")
+    assert_contains("diff ui: removed contains 192.168.0.0/24",
+                    removed_text or "", "192.168.0.0/24")
+    assert_contains("diff ui: changed contains /24 → /23",
+                    changed_text or "", "/24")
+    assert_contains("diff ui: changed contains 10.0.0.0/23",
+                    changed_text or "", "10.0.0.0/23")
+    assert_contains("diff ui: unchanged contains 10.0.1.0/24",
+                    unchanged_text or "", "10.0.1.0/24")
+
+
+async def test_diff_shareable_url(page: Page) -> None:
+    section("Subnet Diff — shareable GET URL auto-populates and calculates")
+
+    url = (APP_URL + "?tab=ipv4"
+           "&diff_before=10.0.0.0%2F24%0A192.168.0.0%2F24"
+           "&diff_after=10.0.0.0%2F23%0A192.168.1.0%2F24")
+    await navigate(page, url)
+
+    assert_true(
+        "diff share: tool drawer open",
+        await page.locator("#panel-ipv4 .tool-drawer.open").count() > 0,
+    )
+    assert_true(
+        "diff share: diff tool-panel active",
+        await page.locator(
+            "#panel-ipv4 .tool-panel[data-tool='diff'].active"
+        ).count() > 0,
+    )
+
+    await page.wait_for_selector("#panel-ipv4 .diff-results")
+    added_text = await page.locator(
+        "#panel-ipv4 .diff-results .diff-group--added"
+    ).text_content()
+    changed_text = await page.locator(
+        "#panel-ipv4 .diff-results .diff-group--changed"
+    ).text_content()
+
+    assert_contains("diff share: added contains 192.168.1.0/24",
+                    added_text or "", "192.168.1.0/24")
+    assert_contains("diff share: changed contains 10.0.0.0/23",
+                    changed_text or "", "10.0.0.0/23")
+
+    before_val = await page.input_value("#diff_before_v4")
+    assert_contains("diff share: before textarea hydrated",
+                    before_val, "10.0.0.0/24")
+    after_val = await page.input_value("#diff_after_v4")
+    assert_contains("diff share: after textarea hydrated",
+                    after_val, "10.0.0.0/23")
+
+
+async def _install_clipboard_spy(page: Page) -> None:
+    """Install a navigator.clipboard.writeText spy.
+
+    The app is served over plain HTTP inside Docker (http://app:8080), which is
+    not a secure context, so the real navigator.clipboard API is unavailable
+    in chromium. We install a spy via addInitScript that records the most
+    recent writeText() payload on window.__lastClipboard and resolves successfully,
+    exercising the production clipboard branch in app.js (which prefers
+    navigator.clipboard.writeText over the document.execCommand fallback).
+    """
+    await page.add_init_script(
+        """
+        (function () {
+            try {
+                Object.defineProperty(navigator, 'clipboard', {
+                    configurable: true,
+                    get: function () {
+                        return {
+                            writeText: function (txt) {
+                                window.__lastClipboard = String(txt);
+                                return Promise.resolve();
+                            },
+                            readText: function () {
+                                return Promise.resolve(window.__lastClipboard || '');
+                            },
+                        };
+                    },
+                });
+            } catch (e) { /* ignore */ }
+        })();
+        """
+    )
+
+
+async def _read_clipboard(page: Page) -> str:
+    return await page.evaluate("window.__lastClipboard || ''")
+
+
+async def _wait_for_clipboard_write(page: Page, previous: str = "") -> str:
+    """Wait until the clipboard spy observes a payload different from `previous`.
+
+    The Playwright Page is reused across the entire suite, so window.__lastClipboard
+    survives between tests. A fixed `wait_for_timeout(150)` races with the async
+    copy handler and can read a previous test's payload on slow runs. Polling for
+    a change relative to a captured baseline eliminates that race.
+    """
+    await page.wait_for_function(
+        "(prev) => (window.__lastClipboard || '') !== prev",
+        arg=previous,
+        timeout=2000,
+    )
+    return await _read_clipboard(page)
+
+
+async def test_copy_as_markdown_ipv4(page: Page) -> None:
+    section("Copy as Markdown — IPv4 results")
+
+    await _install_clipboard_spy(page)
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "192.168.1.0")
+    await page.fill("#mask", "24")
+    await submit_form(page, "#panel-ipv4 form")
+    await page.wait_for_selector("#panel-ipv4 .results")
+
+    btn = page.locator("#panel-ipv4 .copy-md-btn[data-target='ipv4']")
+    assert_true("Copy as Markdown button present (IPv4)", await btn.count() > 0)
+    prev = await _read_clipboard(page)
+    await btn.first.click()
+    md = await _wait_for_clipboard_write(page, prev)
+    assert_contains("ipv4 markdown: header row", md, "| Field |")
+    assert_contains("ipv4 markdown: separator row", md, "| --- |")
+    assert_contains("ipv4 markdown: contains CIDR",
+                    md, "192.168.1.0/24")
+
+
+async def test_copy_as_markdown_ipv6(page: Page) -> None:
+    section("Copy as Markdown — IPv6 results")
+
+    await _install_clipboard_spy(page)
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.fill("#ipv6", "2001:db8::")
+    await page.fill("#prefix", "32")
+    await submit_form(page, "#panel-ipv6 form")
+    await page.wait_for_selector("#panel-ipv6 .results")
+
+    btn = page.locator("#panel-ipv6 .copy-md-btn[data-target='ipv6']")
+    assert_true("Copy as Markdown button present (IPv6)", await btn.count() > 0)
+    prev = await _read_clipboard(page)
+    await btn.first.click()
+    md = await _wait_for_clipboard_write(page, prev)
+    assert_contains("ipv6 markdown: header row", md, "| Field |")
+    assert_contains("ipv6 markdown: separator row", md, "| --- |")
+    assert_contains("ipv6 markdown: contains prefix", md, "2001:db8::/32")
+
+
+async def test_copy_as_markdown_vlsm(page: Page) -> None:
+    section("Copy as Markdown — VLSM results")
+
+    await _install_clipboard_spy(page)
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr", "24")
+    await page.evaluate(
+        "document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN A'"
+    )
+    await page.evaluate(
+        "document.querySelectorAll('.vlsm-hosts-input')[0].value = '50'"
+    )
+    await submit_form(page, ".vlsm-form")
+    await page.wait_for_selector(".vlsm-table")
+
+    btn = page.locator(".copy-md-btn[data-target='vlsm']")
+    assert_true("Copy as Markdown button present (VLSM)", await btn.count() > 0)
+    prev = await _read_clipboard(page)
+    await btn.first.click()
+    md = await _wait_for_clipboard_write(page, prev)
+    assert_contains("vlsm markdown: name column", md, "| Name |")
+    assert_contains("vlsm markdown: separator row", md, "| --- |")
+    assert_contains("vlsm markdown: LAN A row", md, "LAN A")
+
+
+async def test_copy_as_cisco_ipv4(page: Page) -> None:
+    section("Copy as Cisco — IPv4 results")
+
+    await _install_clipboard_spy(page)
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "192.168.1.0")
+    await page.fill("#mask", "24")
+    await submit_form(page, "#panel-ipv4 form")
+    await page.wait_for_selector("#panel-ipv4 .results")
+
+    btn = page.locator("#panel-ipv4 .copy-cisco-btn[data-target='ipv4']")
+    assert_true("Copy as Cisco button present (IPv4)", await btn.count() > 0)
+    prev = await _read_clipboard(page)
+    await btn.first.click()
+    cfg = await _wait_for_clipboard_write(page, prev)
+    assert_contains("ipv4 cisco: interface stanza", cfg, "interface ")
+    assert_contains("ipv4 cisco: ip address line", cfg, "ip address ")
+    assert_contains("ipv4 cisco: subnet mask in dotted", cfg, "255.255.255.0")
+
+
+async def test_copy_as_cisco_vlsm(page: Page) -> None:
+    section("Copy as Cisco — VLSM results")
+
+    await _install_clipboard_spy(page)
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr", "24")
+    await page.evaluate(
+        "document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN A'"
+    )
+    await page.evaluate(
+        "document.querySelectorAll('.vlsm-hosts-input')[0].value = '50'"
+    )
+    await submit_form(page, ".vlsm-form")
+    await page.wait_for_selector(".vlsm-table")
+
+    btn = page.locator(".copy-cisco-btn[data-target='vlsm']")
+    assert_true("Copy as Cisco button present (VLSM)", await btn.count() > 0)
+    prev = await _read_clipboard(page)
+    await btn.first.click()
+    cfg = await _wait_for_clipboard_write(page, prev)
+    assert_contains("vlsm cisco: interface stanza present", cfg, "interface ")
+    assert_contains("vlsm cisco: ip address keyword", cfg, "ip address ")
+    assert_contains("vlsm cisco: includes a /26 mask",
+                    cfg, "255.255.255.192")
+
+
+async def test_copy_as_cisco_ipv6(page: Page) -> None:
+    section("Copy as Cisco — IPv6 results")
+
+    await _install_clipboard_spy(page)
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.fill("#ipv6", "2001:db8::")
+    await page.fill("#prefix", "32")
+    await submit_form(page, "#panel-ipv6 form")
+    await page.wait_for_selector("#panel-ipv6 .results")
+
+    btn = page.locator("#panel-ipv6 .copy-cisco-btn[data-target='ipv6']")
+    assert_true("Copy as Cisco button present (IPv6)", await btn.count() > 0)
+    prev = await _read_clipboard(page)
+    await btn.first.click()
+    cfg = await _wait_for_clipboard_write(page, prev)
+    assert_contains("ipv6 cisco: interface stanza present", cfg, "interface ")
+    assert_contains("ipv6 cisco: ipv6 address line", cfg, "ipv6 address ")
+
+
+async def test_copy_as_markdown_splitter(page: Page) -> None:
+    section("Copy as Markdown — IPv4 splitter results")
+
+    await _install_clipboard_spy(page)
+    await navigate(page, APP_URL)
+    await page.fill("#ip",   "192.168.1.0")
+    await page.fill("#mask", "24")
+    await submit_form(page, "#panel-ipv4 form")
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='split']")
+    await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
+    await page.fill("input[name='split_prefix']", "/26")
+    await submit_form(page, "#panel-ipv4 .splitter-form")
+    await page.wait_for_selector("#panel-ipv4 .split-list")
+
+    btn = page.locator(".copy-md-btn[data-target='split4']")
+    assert_true("Copy as Markdown button present (splitter v4)",
+                await btn.count() > 0)
+    prev = await _read_clipboard(page)
+    await btn.first.click()
+    md = await _wait_for_clipboard_write(page, prev)
+    assert_contains("splitter md: includes /26 subnet", md, "/26")
+    assert_contains("splitter md: includes 192.168.1", md, "192.168.1")
+
+
+async def test_copy_as_markdown_vlsm6(page: Page) -> None:
+    section("Copy as Markdown — VLSM6 results")
+
+    await _install_clipboard_spy(page)
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "120")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'site-a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '64'")
+    await submit_form(page, ".vlsm6-form")
+    await page.wait_for_selector(".vlsm6-table")
+
+    btn = page.locator(".copy-md-btn[data-target='vlsm6']")
+    assert_true("Copy as Markdown button present (VLSM6)",
+                await btn.count() > 0)
+    prev = await _read_clipboard(page)
+    await btn.first.click()
+    md = await _wait_for_clipboard_write(page, prev)
+    assert_contains("vlsm6 md: separator row", md, "| --- |")
+    assert_contains("vlsm6 md: site-a row", md, "site-a")
+
+
 async def test_print_stylesheet_dark_mode(page: Page) -> None:
     section("Print stylesheet (dark mode)")
 
@@ -1709,9 +2448,59 @@ async def test_api_vlsm(page: Page) -> None:
     assert_eq("api vlsm: HTTP 200", status, 200)
     assert_eq("api vlsm: ok=true", data.get("ok"), True)
     allocs = data.get("data", {}).get("allocations", [])
-    assert_eq("api vlsm: 2 allocations", len(allocs), 2)
+    if not assert_eq("api vlsm: 2 allocations", len(allocs), 2):
+        return
     assert_eq("api vlsm: first allocation has subnet key",
-              "subnet" in allocs[0] if allocs else False, True)
+              "subnet" in allocs[0], True)
+
+
+async def test_vlsm6_api_endpoint(_page: Page) -> None:
+    section("API — IPv6 VLSM (POST /api/v1/vlsm6)")
+    status, data = _api_post("vlsm6", {
+        "network": "2001:db8::",
+        "cidr": "32",
+        "requirements": [
+            {"name": "site-a", "hosts": 256},
+            {"name": "site-b", "hosts": 4},
+        ],
+    })
+    assert_eq("api vlsm6: HTTP 200", status, 200)
+    assert_eq("api vlsm6: ok=true", data.get("ok"), True)
+    allocs = data.get("data", {}).get("allocations", [])
+    if not assert_eq("api vlsm6: 2 allocations", len(allocs), 2):
+        return
+    names = {a.get("name") for a in allocs}
+    assert_true("api vlsm6: names round-trip",
+                names == {"site-a", "site-b"}, str(names))
+    # Largest-first: site-a (256 hosts) → /120 block
+    site_a = next((a for a in allocs if a.get("name") == "site-a"), None)
+    if not assert_true("api vlsm6: site-a allocation present",
+                       site_a is not None, str(allocs)):
+        return
+    assert_eq("api vlsm6: site-a subnet", site_a.get("subnet"), "2001:db8::/120")
+    assert_eq("api vlsm6: site-a usable", site_a.get("usable"), 256)
+
+    # 2^N huge-host string round-trip
+    status2, data2 = _api_post("vlsm6", {
+        "network": "2001:db8::",
+        "cidr": "32",
+        "requirements": [{"name": "huge", "hosts": "2^96"}],
+    })
+    assert_eq("api vlsm6 (2^N): HTTP 200", status2, 200)
+    allocs2 = data2.get("data", {}).get("allocations", [])
+    if not assert_eq("api vlsm6 (2^N): 1 allocation", len(allocs2), 1):
+        return
+    assert_eq("api vlsm6 (2^N): subnet", allocs2[0].get("subnet"), "2001:db8::/32")
+    assert_eq("api vlsm6 (2^N): usable as 2^N", allocs2[0].get("usable"), "2^96")
+
+    # Insufficient space -> error
+    status3, data3 = _api_post("vlsm6", {
+        "network": "2001:db8::",
+        "cidr": "126",
+        "requirements": [{"name": "x", "hosts": 32}],
+    })
+    assert_eq("api vlsm6 (over): HTTP 400", status3, 400)
+    assert_true("api vlsm6 (over): ok=false", data3.get("ok") is False, str(data3))
 
 
 async def test_api_overlap(page: Page) -> None:
@@ -3249,7 +4038,10 @@ async def main() -> None:
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
-        ctx_kwargs: dict = {"ignore_https_errors": True}
+        ctx_kwargs: dict = {
+            "ignore_https_errors": True,
+            "permissions": ["clipboard-read", "clipboard-write"],
+        }
         if _needs_auth:
             ctx_kwargs["http_credentials"] = {"username": BASIC_USER, "password": BASIC_PASS}
         context = await browser.new_context(**ctx_kwargs)
@@ -3297,6 +4089,19 @@ async def main() -> None:
             await test_ipv6_copy_all(page)
             await test_vlsm_utilisation_summary(page)
             await test_vlsm_sort_note(page)
+            await test_vlsm6_basic(page)
+            await test_vlsm6_2pow_n(page)
+            await test_vlsm6_non_power_of_two(page)
+            await test_vlsm6_overcapacity_error(page)
+            await test_vlsm6_shareable_url(page)
+            await test_vlsm6_dynamic_rows(page)
+            await test_vlsm6_validation_inline(page)
+            await test_vlsm6_copy_all(page)
+            await test_vlsm6_csv_export(page)
+            await test_vlsm6_json_export(page)
+            await test_vlsm6_reset(page)
+            await test_vlsm6_keyboard_delete(page)
+            await test_vlsm6_utilisation_summary(page)
             await test_ipv6_overlap(page)
             await test_multi_cidr_overlap(page)
             await test_ipv6_binary_repr(page)
@@ -3319,10 +4124,26 @@ async def main() -> None:
             await test_wildcard_to_cidr(page)
             await test_wildcard_rejects_noncontiguous(page)
             await test_wildcard_api_endpoint(page)
+            await test_lookup_api_endpoint(page)
+            await test_lookup_ui(page)
+            await test_lookup_ui_ipv6_tab(page)
+            await test_lookup_shareable_url(page)
+            await test_diff_api_endpoint(page)
+            await test_diff_ui(page)
+            await test_diff_shareable_url(page)
+            await test_copy_as_markdown_ipv4(page)
+            await test_copy_as_markdown_ipv6(page)
+            await test_copy_as_markdown_vlsm(page)
+            await test_copy_as_cisco_ipv4(page)
+            await test_copy_as_cisco_vlsm(page)
+            await test_copy_as_cisco_ipv6(page)
+            await test_copy_as_markdown_splitter(page)
+            await test_copy_as_markdown_vlsm6(page)
             await test_api_meta(page)
             await test_api_ipv4(page)
             await test_api_ipv6(page)
             await test_api_vlsm(page)
+            await test_vlsm6_api_endpoint(page)
             await test_api_overlap(page)
             await test_api_split(page)
             await test_api_supernet(page)

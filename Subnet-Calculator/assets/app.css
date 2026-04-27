@@ -772,6 +772,23 @@
         }
         .copy-all-btn:hover { background: var(--color-border); color: var(--color-text); }
 
+        .copy-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.4rem;
+            margin: 0.3rem 0;
+        }
+        .copy-actions .copy-all-btn { margin: 0; }
+
+        @media (width <= 480px) {
+            .copy-actions { gap: 0.3rem; }
+            .copy-actions .copy-all-btn {
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+        }
+
         .vlsm-summary {
             display: flex;
             flex-wrap: wrap;
@@ -971,6 +988,50 @@
             border-bottom: 1px solid var(--color-border);
         }
         .multi-overlap-list li:last-child { border-bottom: none; }
+
+        /* ── IP Lookup (inverse subnet lookup) ─────────────────────────── */
+        .lookup-form-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.25rem;
+        }
+        .lookup-form-label {
+            font-size: 0.78rem;
+            color: var(--color-text-faint);
+            margin-top: 0.25rem;
+        }
+        .lookup-form-hint {
+            font-size: 0.72rem;
+            color: var(--color-text-faint);
+        }
+        .lookup-results { margin-top: 0.5rem; }
+        .lookup-table-wrap {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .lookup-table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.8rem;
+        }
+        .lookup-table th {
+            text-align: left;
+            padding: 0.3rem 0.5rem;
+            border-bottom: 1px solid var(--color-border);
+            color: var(--color-text-faint);
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        .lookup-table__cell {
+            padding: 0.3rem 0.5rem;
+            border-bottom: 1px solid var(--color-border);
+            overflow-wrap: anywhere;
+            vertical-align: top;
+        }
+        .lookup-table__cell code {
+            font-family: 'Fira Code', 'Courier New', monospace;
+        }
+        .lookup-table__empty { color: var(--color-text-faint); }
 
         .ula-meta {
             margin-top: 0.35rem;
@@ -1235,3 +1296,110 @@
 .tool-panel { display: block; }
 .js-enabled .tool-panel { display: none; }
 .js-enabled .tool-drawer.open .tool-panel.active { display: block; }
+
+/* ─── Subnet Diff results ────────────────────────────────────────────────── */
+.diff-results {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 12px;
+}
+.diff-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.diff-summary-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-alt);
+    color: var(--color-text-muted);
+    line-height: 1.4;
+}
+.diff-summary-pill--added     { color: var(--color-green);       border-color: var(--color-green); }
+.diff-summary-pill--removed   { color: var(--color-error-text);   border-color: var(--color-error-border); }
+.diff-summary-pill--changed   { color: #f59e0b;                   border-color: #b45309; }
+.diff-summary-pill--unchanged { color: var(--color-text-muted);   border-color: var(--color-border); }
+
+.diff-group {
+    border: 1px solid var(--color-border);
+    border-left-width: 3px;
+    border-radius: 6px;
+    background: var(--color-surface-alt);
+    padding: 8px 10px;
+}
+.diff-group--added     { border-left-color: var(--color-green); }
+.diff-group--removed   { border-left-color: var(--color-error-text); }
+.diff-group--changed   { border-left-color: #f59e0b; }
+.diff-group--unchanged { border-left-color: var(--color-text-faint, var(--color-text-muted)); }
+.diff-group--empty     { opacity: 55%; }
+
+.diff-group-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-heading);
+    margin-bottom: 6px;
+}
+.diff-empty {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+.diff-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.diff-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: var(--color-text);
+}
+.diff-item code {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 12px;
+}
+.diff-marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 14px;
+    font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+}
+.diff-group--added     .diff-marker { color: var(--color-green); }
+.diff-group--removed   .diff-marker { color: var(--color-error-text); }
+.diff-group--changed   .diff-marker { color: #f59e0b; }
+.diff-group--unchanged .diff-marker { color: var(--color-text-muted); }
+.diff-arrow {
+    color: var(--color-text-muted);
+    font-weight: 600;
+}
+.diff-reason {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+@media (width <= 480px) {
+    .diff-summary { gap: 4px; }
+    .diff-summary-pill { font-size: 11px; padding: 2px 8px; }
+    .diff-item { font-size: 12px; }
+}
