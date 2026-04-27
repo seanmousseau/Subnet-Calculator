@@ -70,7 +70,7 @@
 
 ## Requirements
 
-- PHP 8.1+
+- PHP 8.1, 8.2, 8.3, or 8.4
 - PHP GMP extension (for IPv6 — `php-gmp`)
 - PHP SQLite3 extension (for session persistence — `php-sqlite3`; optional)
 
