@@ -2048,6 +2048,166 @@ async def test_diff_shareable_url(page: Page) -> None:
                     after_val, "10.0.0.0/23")
 
 
+async def _install_clipboard_spy(page: Page) -> None:
+    """Install a navigator.clipboard.writeText spy.
+
+    The app is served over plain HTTP inside Docker (http://app:8080), which is
+    not a secure context, so the real navigator.clipboard API is unavailable
+    in chromium. We install a spy via addInitScript that records the most
+    recent writeText() payload on window.__lastCopy and resolves successfully,
+    exercising the production clipboard branch in app.js (which prefers
+    navigator.clipboard.writeText over the document.execCommand fallback).
+    """
+    await page.add_init_script(
+        """
+        (function () {
+            try {
+                Object.defineProperty(navigator, 'clipboard', {
+                    configurable: true,
+                    get: function () {
+                        return {
+                            writeText: function (txt) {
+                                window.__lastCopy = String(txt);
+                                return Promise.resolve();
+                            },
+                            readText: function () {
+                                return Promise.resolve(window.__lastCopy || '');
+                            },
+                        };
+                    },
+                });
+            } catch (e) { /* ignore */ }
+        })();
+        """
+    )
+
+
+async def _read_clipboard(page: Page) -> str:
+    return await page.evaluate("window.__lastCopy || ''")
+
+
+async def test_copy_as_markdown_ipv4(page: Page) -> None:
+    section("Copy as Markdown — IPv4 results")
+
+    await _install_clipboard_spy(page)
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "192.168.1.0")
+    await page.fill("#mask", "24")
+    await submit_form(page, "#panel-ipv4 form")
+    await page.wait_for_selector("#panel-ipv4 .results")
+
+    btn = page.locator("#panel-ipv4 .copy-md-btn[data-target='ipv4']")
+    assert_true("Copy as Markdown button present (IPv4)", await btn.count() > 0)
+    await btn.first.click()
+    await page.wait_for_timeout(150)
+
+    md = await _read_clipboard(page)
+    assert_contains("ipv4 markdown: header row", md, "| Field |")
+    assert_contains("ipv4 markdown: separator row", md, "| --- |")
+    assert_contains("ipv4 markdown: contains CIDR",
+                    md, "192.168.1.0/24")
+
+
+async def test_copy_as_markdown_ipv6(page: Page) -> None:
+    section("Copy as Markdown — IPv6 results")
+
+    await _install_clipboard_spy(page)
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.fill("#ipv6", "2001:db8::")
+    await page.fill("#prefix", "32")
+    await submit_form(page, "#panel-ipv6 form")
+    await page.wait_for_selector("#panel-ipv6 .results")
+
+    btn = page.locator("#panel-ipv6 .copy-md-btn[data-target='ipv6']")
+    assert_true("Copy as Markdown button present (IPv6)", await btn.count() > 0)
+    await btn.first.click()
+    await page.wait_for_timeout(150)
+
+    md = await _read_clipboard(page)
+    assert_contains("ipv6 markdown: header row", md, "| Field |")
+    assert_contains("ipv6 markdown: separator row", md, "| --- |")
+    assert_contains("ipv6 markdown: contains prefix", md, "2001:db8::/32")
+
+
+async def test_copy_as_markdown_vlsm(page: Page) -> None:
+    section("Copy as Markdown — VLSM results")
+
+    await _install_clipboard_spy(page)
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr", "24")
+    await page.evaluate(
+        "document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN A'"
+    )
+    await page.evaluate(
+        "document.querySelectorAll('.vlsm-hosts-input')[0].value = '50'"
+    )
+    await submit_form(page, ".vlsm-form")
+    await page.wait_for_selector(".vlsm-table")
+
+    btn = page.locator(".copy-md-btn[data-target='vlsm']")
+    assert_true("Copy as Markdown button present (VLSM)", await btn.count() > 0)
+    await btn.first.click()
+    await page.wait_for_timeout(150)
+
+    md = await _read_clipboard(page)
+    assert_contains("vlsm markdown: name column", md, "| Name |")
+    assert_contains("vlsm markdown: separator row", md, "| --- |")
+    assert_contains("vlsm markdown: LAN A row", md, "LAN A")
+
+
+async def test_copy_as_cisco_ipv4(page: Page) -> None:
+    section("Copy as Cisco — IPv4 results")
+
+    await _install_clipboard_spy(page)
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "192.168.1.0")
+    await page.fill("#mask", "24")
+    await submit_form(page, "#panel-ipv4 form")
+    await page.wait_for_selector("#panel-ipv4 .results")
+
+    btn = page.locator("#panel-ipv4 .copy-cisco-btn[data-target='ipv4']")
+    assert_true("Copy as Cisco button present (IPv4)", await btn.count() > 0)
+    await btn.first.click()
+    await page.wait_for_timeout(150)
+
+    cfg = await _read_clipboard(page)
+    assert_contains("ipv4 cisco: interface stanza", cfg, "interface ")
+    assert_contains("ipv4 cisco: ip address line", cfg, "ip address ")
+    assert_contains("ipv4 cisco: subnet mask in dotted", cfg, "255.255.255.0")
+
+
+async def test_copy_as_cisco_vlsm(page: Page) -> None:
+    section("Copy as Cisco — VLSM results")
+
+    await _install_clipboard_spy(page)
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm")
+    await page.fill("#vlsm_network", "10.0.0.0")
+    await page.fill("#vlsm_cidr", "24")
+    await page.evaluate(
+        "document.querySelectorAll('.vlsm-name-input')[0].value = 'LAN A'"
+    )
+    await page.evaluate(
+        "document.querySelectorAll('.vlsm-hosts-input')[0].value = '50'"
+    )
+    await submit_form(page, ".vlsm-form")
+    await page.wait_for_selector(".vlsm-table")
+
+    btn = page.locator(".copy-cisco-btn[data-target='vlsm']")
+    assert_true("Copy as Cisco button present (VLSM)", await btn.count() > 0)
+    await btn.first.click()
+    await page.wait_for_timeout(150)
+
+    cfg = await _read_clipboard(page)
+    assert_contains("vlsm cisco: interface stanza present", cfg, "interface ")
+    assert_contains("vlsm cisco: ip address keyword", cfg, "ip address ")
+    assert_contains("vlsm cisco: includes a /26 mask",
+                    cfg, "255.255.255.192")
+
+
 async def test_print_stylesheet_dark_mode(page: Page) -> None:
     section("Print stylesheet (dark mode)")
 
@@ -3758,7 +3918,10 @@ async def main() -> None:
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
-        ctx_kwargs: dict = {"ignore_https_errors": True}
+        ctx_kwargs: dict = {
+            "ignore_https_errors": True,
+            "permissions": ["clipboard-read", "clipboard-write"],
+        }
         if _needs_auth:
             ctx_kwargs["http_credentials"] = {"username": BASIC_USER, "password": BASIC_PASS}
         context = await browser.new_context(**ctx_kwargs)
@@ -3847,6 +4010,11 @@ async def main() -> None:
             await test_diff_api_endpoint(page)
             await test_diff_ui(page)
             await test_diff_shareable_url(page)
+            await test_copy_as_markdown_ipv4(page)
+            await test_copy_as_markdown_ipv6(page)
+            await test_copy_as_markdown_vlsm(page)
+            await test_copy_as_cisco_ipv4(page)
+            await test_copy_as_cisco_vlsm(page)
             await test_api_meta(page)
             await test_api_ipv4(page)
             await test_api_ipv6(page)

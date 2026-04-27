@@ -192,6 +192,10 @@
                     <span class="result-value"><?= htmlspecialchars($result['ptr_zone']) ?></span>
                 </div>
             </div>
+            <div class="copy-actions" data-kind="ipv4">
+                <button type="button" class="copy-all-btn copy-md-btn" data-target="ipv4">Copy as Markdown</button>
+                <button type="button" class="copy-all-btn copy-cisco-btn" data-target="ipv4">Copy as Cisco</button><?= help_bubble('copy-cisco-ipv4', 'Cisco output is generic IOS-style: an interface stanza with ip address. Vendor-specific tweaks (e.g. Juniper, Arista) may be required.') ?>
+            </div>
             <?php
             $bin_cidr  = (int)ltrim($result['netmask_cidr'], '/');
             $bin_net   = array_map(fn($o) => sprintf('%08b', (int)$o), explode('.', explode('/', $result['network_cidr'])[0]));
@@ -275,6 +279,8 @@ if ($i < 3) {
                     <?php elseif ($split_result && $split_result['showing'] > 0) : ?>
                         <div class="split-list" data-parent="<?= htmlspecialchars($result['cidr'] ?? '') ?>">
                             <button type="button" class="copy-all-btn" data-target="split">Copy All</button>
+                            <button type="button" class="copy-all-btn copy-md-btn" data-target="split4">Copy as Markdown</button>
+                            <button type="button" class="copy-all-btn copy-cisco-btn" data-target="split4">Copy as Cisco</button><?= help_bubble('copy-cisco-split4', 'Cisco output is generic IOS-style — one interface stanza per split subnet. Vendor-specific tweaks may be required.') ?>
                             <button type="button" class="ascii-export-btn">Export ASCII</button>
                             <?php foreach ($split_result['subnets'] as $s) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
@@ -645,6 +651,10 @@ if ($i < 3) {
                 </div>
                 <?php endif; ?>
             </div>
+            <div class="copy-actions" data-kind="ipv6">
+                <button type="button" class="copy-all-btn copy-md-btn" data-target="ipv6">Copy as Markdown</button>
+                <button type="button" class="copy-all-btn copy-cisco-btn" data-target="ipv6">Copy as Cisco</button><?= help_bubble('copy-cisco-ipv6', 'Cisco output is generic IOS-style: ipv6 address on an interface stanza. Vendor-specific tweaks may be required.') ?>
+            </div>
             <?php
             try {
                 $bin6_prefix_int = (int)ltrim($result6['prefix'], '/');
@@ -744,6 +754,8 @@ if ($i < 3) {
                     <?php elseif ($split_result6 && $split_result6['showing'] > 0) : ?>
                         <div class="split-list" data-parent="<?= htmlspecialchars($result6['network_cidr'] ?? '') ?>">
                             <button type="button" class="copy-all-btn" data-target="split">Copy All</button>
+                            <button type="button" class="copy-all-btn copy-md-btn" data-target="split6">Copy as Markdown</button>
+                            <button type="button" class="copy-all-btn copy-cisco-btn" data-target="split6">Copy as Cisco</button><?= help_bubble('copy-cisco-split6', 'Cisco output is generic IOS-style — one interface stanza per split IPv6 subnet using ipv6 address. Vendor-specific tweaks may be required.') ?>
                             <button type="button" class="ascii-export-btn">Export ASCII</button>
                             <?php foreach ($split_result6['subnets'] as $s) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
@@ -986,7 +998,11 @@ if ($i < 3) {
                     </tbody>
                 </table>
             </div>
-            <button type="button" class="copy-all-btn" data-target="vlsm">Copy All</button>
+            <div class="copy-actions" data-kind="vlsm">
+                <button type="button" class="copy-all-btn" data-target="vlsm">Copy All</button>
+                <button type="button" class="copy-all-btn copy-md-btn" data-target="vlsm">Copy as Markdown</button>
+                <button type="button" class="copy-all-btn copy-cisco-btn" data-target="vlsm">Copy as Cisco</button><?= help_bubble('copy-cisco-vlsm', 'Cisco output is generic IOS-style — one interface stanza per VLSM allocation. Vendor-specific tweaks may be required.') ?>
+            </div>
             <?php
             $vlsm_total_hosts_req = 0;
             $vlsm_total_allocated = 0;
@@ -1238,7 +1254,11 @@ if ($i < 3) {
                     </tbody>
                 </table>
             </div>
-            <button type="button" class="copy-all-btn" data-target="vlsm6">Copy All</button>
+            <div class="copy-actions" data-kind="vlsm6">
+                <button type="button" class="copy-all-btn" data-target="vlsm6">Copy All</button>
+                <button type="button" class="copy-all-btn copy-md-btn" data-target="vlsm6">Copy as Markdown</button>
+                <button type="button" class="copy-all-btn copy-cisco-btn" data-target="vlsm6">Copy as Cisco</button><?= help_bubble('copy-cisco-vlsm6', 'Cisco output is generic IOS-style — one interface stanza per IPv6 VLSM allocation using ipv6 address. Vendor-specific tweaks may be required.') ?>
+            </div>
             <?php
             $vlsm6_parent_cidr_int = (int)ltrim((string)$vlsm6_cidr_input, '/');
             $vlsm6_parent_total    = gmp_pow(gmp_init(2), 128 - $vlsm6_parent_cidr_int);

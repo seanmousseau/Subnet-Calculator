@@ -772,6 +772,23 @@
         }
         .copy-all-btn:hover { background: var(--color-border); color: var(--color-text); }
 
+        .copy-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.4rem;
+            margin: 0.3rem 0;
+        }
+        .copy-actions .copy-all-btn { margin: 0; }
+
+        @media (width <= 480px) {
+            .copy-actions { gap: 0.3rem; }
+            .copy-actions .copy-all-btn {
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+        }
+
         .vlsm-summary {
             display: flex;
             flex-wrap: wrap;
