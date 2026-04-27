@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.0] - 2026-04-27
+
+### Added
+- **Wildcard mask ↔ CIDR converter** — new tool drawer entry on the IPv4 tab and `POST /api/v1/wildcard` endpoint that converts between Cisco-style wildcard masks (e.g. `0.0.0.255`) and CIDR prefixes (e.g. `/24`). Non-contiguous masks are rejected. Closes #292.
+- **`/sitemap.xml`** — static sitemap published at the app root listing app + docs URLs, advertised in `robots.txt`. Closes #285.
+- **CI matrix** — `.github/workflows/php.yml` now runs PHPUnit, PHPStan (level 9), and PHPCS against PHP 8.1, 8.2, 8.3, and 8.4 in parallel. Closes #287.
+- **OpenAPI `externalDocs`** — top-level `externalDocs.url` block added pointing at `https://docs.subnetcalculator.app/api/`. Closes #290.
+
+### Changed
+- **Documentation URL** — every in-app and in-repo reference to the legacy `seanmousseau.github.io/Subnet-Calculator` URL now points at the canonical custom domain `https://docs.subnetcalculator.app/` (README, footer link, Playwright assertion). Closes #284.
+- **Print stylesheet** — `@media print` now redefines all dark-theme CSS custom properties to print-safe light values when `data-theme="dark"` is active, so users in dark mode get readable, ink-efficient pages instead of dark surfaces. Teal accent dimmed to `#0a8f6b` for paper. Closes #291.
+
 ## [2.9.2] - 2026-04-26
 
 ### Added

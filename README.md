@@ -184,6 +184,8 @@ echo $result['data']['network_cidr'];
 Pre-built release archives are available in `releases/`:
 
 | Version | File | Description |
+| --- | --- | --- |
+| 2.10.0 | [subnet-calculator-2.10.0.tar.gz](releases/subnet-calculator-2.10.0.tar.gz) | Wildcard ↔ CIDR converter; sitemap.xml; PHP 8.1–8.4 CI matrix; dark-mode print stylesheet; docs URL → docs.subnetcalculator.app |
 |---------|------|-------------|
 | 2.9.2 | [subnet-calculator-2.9.2.tar.gz](releases/subnet-calculator-2.9.2.tar.gz) | Light + dark logo variants; adaptive favicon (prefers-color-scheme); apple-touch-icon WebP fix; refreshed README header |
 | 2.9.1 | [subnet-calculator-2.9.1.tar.gz](releases/subnet-calculator-2.9.1.tar.gz) | Bug fixes: VLSM dark inputs, mobile toggle clip, IPv6 overflow, logo transparency, favicon cache-bust |

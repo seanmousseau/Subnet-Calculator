@@ -157,6 +157,26 @@ curl -X POST https://example.com/subnet-calculator/api/v1/tree \
   -d '{"parent":"10.0.0.0/24","children":["10.0.0.0/25","10.0.0.128/25"]}'
 ```
 
+### POST /api/v1/wildcard
+
+Bidirectional converter between Cisco-style wildcard masks and CIDR prefixes.
+
+```bash
+# CIDR → wildcard
+curl -X POST https://example.com/subnet-calculator/api/v1/wildcard \
+  -H 'Content-Type: application/json' \
+  -d '{"value":"/24"}'
+
+# Wildcard → CIDR
+curl -X POST https://example.com/subnet-calculator/api/v1/wildcard \
+  -H 'Content-Type: application/json' \
+  -d '{"value":"0.0.0.255"}'
+```
+
+Response: `{"ok":true,"data":{"input":"/24","cidr":"/24","wildcard":"0.0.0.255"}}`
+
+Non-contiguous wildcard masks (e.g. `0.0.255.0`) and out-of-range CIDR prefixes are rejected with HTTP 400. See the [Wildcard ↔ CIDR Converter](wildcard.md) page for full reference.
+
 ### POST /api/v1/bulk
 
 Run multiple subnet calculations in a single request (up to 50 CIDRs). Pass a `cidrs` array and an optional `type` (`auto`, `ipv4`, or `ipv6`; defaults to `auto`).
