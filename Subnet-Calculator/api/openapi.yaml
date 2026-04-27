@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Subnet Calculator API
-  version: "2.10.0"
+  version: "2.11.0"
   description: |
     JSON REST API for IPv4/IPv6 subnet calculation, VLSM allocation,
     overlap detection, subnet splitting, route summarisation, ULA prefix
