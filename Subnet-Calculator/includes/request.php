@@ -148,6 +148,11 @@ $tree_children = '';
 $tree_result = null;
 $tree_error  = null;
 
+$wildcard_input  = '';
+/** @var array{cidr: string, wildcard: string}|null $wildcard_result */
+$wildcard_result = null;
+$wildcard_error  = null;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $post_tab   = $_POST['tab'] ?? $default_tab;
     $active_tab = in_array($post_tab, ['ipv4', 'ipv6', 'vlsm'], true) ? $post_tab : 'ipv4';
@@ -162,9 +167,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_session_save  = isset($_POST['session_action']) && (string)($_POST['session_action'] ?? '') === 'save';
     $is_range         = isset($_POST['range_start']) || isset($_POST['range_end']);
     $is_tree          = isset($_POST['tree_parent']);
+    $is_wildcard      = isset($_POST['wildcard_input']);
 
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
-        || $is_supernet || $is_ula || $is_session_save || $is_range || $is_tree;
+        || $is_supernet || $is_ula || $is_session_save || $is_range || $is_tree
+        || $is_wildcard;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -541,6 +548,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $range_error = $rr['error'];
             } else {
                 $range_result = $rr['cidrs'] ?? [];
+            }
+        }
+    }
+
+    if ($is_wildcard && !$form_blocked) {
+        $wildcard_input = trim((string)($_POST['wildcard_input'] ?? ''));
+        if ($wildcard_input === '') {
+            $wildcard_error = 'A CIDR prefix or wildcard mask is required.';
+        } else {
+            try {
+                if (str_contains($wildcard_input, '.')) {
+                    $wildcard_result = [
+                        'cidr'     => wildcard_to_cidr($wildcard_input),
+                        'wildcard' => $wildcard_input,
+                    ];
+                } else {
+                    $wildcard_result = [
+                        'cidr'     => '/' . ltrim($wildcard_input, '/'),
+                        'wildcard' => cidr_to_wildcard($wildcard_input),
+                    ];
+                }
+            } catch (\InvalidArgumentException $e) {
+                $wildcard_error = $e->getMessage();
             }
         }
     }

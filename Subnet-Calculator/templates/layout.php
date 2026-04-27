@@ -229,12 +229,14 @@ if ($i < 3) {
         elseif ($supernet_result !== null || $supernet_error !== null) { $open_tool_ipv4 = 'supernet'; }
         elseif ($range_result !== null || $range_error !== null) { $open_tool_ipv4 = 'range'; }
         elseif ($tree_result !== null || $tree_error !== null) { $open_tool_ipv4 = 'tree'; }
+        elseif ($wildcard_result !== null || $wildcard_error !== null) { $open_tool_ipv4 = 'wildcard'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv4 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv4) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split" aria-expanded="false">Split Subnet</button>
             <button type="button" class="tool-trigger" data-tool="supernet" aria-expanded="false">Supernet</button>
             <button type="button" class="tool-trigger" data-tool="range" aria-expanded="false">Range&rarr;CIDR</button>
             <button type="button" class="tool-trigger" data-tool="tree" aria-expanded="false">Subnet Tree</button>
+            <button type="button" class="tool-trigger" data-tool="wildcard" aria-expanded="false">Wildcard&harr;CIDR</button>
         </div>
 
         <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv4">
@@ -411,6 +413,47 @@ if ($i < 3) {
                             }
                             render_tree_node($tree_result);
                             ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="wildcard">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Wildcard &harr; CIDR<?= help_bubble('wildcard-cidr', 'Bidirectional Cisco-style converter. Enter a wildcard mask (e.g. 0.0.0.255) to get its CIDR prefix, or a prefix (/24 or 24) to get the wildcard. Non-contiguous masks are rejected.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv4">
+                        <div class="overlap-inputs">
+                            <input type="text" id="wildcard_input" name="wildcard_input"
+                                   value="<?= htmlspecialchars($wildcard_input) ?>"
+                                   placeholder="/24  or  0.0.0.255"
+                                   autocomplete="off" spellcheck="false"
+                                   aria-label="CIDR prefix or wildcard mask">
+                            <button type="submit" class="splitter-btn">Convert</button>
+                        </div>
+                    </form>
+                    <?php if ($wildcard_error) : ?>
+                        <div class="error wildcard-error"><?= htmlspecialchars($wildcard_error) ?></div>
+                    <?php elseif ($wildcard_result !== null) : ?>
+                        <div class="split-list split-list--mt">
+                            <div class="split-item" tabindex="0" role="button"
+                                 data-copy="<?= htmlspecialchars($wildcard_result['cidr']) ?>">
+                                <span class="split-subnet-text" id="wildcard-result-cidr">CIDR: <?= htmlspecialchars($wildcard_result['cidr']) ?></span>
+                                <button type="button" class="subnet-copy"
+                                        data-copy="<?= htmlspecialchars($wildcard_result['cidr']) ?>"
+                                        aria-label="Copy CIDR <?= htmlspecialchars($wildcard_result['cidr']) ?>">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                </button>
+                            </div>
+                            <div class="split-item" tabindex="0" role="button"
+                                 data-copy="<?= htmlspecialchars($wildcard_result['wildcard']) ?>">
+                                <span class="split-subnet-text" id="wildcard-result-mask">Wildcard: <?= htmlspecialchars($wildcard_result['wildcard']) ?></span>
+                                <button type="button" class="subnet-copy"
+                                        data-copy="<?= htmlspecialchars($wildcard_result['wildcard']) ?>"
+                                        aria-label="Copy wildcard <?= htmlspecialchars($wildcard_result['wildcard']) ?>">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                </button>
+                            </div>
                         </div>
                     <?php endif; ?>
                 </div>

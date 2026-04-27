@@ -35,11 +35,66 @@ function is_valid_mask_octet(string $mask): bool
     return ($inverted & ($inverted + 1)) === 0;
 }
 
-function cidr_to_wildcard(int $cidr): string
+/**
+ * Convert a CIDR prefix to its dotted-quad wildcard mask.
+ *
+ * Accepts either an int (0-32) or a user-supplied string ("/24" or "24").
+ * String input is normalised, validated, and rejected via
+ * InvalidArgumentException when out-of-range or non-numeric. Internal callers
+ * that already hold an int continue to work unchanged.
+ *
+ * @param int|string $cidr
+ */
+function cidr_to_wildcard(int|string $cidr): string
 {
+    if (is_string($cidr)) {
+        $trim = ltrim(trim($cidr), '/');
+        if (!ctype_digit($trim)) {
+            throw new InvalidArgumentException('CIDR prefix must be numeric');
+        }
+        $cidr = (int) $trim;
+    }
+    if ($cidr < 0 || $cidr > 32) {
+        throw new InvalidArgumentException('CIDR prefix must be between 0 and 32');
+    }
     $mask_long = $cidr === 0 ? 0 : (~0 << (32 - $cidr));
     $ip        = long2ip(~$mask_long & 0xFFFFFFFF);
     return $ip !== false ? $ip : '0.0.0.0';
+}
+
+/**
+ * Convert a Cisco-style wildcard mask to its CIDR prefix (e.g. "0.0.0.255" → "/24").
+ *
+ * Only contiguous wildcard masks (the bitwise inverse of a valid netmask) are
+ * accepted; non-contiguous masks raise InvalidArgumentException.
+ */
+function wildcard_to_cidr(string $wildcard): string
+{
+    $wildcard = trim($wildcard);
+    if (filter_var($wildcard, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+        throw new InvalidArgumentException('Wildcard must be a valid IPv4 dotted-quad');
+    }
+    $w_long = ip2long($wildcard);
+    if ($w_long === false) {
+        throw new InvalidArgumentException('Wildcard must be a valid IPv4 dotted-quad');
+    }
+    $w       = $w_long & 0xFFFFFFFF;
+    $netmask = (~$w) & 0xFFFFFFFF;
+    // Contiguity: the inverted-mask (host bits) must be (2^n)-1 — i.e. all
+    // host bits live on the right. ((inv)+1) AND inv == 0 ⇒ inv is power-of-two-minus-one.
+    $inv = (~$netmask) & 0xFFFFFFFF;
+    if ((($inv + 1) & $inv) !== 0) {
+        throw new InvalidArgumentException('Wildcard mask is not contiguous');
+    }
+    $prefix = 0;
+    for ($i = 31; $i >= 0; $i--) {
+        if (($netmask >> $i) & 1) {
+            $prefix++;
+        } else {
+            break;
+        }
+    }
+    return '/' . $prefix;
 }
 
 function cidrs_overlap(string $cidr_a, string $cidr_b): string
