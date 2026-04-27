@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.11.0] - 2026-04-27
+
+### Added
+- **IPv6 VLSM Planner** (#293) — `vlsm6_allocate()` GMP-backed allocator in `includes/functions-vlsm6.php`; `POST /api/v1/vlsm6` endpoint accepts integer or `"2^N"` host counts (N is 0–128); full UI parity with the IPv4 planner on the IPv6 tab — input table, dynamic rows, results table with CSV / JSON / ASCII exports (XLSX intentionally omitted), Copy All button, utilisation summary card, shareable URLs, reset, keyboard-delete. New `docs/ipv6-vlsm.md`.
+- **Inverse Subnet Lookup** (#295) — `lookup_ips()` in `includes/functions-lookup.php`; `POST /api/v1/lookup` endpoint; dual-tab tool drawer (IPv4 + IPv6); shared `sc_run_lookup()` POST/GET helper in `request.php`; GET shareable URLs; deepest-prefix-match semantics; mixed IPv4/IPv6 input supported. Caps configurable via `$lookup_max_cidrs` (default 100, hard ceiling 1000) and `$lookup_max_ips` (default 1000, hard ceiling 10000). New `docs/lookup.md`.
+- **Subnet Aggregation Diff** (#296) — `subnet_diff()` in `includes/functions-diff.php`; `POST /api/v1/diff` endpoint; dual-tab tool drawer; BEM-style colour-coded result groups (added / removed / changed / unchanged); shared `sc_run_diff()` POST/GET helper; `templates/_diff_result.php` shared partial; GET shareable URLs; canonical-form normalisation (host bits zeroed, IPv6 lowercased + compressed) before comparison. 1000-entry caps per side. New `docs/diff.md`.
+- **Copy-as-Markdown / Copy-as-Cisco exports** (#294) — JS-only feature (`buildMarkdown` + `buildCiscoConfig` in `app.js`); new `Copy as Markdown` and `Copy as Cisco` buttons added to IPv4 / IPv6 / VLSM / splitter result panels via a shared `.copy-actions` flex container; help bubble notes that Cisco output is generic IOS-style. New `docs/exports.md`.
+
+### Changed
+- **Footer** — the GitHub source link in the footer was trimmed from the full GitHub URL to the single word "GitHub" (#293).
+
+### Tests
+- PHPUnit grew from 200 tests / 313 assertions (v2.10.0) to **226 tests / 379 assertions** (14 still GMP-skipped).
+- Playwright groups grew from 91 (v2.10.0) to **131 groups**, covering each new feature: IPv6 VLSM UI / API / shareable URL / exports / utilisation summary; inverse subnet lookup UI + API + shareable URL; subnet diff UI + API + shareable URL + canonical-form behaviour; copy-as-Markdown / copy-as-Cisco button presence and clipboard payload.
+
+### Docs
+- `docs/api.md` updated with reference sections for `/vlsm6`, `/lookup`, `/diff` (curl, response shape, caps, error matrix, cross-link to per-feature pages).
+- New per-feature pages: `docs/ipv6-vlsm.md`, `docs/lookup.md`, `docs/diff.md`, `docs/exports.md` — added to `mkdocs.yml` nav.
+- `mkdocs.yml` `extra.version` bumped to 2.11.0; `docs/index.md` tarball example bumped to `subnet-calculator-2.11.0.tar.gz`.
+
 ## [2.10.0] - 2026-04-27
 
 ### Added

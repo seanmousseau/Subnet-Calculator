@@ -201,7 +201,7 @@ curl -X POST https://example.com/subnet-calculator/api/v1/lookup \
 
 Response: `{"ok":true,"data":{"results":[{"ip":"10.1.2.3","matches":["10.0.0.0/8","10.1.0.0/16","10.1.2.0/24"],"deepest":"10.1.2.0/24"},{"ip":"8.8.8.8","matches":[],"deepest":null}]}}`
 
-Mixed IPv4/IPv6 inputs are allowed; CIDRs only match IPs of the same family. Caps default to 100 CIDRs and 1000 IPs per request (operator-tunable via `$lookup_max_cidrs` / `$lookup_max_ips`). See the [IP Lookup](lookup.md) page for full reference.
+Mixed IPv4/IPv6 inputs are allowed; CIDRs only match IPs of the same family. Result rows are returned in the same order as the input `ips` array. Caps default to 100 CIDRs and 1000 IPs per request (operator-tunable via `$lookup_max_cidrs` / `$lookup_max_ips`; hard ceilings 1000 / 10000). Errors: `400` (missing/empty array, cap exceeded), `401` (invalid token), `429` (rate-limit). See the [IP Lookup](lookup.md) page for full reference.
 
 ### POST /api/v1/diff
 
@@ -215,7 +215,7 @@ curl -X POST https://example.com/subnet-calculator/api/v1/diff \
 
 Response: `{"ok":true,"data":{"added":["192.168.1.0/24"],"removed":["192.168.0.0/24"],"unchanged":[],"changed":[{"from":"10.0.0.0/24","to":"10.0.0.0/23","reason":"prefix changed /24 → /23"}]}}`
 
-Each input CIDR is canonicalised (host bits zeroed, IPv6 lowercased + compressed) before comparison. Mixed IPv4/IPv6 inputs are allowed. Cap of 1000 entries per side. See the [Subnet Diff](diff.md) page for full reference.
+Each input CIDR is canonicalised (host bits zeroed, IPv6 lowercased + compressed) before comparison. Mixed IPv4/IPv6 inputs are allowed. Cap of 1000 entries per side. `added`/`removed` rows are sorted (IPv4 first, then IPv6); `changed` rows record the prefix-length transition in `reason`. Errors: `400` (missing field, invalid CIDR, cap exceeded), `401` (invalid token), `429` (rate-limit). See the [Subnet Diff](diff.md) page for full reference.
 
 ### POST /api/v1/bulk
 
