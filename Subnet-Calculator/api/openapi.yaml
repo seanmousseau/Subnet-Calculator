@@ -55,6 +55,10 @@ tags:
     description: IP address range to CIDR conversion
   - name: Tree
     description: Subnet allocation tree
+  - name: Wildcard
+    description: Wildcard mask ↔ CIDR conversion
+  - name: Lookup
+    description: Inverse subnet lookup (find which CIDRs contain each IP)
   - name: Changelog
     description: API changelog
 
@@ -1160,6 +1164,88 @@ paths:
                   cidr: "/24"
                   wildcard: "0.0.0.255"
         "400": { description: "Missing value, malformed input, or non-contiguous wildcard", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+
+  /lookup:
+    post:
+      operationId: lookupIps
+      tags: [Lookup]
+      summary: Inverse subnet lookup — find which CIDRs contain each IP
+      description: |
+        For each IP in `ips`, returns every CIDR from `cidrs` that contains it
+        and identifies the deepest (longest-prefix) match. IPv4 and IPv6 inputs
+        may be mixed; a CIDR only matches an IP of the same family. Result rows
+        are returned in the same order as the input `ips` array.
+
+        Caps: max 100 CIDRs and max 1000 IPs per request (configurable via
+        `$lookup_max_cidrs` / `$lookup_max_ips`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cidrs, ips]
+              properties:
+                cidrs:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  description: CIDR networks to test against (IPv4 and/or IPv6).
+                  items: { type: string, example: "10.0.0.0/8" }
+                ips:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  description: IP addresses to look up.
+                  items: { type: string, example: "10.1.2.3" }
+            example:
+              cidrs: ["10.0.0.0/8", "10.1.0.0/16", "2001:db8::/32"]
+              ips:   ["10.1.2.3", "8.8.8.8", "2001:db8::1"]
+      responses:
+        "200":
+          description: Lookup results, one row per IP
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [results]
+                        properties:
+                          results:
+                            type: array
+                            items:
+                              type: object
+                              required: [ip, matches, deepest]
+                              properties:
+                                ip:      { type: string, example: "10.1.2.3" }
+                                matches:
+                                  type: array
+                                  items: { type: string }
+                                  description: Every CIDR that contains the IP.
+                                deepest:
+                                  type: [string, "null"]
+                                  description: Longest-prefix match, or null if no match.
+              example:
+                ok: true
+                data:
+                  results:
+                    - ip: "10.1.2.3"
+                      matches: ["10.0.0.0/8", "10.1.0.0/16"]
+                      deepest: "10.1.0.0/16"
+                    - ip: "8.8.8.8"
+                      matches: []
+                      deepest: null
+                    - ip: "2001:db8::1"
+                      matches: ["2001:db8::/32"]
+                      deepest: "2001:db8::/32"
+        "400": { description: "Missing/invalid input or out-of-range cap", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }

@@ -1793,6 +1793,104 @@ async def test_wildcard_api_endpoint(_page: Page) -> None:
     assert_true("ok=false", data3.get("ok") is False, str(data3))
 
 
+async def test_lookup_api_endpoint(_page: Page) -> None:
+    section("Lookup API — POST /api/v1/lookup")
+
+    status, data = _api_post("lookup", {
+        "cidrs": ["10.0.0.0/8", "10.1.0.0/16", "10.1.2.0/24", "2001:db8::/32"],
+        "ips":   ["10.1.2.3", "8.8.8.8", "2001:db8::1"],
+    })
+    assert_eq("api lookup: HTTP 200", status, 200)
+    assert_true("api lookup: ok=true", data.get("ok") is True, str(data))
+    results = data.get("data", {}).get("results") or []
+    assert_eq("api lookup: 3 result rows", len(results), 3)
+
+    # Row 0: 10.1.2.3 — deepest is /24, all 3 v4 CIDRs match
+    row0 = results[0]
+    assert_eq("api lookup: row[0].ip", row0.get("ip"), "10.1.2.3")
+    assert_eq("api lookup: row[0].deepest is /24",
+              row0.get("deepest"), "10.1.2.0/24")
+    assert_eq("api lookup: row[0] has 3 matches",
+              len(row0.get("matches") or []), 3)
+
+    # Row 1: 8.8.8.8 — no match
+    row1 = results[1]
+    assert_eq("api lookup: row[1].deepest is null",
+              row1.get("deepest"), None)
+    assert_eq("api lookup: row[1].matches is empty",
+              row1.get("matches"), [])
+
+    # Row 2: 2001:db8::1 — matches v6 only
+    row2 = results[2]
+    assert_eq("api lookup: row[2].deepest is /32",
+              row2.get("deepest"), "2001:db8::/32")
+
+    # Missing cidrs → 400
+    status_b, _ = _api_post("lookup", {"ips": ["10.0.0.1"]})
+    assert_eq("api lookup: missing cidrs → 400", status_b, 400)
+
+    # Invalid IP → 400
+    status_c, _ = _api_post("lookup", {
+        "cidrs": ["10.0.0.0/8"],
+        "ips":   ["not-an-ip"],
+    })
+    assert_eq("api lookup: invalid ip → 400", status_c, 400)
+
+
+async def test_lookup_ui(page: Page) -> None:
+    section("IP Lookup — UI (IPv4 tab)")
+
+    await navigate(page, APP_URL)
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='lookup']")
+    await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
+    await page.fill("#lookup_cidrs_v4",
+                    "10.0.0.0/8\n10.1.0.0/16\n10.1.2.0/24")
+    await page.fill("#lookup_ips_v4", "10.1.2.3\n8.8.8.8")
+    await page.click(
+        "#panel-ipv4 .tool-panel[data-tool='lookup'] button[type='submit']"
+    )
+    await page.wait_for_load_state("load")
+    await page.wait_for_selector(".lookup-table tbody tr")
+
+    rows = await page.locator(".lookup-table tbody tr").all_text_contents()
+    assert_eq("lookup ui: 2 result rows", len(rows), 2)
+    assert_contains("lookup ui: row 0 contains 10.1.2.3", rows[0], "10.1.2.3")
+    assert_contains("lookup ui: row 0 deepest is /24", rows[0], "10.1.2.0/24")
+    assert_contains("lookup ui: row 1 contains 8.8.8.8", rows[1], "8.8.8.8")
+    # No-match row renders em-dash (—)
+    assert_contains("lookup ui: row 1 has em-dash for no match",
+                    rows[1], "—")
+
+
+async def test_lookup_ui_ipv6_tab(page: Page) -> None:
+    section("IP Lookup — UI (IPv6 tab)")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='lookup']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#lookup_cidrs_v6",
+                    "2001:db8::/32\n2001:db8:1::/48")
+    await page.fill("#lookup_ips_v6",
+                    "2001:db8:1::5\n2001:db9::1")
+    await page.click(
+        "#panel-ipv6 .tool-panel[data-tool='lookup'] button[type='submit']"
+    )
+    await page.wait_for_load_state("load")
+    await page.wait_for_selector(
+        "#panel-ipv6 .lookup-table tbody tr"
+    )
+
+    rows = await page.locator(
+        "#panel-ipv6 .lookup-table tbody tr"
+    ).all_text_contents()
+    assert_eq("lookup ui v6: 2 result rows", len(rows), 2)
+    assert_contains("lookup ui v6: row 0 deepest is /48",
+                    rows[0], "2001:db8:1::/48")
+    assert_contains("lookup ui v6: row 1 has em-dash for no match",
+                    rows[1], "—")
+
+
 async def test_print_stylesheet_dark_mode(page: Page) -> None:
     section("Print stylesheet (dark mode)")
 
@@ -3585,6 +3683,9 @@ async def main() -> None:
             await test_wildcard_to_cidr(page)
             await test_wildcard_rejects_noncontiguous(page)
             await test_wildcard_api_endpoint(page)
+            await test_lookup_api_endpoint(page)
+            await test_lookup_ui(page)
+            await test_lookup_ui_ipv6_tab(page)
             await test_api_meta(page)
             await test_api_ipv4(page)
             await test_api_ipv6(page)

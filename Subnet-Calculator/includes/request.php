@@ -160,6 +160,12 @@ $wildcard_input  = '';
 $wildcard_result = null;
 $wildcard_error  = null;
 
+$lookup_cidrs_input = '';
+$lookup_ips_input   = '';
+/** @var list<array{ip: string, matches: list<string>, deepest: string|null}>|null $lookup_result */
+$lookup_result = null;
+$lookup_error  = null;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $post_tab   = $_POST['tab'] ?? $default_tab;
     $active_tab = in_array($post_tab, ['ipv4', 'ipv6', 'vlsm', 'vlsm6'], true) ? $post_tab : 'ipv4';
@@ -176,10 +182,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_range         = isset($_POST['range_start']) || isset($_POST['range_end']);
     $is_tree          = isset($_POST['tree_parent']);
     $is_wildcard      = isset($_POST['wildcard_input']);
+    $is_lookup        = isset($_POST['lookup_cidrs']) || isset($_POST['lookup_ips']);
 
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
         || $is_vlsm6 || $is_supernet || $is_ula || $is_session_save || $is_range
-        || $is_tree || $is_wildcard;
+        || $is_tree || $is_wildcard || $is_lookup;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -620,6 +627,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             } catch (\InvalidArgumentException $e) {
                 $wildcard_error = $e->getMessage();
+            }
+        }
+    }
+
+    if ($is_lookup && !$form_blocked) {
+        $lookup_cidrs_input = (string)($_POST['lookup_cidrs'] ?? '');
+        $lookup_ips_input   = (string)($_POST['lookup_ips']   ?? '');
+        $cidr_lines = array_values(array_filter(array_map('trim', explode("\n", $lookup_cidrs_input))));
+        $ip_lines   = array_values(array_filter(array_map('trim', explode("\n", $lookup_ips_input))));
+        $max_cidrs  = isset($lookup_max_cidrs) ? (int)$lookup_max_cidrs : 100;
+        $max_ips    = isset($lookup_max_ips)   ? (int)$lookup_max_ips   : 1000;
+        if ($cidr_lines === []) {
+            $lookup_error = 'At least one CIDR is required.';
+        } elseif ($ip_lines === []) {
+            $lookup_error = 'At least one IP is required.';
+        } elseif (count($cidr_lines) > $max_cidrs) {
+            $lookup_error = 'Too many CIDRs (max ' . $max_cidrs . ').';
+        } elseif (count($ip_lines) > $max_ips) {
+            $lookup_error = 'Too many IPs (max ' . $max_ips . ').';
+        } else {
+            try {
+                $lookup_result = lookup_ips($cidr_lines, $ip_lines);
+            } catch (\InvalidArgumentException $e) {
+                $lookup_error = $e->getMessage();
             }
         }
     }

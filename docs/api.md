@@ -189,6 +189,20 @@ Response: `{"ok":true,"data":{"input":"/24","cidr":"/24","wildcard":"0.0.0.255"}
 
 Non-contiguous wildcard masks (e.g. `0.0.255.0`) and out-of-range CIDR prefixes are rejected with HTTP 400. See the [Wildcard ↔ CIDR Converter](wildcard.md) page for full reference.
 
+### POST /api/v1/lookup
+
+Inverse subnet lookup — for each IP, return every CIDR (from the supplied list) that contains it, plus the deepest (longest-prefix) match.
+
+```bash
+curl -X POST https://example.com/subnet-calculator/api/v1/lookup \
+  -H 'Content-Type: application/json' \
+  -d '{"cidrs":["10.0.0.0/8","10.1.0.0/16","10.1.2.0/24"],"ips":["10.1.2.3","8.8.8.8"]}'
+```
+
+Response: `{"ok":true,"data":{"results":[{"ip":"10.1.2.3","matches":["10.0.0.0/8","10.1.0.0/16","10.1.2.0/24"],"deepest":"10.1.2.0/24"},{"ip":"8.8.8.8","matches":[],"deepest":null}]}}`
+
+Mixed IPv4/IPv6 inputs are allowed; CIDRs only match IPs of the same family. Caps default to 100 CIDRs and 1000 IPs per request (operator-tunable via `$lookup_max_cidrs` / `$lookup_max_ips`). See the [IP Lookup](lookup.md) page for full reference.
+
 ### POST /api/v1/bulk
 
 Run multiple subnet calculations in a single request (up to 50 CIDRs). Pass a `cidrs` array and an optional `type` (`auto`, `ipv4`, or `ipv6`; defaults to `auto`).

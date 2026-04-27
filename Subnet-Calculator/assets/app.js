@@ -239,6 +239,17 @@ document.addEventListener('click', function (e) {
                 texts.push(item.dataset.copy);
             });
         }
+    } else if (target === 'lookup') {
+        var results = btn.closest('.lookup-results');
+        if (results) {
+            results.querySelectorAll('.lookup-table tbody tr').forEach(function (tr) {
+                var cells = tr.querySelectorAll('td');
+                var ip      = (cells[0]?.textContent || '').trim();
+                var deepest = (cells[1]?.textContent || '').trim();
+                var all     = (cells[2]?.textContent || '').trim();
+                texts.push(ip + '\t' + deepest + '\t' + all);
+            });
+        }
     }
     if (texts.length > 0) copyText(texts.join('\n'), 'All copied!');
 });

@@ -26,6 +26,7 @@ require $base . 'functions-session.php';
 require_once $base . 'functions-resolve.php';
 require $base . 'functions-range.php';
 require $base . 'functions-tree.php';
+require $base . 'functions-lookup.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -73,6 +74,7 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/range/ipv4',
             'POST /api/v1/tree',
             'POST /api/v1/wildcard',
+            'POST /api/v1/lookup',
             'GET  /api/v1/changelog',
         ],
     ]);
@@ -146,6 +148,9 @@ switch ($route_key) {
         break;
     case 'POST /wildcard':
         require __DIR__ . '/handlers/wildcard.php';
+        break;
+    case 'POST /lookup':
+        require __DIR__ . '/handlers/lookup.php';
         break;
     case 'GET /changelog':
         require __DIR__ . '/handlers/changelog.php';

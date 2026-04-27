@@ -235,6 +235,7 @@ if ($i < 3) {
         elseif ($range_result !== null || $range_error !== null) { $open_tool_ipv4 = 'range'; }
         elseif ($tree_result !== null || $tree_error !== null) { $open_tool_ipv4 = 'tree'; }
         elseif ($wildcard_result !== null || $wildcard_error !== null) { $open_tool_ipv4 = 'wildcard'; }
+        elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'lookup'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv4 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv4) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split" aria-expanded="false">Split Subnet</button>
@@ -242,6 +243,7 @@ if ($i < 3) {
             <button type="button" class="tool-trigger" data-tool="range" aria-expanded="false">Range&rarr;CIDR</button>
             <button type="button" class="tool-trigger" data-tool="tree" aria-expanded="false">Subnet Tree</button>
             <button type="button" class="tool-trigger" data-tool="wildcard" aria-expanded="false">Wildcard&harr;CIDR</button>
+            <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
         </div>
 
         <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv4">
@@ -463,6 +465,68 @@ if ($i < 3) {
                     <?php endif; ?>
                 </div>
             </div>
+
+            <div class="tool-panel" data-tool="lookup">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IP Lookup<?= help_bubble('ipv4-lookup', 'For each IP, finds every CIDR that contains it. The "Deepest" column is the longest-prefix (most specific) match. Mixed IPv4/IPv6 inputs are allowed; CIDRs only match IPs of the same family. Caps: 100 CIDRs, 1000 IPs.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv4">
+                        <div class="lookup-form-grid">
+                            <label for="lookup_cidrs_v4" class="lookup-form-label">CIDRs <span class="lookup-form-hint">(one per line, max 100)</span></label>
+                            <textarea id="lookup_cidrs_v4" name="lookup_cidrs" rows="4" class="multi-overlap-input"
+                                      placeholder="10.0.0.0/8&#10;10.1.0.0/16&#10;2001:db8::/32"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv4' ? $lookup_cidrs_input : '') ?></textarea>
+                            <label for="lookup_ips_v4" class="lookup-form-label">IPs <span class="lookup-form-hint">(one per line, max 1000)</span></label>
+                            <textarea id="lookup_ips_v4" name="lookup_ips" rows="4" class="multi-overlap-input"
+                                      placeholder="10.1.2.3&#10;8.8.8.8&#10;2001:db8::1"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv4' ? $lookup_ips_input : '') ?></textarea>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Lookup</button>
+                        </div>
+                    </form>
+                    <?php if ($active_tab === 'ipv4' && $lookup_error) : ?>
+                        <div class="error"><?= htmlspecialchars($lookup_error) ?></div>
+                    <?php elseif ($active_tab === 'ipv4' && $lookup_result !== null) : ?>
+                        <div class="lookup-results">
+                            <button type="button" class="copy-all-btn" data-target="lookup">Copy All</button>
+                            <div class="lookup-table-wrap">
+                                <table class="lookup-table" aria-label="IP lookup results">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">IP</th>
+                                            <th scope="col">Deepest match</th>
+                                            <th scope="col">All matches</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($lookup_result as $row) : ?>
+                                            <tr>
+                                                <td class="lookup-table__cell" data-label="IP"><code><?= htmlspecialchars($row['ip']) ?></code></td>
+                                                <td class="lookup-table__cell" data-label="Deepest match">
+                                                    <?php if ($row['deepest'] !== null) : ?>
+                                                        <code><?= htmlspecialchars($row['deepest']) ?></code>
+                                                    <?php else : ?>
+                                                        <span class="lookup-table__empty" aria-label="no match">&mdash;</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="lookup-table__cell" data-label="All matches">
+                                                    <?php if ($row['matches'] !== []) : ?>
+                                                        <code><?= htmlspecialchars(implode(', ', $row['matches'])) ?></code>
+                                                    <?php else : ?>
+                                                        <span class="lookup-table__empty" aria-label="no matches">&mdash;</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="split-more"><?= count($lookup_result) ?> IP<?= count($lookup_result) !== 1 ? 's' : '' ?> looked up</div>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -614,10 +678,12 @@ if ($i < 3) {
         $open_tool_ipv6 = null;
         if ($split_result6 !== null || $split_error6 !== null) { $open_tool_ipv6 = 'split6'; }
         elseif ($ula_result !== null || $ula_error !== null) { $open_tool_ipv6 = 'ula'; }
+        elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv6 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv6) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split6" aria-expanded="false">Split Subnet</button>
             <button type="button" class="tool-trigger" data-tool="ula" aria-expanded="false">ULA Generator</button>
+            <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
         </div>
 
         <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv6">
@@ -710,6 +776,68 @@ if ($i < 3) {
                                 <?php endforeach; ?>
                             </div>
                             <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="lookup">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IP Lookup<?= help_bubble('ipv6-lookup', 'For each IP, finds every CIDR that contains it. The "Deepest" column is the longest-prefix (most specific) match. Mixed IPv4/IPv6 inputs are allowed; CIDRs only match IPs of the same family. Caps: 100 CIDRs, 1000 IPs.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="lookup-form-grid">
+                            <label for="lookup_cidrs_v6" class="lookup-form-label">CIDRs <span class="lookup-form-hint">(one per line, max 100)</span></label>
+                            <textarea id="lookup_cidrs_v6" name="lookup_cidrs" rows="4" class="multi-overlap-input"
+                                      placeholder="2001:db8::/32&#10;2001:db8:1::/48&#10;10.0.0.0/8"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv6' ? $lookup_cidrs_input : '') ?></textarea>
+                            <label for="lookup_ips_v6" class="lookup-form-label">IPs <span class="lookup-form-hint">(one per line, max 1000)</span></label>
+                            <textarea id="lookup_ips_v6" name="lookup_ips" rows="4" class="multi-overlap-input"
+                                      placeholder="2001:db8::1&#10;2001:db8:1::5&#10;10.1.2.3"
+                                      autocomplete="off" spellcheck="false"><?= htmlspecialchars($active_tab === 'ipv6' ? $lookup_ips_input : '') ?></textarea>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Lookup</button>
+                        </div>
+                    </form>
+                    <?php if ($active_tab === 'ipv6' && $lookup_error) : ?>
+                        <div class="error"><?= htmlspecialchars($lookup_error) ?></div>
+                    <?php elseif ($active_tab === 'ipv6' && $lookup_result !== null) : ?>
+                        <div class="lookup-results">
+                            <button type="button" class="copy-all-btn" data-target="lookup">Copy All</button>
+                            <div class="lookup-table-wrap">
+                                <table class="lookup-table" aria-label="IP lookup results">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">IP</th>
+                                            <th scope="col">Deepest match</th>
+                                            <th scope="col">All matches</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($lookup_result as $row) : ?>
+                                            <tr>
+                                                <td class="lookup-table__cell" data-label="IP"><code><?= htmlspecialchars($row['ip']) ?></code></td>
+                                                <td class="lookup-table__cell" data-label="Deepest match">
+                                                    <?php if ($row['deepest'] !== null) : ?>
+                                                        <code><?= htmlspecialchars($row['deepest']) ?></code>
+                                                    <?php else : ?>
+                                                        <span class="lookup-table__empty" aria-label="no match">&mdash;</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="lookup-table__cell" data-label="All matches">
+                                                    <?php if ($row['matches'] !== []) : ?>
+                                                        <code><?= htmlspecialchars(implode(', ', $row['matches'])) ?></code>
+                                                    <?php else : ?>
+                                                        <span class="lookup-table__empty" aria-label="no matches">&mdash;</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="split-more"><?= count($lookup_result) ?> IP<?= count($lookup_result) !== 1 ? 's' : '' ?> looked up</div>
                         </div>
                     <?php endif; ?>
                 </div>
