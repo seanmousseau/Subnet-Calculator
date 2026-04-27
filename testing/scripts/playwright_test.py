@@ -1891,6 +1891,50 @@ async def test_lookup_ui_ipv6_tab(page: Page) -> None:
                     rows[1], "—")
 
 
+async def test_lookup_shareable_url(page: Page) -> None:
+    section("IP Lookup — shareable GET URL auto-populates and calculates")
+
+    url = (APP_URL + "?tab=ipv4"
+           "&lookup_cidrs=10.0.0.0%2F8%0A10.1.0.0%2F16%0A10.1.2.0%2F24"
+           "&lookup_ips=10.1.2.3%0A8.8.8.8")
+    await navigate(page, url)
+
+    # Drawer should be auto-opened on the lookup tool
+    assert_true(
+        "lookup share: tool drawer open",
+        await page.locator("#panel-ipv4 .tool-drawer.open").count() > 0,
+    )
+    assert_true(
+        "lookup share: lookup tool-panel active",
+        await page.locator(
+            "#panel-ipv4 .tool-panel[data-tool='lookup'].active"
+        ).count() > 0,
+    )
+
+    # Results table should be rendered from GET parameters
+    await page.wait_for_selector("#panel-ipv4 .lookup-table tbody tr")
+    rows = await page.locator(
+        "#panel-ipv4 .lookup-table tbody tr"
+    ).all_text_contents()
+    assert_eq("lookup share: 2 result rows", len(rows), 2)
+    assert_contains("lookup share: row 0 contains 10.1.2.3",
+                    rows[0], "10.1.2.3")
+    assert_contains("lookup share: row 0 deepest is /24",
+                    rows[0], "10.1.2.0/24")
+    assert_contains("lookup share: row 1 contains 8.8.8.8",
+                    rows[1], "8.8.8.8")
+    assert_contains("lookup share: row 1 has em-dash for no match",
+                    rows[1], "—")
+
+    # Textareas should be hydrated with GET values
+    cidrs_val = await page.input_value("#lookup_cidrs_v4")
+    assert_contains("lookup share: cidrs textarea hydrated",
+                    cidrs_val, "10.0.0.0/8")
+    ips_val = await page.input_value("#lookup_ips_v4")
+    assert_contains("lookup share: ips textarea hydrated",
+                    ips_val, "10.1.2.3")
+
+
 async def test_print_stylesheet_dark_mode(page: Page) -> None:
     section("Print stylesheet (dark mode)")
 
@@ -3686,6 +3730,7 @@ async def main() -> None:
             await test_lookup_api_endpoint(page)
             await test_lookup_ui(page)
             await test_lookup_ui_ipv6_tab(page)
+            await test_lookup_shareable_url(page)
             await test_api_meta(page)
             await test_api_ipv4(page)
             await test_api_ipv6(page)

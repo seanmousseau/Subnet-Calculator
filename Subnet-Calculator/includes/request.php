@@ -92,6 +92,48 @@ function recaptcha_enterprise_verify(
     return $valid && $score >= $threshold;
 }
 
+// ─── Lookup helper (shared by POST handler and GET shareable URL) ────────────
+
+/**
+ * Run the IP lookup tool against the given raw textarea inputs and write the
+ * outcome into $result_out / $error_out by reference. Used by both the POST
+ * handler and the GET shareable-URL hydration path.
+ *
+ * @param list<array{ip: string, matches: list<string>, deepest: string|null}>|null $result_out
+ */
+function sc_run_lookup(
+    string $cidrs_input,
+    string $ips_input,
+    ?array &$result_out,
+    ?string &$error_out,
+    int $max_cidrs = 100,
+    int $max_ips = 1000
+): void {
+    $cidr_lines = array_values(array_filter(array_map('trim', explode("\n", $cidrs_input))));
+    $ip_lines   = array_values(array_filter(array_map('trim', explode("\n", $ips_input))));
+    if ($cidr_lines === []) {
+        $error_out = 'At least one CIDR is required.';
+        return;
+    }
+    if ($ip_lines === []) {
+        $error_out = 'At least one IP is required.';
+        return;
+    }
+    if (count($cidr_lines) > $max_cidrs) {
+        $error_out = 'Too many CIDRs (max ' . $max_cidrs . ').';
+        return;
+    }
+    if (count($ip_lines) > $max_ips) {
+        $error_out = 'Too many IPs (max ' . $max_ips . ').';
+        return;
+    }
+    try {
+        $result_out = lookup_ips($cidr_lines, $ip_lines);
+    } catch (\InvalidArgumentException $e) {
+        $error_out = $e->getMessage();
+    }
+}
+
 // ─── Request handling ─────────────────────────────────────────────────────────
 
 $get_tab    = $_GET['tab'] ?? $default_tab;
@@ -634,25 +676,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($is_lookup && !$form_blocked) {
         $lookup_cidrs_input = (string)($_POST['lookup_cidrs'] ?? '');
         $lookup_ips_input   = (string)($_POST['lookup_ips']   ?? '');
-        $cidr_lines = array_values(array_filter(array_map('trim', explode("\n", $lookup_cidrs_input))));
-        $ip_lines   = array_values(array_filter(array_map('trim', explode("\n", $lookup_ips_input))));
-        $max_cidrs  = isset($lookup_max_cidrs) ? (int)$lookup_max_cidrs : 100;
-        $max_ips    = isset($lookup_max_ips)   ? (int)$lookup_max_ips   : 1000;
-        if ($cidr_lines === []) {
-            $lookup_error = 'At least one CIDR is required.';
-        } elseif ($ip_lines === []) {
-            $lookup_error = 'At least one IP is required.';
-        } elseif (count($cidr_lines) > $max_cidrs) {
-            $lookup_error = 'Too many CIDRs (max ' . $max_cidrs . ').';
-        } elseif (count($ip_lines) > $max_ips) {
-            $lookup_error = 'Too many IPs (max ' . $max_ips . ').';
-        } else {
-            try {
-                $lookup_result = lookup_ips($cidr_lines, $ip_lines);
-            } catch (\InvalidArgumentException $e) {
-                $lookup_error = $e->getMessage();
-            }
-        }
+        sc_run_lookup(
+            $lookup_cidrs_input,
+            $lookup_ips_input,
+            $lookup_result,
+            $lookup_error,
+            isset($lookup_max_cidrs) ? (int)$lookup_max_cidrs : 100,
+            isset($lookup_max_ips)   ? (int)$lookup_max_ips   : 1000,
+        );
     }
 
     if ($is_tree && !$form_blocked) {
@@ -724,6 +755,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $session_error = 'Invalid session ID format.';
         }
+    }
+
+    // IP Lookup shareable GET URL (works on both ipv4 and ipv6 tabs)
+    if (
+        ($active_tab === 'ipv4' || $active_tab === 'ipv6')
+        && (isset($_GET['lookup_cidrs']) || isset($_GET['lookup_ips']))
+    ) {
+        $lookup_cidrs_input = (string)($_GET['lookup_cidrs'] ?? '');
+        $lookup_ips_input   = (string)($_GET['lookup_ips']   ?? '');
+        sc_run_lookup(
+            $lookup_cidrs_input,
+            $lookup_ips_input,
+            $lookup_result,
+            $lookup_error,
+            isset($lookup_max_cidrs) ? (int)$lookup_max_cidrs : 100,
+            isset($lookup_max_ips)   ? (int)$lookup_max_ips   : 1000,
+        );
     }
 
     // Supernet / summarise shareable GET URL

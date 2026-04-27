@@ -32,6 +32,16 @@ A results table with one row per IP (in input order) and three columns:
 
 Click **Copy All** to copy every row as tab-separated text.
 
+## Shareable URL
+
+Lookup inputs can be passed via GET parameters, which auto-opens the tool drawer and renders the results table on page load — handy for bookmarks, documentation, ticket links, and chat shares. The textareas accept URL-encoded newlines (`%0A`):
+
+```text
+/?tab=ipv4&lookup_cidrs=10.0.0.0%2F8%0A10.1.0.0%2F16&lookup_ips=10.1.2.3%0A8.8.8.8
+```
+
+The `tab` parameter selects which panel (`ipv4` or `ipv6`) hosts the lookup drawer; the `lookup_cidrs` and `lookup_ips` payload itself is family-agnostic and can mix IPv4 and IPv6 lines on either tab.
+
 ## Example
 
 CIDRs:
