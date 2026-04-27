@@ -1059,9 +1059,9 @@
              * legibility on white paper.
              */
             html[data-theme="dark"] {
-                --color-bg:           #ffffff;
-                --color-surface:      #ffffff;
-                --color-surface-alt:  #ffffff;
+                --color-bg:           #fff;
+                --color-surface:      #fff;
+                --color-surface-alt:  #fff;
                 --color-text:         #0a1a12;
                 --color-text-subtle:  #1f2937;
                 --color-border:       #cbd5e1;
@@ -1081,7 +1081,7 @@
             html[data-theme="dark"] td,
             html[data-theme="dark"] input,
             html[data-theme="dark"] textarea {
-                background: #ffffff !important;
+                background: #fff !important;
                 color: #0a1a12 !important;
                 border-color: #cbd5e1 !important;
             }
