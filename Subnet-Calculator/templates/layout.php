@@ -1053,6 +1053,74 @@ if ($i < 3) {
                 </table>
             </div>
             <button type="button" class="copy-all-btn" data-target="vlsm6">Copy All</button>
+            <?php
+            $vlsm6_parent_cidr_int = (int)ltrim((string)$vlsm6_cidr_input, '/');
+            $vlsm6_parent_total    = gmp_pow(gmp_init(2), 128 - $vlsm6_parent_cidr_int);
+            $vlsm6_total_allocated = gmp_init(0);
+            $vlsm6_total_hosts_req = gmp_init(0);
+            foreach ($vlsm6_result as $alloc6) {
+                [, $vlsm6_alloc_pfx_str] = explode('/', $alloc6['subnet']);
+                $vlsm6_alloc_pfx = (int)$vlsm6_alloc_pfx_str;
+                $vlsm6_total_allocated = gmp_add(
+                    $vlsm6_total_allocated,
+                    gmp_pow(gmp_init(2), 128 - $vlsm6_alloc_pfx)
+                );
+                $vlsm6_hosts_raw = (string)$alloc6['hosts_needed'];
+                if (preg_match('/^2\^(\d+)$/', $vlsm6_hosts_raw, $m_hr) === 1) {
+                    $vlsm6_total_hosts_req = gmp_add(
+                        $vlsm6_total_hosts_req,
+                        gmp_pow(gmp_init(2), (int)$m_hr[1])
+                    );
+                } elseif (preg_match('/^\d+$/', $vlsm6_hosts_raw) === 1) {
+                    $vlsm6_total_hosts_req = gmp_add($vlsm6_total_hosts_req, gmp_init($vlsm6_hosts_raw));
+                }
+            }
+            $vlsm6_remaining = gmp_sub($vlsm6_parent_total, $vlsm6_total_allocated);
+
+            $vlsm6_fmt_count = static function (\GMP $g): string {
+                $threshold = gmp_pow(gmp_init(2), 31);
+                if (gmp_cmp($g, $threshold) < 0) {
+                    return format_number((int)gmp_strval($g));
+                }
+                for ($n = 31; $n <= 128; $n++) {
+                    if (gmp_cmp(gmp_pow(gmp_init(2), $n), $g) >= 0) {
+                        return '2^' . $n;
+                    }
+                }
+                return '2^128';
+            };
+
+            // Utilisation %: when both fit in float, compute exact; else show approximation
+            // via log2 difference: 100 * 2^(log2(allocated) - log2(parent_total)).
+            $vlsm6_float_safe = gmp_cmp($vlsm6_parent_total, gmp_pow(gmp_init(2), 53)) <= 0;
+            if (gmp_cmp($vlsm6_parent_total, gmp_init(0)) <= 0) {
+                $vlsm6_util_display = '0%';
+            } elseif ($vlsm6_float_safe) {
+                $pct = ((float)gmp_strval($vlsm6_total_allocated) / (float)gmp_strval($vlsm6_parent_total)) * 100.0;
+                $vlsm6_util_display = round($pct, 6) . '%';
+            } else {
+                // Approximate: ratio = allocated / parent_total. Compute via shifting down to a safe magnitude.
+                $shift = 0;
+                $denom = $vlsm6_parent_total;
+                $numer = $vlsm6_total_allocated;
+                $cap = gmp_pow(gmp_init(2), 53);
+                while (gmp_cmp($denom, $cap) > 0) {
+                    $denom = gmp_div_q($denom, gmp_init(2));
+                    $numer = gmp_div_q($numer, gmp_init(2));
+                    $shift++;
+                }
+                $denom_f = (float)gmp_strval($denom);
+                $numer_f = (float)gmp_strval($numer);
+                $pct = $denom_f > 0 ? ($numer_f / $denom_f) * 100.0 : 0.0;
+                $vlsm6_util_display = '~' . round($pct, 6) . '%';
+            }
+            ?>
+            <div class="vlsm-summary">
+                <span>Hosts requested: <strong><?= htmlspecialchars($vlsm6_fmt_count($vlsm6_total_hosts_req)) ?></strong></span>
+                <span>Allocated: <strong><?= htmlspecialchars($vlsm6_fmt_count($vlsm6_total_allocated)) ?></strong> addresses</span>
+                <span>Remaining: <strong><?= htmlspecialchars($vlsm6_fmt_count($vlsm6_remaining)) ?></strong></span>
+                <span>Utilisation: <strong><?= htmlspecialchars($vlsm6_util_display) ?></strong><?= help_bubble('vlsm6-util', 'Total allocated addresses ÷ total addresses in the parent /N × 100. For very large IPv6 totals (parent &gt; 2^53), the percentage is shown as an approximation prefixed with ~.') ?></span>
+            </div>
             <div class="export-btn-group">
                 <button type="button" id="vlsm6-export-csv">Export CSV</button>
                 <button type="button" id="vlsm6-export-json">Export JSON</button>

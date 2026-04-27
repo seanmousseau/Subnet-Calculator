@@ -1162,6 +1162,100 @@ async def test_vlsm6_copy_all(page: Page) -> None:
                 and await page.locator("#vlsm6-export-ascii").count() > 0)
 
 
+async def test_vlsm6_csv_export(page: Page) -> None:
+    section("VLSM6 — CSV export button and table content")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "32")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'site-a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '256'")
+    await submit_form(page, ".vlsm6-form")
+    assert_true("VLSM6 Export CSV button present",
+                await page.locator("#vlsm6-export-csv").count() > 0)
+    # Verify a result row exists with an IPv6 subnet (contains a colon)
+    subnet = await page.text_content(".vlsm6-table .vlsm-subnet-cell code") or ""
+    assert_true("VLSM6 result row present with IPv6 subnet",
+                ":" in subnet and "/" in subnet, subnet)
+
+
+async def test_vlsm6_json_export(page: Page) -> None:
+    section("VLSM6 — JSON export download")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "32")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'site-a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '256'")
+    await submit_form(page, ".vlsm6-form")
+    assert_true("VLSM6 Export JSON button present",
+                await page.locator("#vlsm6-export-json").count() > 0)
+    async with page.expect_download() as dl_info:
+        await page.click("#vlsm6-export-json")
+    download = await dl_info.value
+    assert_true("VLSM6 JSON download filename ends with .json",
+                (download.suggested_filename or "").endswith(".json"),
+                download.suggested_filename)
+
+
+async def test_vlsm6_reset(page: Page) -> None:
+    section("VLSM6 — Reset button clears form and results")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "32")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'site-a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '256'")
+    await submit_form(page, ".vlsm6-form")
+    assert_true("VLSM6 table shown before reset",
+                await page.locator(".vlsm6-table").count() > 0)
+    async with page.expect_navigation(wait_until="load"):
+        await page.click("#panel-vlsm6 a.reset")
+    assert_true("VLSM6 table gone after reset",
+                await page.locator(".vlsm6-table").count() == 0)
+    assert_eq("VLSM6 network field cleared", await page.input_value("#vlsm6_network"), "")
+
+
+async def test_vlsm6_keyboard_delete(page: Page) -> None:
+    section("VLSM6 — keyboard Delete on focused row removes it")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    # Add two rows to start with three total
+    await page.click(".vlsm6-add-row")
+    await page.click(".vlsm6-add-row")
+    rows_before = await page.locator("#vlsm6-reqs .vlsm-req-row").count()
+    assert_eq("Three VLSM6 rows present before delete", rows_before, 3)
+    # Focus the remove button of the last row and press Delete
+    await page.focus("#vlsm6-reqs .vlsm-req-row:last-child .vlsm-remove-row")
+    await page.keyboard.press("Delete")
+    rows_after = await page.locator("#vlsm6-reqs .vlsm-req-row").count()
+    assert_eq("VLSM6 row removed by keyboard Delete", rows_after, 2)
+
+
+async def test_vlsm6_utilisation_summary(page: Page) -> None:
+    section("VLSM6 — utilisation summary")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "120")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'site-a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '64'")
+    await submit_form(page, ".vlsm6-form")
+    assert_true("VLSM6 utilisation summary present",
+                await page.locator("#panel-vlsm6 .vlsm-summary").count() > 0)
+    summary = await page.text_content("#panel-vlsm6 .vlsm-summary") or ""
+    assert_contains("VLSM6 summary shows Hosts requested", summary, "Hosts requested")
+    assert_contains("VLSM6 summary shows Allocated",      summary, "Allocated")
+    assert_contains("VLSM6 summary shows Remaining",      summary, "Remaining")
+    assert_contains("VLSM6 summary shows Utilisation",    summary, "Utilisation")
+    assert_contains("VLSM6 summary shows %",              summary, "%")
+
+
 async def test_ipv6_overlap(page: Page) -> None:
     section("VLSM tab — IPv6 overlap checker")
 
@@ -3464,6 +3558,11 @@ async def main() -> None:
             await test_vlsm6_dynamic_rows(page)
             await test_vlsm6_validation_inline(page)
             await test_vlsm6_copy_all(page)
+            await test_vlsm6_csv_export(page)
+            await test_vlsm6_json_export(page)
+            await test_vlsm6_reset(page)
+            await test_vlsm6_keyboard_delete(page)
+            await test_vlsm6_utilisation_summary(page)
             await test_ipv6_overlap(page)
             await test_multi_cidr_overlap(page)
             await test_ipv6_binary_repr(page)
