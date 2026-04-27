@@ -2122,6 +2122,22 @@ async def _read_clipboard(page: Page) -> str:
     return await page.evaluate("window.__lastClipboard || ''")
 
 
+async def _wait_for_clipboard_write(page: Page, previous: str = "") -> str:
+    """Wait until the clipboard spy observes a payload different from `previous`.
+
+    The Playwright Page is reused across the entire suite, so window.__lastClipboard
+    survives between tests. A fixed `wait_for_timeout(150)` races with the async
+    copy handler and can read a previous test's payload on slow runs. Polling for
+    a change relative to a captured baseline eliminates that race.
+    """
+    await page.wait_for_function(
+        "(prev) => (window.__lastClipboard || '') !== prev",
+        arg=previous,
+        timeout=2000,
+    )
+    return await _read_clipboard(page)
+
+
 async def test_copy_as_markdown_ipv4(page: Page) -> None:
     section("Copy as Markdown — IPv4 results")
 
@@ -2134,10 +2150,9 @@ async def test_copy_as_markdown_ipv4(page: Page) -> None:
 
     btn = page.locator("#panel-ipv4 .copy-md-btn[data-target='ipv4']")
     assert_true("Copy as Markdown button present (IPv4)", await btn.count() > 0)
+    prev = await _read_clipboard(page)
     await btn.first.click()
-    await page.wait_for_timeout(150)
-
-    md = await _read_clipboard(page)
+    md = await _wait_for_clipboard_write(page, prev)
     assert_contains("ipv4 markdown: header row", md, "| Field |")
     assert_contains("ipv4 markdown: separator row", md, "| --- |")
     assert_contains("ipv4 markdown: contains CIDR",
@@ -2157,10 +2172,9 @@ async def test_copy_as_markdown_ipv6(page: Page) -> None:
 
     btn = page.locator("#panel-ipv6 .copy-md-btn[data-target='ipv6']")
     assert_true("Copy as Markdown button present (IPv6)", await btn.count() > 0)
+    prev = await _read_clipboard(page)
     await btn.first.click()
-    await page.wait_for_timeout(150)
-
-    md = await _read_clipboard(page)
+    md = await _wait_for_clipboard_write(page, prev)
     assert_contains("ipv6 markdown: header row", md, "| Field |")
     assert_contains("ipv6 markdown: separator row", md, "| --- |")
     assert_contains("ipv6 markdown: contains prefix", md, "2001:db8::/32")
@@ -2185,10 +2199,9 @@ async def test_copy_as_markdown_vlsm(page: Page) -> None:
 
     btn = page.locator(".copy-md-btn[data-target='vlsm']")
     assert_true("Copy as Markdown button present (VLSM)", await btn.count() > 0)
+    prev = await _read_clipboard(page)
     await btn.first.click()
-    await page.wait_for_timeout(150)
-
-    md = await _read_clipboard(page)
+    md = await _wait_for_clipboard_write(page, prev)
     assert_contains("vlsm markdown: name column", md, "| Name |")
     assert_contains("vlsm markdown: separator row", md, "| --- |")
     assert_contains("vlsm markdown: LAN A row", md, "LAN A")
@@ -2206,10 +2219,9 @@ async def test_copy_as_cisco_ipv4(page: Page) -> None:
 
     btn = page.locator("#panel-ipv4 .copy-cisco-btn[data-target='ipv4']")
     assert_true("Copy as Cisco button present (IPv4)", await btn.count() > 0)
+    prev = await _read_clipboard(page)
     await btn.first.click()
-    await page.wait_for_timeout(150)
-
-    cfg = await _read_clipboard(page)
+    cfg = await _wait_for_clipboard_write(page, prev)
     assert_contains("ipv4 cisco: interface stanza", cfg, "interface ")
     assert_contains("ipv4 cisco: ip address line", cfg, "ip address ")
     assert_contains("ipv4 cisco: subnet mask in dotted", cfg, "255.255.255.0")
@@ -2234,10 +2246,9 @@ async def test_copy_as_cisco_vlsm(page: Page) -> None:
 
     btn = page.locator(".copy-cisco-btn[data-target='vlsm']")
     assert_true("Copy as Cisco button present (VLSM)", await btn.count() > 0)
+    prev = await _read_clipboard(page)
     await btn.first.click()
-    await page.wait_for_timeout(150)
-
-    cfg = await _read_clipboard(page)
+    cfg = await _wait_for_clipboard_write(page, prev)
     assert_contains("vlsm cisco: interface stanza present", cfg, "interface ")
     assert_contains("vlsm cisco: ip address keyword", cfg, "ip address ")
     assert_contains("vlsm cisco: includes a /26 mask",
@@ -2257,10 +2268,9 @@ async def test_copy_as_cisco_ipv6(page: Page) -> None:
 
     btn = page.locator("#panel-ipv6 .copy-cisco-btn[data-target='ipv6']")
     assert_true("Copy as Cisco button present (IPv6)", await btn.count() > 0)
+    prev = await _read_clipboard(page)
     await btn.first.click()
-    await page.wait_for_timeout(150)
-
-    cfg = await _read_clipboard(page)
+    cfg = await _wait_for_clipboard_write(page, prev)
     assert_contains("ipv6 cisco: interface stanza present", cfg, "interface ")
     assert_contains("ipv6 cisco: ipv6 address line", cfg, "ipv6 address ")
 
@@ -2282,10 +2292,9 @@ async def test_copy_as_markdown_splitter(page: Page) -> None:
     btn = page.locator(".copy-md-btn[data-target='split4']")
     assert_true("Copy as Markdown button present (splitter v4)",
                 await btn.count() > 0)
+    prev = await _read_clipboard(page)
     await btn.first.click()
-    await page.wait_for_timeout(150)
-
-    md = await _read_clipboard(page)
+    md = await _wait_for_clipboard_write(page, prev)
     assert_contains("splitter md: includes /26 subnet", md, "/26")
     assert_contains("splitter md: includes 192.168.1", md, "192.168.1")
 
@@ -2306,10 +2315,9 @@ async def test_copy_as_markdown_vlsm6(page: Page) -> None:
     btn = page.locator(".copy-md-btn[data-target='vlsm6']")
     assert_true("Copy as Markdown button present (VLSM6)",
                 await btn.count() > 0)
+    prev = await _read_clipboard(page)
     await btn.first.click()
-    await page.wait_for_timeout(150)
-
-    md = await _read_clipboard(page)
+    md = await _wait_for_clipboard_write(page, prev)
     assert_contains("vlsm6 md: separator row", md, "| --- |")
     assert_contains("vlsm6 md: site-a row", md, "site-a")
 
