@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Wildcard mask ↔ CIDR converter** — new tool drawer entry on the IPv4 tab and `POST /api/v1/wildcard` endpoint that converts between Cisco-style wildcard masks (e.g. `0.0.0.255`) and CIDR prefixes (e.g. `/24`). Non-contiguous masks are rejected. Closes #292.
 - **`/sitemap.xml`** — static sitemap published at the app root listing app + docs URLs, advertised in `robots.txt`. Closes #285.
-- **CI matrix** — `.github/workflows/php.yml` now runs PHPUnit, PHPStan (level 9), and PHPCS against PHP 8.1, 8.2, 8.3, and 8.4 in parallel. Closes #287.
+- **CI matrix** — `.github/workflows/php.yml` now runs PHPUnit, PHPStan (level 9), and PHPCS against PHP 8.2, 8.3, and 8.4 in parallel. (PHP 8.1 omitted from the matrix because PHPUnit 11 and PHPStan 2 dev-dependencies both require 8.2+; the app runtime still supports 8.1.) Closes #287.
 - **OpenAPI `externalDocs`** — top-level `externalDocs.url` block added pointing at `https://docs.subnetcalculator.app/api/`. Closes #290.
 
 ### Changed

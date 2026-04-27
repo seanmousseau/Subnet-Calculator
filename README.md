@@ -70,7 +70,7 @@
 
 ## Requirements
 
-- PHP 8.1, 8.2, 8.3, or 8.4
+- PHP 8.2, 8.3, or 8.4 (PHP 8.1 still runs the app but dev tooling — PHPUnit 11, PHPStan 2 — requires 8.2+)
 - PHP GMP extension (for IPv6 — `php-gmp`)
 - PHP SQLite3 extension (for session persistence — `php-sqlite3`; optional)
 
@@ -185,8 +185,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File | Description |
 | --- | --- | --- |
-| 2.10.0 | [subnet-calculator-2.10.0.tar.gz](releases/subnet-calculator-2.10.0.tar.gz) | Wildcard ↔ CIDR converter; sitemap.xml; PHP 8.1–8.4 CI matrix; dark-mode print stylesheet; docs URL → docs.subnetcalculator.app |
-|---------|------|-------------|
+| 2.10.0 | [subnet-calculator-2.10.0.tar.gz](releases/subnet-calculator-2.10.0.tar.gz) | Wildcard ↔ CIDR converter; sitemap.xml; PHP 8.2–8.4 CI matrix; dark-mode print stylesheet; docs URL → docs.subnetcalculator.app |
 | 2.9.2 | [subnet-calculator-2.9.2.tar.gz](releases/subnet-calculator-2.9.2.tar.gz) | Light + dark logo variants; adaptive favicon (prefers-color-scheme); apple-touch-icon WebP fix; refreshed README header |
 | 2.9.1 | [subnet-calculator-2.9.1.tar.gz](releases/subnet-calculator-2.9.1.tar.gz) | Bug fixes: VLSM dark inputs, mobile toggle clip, IPv6 overflow, logo transparency, favicon cache-bust |
 | 2.9.0 | [subnet-calculator-2.9.0.tar.gz](releases/subnet-calculator-2.9.0.tar.gz) | UI/UX overhaul: teal accent, Space Grotesk/Plus Jakarta Sans/Fira Code fonts, mobile fixes |

@@ -1632,8 +1632,8 @@ async def test_sitemap_and_robots(_page: Page) -> None:
     assert_contains("sitemap.xml has <urlset>", body, "<urlset")
     assert_contains("sitemap.xml lists app root",
                     body, "https://subnetcalculator.app/")
-    assert_contains("sitemap.xml lists docs site",
-                    body, "https://docs.subnetcalculator.app/")
+    assert_true("sitemap.xml does NOT cross host into docs subdomain",
+                "docs.subnetcalculator.app" not in body, body[:300])
 
     rstatus, _, robots = _http_get("robots.txt")
     assert_eq("robots.txt HTTP 200", rstatus, 200)
