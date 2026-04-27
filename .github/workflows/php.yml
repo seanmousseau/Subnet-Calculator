@@ -7,16 +7,26 @@ on:
 
 jobs:
   analyse:
+    name: PHP ${{ matrix.php }}
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # PHP 8.1 omitted: app runtime supports it but PHPUnit 11 + PHPStan 2
+        # (dev dependencies) both require PHP >= 8.2.
+        php: ['8.2', '8.3', '8.4']
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup PHP
+      - name: Setup PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
-          extensions: gmp, sqlite3
+          php-version: ${{ matrix.php }}
+          extensions: gmp, sqlite3, intl, mbstring, json
+          tools: composer:v2
+          coverage: none
 
       - name: Install dependencies
         if: hashFiles('composer.json') != ''
@@ -32,12 +42,16 @@ jobs:
             find Subnet-Calculator/api -name '*.php' | while read f; do php -l "$f"; done
           fi
 
-      - name: PHPStan
-        run: vendor/bin/phpstan analyse --no-progress
+      - name: PHPStan (level 9)
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=512M
 
       - name: PHPUnit
         if: hashFiles('composer.json') != ''
         run: vendor/bin/phpunit
+
+      - name: PHPCS (PSR-12)
+        if: hashFiles('composer.json') != ''
+        run: vendor/bin/phpcs --standard=PSR12 Subnet-Calculator/includes/ Subnet-Calculator/api/
 
       - name: Spectral — lint OpenAPI spec
         if: hashFiles('Subnet-Calculator/api/openapi.yaml') != ''

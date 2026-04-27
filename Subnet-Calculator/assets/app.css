@@ -1047,6 +1047,48 @@
             .export-btn-group,
             .copy-all-btn,
             .ascii-export-btn { display: none !important; }
+
+            /*
+             * #291: dark-mode print path.
+             * When the user prints while the app is in dark mode, the existing
+             * rules above only cover html/body/.card. Every other surface
+             * (panels, results, inputs, tables, drawer chrome) reads CSS
+             * custom properties — so the cleanest fix is to redefine the
+             * tokens themselves to print-safe light values under
+             * html[data-theme="dark"]. Teal accent is dimmed to #0a8f6b for
+             * legibility on white paper.
+             */
+            html[data-theme="dark"] {
+                --color-bg:           #fff;
+                --color-surface:      #fff;
+                --color-surface-alt:  #fff;
+                --color-text:         #0a1a12;
+                --color-text-subtle:  #1f2937;
+                --color-border:       #cbd5e1;
+                --color-accent:       #0a8f6b;
+                --color-btn-text:     #0a1a12;
+            }
+            html[data-theme="dark"] body,
+            html[data-theme="dark"] .card,
+            html[data-theme="dark"] .panel,
+            html[data-theme="dark"] .result,
+            html[data-theme="dark"] .results,
+            html[data-theme="dark"] .vlsm-table,
+            html[data-theme="dark"] .vlsm-table th,
+            html[data-theme="dark"] .vlsm-table td,
+            html[data-theme="dark"] table,
+            html[data-theme="dark"] th,
+            html[data-theme="dark"] td,
+            html[data-theme="dark"] input,
+            html[data-theme="dark"] textarea {
+                background: #fff !important;
+                color: #0a1a12 !important;
+                border-color: #cbd5e1 !important;
+            }
+            /* Hide screen-only chrome that has no print value */
+            html[data-theme="dark"] .tool-toolbar,
+            html[data-theme="dark"] .tool-drawer,
+            html[data-theme="dark"] .copy-btn { display: none !important; }
         }
 
         @media (prefers-reduced-motion: reduce) {

@@ -52,16 +52,18 @@ nav:
     - Binary / Hex Panel: binary.md
     - Reverse DNS Zones: rdns.md
     - Allocation Tree: tree.md
+    - Wildcard ↔ CIDR: wildcard.md
   - Features:
     - VLSM Sessions: sessions.md
     - Shareable URLs & Embedding: sharing.md
+    - Printing: print.md
   - Reference:
     - REST API: api.md
     - PHP Client Library: client.md
     - Operator Config: config.md
 
 extra:
-  version: "2.9.2"
+  version: "2.10.0"
 
 extra_css:
   - stylesheets/extra.css

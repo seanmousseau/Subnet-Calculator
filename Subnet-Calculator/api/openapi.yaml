@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Subnet Calculator API
-  version: "1.0"
+  version: "2.10.0"
   description: |
     JSON REST API for IPv4/IPv6 subnet calculation, VLSM allocation,
     overlap detection, subnet splitting, route summarisation, ULA prefix
@@ -12,6 +12,10 @@ info:
   contact:
     name: Sean Mousseau
     url: https://github.com/seanmousseau/Subnet-Calculator
+
+externalDocs:
+  description: Subnet Calculator documentation
+  url: https://docs.subnetcalculator.app/api/
 
 servers:
   - url: /api/v1
@@ -1010,6 +1014,57 @@ paths:
                         allocated: false
                         children: []
         "400": { description: Invalid CIDRs or children outside parent, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+
+  /wildcard:
+    post:
+      operationId: convertWildcard
+      tags: [Wildcard]
+      summary: Convert between Cisco-style wildcard masks and CIDR prefixes
+      description: |
+        Bidirectional converter. If the `value` contains a dot it is treated as
+        a wildcard mask (e.g. `0.0.0.255`) and converted to its CIDR prefix.
+        Otherwise it is treated as a CIDR prefix (e.g. `/24` or `24`) and
+        converted to its wildcard mask. Non-contiguous wildcard masks are
+        rejected with HTTP 400.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value:
+                  type: string
+                  description: Either a CIDR prefix ("/24" or "24") or a wildcard mask ("0.0.0.255")
+                  example: "/24"
+      responses:
+        "200":
+          description: Wildcard / CIDR pair
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [input, cidr, wildcard]
+                        properties:
+                          input:    { type: string }
+                          cidr:     { type: string, example: "/24" }
+                          wildcard: { type: string, example: "0.0.0.255" }
+              example:
+                ok: true
+                data:
+                  input: "/24"
+                  cidr: "/24"
+                  wildcard: "0.0.0.255"
+        "400": { description: "Missing value, malformed input, or non-contiguous wildcard", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }

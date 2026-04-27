@@ -1504,12 +1504,141 @@ async def test_docs_footer_link(page: Page) -> None:
     section("Docs footer link")
 
     await navigate(page, APP_URL)
-    link = page.locator("footer a[href*='github.io/Subnet-Calculator']")
+    link = page.locator("footer a[href*='docs.subnetcalculator.app']")
     assert_true("Docs link present in footer",
                 await link.count() > 0)
     target = await link.get_attribute("target")
     assert_true("Docs link opens in new tab",
                 target == "_blank", str(target))
+
+
+async def test_wildcard_cidr_to_wildcard(page: Page) -> None:
+    section("Wildcard ↔ CIDR — CIDR input")
+
+    await navigate(page, APP_URL)
+    await page.click(".tool-trigger[data-tool='wildcard']")
+    await page.fill("#wildcard_input", "/24")
+    await page.click(
+        ".tool-panel[data-tool='wildcard'] button[type='submit']"
+    )
+    await page.wait_for_selector("#wildcard-result-mask")
+    cidr_text = await page.text_content("#wildcard-result-cidr")
+    mask_text = await page.text_content("#wildcard-result-mask")
+    assert_contains("CIDR result row contains /24", cidr_text or "", "/24")
+    assert_contains("Wildcard result row contains 0.0.0.255",
+                    mask_text or "", "0.0.0.255")
+
+
+async def test_wildcard_to_cidr(page: Page) -> None:
+    section("Wildcard ↔ CIDR — wildcard input")
+
+    await navigate(page, APP_URL)
+    await page.click(".tool-trigger[data-tool='wildcard']")
+    await page.fill("#wildcard_input", "0.0.0.255")
+    await page.click(
+        ".tool-panel[data-tool='wildcard'] button[type='submit']"
+    )
+    await page.wait_for_selector("#wildcard-result-cidr")
+    cidr_text = await page.text_content("#wildcard-result-cidr")
+    mask_text = await page.text_content("#wildcard-result-mask")
+    assert_contains("CIDR row shows /24", cidr_text or "", "/24")
+    assert_contains("Wildcard row shows 0.0.0.255",
+                    mask_text or "", "0.0.0.255")
+
+
+async def test_wildcard_rejects_noncontiguous(page: Page) -> None:
+    section("Wildcard ↔ CIDR — non-contiguous mask rejected")
+
+    await navigate(page, APP_URL)
+    await page.click(".tool-trigger[data-tool='wildcard']")
+    await page.fill("#wildcard_input", "0.0.255.0")
+    await page.click(
+        ".tool-panel[data-tool='wildcard'] button[type='submit']"
+    )
+    await page.wait_for_selector(".wildcard-error")
+    err_text = await page.text_content(".wildcard-error")
+    assert_contains("Error mentions contiguous", err_text or "", "contiguous")
+
+
+async def test_wildcard_api_endpoint(_page: Page) -> None:
+    section("Wildcard API — POST /api/v1/wildcard")
+
+    status, data = _api_post("wildcard", {"value": "/24"})
+    assert_eq("HTTP 200 for /24", status, 200)
+    assert_true("ok=true", data.get("ok") is True, str(data))
+    payload = data.get("data") or {}
+    assert_eq("data.cidr is /24",     payload.get("cidr"),     "/24")
+    assert_eq("data.wildcard is 0.0.0.255",
+              payload.get("wildcard"), "0.0.0.255")
+
+    status2, data2 = _api_post("wildcard", {"value": "0.0.0.255"})
+    assert_eq("HTTP 200 for wildcard", status2, 200)
+    payload2 = data2.get("data") or {}
+    assert_eq("data.cidr is /24",     payload2.get("cidr"),     "/24")
+    assert_eq("data.wildcard echo",
+              payload2.get("wildcard"), "0.0.0.255")
+
+    status3, data3 = _api_post("wildcard", {"value": "0.0.255.0"})
+    assert_eq("HTTP 400 for non-contiguous", status3, 400)
+    assert_true("ok=false", data3.get("ok") is False, str(data3))
+
+
+async def test_print_stylesheet_dark_mode(page: Page) -> None:
+    section("Print stylesheet (dark mode)")
+
+    await navigate(page, APP_URL)
+    await page.evaluate(
+        "document.documentElement.setAttribute('data-theme','dark')"
+    )
+    await page.emulate_media(media="print")
+
+    body_bg = await page.evaluate(
+        "getComputedStyle(document.body).backgroundColor"
+    )
+    assert_true(
+        "print body bg is white in dark mode",
+        body_bg in ("rgb(255, 255, 255)", "rgba(0, 0, 0, 0)"),
+        body_bg,
+    )
+
+    main_color = await page.evaluate(
+        "getComputedStyle(document.querySelector('main#main-content') "
+        "|| document.querySelector('.card')).color"
+    )
+    m = re.match(r"rgba?\((\d+),\s*(\d+),\s*(\d+)", main_color)
+    assert_true(
+        "print main color parseable",
+        m is not None,
+        main_color,
+    )
+    if m:
+        r, g, b = (int(x) for x in m.groups())
+        assert_true(
+            "print main color is dark ink (max channel < 80)",
+            max(r, g, b) < 80,
+            main_color,
+        )
+
+    # Restore default emulation so subsequent tests see a normal viewport
+    await page.emulate_media(media="screen")
+
+
+async def test_sitemap_and_robots(_page: Page) -> None:
+    section("sitemap.xml + robots.txt")
+
+    status, hdrs, body = _http_get("sitemap.xml")
+    assert_eq("sitemap.xml HTTP 200", status, 200)
+    assert_contains("sitemap.xml is XML", hdrs.get("content-type", ""), "xml")
+    assert_contains("sitemap.xml has <urlset>", body, "<urlset")
+    assert_contains("sitemap.xml lists app root",
+                    body, "https://subnetcalculator.app/")
+    assert_true("sitemap.xml does NOT cross host into docs subdomain",
+                "docs.subnetcalculator.app" not in body, body[:300])
+
+    rstatus, _, robots = _http_get("robots.txt")
+    assert_eq("robots.txt HTTP 200", rstatus, 200)
+    assert_contains("robots.txt advertises sitemap",
+                    robots, "Sitemap: https://subnetcalculator.app/sitemap.xml")
 
 
 # ---------------------------------------------------------------------------
@@ -3184,6 +3313,12 @@ async def main() -> None:
             await test_tool_drawer_switch_tools(page)
             await test_visual_regression(page)
             await test_docs_footer_link(page)
+            await test_sitemap_and_robots(page)
+            await test_print_stylesheet_dark_mode(page)
+            await test_wildcard_cidr_to_wildcard(page)
+            await test_wildcard_to_cidr(page)
+            await test_wildcard_rejects_noncontiguous(page)
+            await test_wildcard_api_endpoint(page)
             await test_api_meta(page)
             await test_api_ipv4(page)
             await test_api_ipv6(page)

@@ -70,6 +70,7 @@ if ($uri === '/' && $method === 'GET') {
             'GET  /api/v1/sessions/{id}',
             'POST /api/v1/range/ipv4',
             'POST /api/v1/tree',
+            'POST /api/v1/wildcard',
             'GET  /api/v1/changelog',
         ],
     ]);
@@ -137,6 +138,9 @@ switch ($route_key) {
         break;
     case 'POST /tree':
         require __DIR__ . '/handlers/tree.php';
+        break;
+    case 'POST /wildcard':
+        require __DIR__ . '/handlers/wildcard.php';
         break;
     case 'GET /changelog':
         require __DIR__ . '/handlers/changelog.php';
