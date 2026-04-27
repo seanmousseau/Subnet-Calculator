@@ -71,6 +71,18 @@ curl -X POST https://example.com/subnet-calculator/api/v1/vlsm \
   -d '{"network":"10.0.0.0","cidr":24,"subnets":[{"name":"LAN","hosts":50}]}'
 ```
 
+### POST /api/v1/vlsm6
+
+IPv6 VLSM planner — allocate variable-length IPv6 subnets from a parent block. Each `hosts` value is a positive integer or a `"2^N"` string (N is 0–128) for very large IPv6 sizings. Every IPv6 address in an allocated block is usable.
+
+```bash
+curl -X POST https://example.com/subnet-calculator/api/v1/vlsm6 \
+  -H 'Content-Type: application/json' \
+  -d '{"network":"2001:db8::","cidr":"32","requirements":[{"name":"site-a","hosts":256},{"name":"huge","hosts":"2^96"}]}'
+```
+
+Response `data.allocations[]` items have `name`, `hosts_needed`, `subnet`, and `usable` (an integer or `"2^N"` string).
+
 ### POST /api/v1/overlap
 
 Two-CIDR overlap check.

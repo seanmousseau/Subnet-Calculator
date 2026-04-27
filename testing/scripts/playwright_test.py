@@ -1046,6 +1046,122 @@ async def test_vlsm_sort_note(page: Page) -> None:
     assert_contains("Sort note mentions largest-first", note.lower(), "largest")
 
 
+async def test_vlsm6_basic(page: Page) -> None:
+    section("VLSM6 — IPv6 planner basic allocation")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.wait_for_selector("#panel-vlsm6.active")
+
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "32")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'site-a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '256'")
+    await submit_form(page, ".vlsm6-form")
+
+    assert_true("VLSM6 results table exists",
+                await page.locator(".vlsm6-table").count() > 0)
+    subnet = await page.text_content(".vlsm6-table .vlsm-subnet-cell code") or ""
+    assert_contains("VLSM6 allocates IPv6 /N block", subnet, "/")
+    assert_contains("VLSM6 allocates within parent", subnet, "2001:db8")
+
+
+async def test_vlsm6_2pow_n(page: Page) -> None:
+    section("VLSM6 — 2^N huge host count")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "32")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'huge'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '2^96'")
+    await submit_form(page, ".vlsm6-form")
+
+    rows = await page.locator(".vlsm6-table tbody tr").count()
+    assert_eq("VLSM6 2^N: one row", rows, 1)
+    usable = await page.text_content(".vlsm6-table tbody tr td:nth-child(4)") or ""
+    assert_contains("VLSM6 2^N usable shown as 2^N string", usable, "2^")
+
+
+async def test_vlsm6_overcapacity_error(page: Page) -> None:
+    section("VLSM6 — error when over capacity")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "126")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'big'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '32'")
+    await submit_form(page, ".vlsm6-form")
+    err = await page.text_content("#panel-vlsm6 .error") or ""
+    assert_true("VLSM6 over-capacity error shown", len(err) > 0, err)
+
+
+async def test_vlsm6_shareable_url(page: Page) -> None:
+    section("VLSM6 — shareable URL auto-populates and calculates")
+
+    url = (APP_URL + "?tab=vlsm6&vlsm6_network=2001:db8::&vlsm6_cidr=32"
+           "&vlsm6_name%5B0%5D=site-a&vlsm6_hosts%5B0%5D=256")
+    await navigate(page, url)
+    assert_true("VLSM6 results table after GET",
+                await page.locator(".vlsm6-table").count() > 0)
+    subnet = await page.text_content(".vlsm6-table .vlsm-subnet-cell code") or ""
+    assert_contains("VLSM6 GET auto-calc subnet", subnet, "/")
+    share = await page.text_content("#panel-vlsm6 .share-url") or ""
+    assert_contains("VLSM6 share URL contains vlsm6_network", share, "vlsm6_network")
+    network_val = await page.input_value("#vlsm6_network")
+    assert_eq("VLSM6 network field pre-filled from GET", network_val, "2001:db8::")
+
+
+async def test_vlsm6_dynamic_rows(page: Page) -> None:
+    section("VLSM6 — dynamic add/remove requirement rows")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.click(".vlsm6-add-row")
+    await page.click(".vlsm6-add-row")
+    rows = await page.locator("#vlsm6-reqs .vlsm-req-row").count()
+    assert_eq("VLSM6 add-row produces 3 rows total", rows, 3)
+    # Remove one
+    await page.click("#vlsm6-reqs .vlsm-req-row:last-child .vlsm-remove-row")
+    rows2 = await page.locator("#vlsm6-reqs .vlsm-req-row").count()
+    assert_eq("VLSM6 remove-row reduces to 2", rows2, 2)
+
+
+async def test_vlsm6_validation_inline(page: Page) -> None:
+    section("VLSM6 — inline validation rejects junk hosts input")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "32")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'site-a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = 'abc'")
+    # JS preventDefault should keep us on the page; click submit directly
+    await page.click(".vlsm6-form button[type='submit']")
+    inline = await page.locator(".vlsm6-form .vlsm-inline-error").count()
+    assert_true("VLSM6 inline validation flags junk input", inline > 0,
+                "expected at least one .vlsm-inline-error")
+
+
+async def test_vlsm6_copy_all(page: Page) -> None:
+    section("VLSM6 — Copy All button present")
+
+    await navigate(page, APP_URL)
+    await page.click("#tab-vlsm6")
+    await page.fill("#vlsm6_network", "2001:db8::")
+    await page.fill("#vlsm6_cidr",    "32")
+    await page.evaluate("document.querySelectorAll('.vlsm6-name-input')[0].value = 'a'")
+    await page.evaluate("document.querySelectorAll('.vlsm6-hosts-input')[0].value = '256'")
+    await submit_form(page, ".vlsm6-form")
+    assert_true("VLSM6 Copy All button rendered",
+                await page.locator("#panel-vlsm6 .copy-all-btn[data-target='vlsm6']").count() > 0)
+    assert_true("VLSM6 export buttons present",
+                await page.locator("#vlsm6-export-csv").count() > 0
+                and await page.locator("#vlsm6-export-json").count() > 0
+                and await page.locator("#vlsm6-export-ascii").count() > 0)
+
+
 async def test_ipv6_overlap(page: Page) -> None:
     section("VLSM tab — IPv6 overlap checker")
 
@@ -3341,6 +3457,13 @@ async def main() -> None:
             await test_ipv6_copy_all(page)
             await test_vlsm_utilisation_summary(page)
             await test_vlsm_sort_note(page)
+            await test_vlsm6_basic(page)
+            await test_vlsm6_2pow_n(page)
+            await test_vlsm6_overcapacity_error(page)
+            await test_vlsm6_shareable_url(page)
+            await test_vlsm6_dynamic_rows(page)
+            await test_vlsm6_validation_inline(page)
+            await test_vlsm6_copy_all(page)
             await test_ipv6_overlap(page)
             await test_multi_cidr_overlap(page)
             await test_ipv6_binary_repr(page)

@@ -36,3 +36,7 @@ Below the table: total hosts requested, total allocated addresses, remaining add
 ## Sessions
 
 See [VLSM Sessions](sessions.md) to save and restore your planner inputs.
+
+## IPv6
+
+For IPv6 networks, use the dedicated [IPv6 VLSM Planner](ipv6-vlsm.md) — it uses 128-bit GMP arithmetic and accepts `2^N` notation for very large host counts.

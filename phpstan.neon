@@ -10,6 +10,7 @@ parameters:
         - Subnet-Calculator/includes/functions-split.php
         - Subnet-Calculator/includes/functions-util.php
         - Subnet-Calculator/includes/functions-vlsm.php
+        - Subnet-Calculator/includes/functions-vlsm6.php
         - Subnet-Calculator/includes/functions-supernet.php
         - Subnet-Calculator/includes/functions-ula.php
         - Subnet-Calculator/includes/functions-session.php
@@ -21,6 +22,7 @@ parameters:
         - Subnet-Calculator/api/v1/handlers/ipv4.php
         - Subnet-Calculator/api/v1/handlers/ipv6.php
         - Subnet-Calculator/api/v1/handlers/vlsm.php
+        - Subnet-Calculator/api/v1/handlers/vlsm6.php
         - Subnet-Calculator/api/v1/handlers/overlap.php
         - Subnet-Calculator/api/v1/handlers/split.php
         - Subnet-Calculator/api/v1/handlers/supernet.php

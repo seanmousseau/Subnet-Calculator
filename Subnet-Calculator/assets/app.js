@@ -225,7 +225,11 @@ document.addEventListener('click', function (e) {
             });
         }
     } else if (target === 'vlsm') {
-        document.querySelectorAll('.vlsm-subnet-cell[data-copy]').forEach(function (cell) {
+        document.querySelectorAll('.vlsm-table:not(.vlsm6-table) .vlsm-subnet-cell[data-copy]').forEach(function (cell) {
+            texts.push(cell.dataset.copy);
+        });
+    } else if (target === 'vlsm6') {
+        document.querySelectorAll('.vlsm6-table .vlsm-subnet-cell[data-copy]').forEach(function (cell) {
             texts.push(cell.dataset.copy);
         });
     } else if (target === 'supernet' || target === 'ula') {
@@ -607,6 +611,161 @@ const toolDrawer = {
 };
 
 toolDrawer.init();
+
+// ── VLSM6: dynamic requirement rows ──────────────────────────────────────────
+(function () {
+    const reqs = document.getElementById('vlsm6-reqs');
+    if (!reqs) return;
+
+    function makeRow() {
+        const row = document.createElement('div');
+        row.className = 'vlsm-req-row';
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.name = 'vlsm6_name[]';
+        nameInput.className = 'vlsm6-name-input';
+        nameInput.placeholder = 'e.g. Site A';
+        nameInput.autocomplete = 'off';
+        const hostsInput = document.createElement('input');
+        hostsInput.type = 'text';
+        hostsInput.name = 'vlsm6_hosts[]';
+        hostsInput.className = 'vlsm6-hosts-input';
+        hostsInput.placeholder = 'e.g. 256 or 2^64';
+        hostsInput.autocomplete = 'off';
+        hostsInput.spellcheck = false;
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'vlsm-remove-row';
+        removeBtn.setAttribute('aria-label', 'Remove row');
+        removeBtn.textContent = '×';
+        row.appendChild(nameInput);
+        row.appendChild(hostsInput);
+        row.appendChild(removeBtn);
+        return row;
+    }
+
+    document.querySelector('.vlsm6-add-row')?.addEventListener('click', () => {
+        reqs.appendChild(makeRow());
+    });
+
+    reqs.addEventListener('click', e => {
+        const btn = e.target.closest('.vlsm-remove-row');
+        if (!btn) return;
+        const rows = reqs.querySelectorAll('.vlsm-req-row');
+        if (rows.length > 1) btn.closest('.vlsm-req-row').remove();
+    });
+
+    reqs.addEventListener('keydown', function (e) {
+        if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+        const btn = e.target.closest('.vlsm-remove-row');
+        if (!btn) return;
+        e.preventDefault();
+        const rows = [...reqs.querySelectorAll('.vlsm-req-row')];
+        if (rows.length <= 1) return;
+        const idx = rows.indexOf(btn.closest('.vlsm-req-row'));
+        btn.closest('.vlsm-req-row').remove();
+        const remaining = reqs.querySelectorAll('.vlsm6-name-input');
+        (remaining[idx] || remaining[idx - 1])?.focus();
+    });
+})();
+
+// ── VLSM6: submit validation + loading state ─────────────────────────────────
+(function () {
+    const form = document.querySelector('.vlsm6-form');
+    if (!form) return;
+    form.addEventListener('submit', function (e) {
+        form.querySelectorAll('.vlsm-inline-error').forEach(function (el) { el.remove(); });
+        var hasError = false;
+        form.querySelectorAll('.vlsm-req-row').forEach(function (row) {
+            var hostsInput = row.querySelector('.vlsm6-hosts-input');
+            if (!hostsInput) return;
+            var v = (hostsInput.value || '').trim();
+            var ok = /^\d+$/.test(v) ? parseInt(v, 10) >= 1 : /^2\^(\d{1,3})$/.test(v);
+            if (!ok) {
+                hasError = true;
+                var msg = document.createElement('span');
+                msg.className = 'vlsm-inline-error';
+                msg.textContent = 'Use a positive integer or 2^N';
+                hostsInput.after(msg);
+            }
+        });
+        if (hasError) { e.preventDefault(); return; }
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Calculating…'; }
+    });
+})();
+
+// ── VLSM6: CSV export ────────────────────────────────────────────────────────
+document.getElementById('vlsm6-export-csv')?.addEventListener('click', function () {
+    var table = document.querySelector('.vlsm6-table');
+    if (!table) return;
+    var rows = table.querySelectorAll('tbody tr');
+    var networkVal = (document.getElementById('vlsm6_network')?.value || 'network').replace(/[^0-9a-fA-F:]/g, '');
+    var cidrVal    = (document.getElementById('vlsm6_cidr')?.value    || '0').replace(/[^0-9]/g, '');
+    var filename = 'vlsm6-' + (networkVal || 'network') + '-' + cidrVal + '.csv';
+    var headers = ['Name', 'Hosts Needed', 'Allocated Subnet', 'Usable'];
+    var lines = [headers.join(',')];
+    rows.forEach(function (tr) {
+        var cells = tr.querySelectorAll('td');
+        var name      = (cells[0]?.textContent || '').trim().replace(/,/g, ' ');
+        var hostsNeed = (cells[1]?.textContent || '').trim().replace(/,/g, '');
+        var subnet    = (tr.querySelector('.vlsm-subnet-cell code')?.textContent || '').trim();
+        var usable    = (cells[3]?.textContent || '').trim().replace(/,/g, '');
+        lines.push([name, hostsNeed, subnet, usable].join(','));
+    });
+    var csv = lines.join('\r\n');
+    var blob = new Blob([csv], {type: 'text/csv'});
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = filename; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+});
+
+// ── VLSM6: JSON export ───────────────────────────────────────────────────────
+document.getElementById('vlsm6-export-json')?.addEventListener('click', function () {
+    var table = document.querySelector('.vlsm6-table');
+    if (!table) return;
+    var rows = table.querySelectorAll('tbody tr');
+    var networkVal = (document.getElementById('vlsm6_network')?.value || 'network').replace(/[^0-9a-fA-F:]/g, '');
+    var cidrVal    = (document.getElementById('vlsm6_cidr')?.value    || '0').replace(/[^0-9]/g, '');
+    var filename = 'vlsm6-' + (networkVal || 'network') + '-' + cidrVal + '.json';
+    var data = [];
+    rows.forEach(function (tr) {
+        var cells = tr.querySelectorAll('td');
+        data.push({
+            name:             (cells[0]?.textContent || '').trim(),
+            hosts_needed:     (cells[1]?.textContent || '').trim(),
+            allocated_subnet: (tr.querySelector('.vlsm-subnet-cell code')?.textContent || '').trim(),
+            usable:           (cells[3]?.textContent || '').trim()
+        });
+    });
+    var json = JSON.stringify(data, null, 2);
+    var blob = new Blob([json], {type: 'application/json'});
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = filename; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+});
+
+// ── VLSM6: ASCII export ──────────────────────────────────────────────────────
+document.getElementById('vlsm6-export-ascii')?.addEventListener('click', function () {
+    var table = document.querySelector('.vlsm6-table');
+    if (!table) return;
+    var networkVal = (document.getElementById('vlsm6_network')?.value || '').trim();
+    var cidrVal    = (document.getElementById('vlsm6_cidr')?.value    || '').trim();
+    var parent = networkVal && cidrVal ? networkVal + '/' + cidrVal.replace(/^\//, '') : networkVal;
+    var rows   = Array.prototype.map.call(table.querySelectorAll('tbody tr'), function (tr) {
+        var cells = tr.querySelectorAll('td');
+        return {
+            cidr: (tr.querySelector('.vlsm-subnet-cell code')?.textContent || '').trim(),
+            name: (cells[0]?.textContent || '').trim()
+        };
+    });
+    var diagram = buildAsciiDiagram(parent, rows);
+    copyText(diagram, 'ASCII copied!');
+});
 
 // ── Service Worker registration ───────────────────────────────────────────
 if (window.self === window.top && 'serviceWorker' in navigator) {

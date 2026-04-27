@@ -95,7 +95,7 @@ function recaptcha_enterprise_verify(
 // ─── Request handling ─────────────────────────────────────────────────────────
 
 $get_tab    = $_GET['tab'] ?? $default_tab;
-$active_tab = in_array($get_tab, ['ipv4', 'ipv6', 'vlsm'], true) ? $get_tab : 'ipv4';
+$active_tab = in_array($get_tab, ['ipv4', 'ipv6', 'vlsm', 'vlsm6'], true) ? $get_tab : 'ipv4';
 
 $result = $error = null;
 $input_ip = $input_mask = '';
@@ -120,6 +120,13 @@ $vlsm_result = $vlsm_error = null;
 $vlsm_network = $vlsm_cidr_input = '';
 /** @var array<array{name: string, hosts: int}> $vlsm_requirements */
 $vlsm_requirements = [];
+
+/** @var list<array{name: string, hosts_needed: int|string, subnet: string, usable: int|string}>|null $vlsm6_result */
+$vlsm6_result = null;
+$vlsm6_error  = null;
+$vlsm6_network = $vlsm6_cidr_input = '';
+/** @var array<array{name: string, hosts: int|string}> $vlsm6_requirements */
+$vlsm6_requirements = [];
 
 $supernet_input  = '';
 $supernet_action = '';
@@ -155,13 +162,14 @@ $wildcard_error  = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $post_tab   = $_POST['tab'] ?? $default_tab;
-    $active_tab = in_array($post_tab, ['ipv4', 'ipv6', 'vlsm'], true) ? $post_tab : 'ipv4';
+    $active_tab = in_array($post_tab, ['ipv4', 'ipv6', 'vlsm', 'vlsm6'], true) ? $post_tab : 'ipv4';
 
     $form_blocked = false;
     $is_splitter      = isset($_POST['split_prefix']) || isset($_POST['split_prefix6']);
     $is_overlap       = isset($_POST['overlap_cidr_a']) || isset($_POST['overlap_cidr_b']);
     $is_multi_overlap = isset($_POST['multi_overlap_input']);
     $is_vlsm          = isset($_POST['vlsm_network']);
+    $is_vlsm6         = isset($_POST['vlsm6_network']);
     $is_supernet      = isset($_POST['supernet_action']);
     $is_ula           = isset($_POST['ula_generate']);
     $is_session_save  = isset($_POST['session_action']) && (string)($_POST['session_action'] ?? '') === 'save';
@@ -170,8 +178,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_wildcard      = isset($_POST['wildcard_input']);
 
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
-        || $is_supernet || $is_ula || $is_session_save || $is_range || $is_tree
-        || $is_wildcard;
+        || $is_vlsm6 || $is_supernet || $is_ula || $is_session_save || $is_range
+        || $is_tree || $is_wildcard;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -455,6 +463,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
+    if ($is_vlsm6 && !$form_blocked) {
+        $vlsm6_network    = trim((string)($_POST['vlsm6_network'] ?? ''));
+        $vlsm6_cidr_input = trim((string)($_POST['vlsm6_cidr']    ?? ''));
+        $rv6 = resolve_ipv6_input($vlsm6_network, $vlsm6_cidr_input);
+        if (!$rv6['result6']) {
+            $vlsm6_error = 'Parent network: ' . ($rv6['error6'] ?? 'Invalid input.');
+        } else {
+            $names6 = $_POST['vlsm6_name']  ?? [];
+            $hosts6 = $_POST['vlsm6_hosts'] ?? [];
+            if (!is_array($names6) || !is_array($hosts6) || count($names6) === 0) {
+                $vlsm6_error = 'Add at least one requirement.';
+            } else {
+                $reqs6 = [];
+                foreach ($names6 as $i => $name6) {
+                    $name6 = mb_substr(trim((string)$name6), 0, 100);
+                    $hval6 = trim((string)($hosts6[$i] ?? ''));
+                    if ($name6 === '' || $hval6 === '') {
+                        continue;
+                    }
+                    if (!preg_match('/^(\d+|2\^\d{1,3})$/', $hval6)) {
+                        continue;
+                    }
+                    $reqs6[] = ['name' => $name6, 'hosts' => $hval6];
+                }
+                if ($reqs6 === []) {
+                    $vlsm6_error = 'Add at least one valid requirement.';
+                } else {
+                    $vlsm6_cidr_int   = (int)ltrim($rv6['result6']['prefix'], '/');
+                    $vlsm6_network_ip = explode('/', $rv6['result6']['network_cidr'])[0];
+                    $vlsm6_requirements = $reqs6;
+                    $vr6 = vlsm6_allocate($vlsm6_network_ip, $vlsm6_cidr_int, $reqs6);
+                    if (isset($vr6['error'])) {
+                        $vlsm6_error = $vr6['error'];
+                    } else {
+                        $vlsm6_result = $vr6['allocations'] ?? [];
+                    }
+                }
+            }
+        }
+    }
+
     if ($is_supernet && !$form_blocked) {
         $supernet_action = in_array((string)($_POST['supernet_action'] ?? ''), ['find', 'summarise'], true)
             ? (string)$_POST['supernet_action']
@@ -683,6 +732,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $input_ipv6   = $r['ip'];
             $input_prefix = $r['prefix'];
         }
+    } elseif ($active_tab === 'vlsm6') {
+        $get_vlsm6_network = trim((string)($_GET['vlsm6_network'] ?? ''));
+        $get_vlsm6_cidr    = trim((string)($_GET['vlsm6_cidr']    ?? ''));
+        if ($get_vlsm6_network !== '') {
+            $rv6 = resolve_ipv6_input($get_vlsm6_network, $get_vlsm6_cidr);
+            if (!$rv6['result6']) {
+                $vlsm6_error = 'Parent network: ' . ($rv6['error6'] ?? 'Invalid input.');
+            } else {
+                $vlsm6_network    = $rv6['ip'];
+                $vlsm6_cidr_input = ltrim($rv6['result6']['prefix'], '/');
+                $get_names6 = $_GET['vlsm6_name']  ?? [];
+                $get_hosts6 = $_GET['vlsm6_hosts'] ?? [];
+                if (is_array($get_names6) && is_array($get_hosts6) && count($get_names6) > 0) {
+                    $reqs6 = [];
+                    foreach ($get_names6 as $i => $name6) {
+                        $name6 = mb_substr(trim((string)$name6), 0, 100);
+                        $hval6 = trim((string)($get_hosts6[$i] ?? ''));
+                        if (
+                            $name6 !== '' && $hval6 !== ''
+                            && preg_match('/^(\d+|2\^\d{1,3})$/', $hval6)
+                        ) {
+                            $reqs6[] = ['name' => $name6, 'hosts' => $hval6];
+                        }
+                    }
+                    if ($reqs6 !== []) {
+                        $vlsm6_requirements = $reqs6;
+                        $vlsm6_cidr_int     = (int)ltrim((string)$rv6['result6']['prefix'], '/');
+                        $vlsm6_network_ip   = explode('/', (string)$rv6['result6']['network_cidr'])[0];
+                        $vr6 = vlsm6_allocate($vlsm6_network_ip, $vlsm6_cidr_int, $reqs6);
+                        if (isset($vr6['error'])) {
+                            $vlsm6_error = $vr6['error'];
+                        } else {
+                            $vlsm6_result = $vr6['allocations'] ?? [];
+                        }
+                    }
+                }
+            }
+        }
     } elseif ($active_tab === 'vlsm') {
         $get_vlsm_network = trim((string)($_GET['vlsm_network'] ?? ''));
         $get_vlsm_cidr    = trim((string)($_GET['vlsm_cidr']   ?? ''));
@@ -777,6 +864,16 @@ if ($result) {
         'vlsm_cidr'    => ltrim($vlsm_cidr_input, '/'),
         'vlsm_name'    => $vlsm_names,
         'vlsm_hosts'   => $vlsm_qhosts,
+    ]);
+} elseif ($vlsm6_result !== null && $vlsm6_network !== '') {
+    $vlsm6_names  = array_map(fn($r) => $r['name'], $vlsm6_requirements);
+    $vlsm6_qhosts = array_map(fn($r) => $r['hosts'], $vlsm6_requirements);
+    $share_url = '?' . http_build_query([
+        'tab'           => 'vlsm6',
+        'vlsm6_network' => $vlsm6_network,
+        'vlsm6_cidr'    => ltrim($vlsm6_cidr_input, '/'),
+        'vlsm6_name'    => $vlsm6_names,
+        'vlsm6_hosts'   => $vlsm6_qhosts,
     ]);
 }
 $share_proto = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';

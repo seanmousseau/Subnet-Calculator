@@ -97,6 +97,11 @@
                 aria-selected="<?= $active_tab === 'vlsm' ? 'true' : 'false' ?>"
                 aria-controls="panel-vlsm"
                 data-tab="vlsm">VLSM</button>
+        <button class="tab-btn<?= $active_tab === 'vlsm6' ? ' active' : '' ?>"
+                role="tab" id="tab-vlsm6"
+                aria-selected="<?= $active_tab === 'vlsm6' ? 'true' : 'false' ?>"
+                aria-controls="panel-vlsm6"
+                data-tab="vlsm6">VLSM IPv6</button>
     </div>
 
     <!-- IPv4 Panel -->
@@ -970,8 +975,101 @@ if ($i < 3) {
         </div>
     </div>
 
+    <!-- VLSM IPv6 Panel -->
+    <div id="panel-vlsm6" class="panel<?= $active_tab === 'vlsm6' ? ' active' : '' ?>"
+         role="tabpanel" aria-labelledby="tab-vlsm6" tabindex="-1">
+        <form method="post" class="vlsm6-form" novalidate>
+            <input type="hidden" name="tab" value="vlsm6">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="vlsm6_network">Parent Network</label>
+                    <input type="text" id="vlsm6_network" name="vlsm6_network"
+                           value="<?= htmlspecialchars($vlsm6_network) ?>"
+                           placeholder="2001:db8::" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="form-group form-group--mask">
+                    <label for="vlsm6_cidr">Prefix</label>
+                    <input type="text" id="vlsm6_cidr" name="vlsm6_cidr"
+                           value="<?= htmlspecialchars($vlsm6_cidr_input) ?>"
+                           placeholder="/48" autocomplete="off" spellcheck="false">
+                </div>
+            </div>
+            <div class="vlsm-reqs" id="vlsm6-reqs">
+                <div class="vlsm-reqs-header">
+                    <span class="vlsm-col-name">Name</span>
+                    <span class="vlsm-col-hosts">Hosts Needed<?= help_bubble('vlsm6-hosts-input', 'Enter a positive integer (e.g. 50) or a power-of-two expression (e.g. 2^64) for very large IPv6 sizings.') ?></span>
+                </div>
+                <?php if ($vlsm6_requirements) : ?>
+                    <?php foreach ($vlsm6_requirements as $req6) : ?>
+                    <div class="vlsm-req-row">
+                        <input type="text" name="vlsm6_name[]" class="vlsm6-name-input"
+                               value="<?= htmlspecialchars($req6['name']) ?>" placeholder="e.g. Site A" autocomplete="off">
+                        <input type="text" name="vlsm6_hosts[]" class="vlsm6-hosts-input"
+                               value="<?= htmlspecialchars((string)$req6['hosts']) ?>" placeholder="e.g. 256 or 2^64" autocomplete="off" spellcheck="false">
+                        <button type="button" class="vlsm-remove-row" aria-label="Remove row">&times;</button>
+                    </div>
+                    <?php endforeach; ?>
+                <?php else : ?>
+                    <div class="vlsm-req-row">
+                        <input type="text" name="vlsm6_name[]" class="vlsm6-name-input" placeholder="e.g. Site A" autocomplete="off">
+                        <input type="text" name="vlsm6_hosts[]" class="vlsm6-hosts-input" placeholder="e.g. 256 or 2^64" autocomplete="off" spellcheck="false">
+                        <button type="button" class="vlsm-remove-row" aria-label="Remove row">&times;</button>
+                    </div>
+                <?php endif; ?>
+            </div>
+            <div class="vlsm-actions">
+                <button type="button" class="vlsm6-add-row">+ Add Subnet</button>
+                <button type="submit" class="btn">Calculate</button>
+                <a href="?tab=vlsm6" class="btn reset">Reset</a>
+            </div>
+        </form>
+        <?php if ($vlsm6_error) : ?>
+            <div class="error"><?= htmlspecialchars($vlsm6_error) ?></div>
+        <?php elseif ($vlsm6_result !== null) : ?>
+            <div class="vlsm-results">
+                <p class="vlsm-sort-note">Results sorted largest-first for efficient allocation.<?= help_bubble('vlsm6-sort', 'Subnets are allocated from largest to smallest so that larger blocks can be placed at aligned boundaries without wasting address space.') ?></p>
+                <table class="vlsm-table vlsm6-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Hosts Needed<?= help_bubble('vlsm6-hosts', 'The number of usable host addresses you requested. Every IPv6 address in the allocated block is usable (no broadcast / network reservation).') ?></th>
+                            <th>Allocated Subnet</th>
+                            <th>Usable<?= help_bubble('vlsm6-usable', 'Total addresses in the allocated block. For very large blocks, the count is shown as 2^N.') ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($vlsm6_result as $alloc6) : ?>
+                        <tr>
+                            <td><?= htmlspecialchars($alloc6['name']) ?></td>
+                            <td><?= htmlspecialchars((string)$alloc6['hosts_needed']) ?></td>
+                            <td class="vlsm-subnet-cell vlsm6-subnet-cell" tabindex="0" role="button"
+                                title="Click to copy" data-copy="<?= htmlspecialchars($alloc6['subnet']) ?>">
+                                <code><?= htmlspecialchars($alloc6['subnet']) ?></code>
+                            </td>
+                            <td><?= htmlspecialchars((string)$alloc6['usable']) ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <button type="button" class="copy-all-btn" data-target="vlsm6">Copy All</button>
+            <div class="export-btn-group">
+                <button type="button" id="vlsm6-export-csv">Export CSV</button>
+                <button type="button" id="vlsm6-export-json">Export JSON</button>
+                <button type="button" id="vlsm6-export-ascii">Export ASCII</button>
+            </div>
+            <?php if ($show_share_bar && $share_url !== '') : ?>
+            <div class="share-bar">
+                <span class="share-label">Share</span>
+                <code class="share-url"><?= htmlspecialchars($share_url_abs) ?></code>
+                <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
+            </div>
+            <?php endif; ?>
+        <?php endif; ?>
+    </div>
+
     <footer>
-        <a href="https://github.com/seanmousseau/Subnet-Calculator" target="_blank" rel="noopener noreferrer">github.com/seanmousseau/Subnet-Calculator</a>
+        <a href="https://github.com/seanmousseau/Subnet-Calculator" target="_blank" rel="noopener noreferrer">GitHub</a>
         &nbsp;&middot;&nbsp;
         <a href="https://docs.subnetcalculator.app/" target="_blank" rel="noreferrer">Docs</a>
     </footer>

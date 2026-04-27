@@ -45,6 +45,7 @@ nav:
     - IPv4 Calculator: ipv4.md
     - IPv6 Calculator: ipv6.md
     - VLSM Planner: vlsm.md
+    - IPv6 VLSM Planner: ipv6-vlsm.md
     - Subnet Splitter: splitter.md
     - Overlap Checker: overlap.md
     - Supernet & Summarisation: supernet.md
