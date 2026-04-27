@@ -275,14 +275,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_lookup        = isset($_POST['lookup_cidrs']) || isset($_POST['lookup_ips']);
     $is_diff          = isset($_POST['diff_before']) || isset($_POST['diff_after']);
 
-    // v2.11.0 review fix: vlsm6/lookup/diff perform meaningful work (large
-    // allocations, bulk lookups, list comparisons) and must remain subject to
-    // honeypot/CAPTCHA protection. Lighter tool drawers (splitter, overlap,
-    // supernet, ULA, range, tree, wildcard, vlsm v4, session save) keep the
-    // pre-existing exemption.
+    // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
+    // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
+    // not entry-point form posts. Only the main IPv4/IPv6 calculator forms are gated.
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
-        || $is_supernet || $is_ula || $is_session_save || $is_range
-        || $is_tree || $is_wildcard;
+        || $is_vlsm6 || $is_supernet || $is_ula || $is_session_save || $is_range
+        || $is_tree || $is_wildcard || $is_lookup || $is_diff;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -579,8 +577,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $vlsm6_error = 'Add at least one requirement.';
             } else {
                 $reqs6 = [];
+                $name6_too_long = false;
                 foreach ($names6 as $i => $name6) {
-                    $name6 = mb_substr(trim((string)$name6), 0, 100);
+                    $name6 = trim((string)$name6);
+                    if (mb_strlen($name6) > 100) {
+                        $name6_too_long = true;
+                        break;
+                    }
                     $hval6 = trim((string)($hosts6[$i] ?? ''));
                     if ($name6 === '' || $hval6 === '') {
                         continue;
@@ -590,7 +593,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     $reqs6[] = ['name' => $name6, 'hosts' => $hval6];
                 }
-                if ($reqs6 === []) {
+                if ($name6_too_long) {
+                    $vlsm6_error = 'Each requirement name must be 100 characters or fewer.';
+                } elseif ($reqs6 === []) {
                     $vlsm6_error = 'Add at least one valid requirement.';
                 } else {
                     $vlsm6_cidr_int   = (int)ltrim($rv6['result6']['prefix'], '/');
@@ -905,8 +910,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $get_hosts6 = $_GET['vlsm6_hosts'] ?? [];
                 if (is_array($get_names6) && is_array($get_hosts6) && count($get_names6) > 0) {
                     $reqs6 = [];
+                    $name6_too_long = false;
                     foreach ($get_names6 as $i => $name6) {
-                        $name6 = mb_substr(trim((string)$name6), 0, 100);
+                        $name6 = trim((string)$name6);
+                        if (mb_strlen($name6) > 100) {
+                            $name6_too_long = true;
+                            break;
+                        }
                         $hval6 = trim((string)($get_hosts6[$i] ?? ''));
                         if (
                             $name6 !== '' && $hval6 !== ''
@@ -915,7 +925,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $reqs6[] = ['name' => $name6, 'hosts' => $hval6];
                         }
                     }
-                    if ($reqs6 !== []) {
+                    if ($name6_too_long) {
+                        $vlsm6_error = 'Each requirement name must be 100 characters or fewer.';
+                    } elseif ($reqs6 !== []) {
                         $vlsm6_requirements = $reqs6;
                         $vlsm6_cidr_int     = (int)ltrim((string)$rv6['result6']['prefix'], '/');
                         $vlsm6_network_ip   = explode('/', (string)$rv6['result6']['network_cidr'])[0];
