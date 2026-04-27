@@ -1504,7 +1504,7 @@ async def test_docs_footer_link(page: Page) -> None:
     section("Docs footer link")
 
     await navigate(page, APP_URL)
-    link = page.locator("footer a[href*='github.io/Subnet-Calculator']")
+    link = page.locator("footer a[href*='docs.subnetcalculator.app']")
     assert_true("Docs link present in footer",
                 await link.count() > 0)
     target = await link.get_attribute("target")

@@ -930,7 +930,7 @@ if ($i < 3) {
     <footer>
         <a href="https://github.com/seanmousseau/Subnet-Calculator" target="_blank" rel="noopener noreferrer">github.com/seanmousseau/Subnet-Calculator</a>
         &nbsp;&middot;&nbsp;
-        <a href="https://seanmousseau.github.io/Subnet-Calculator/" target="_blank" rel="noreferrer">Docs</a>
+        <a href="https://docs.subnetcalculator.app/" target="_blank" rel="noreferrer">Docs</a>
     </footer>
 </main>
 

@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://subnetcalculator.app"><strong>Live app</strong></a> ·
-  <a href="https://seanmousseau.github.io/Subnet-Calculator/"><strong>Documentation</strong></a> ·
+  <a href="https://docs.subnetcalculator.app/"><strong>Documentation</strong></a> ·
   <a href="CHANGELOG.md"><strong>Changelog</strong></a>
 </p>
 
