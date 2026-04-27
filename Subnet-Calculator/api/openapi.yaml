@@ -13,6 +13,10 @@ info:
     name: Sean Mousseau
     url: https://github.com/seanmousseau/Subnet-Calculator
 
+externalDocs:
+  description: Subnet Calculator documentation
+  url: https://docs.subnetcalculator.app/api/
+
 servers:
   - url: /api/v1
     description: |
