@@ -9,10 +9,13 @@ declare(strict_types=1);
 
 // ── Response helpers ──────────────────────────────────────────────────────────
 
-/** @param array<mixed> $data */
-function json_ok(array $data): never
+/**
+ * @param  array<mixed> $data
+ * @param  int          $status  HTTP status code (default 200; pass 201 for create endpoints).
+ */
+function json_ok(array $data, int $status = 200): never
 {
-    http_response_code(200);
+    http_response_code($status);
     echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }

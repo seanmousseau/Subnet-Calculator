@@ -38,19 +38,17 @@ try {
     }
 
     if ($id === null && $uri === '/admin/keys' && $method === 'POST') {
-        $body = api_body();
-        $name = (string)($body['name'] ?? '');
+        $body    = api_body();
+        $rawName = $body['name'] ?? null;
+        if (!is_string($rawName)) {
+            json_err('Field "name" must be a string.', 400);
+        }
         try {
-            $created = apikey_create($db, $name);
+            $created = apikey_create($db, $rawName);
         } catch (\InvalidArgumentException $e) {
             json_err($e->getMessage(), 400);
         }
-        http_response_code(201);
-        echo json_encode(
-            ['ok' => true, 'data' => $created],
-            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-        );
-        exit;
+        json_ok($created, 201);
     }
 
     if ($id !== null && $method === 'DELETE') {

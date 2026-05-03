@@ -54,7 +54,11 @@ function apikey_db_open(string $path): \SQLite3
  *
  * @return array{id:int, token:string, prefix:string, name:string, created_at:int}
  * @throws InvalidArgumentException on empty / oversized name
- * @throws \RuntimeException on hash failure
+ * @throws \RuntimeException        on prepare failure
+ *
+ * Note: PHP 8.0+ password_hash() always returns a string for valid inputs
+ * (the historical `false` return was removed); we therefore do not guard
+ * against a hash failure on the happy path.
  */
 function apikey_create(\SQLite3 $db, string $name): array
 {
