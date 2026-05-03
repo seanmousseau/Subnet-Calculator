@@ -6,7 +6,7 @@ declare(strict_types=1);
 // These are the built-in defaults. To override, copy config.php.example to
 // config.php alongside this file — config.php is never overwritten by upgrades.
 
-$app_version          = '2.11.0';
+$app_version          = '2.12.0';
 $locale               = 'en'; // BCP 47 locale tag for number formatting (e.g. 'de', 'fr')
 $fixed_bg_color       = 'null';
 $default_tab          = 'ipv4'; // 'ipv4', 'ipv6', or 'vlsm'
@@ -44,6 +44,12 @@ $session_ttl_days   = 30;     // Days before a saved session expires
 // API request logging (v2.6.0)
 $api_request_log         = false;  // Enable SQLite-backed API request logging
 $api_request_log_db_path = '';     // Absolute path to log DB (auto if empty)
+
+// Admin UI + API key management (v2.12.0, #297)
+$admin_ui_enabled  = false;  // Master switch for /admin/ pages and admin/keys API
+$admin_user        = '';     // Admin username for HTTP Basic Auth on /admin/
+$admin_pass_hash   = '';     // PASSWORD_BCRYPT hash of the admin password
+$apikey_db_path    = '';     // SQLite file for api_keys (auto: data/sessions.sqlite or data/admin.sqlite)
 
 if (file_exists(__DIR__ . '/../config.php')) {
     require __DIR__ . '/../config.php';
@@ -110,3 +116,8 @@ $session_db_path  = is_string($session_db_path) ? $session_db_path : '';
 $session_ttl_days = max(1, (int)$session_ttl_days);
 $api_request_log         = (bool)$api_request_log;
 $api_request_log_db_path = is_string($api_request_log_db_path) ? $api_request_log_db_path : '';
+
+$admin_ui_enabled = (bool)$admin_ui_enabled;
+$admin_user       = is_string($admin_user)      ? $admin_user      : '';
+$admin_pass_hash  = is_string($admin_pass_hash) ? $admin_pass_hash : '';
+$apikey_db_path   = is_string($apikey_db_path)  ? $apikey_db_path  : '';

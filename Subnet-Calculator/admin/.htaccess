@@ -1,0 +1,11 @@
+# Subnet Calculator admin pages
+# Apache 2.4+ and OpenLiteSpeed compatible.
+
+# Block direct access to PHP includes that may live alongside the UI.
+<FilesMatch "^(\..*|.*\.(md|sql|sqlite|sqlite-journal|sqlite-shm|sqlite-wal))$">
+    Require all denied
+</FilesMatch>
+
+# Default doc index — keeps directory listing off and routes / to index.php.
+DirectoryIndex index.php
+Options -Indexes

@@ -81,8 +81,9 @@ $api_rate_limit_tokens = [];
 
 // Endpoint allowlist (v2.2.0).
 // Empty array = all endpoints available (default). Non-empty = allowlist.
-// Valid endpoint names: ipv4, ipv6, vlsm, overlap, split/ipv4, split/ipv6,
-//   supernet, ula, rdns, bulk, sessions.
+// Valid endpoint names: ipv4, ipv6, vlsm, vlsm6, overlap, split/ipv4,
+//   split/ipv6, supernet, ula, rdns, bulk, sessions, range/ipv4, tree,
+//   wildcard, lookup, diff, changelog, schemas, admin.
 // The meta endpoint (GET /) is always available regardless of this setting.
 // Example: ['ipv4', 'ipv6'] — expose only the core calculation endpoints.
 $api_allowed_endpoints = [];
@@ -101,3 +102,22 @@ $session_db_path = '';
 
 // Number of days before a saved session expires and is purged.
 $session_ttl_days = 30;
+
+// ── Admin UI / API key management (v2.12.0) ──────────────────────────────
+// Master switch for the /admin/ web UI and /api/v1/admin/* JSON endpoints.
+// When false (default), all admin routes return 404 regardless of credentials.
+$admin_ui_enabled = false;
+
+// Admin username for the HTTP Basic Auth challenge on /admin/ pages.
+$admin_user = '';
+
+// Bcrypt hash of the admin password. Generate with:
+//   php -r "echo password_hash('YOUR_PASSWORD_HERE', PASSWORD_BCRYPT) . PHP_EOL;"
+// and paste the resulting $2y$10$... string here. Never commit this file.
+// Operators are responsible for fronting /admin/ with TLS.
+$admin_pass_hash = '';
+
+// Optional: explicit path to the SQLite DB used for api_keys.
+// When empty, the api_keys table is created in $session_db_path (when set)
+// otherwise <docroot>/../data/sessions.sqlite, alongside the rate_limit table.
+$apikey_db_path = '';

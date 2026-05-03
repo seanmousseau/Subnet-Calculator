@@ -79,6 +79,11 @@ tags:
     description: API changelog
   - name: Schemas
     description: Published JSON-Schema documents for persisted payload formats
+  - name: Admin
+    description: |
+      Self-hoster admin endpoints for API key management. Gated by
+      `$admin_ui_enabled = true` and HTTP Basic Auth (admin user/password).
+      Available only on the same origin as the web admin UI at `/admin/`.
 
 components:
   securitySchemes:
@@ -1567,3 +1572,120 @@ paths:
             X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
             Retry-After:           { $ref: "#/components/headers/RetryAfter" }
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+
+  /admin/keys:
+    get:
+      operationId: listAdminKeys
+      tags: [Admin]
+      summary: List API keys (self-hoster admin)
+      description: |
+        Lists all API keys with their public prefix, status, and timestamps.
+        Token hashes are never returned.
+
+        Authentication: HTTP Basic Auth using `$admin_user` / `$admin_pass_hash`.
+        Available only when `$admin_ui_enabled = true`. Self-hosters should
+        front this endpoint with TLS termination at the reverse proxy.
+      responses:
+        "200":
+          description: API key list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [keys]
+                        properties:
+                          keys:
+                            type: array
+                            items:
+                              type: object
+                              required: [id, name, prefix, created_at]
+                              properties:
+                                id:           { type: integer }
+                                name:         { type: string }
+                                prefix:       { type: string, description: "First 8 hex chars of the token (non-secret)." }
+                                created_at:   { type: integer, description: "UNIX epoch seconds." }
+                                last_used_at: { type: [integer, "null"] }
+                                revoked_at:   { type: [integer, "null"] }
+        "401": { description: Missing or invalid admin credentials, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Admin UI is disabled on this server, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "503": { description: Admin enabled but credentials not configured, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+    post:
+      operationId: createAdminKey
+      tags: [Admin]
+      summary: Mint a new API key
+      description: |
+        Creates a new API key. The plaintext token is returned in the
+        response exactly once — it is bcrypt-hashed in storage and cannot
+        be retrieved again. Authentication: HTTP Basic Auth.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  example: "production"
+      responses:
+        "201":
+          description: Key created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [id, token, prefix, name, created_at]
+                        properties:
+                          id:         { type: integer, example: 1 }
+                          token:      { type: string,  example: "sk_live_a1b2c3d4e5f6...", description: "Returned exactly once — store securely." }
+                          prefix:     { type: string,  example: "a1b2c3d4" }
+                          name:       { type: string,  example: "production" }
+                          created_at: { type: integer, example: 1714742400 }
+        "400": { description: Missing or oversized name, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { description: Missing or invalid admin credentials, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Admin UI is disabled on this server }
+
+  /admin/keys/{id}:
+    delete:
+      operationId: revokeAdminKey
+      tags: [Admin]
+      summary: Revoke an API key
+      description: |
+        Marks the named key as revoked. Revocation is permanent — issue a
+        new key to replace it. Authentication: HTTP Basic Auth.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Key revoked
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [id, revoked]
+                        properties:
+                          id:      { type: integer }
+                          revoked: { type: boolean, enum: [true] }
+        "401": { description: Missing or invalid admin credentials, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Key not found or already revoked, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }

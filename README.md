@@ -147,6 +147,10 @@ All tuneable values with their defaults:
 | `$session_enabled` | `false` | Enable SQLite-backed VLSM session save/restore. Requires `php-sqlite3`. |
 | `$session_db_path` | `''` | Absolute path to the SQLite database file. Leave empty to auto-place at `<docroot>/../data/sessions.sqlite`. |
 | `$session_ttl_days` | `30` | Days before a saved session expires and is purged. |
+| `$admin_ui_enabled` | `false` | Enable the `/admin/` web UI and `/api/v1/admin/*` JSON endpoints for API key management (v2.12.0). |
+| `$admin_user` | `''` | Admin username for HTTP Basic Auth on `/admin/`. |
+| `$admin_pass_hash` | `''` | Bcrypt hash of the admin password. Generate with `php -r "echo password_hash('pwd', PASSWORD_BCRYPT);"`. |
+| `$apikey_db_path` | `''` | Optional SQLite path for the `api_keys` table; defaults to the sessions DB. |
 
 ## REST API
 
@@ -204,6 +208,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File | Description |
 | --- | --- | --- |
+| 2.12.0 | [subnet-calculator-2.12.0.tar.gz](releases/subnet-calculator-2.12.0.tar.gz) | API admin UI for self-hosters (`/admin/keys.php`, `/api/v1/admin/keys`) — bcrypt-hashed SQLite-backed API keys; `X-RateLimit-*` response headers exposed in HTTP and OpenAPI; published JSON-Schema for VLSM session payloads (`GET /api/v1/schemas/vlsm-session`) |
 | 2.11.0 | [subnet-calculator-2.11.0.tar.gz](releases/subnet-calculator-2.11.0.tar.gz) | IPv6 VLSM planner (UI + `POST /api/v1/vlsm6`); inverse subnet lookup (`POST /api/v1/lookup`); subnet aggregation diff (`POST /api/v1/diff`); copy-as-Markdown and copy-as-Cisco exports |
 | 2.10.0 | [subnet-calculator-2.10.0.tar.gz](releases/subnet-calculator-2.10.0.tar.gz) | Wildcard ↔ CIDR converter; sitemap.xml; PHP 8.2–8.4 CI matrix; dark-mode print stylesheet; docs URL → docs.subnetcalculator.app |
 | 2.9.2 | [subnet-calculator-2.9.2.tar.gz](releases/subnet-calculator-2.9.2.tar.gz) | Light + dark logo variants; adaptive favicon (prefers-color-scheme); apple-touch-icon WebP fix; refreshed README header |
@@ -356,6 +361,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 | Version | Notes |
 |---------|-------|
+| 2.12.0 | API admin UI + JSON CRUD for self-hosters (`/admin/keys.php` + `/api/v1/admin/keys`) backed by a bcrypt-hashed SQLite `api_keys` table; rate-limit response headers (`X-RateLimit-Limit`, `-Remaining`, `-Reset`) emitted on every response when rate limiting is active and documented in OpenAPI; published `GET /api/v1/schemas/vlsm-session` JSON-Schema export (Draft 2020-12); 245 PHPUnit tests (was 226) |
 | 2.11.0 | IPv6 VLSM planner (UI + `POST /api/v1/vlsm6`, GMP-backed, supports `2^N` host counts); inverse subnet lookup (`POST /api/v1/lookup`) with shareable URLs; subnet aggregation diff (`POST /api/v1/diff`) with canonical-form normalisation; copy-as-Markdown and copy-as-Cisco exports across IPv4/IPv6/VLSM/splitter result panels; footer GitHub link trimmed to "GitHub" |
 | 2.10.0 | Wildcard ↔ CIDR converter (`POST /api/v1/wildcard`); sitemap.xml; PHP 8.2–8.4 CI matrix; dark-mode print stylesheet; docs URL → docs.subnetcalculator.app |
 | 2.5.0 | Accessibility & UX hardening: skip link, `<main>` landmark, input focus rings, button focus-visible, light mode color contrast, prefers-reduced-motion, help bubble touch target + keyboard access, VLSM keyboard Delete; 6 new a11y test groups (529 assertions) |
