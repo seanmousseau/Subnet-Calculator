@@ -19,9 +19,6 @@ admin_authenticate(static function (string $reason, int $status): void {
     json_err('Admin: ' . $reason, $status);
 });
 
-$db_path = admin_apikey_db_path();
-$db      = apikey_db_open($db_path);
-
 // Route parsing happens against $uri, which the router already normalised.
 // Trailing /{id} extraction:
 $id = null;
@@ -29,35 +26,43 @@ if (preg_match('#^/admin/keys/(\d+)$#', $uri, $m)) {
     $id = (int)$m[1];
 }
 
-if ($id === null && $uri === '/admin/keys' && $method === 'GET') {
-    json_ok(['keys' => apikey_list($db)]);
-}
+// Open the SQLite-backed key store. Any DB failure here (or in the per-
+// branch helpers below) escapes through the broader try/catch as a clean
+// JSON 500 envelope rather than a raw PHP fatal.
+try {
+    $db_path = admin_apikey_db_path();
+    $db      = apikey_db_open($db_path);
 
-if ($id === null && $uri === '/admin/keys' && $method === 'POST') {
-    $body = api_body();
-    $name = (string)($body['name'] ?? '');
-    try {
-        $created = apikey_create($db, $name);
-    } catch (\InvalidArgumentException $e) {
-        json_err($e->getMessage(), 400);
-    } catch (\Throwable $e) {
-        error_log('sc admin keys create: ' . $e->getMessage());
-        json_err('Failed to create key.', 500);
+    if ($id === null && $uri === '/admin/keys' && $method === 'GET') {
+        json_ok(['keys' => apikey_list($db)]);
     }
-    http_response_code(201);
-    echo json_encode(
-        ['ok' => true, 'data' => $created],
-        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-    );
-    exit;
-}
 
-if ($id !== null && $method === 'DELETE') {
-    $ok = apikey_revoke($db, $id);
-    if (!$ok) {
-        json_err('Key not found or already revoked.', 404);
+    if ($id === null && $uri === '/admin/keys' && $method === 'POST') {
+        $body = api_body();
+        $name = (string)($body['name'] ?? '');
+        try {
+            $created = apikey_create($db, $name);
+        } catch (\InvalidArgumentException $e) {
+            json_err($e->getMessage(), 400);
+        }
+        http_response_code(201);
+        echo json_encode(
+            ['ok' => true, 'data' => $created],
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        );
+        exit;
     }
-    json_ok(['id' => $id, 'revoked' => true]);
+
+    if ($id !== null && $method === 'DELETE') {
+        $ok = apikey_revoke($db, $id);
+        if (!$ok) {
+            json_err('Key not found or already revoked.', 404);
+        }
+        json_ok(['id' => $id, 'revoked' => true]);
+    }
+} catch (\Throwable $e) {
+    error_log('sc admin keys handler error: ' . $e->getMessage());
+    json_err('Internal error processing the request.', 500);
 }
 
 json_err('Method not allowed.', 405);

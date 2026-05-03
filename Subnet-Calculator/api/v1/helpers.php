@@ -62,8 +62,17 @@ function api_apikey_db_path(): string
 
 /**
  * Cheap one-shot probe: does the api_keys table contain any active rows?
- * Returns false on any error (table missing, file missing) — the caller
- * treats that as "no SQLite keys configured."
+ *
+ * Three outcomes:
+ *   - File does not exist (no keys ever minted)        → false (open API).
+ *   - File exists, table exists, ≥1 active row         → true (require auth).
+ *   - File exists, table exists, 0 active rows         → false.
+ *   - File exists but unreadable / corrupt / table     → fail closed:
+ *     missing despite the file being there            json_err 503.
+ *
+ * Failing closed on a real DB error is critical: a perms regression or
+ * disk corruption must NOT silently re-open the API to anonymous callers
+ * just because the probe could not read the table.
  */
 function api_sqlite_keys_present(): bool
 {
@@ -71,9 +80,9 @@ function api_sqlite_keys_present(): bool
     if ($cached !== null) {
         return $cached;
     }
-    $cached = false;
     $path = api_apikey_db_path();
     if (!is_file($path)) {
+        $cached = false;
         return false;
     }
     try {
@@ -81,14 +90,29 @@ function api_sqlite_keys_present(): bool
         $db->enableExceptions(true);
         $db->busyTimeout(1000);
         $res = $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='api_keys'");
-        $has_table = $res !== false && $res->fetchArray(SQLITE3_ASSOC) !== false;
-        if ($has_table) {
-            $res = $db->query('SELECT 1 FROM api_keys WHERE revoked_at IS NULL LIMIT 1');
-            $cached = $res !== false && $res->fetchArray(SQLITE3_NUM) !== false;
+        if ($res === false) {
+            throw new \RuntimeException('Failed to query sqlite_master.');
         }
+        $has_table = $res->fetchArray(SQLITE3_ASSOC) !== false;
+        if (!$has_table) {
+            // File exists but no api_keys table — treat as no keys.
+            // (e.g. only the rate_limit table is present in sessions.sqlite.)
+            $db->close();
+            $cached = false;
+            return false;
+        }
+        $res = $db->query('SELECT 1 FROM api_keys WHERE revoked_at IS NULL LIMIT 1');
+        if ($res === false) {
+            throw new \RuntimeException('Failed to query api_keys.');
+        }
+        $cached = $res->fetchArray(SQLITE3_NUM) !== false;
         $db->close();
     } catch (\Throwable $e) {
-        $cached = false;
+        // Fail closed — log and reject the request rather than silently
+        // re-opening the API. The DB file exists but we couldn't read it,
+        // which is a real operator problem that needs surfacing.
+        error_log('sc apikey probe error: ' . $e->getMessage());
+        json_err('API key store unavailable.', 503);
     }
     return $cached;
 }

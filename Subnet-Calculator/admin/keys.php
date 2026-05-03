@@ -38,8 +38,17 @@ session_set_cookie_params([
 session_name('sc_admin');
 session_start();
 
-$db_path = admin_apikey_db_path();
-$db      = apikey_db_open($db_path);
+try {
+    $db_path = admin_apikey_db_path();
+    $db      = apikey_db_open($db_path);
+} catch (\Throwable $e) {
+    error_log('sc admin keys db_open error: ' . $e->getMessage());
+    http_response_code(503);
+    echo '<!doctype html><meta charset="utf-8"><title>API key store unavailable</title>'
+       . '<p>The API key store could not be opened. Check filesystem permissions on the '
+       . 'configured <code>$apikey_db_path</code> / sessions DB. The server log has details.</p>';
+    exit;
+}
 
 // CSRF token: hashed admin password + IP. Stable for the auth context, not
 // guessable without the admin credentials.
@@ -106,7 +115,17 @@ $error         = is_array($flash) && isset($flash['error']) && is_string($flash[
     ? $flash['error'] : null;
 unset($_SESSION['flash']);
 
-$keys = apikey_list($db);
+// Distinguish a true empty state ([]) from a DB read failure (exception):
+// apikey_list() throws on prepare/execute failure so the operator sees a
+// loud error banner instead of "No keys yet" hiding a real DB problem.
+try {
+    $keys = apikey_list($db);
+} catch (\Throwable $e) {
+    error_log('sc admin keys list error: ' . $e->getMessage());
+    $keys  = [];
+    $error = $error
+        ?? 'Failed to read the API key store. Operator should check the server log.';
+}
 $db->close();
 
 /** Format a unix timestamp or render an em-dash. */

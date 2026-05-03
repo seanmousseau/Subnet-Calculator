@@ -148,13 +148,16 @@ function apikey_verify(\SQLite3 $db, string $token): ?array
  */
 function apikey_list(\SQLite3 $db): array
 {
+    // Throws \SQLite3Exception on prepare/execute failure (db has
+    // enableExceptions(true) set in apikey_db_open). Callers must
+    // surface errors — silently returning [] would mask DB failures.
     $res = $db->query(
         'SELECT id, name, prefix, created_at, last_used_at, revoked_at
          FROM api_keys
          ORDER BY id DESC'
     );
     if ($res === false) {
-        return [];
+        throw new \RuntimeException('Failed to list API keys.');
     }
     $rows = [];
     while (($r = $res->fetchArray(SQLITE3_ASSOC)) !== false) {
@@ -171,7 +174,10 @@ function apikey_list(\SQLite3 $db): array
 }
 
 /**
- * Mark an API key as revoked. Returns true if the row existed and was active.
+ * Mark an API key as revoked. Returns true if the row existed and was active,
+ * false if it did not exist or was already revoked. Throws \RuntimeException
+ * on DB error so callers can distinguish "no such key" (false) from
+ * "DB failure" (exception) — important on a security-sensitive admin screen.
  */
 function apikey_revoke(\SQLite3 $db, int $id): bool
 {
@@ -181,7 +187,7 @@ function apikey_revoke(\SQLite3 $db, int $id): bool
          WHERE id = :id AND revoked_at IS NULL'
     );
     if ($stmt === false) {
-        return false;
+        throw new \RuntimeException('Failed to prepare revoke statement.');
     }
     $stmt->bindValue(':ts', time(), SQLITE3_INTEGER);
     $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
