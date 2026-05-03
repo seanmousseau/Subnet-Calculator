@@ -1,11 +1,25 @@
 openapi: 3.1.0
 info:
   title: Subnet Calculator API
-  version: "2.11.0"
+  version: "2.12.0"
   description: |
     JSON REST API for IPv4/IPv6 subnet calculation, VLSM allocation,
     overlap detection, subnet splitting, route summarisation, ULA prefix
     generation, and VLSM session persistence.
+
+    ## Rate-limit response headers
+
+    When `$api_rate_limit_rpm` is greater than zero on the server, every
+    response (including 4xx errors) carries the following headers so that
+    generated clients can surface remaining quota:
+
+    - `X-RateLimit-Limit:` requests-per-minute ceiling for this client.
+    - `X-RateLimit-Remaining:` requests left in the current 60-second window.
+    - `X-RateLimit-Reset:` UNIX epoch seconds when the window rolls over.
+    - `Retry-After:` seconds until the window resets — only on `429` responses.
+
+    Header definitions live under `components.headers` and are referenced
+    explicitly on every documented response.
   license:
     name: AGPL-3.0
     identifier: AGPL-3.0-only
@@ -69,6 +83,28 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
+
+  headers:
+    XRateLimitLimit:
+      description: Requests-per-minute ceiling for this client. Present whenever rate limiting is active.
+      schema:
+        type: integer
+        example: 60
+    XRateLimitRemaining:
+      description: Requests left in the current 60-second window. Present whenever rate limiting is active.
+      schema:
+        type: integer
+        example: 59
+    XRateLimitReset:
+      description: UNIX epoch seconds when the rate-limit window rolls over. Present whenever rate limiting is active.
+      schema:
+        type: integer
+        example: 1714742460
+    RetryAfter:
+      description: Seconds until the rate-limit window resets. Only sent on `429` responses.
+      schema:
+        type: integer
+        example: 60
 
   schemas:
     OkEnvelope:
@@ -200,6 +236,10 @@ paths:
       responses:
         "200":
           description: Metadata
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
           content:
             application/json:
               schema:
@@ -281,8 +321,14 @@ paths:
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /ipv6:
     post:
       operationId: calcIpv6
@@ -326,8 +372,14 @@ paths:
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /vlsm:
     post:
       operationId: calcVlsm
@@ -398,8 +450,14 @@ paths:
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /vlsm6:
     post:
       operationId: calcVlsm6
@@ -474,8 +532,14 @@ paths:
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /overlap:
     post:
       operationId: checkOverlap
@@ -523,8 +587,14 @@ paths:
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /split/ipv4:
     post:
       operationId: splitIpv4
@@ -572,8 +642,14 @@ paths:
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /split/ipv6:
     post:
       operationId: splitIpv6
@@ -622,8 +698,14 @@ paths:
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /supernet:
     post:
       operationId: supernet
@@ -681,8 +763,14 @@ paths:
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /ula:
     post:
       operationId: generateUla
@@ -727,8 +815,14 @@ paths:
         "400": { description: Invalid global_id, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /sessions:
     post:
       operationId: createSession
@@ -768,7 +862,14 @@ paths:
         "400": { description: Invalid payload }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "501": { description: Session persistence not enabled on this server }
 
   /sessions/{id}:
@@ -817,7 +918,14 @@ paths:
         "400": { description: Invalid session ID format }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Session not found or expired }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "501": { description: Session persistence not enabled on this server }
 
   /rdns:
@@ -903,7 +1011,14 @@ paths:
         "400": { description: Invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "500": { description: GMP extension missing (IPv6 only) }
 
   /bulk:
@@ -986,8 +1101,14 @@ paths:
         "400": { description: Invalid request, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /range/ipv4:
     post:
       operationId: rangeToIPv4CIDRs
@@ -1038,8 +1159,14 @@ paths:
         "400": { description: Invalid IPs or end < start, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /tree:
     post:
       operationId: buildSubnetTree
@@ -1117,8 +1244,14 @@ paths:
         "400": { description: Invalid CIDRs or children outside parent, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /wildcard:
     post:
       operationId: convertWildcard
@@ -1168,8 +1301,14 @@ paths:
         "400": { description: "Missing value, malformed input, or non-contiguous wildcard", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /lookup:
     post:
       operationId: lookupIps
@@ -1251,8 +1390,14 @@ paths:
         "400": { description: "Missing/invalid input or out-of-range cap", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /diff:
     post:
       operationId: subnetDiff
@@ -1336,8 +1481,14 @@ paths:
         "400": { description: "Missing field, invalid CIDR, or list too large", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint disabled by $api_allowed_endpoints configuration, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /changelog:
     get:
       operationId: getChangelog
@@ -1364,5 +1515,12 @@ paths:
                   changelog: "## [2.6.0] - 2026-04-21\n### Added\n- ..."
         "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: Endpoint not in allowlist, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
-        "429": { description: Rate limit exceeded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "503": { description: Changelog file not available on this server, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }

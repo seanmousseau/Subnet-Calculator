@@ -114,6 +114,7 @@ function api_rate_limit(string $key): void
         $db->exec('CREATE INDEX IF NOT EXISTS idx_rl_key ON rate_limit (key, hit_at)');
         $now    = time();
         $window = $now - 60;
+        $reset  = $now + 60;
         $del = $db->prepare('DELETE FROM rate_limit WHERE hit_at < :w');
         if ($del === false) {
             throw new \RuntimeException('Failed to prepare rate_limit delete.');
@@ -129,8 +130,16 @@ function api_rate_limit(string $key): void
         $res   = $cnt->execute();
         $row   = ($res !== false) ? $res->fetchArray(SQLITE3_NUM) : false;
         $count = is_array($row) ? (int)$row[0] : 0;
+        // Per RFC draft-ietf-httpapi-ratelimit-headers; remaining is computed
+        // before the request is recorded (so the count includes the previous
+        // requests but not this one yet — match standard semantics).
+        $remaining = max(0, $rpm - $count - 1);
+        header('X-RateLimit-Limit: ' . $rpm);
+        header('X-RateLimit-Remaining: ' . $remaining);
+        header('X-RateLimit-Reset: ' . $reset);
         if ($count >= $rpm) {
             $db->close();
+            header('X-RateLimit-Remaining: 0');
             header('Retry-After: 60');
             json_err('Rate limit exceeded — ' . $rpm . ' requests/minute.', 429);
         }
