@@ -151,7 +151,14 @@ function api_authenticate(): void
             $db = apikey_db_open($db_path);
             $row = apikey_verify($db, $token);
             if ($row !== null) {
-                apikey_record_use($db, (int)$row['id']);
+                // Stat update is best-effort: a transient lock or perms blip
+                // here must NOT reject a token that just verified. Log and
+                // proceed so the caller sees a 200 with a stale last_used_at.
+                try {
+                    apikey_record_use($db, (int)$row['id']);
+                } catch (\Throwable $e) {
+                    error_log('sc apikey_record_use error: ' . $e->getMessage());
+                }
                 $db->close();
                 return;
             }
