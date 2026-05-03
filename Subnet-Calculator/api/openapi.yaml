@@ -77,6 +77,8 @@ tags:
     description: Subnet aggregation diff (compare two CIDR lists)
   - name: Changelog
     description: API changelog
+  - name: Schemas
+    description: Published JSON-Schema documents for persisted payload formats
 
 components:
   securitySchemes:
@@ -828,7 +830,10 @@ paths:
       operationId: createSession
       tags: [Sessions]
       summary: Save a VLSM session payload
-      description: Requires `$session_enabled = true` on the server.
+      description: |
+        Requires `$session_enabled = true` on the server. The `payload` object
+        is validated only structurally on save; clients should validate against
+        the published JSON-Schema (`GET /schemas/vlsm-session`) before posting.
       requestBody:
         required: true
         content:
@@ -839,7 +844,12 @@ paths:
               properties:
                 payload:
                   type: object
-                  description: Arbitrary JSON object to persist (e.g. VLSM state).
+                  description: |
+                    VLSM session state. Conforms to the
+                    [vlsm-session JSON-Schema](/api/v1/schemas/vlsm-session).
+                  externalDocs:
+                    description: VLSM session JSON-Schema
+                    url: /api/v1/schemas/vlsm-session
       responses:
         "201":
           description: Session created
@@ -1524,3 +1534,36 @@ paths:
             Retry-After:           { $ref: "#/components/headers/RetryAfter" }
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "503": { description: Changelog file not available on this server, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+
+  /schemas/vlsm-session:
+    get:
+      operationId: getVlsmSessionSchema
+      tags: [Schemas]
+      summary: Fetch the VLSM session payload JSON-Schema
+      description: |
+        Returns the canonical Draft 2020-12 JSON-Schema describing the payload
+        format for `POST /sessions`. Served with `Content-Type:
+        application/schema+json`. Use this for client-side validation before
+        attempting to persist a session.
+      responses:
+        "200":
+          description: VLSM session JSON-Schema
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content:
+            application/schema+json:
+              schema:
+                type: object
+                description: JSON-Schema document (Draft 2020-12).
+        "401": { description: Missing or invalid Bearer token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: Schema not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }

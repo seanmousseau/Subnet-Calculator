@@ -78,6 +78,7 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/lookup',
             'POST /api/v1/diff',
             'GET  /api/v1/changelog',
+            'GET  /api/v1/schemas/vlsm-session',
         ],
     ]);
 }
@@ -90,6 +91,8 @@ if (!empty($api_allowed_endpoints) && $uri !== '/') {
     $ep = ltrim($uri, '/');
     if (str_starts_with($ep, 'sessions/')) {
         $ep = 'sessions';
+    } elseif (str_starts_with($ep, 'schemas/')) {
+        $ep = 'schemas';
     }
     if (!in_array($ep, $api_allowed_endpoints, true)) {
         json_err('Not found.', 404);
@@ -102,6 +105,11 @@ $route_key = $method . ' ' . $uri;
 if ($method === 'GET' && preg_match('#^/sessions/([0-9a-f]{8})$#', $uri, $m)) {
     $_GET['session_id'] = $m[1];
     require __DIR__ . '/handlers/sessions.php';
+}
+
+// Schema export: /schemas/{name}
+if ($method === 'GET' && preg_match('#^/schemas/[a-z0-9\-]+$#', $uri)) {
+    require __DIR__ . '/handlers/schemas.php';
 }
 
 // ── Dispatch ─────────────────────────────────────────────────────────────────

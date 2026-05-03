@@ -64,6 +64,7 @@ nav:
   - Reference:
     - REST API: api.md
     - PHP Client Library: client.md
+    - JSON-Schemas: schemas.md
     - Operator Config: config.md
 
 extra:
