@@ -79,7 +79,7 @@ auth methods coexist. Static tokens still rotate by editing `config.php`.
 
 Minted tokens look like:
 
-```
+```text
 sk_live_a1b2c3d4e5f6...   (8-char "sk_live_" prefix + 32 random hex chars)
 ```
 

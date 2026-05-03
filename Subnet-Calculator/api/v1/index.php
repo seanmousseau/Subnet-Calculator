@@ -35,8 +35,14 @@ header('Content-Type: application/json; charset=utf-8');
 
 api_cors();
 
+// Rate-limiting runs before authentication so the X-RateLimit-* headers are
+// emitted on every response, including 401s from api_authenticate(). This
+// means anonymous probes count against the per-IP RPM ceiling — desirable,
+// since unbounded 401s are themselves an abuse vector.
+api_rate_limit(api_client_key());
+
 // Admin endpoints authenticate via HTTP Basic inside their handler, so the
-// Bearer check is skipped for them. Rate limiting still applies.
+// Bearer check is skipped for them.
 $_raw_uri_check  = $_SERVER['REQUEST_URI'] ?? '/';
 $_uri_for_auth_check = is_string($_raw_uri_check)
     ? (parse_url($_raw_uri_check, PHP_URL_PATH) ?? '/')
@@ -56,8 +62,6 @@ if (!str_starts_with($_uri_for_auth_check, '/admin/')) {
     api_authenticate();
 }
 unset($_uri_for_auth_check, $_script_dir_check, $_raw_uri_check, $_raw_script_check);
-
-api_rate_limit(api_client_key());
 
 $raw_method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $method     = is_string($raw_method) ? $raw_method : 'GET';

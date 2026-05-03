@@ -7,6 +7,11 @@ declare(strict_types=1);
 // POST actions are CSRF-protected by a per-request token derived from the
 // admin password hash + client IP; since admin auth re-prompts every
 // request, a bare GET cannot mint a usable token.
+//
+// Mutating actions follow the POST-Redirect-GET pattern so a browser
+// refresh / back-forward cache cannot replay a create or revoke. The
+// freshly-minted token (shown once) survives the redirect via a one-shot
+// PHP session flash and is wiped on read.
 
 require __DIR__ . '/../includes/config.php';
 require __DIR__ . '/../includes/functions-admin-auth.php';
@@ -14,12 +19,27 @@ require __DIR__ . '/../includes/functions-apikeys.php';
 
 admin_authenticate();
 
+// Never cache admin output — the one-time minted token must not survive
+// in browser/disk/back-forward caches.
+header('Cache-Control: no-store, no-cache, must-revalidate, private, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
+// PRG flash carrier — short-lived session, secure cookie attributes.
+$is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path'     => '/',
+    'secure'   => $is_https,
+    'httponly' => true,
+    'samesite' => 'Strict',
+]);
+session_name('sc_admin');
+session_start();
+
 $db_path = admin_apikey_db_path();
 $db      = apikey_db_open($db_path);
-
-$created_token = null;
-$error         = null;
-$success       = null;
 
 // CSRF token: hashed admin password + IP. Stable for the auth context, not
 // guessable without the admin credentials.
@@ -27,35 +47,64 @@ $csrf_seed   = ($admin_pass_hash ?? '') . '|' . ($_SERVER['REMOTE_ADDR'] ?? '');
 $csrf_expect = hash('sha256', $csrf_seed);
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    $flash_token = null;
+    $flash_error = null;
+    $flash_msg   = null;
+
     $csrf = (string)($_POST['_csrf'] ?? '');
     if (!hash_equals($csrf_expect, $csrf)) {
-        $error = 'Invalid CSRF token. Reload the page and retry.';
+        $flash_error = 'Invalid CSRF token. Reload the page and retry.';
     } else {
         $action = (string)($_POST['action'] ?? '');
         try {
             if ($action === 'create') {
-                $name = (string)($_POST['name'] ?? '');
+                $name    = (string)($_POST['name'] ?? '');
                 $created = apikey_create($db, $name);
-                $created_token = $created['token'];
-                $success = 'Key "' . $created['name'] . '" created. Copy the token now — it is not shown again.';
+                $flash_token = $created['token'];
+                $flash_msg   = 'Key "' . $created['name']
+                             . '" created. Copy the token now — it is not shown again.';
             } elseif ($action === 'revoke') {
                 $id = (int)($_POST['id'] ?? 0);
                 if ($id > 0 && apikey_revoke($db, $id)) {
-                    $success = 'Key revoked.';
+                    $flash_msg = 'Key revoked.';
                 } else {
-                    $error = 'Key not found or already revoked.';
+                    $flash_error = 'Key not found or already revoked.';
                 }
             } else {
-                $error = 'Unknown action.';
+                $flash_error = 'Unknown action.';
             }
         } catch (\InvalidArgumentException $e) {
-            $error = $e->getMessage();
+            $flash_error = $e->getMessage();
         } catch (\Throwable $e) {
             error_log('sc admin keys error: ' . $e->getMessage());
-            $error = 'Internal error processing the request.';
+            $flash_error = 'Internal error processing the request.';
         }
     }
+
+    $db->close();
+
+    $_SESSION['flash'] = [
+        'token'   => $flash_token,
+        'success' => $flash_msg,
+        'error'   => $flash_error,
+    ];
+
+    // 303 See Other forces the browser to use GET on follow.
+    $self = (string)($_SERVER['REQUEST_URI'] ?? '/admin/keys.php');
+    $self = strtok($self, '?'); // strip any query string
+    header('Location: ' . $self, true, 303);
+    exit;
 }
+
+// GET: read and clear flash data populated by the previous POST.
+$flash         = $_SESSION['flash'] ?? null;
+$created_token = is_array($flash) && isset($flash['token']) && is_string($flash['token'])
+    ? $flash['token'] : null;
+$success       = is_array($flash) && isset($flash['success']) && is_string($flash['success'])
+    ? $flash['success'] : null;
+$error         = is_array($flash) && isset($flash['error']) && is_string($flash['error'])
+    ? $flash['error'] : null;
+unset($_SESSION['flash']);
 
 $keys = apikey_list($db);
 $db->close();

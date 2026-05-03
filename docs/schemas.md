@@ -75,6 +75,14 @@ Draft202012Validator(schema).validate(payload)
 
 ## Stability and versioning
 
-The `$id` URL is stable per major API version (`v1`). Field additions are
-non-breaking — existing clients keep validating as long as they do not enable
-strict modes. Field removals or type changes will only ship under `/api/v2/`.
+The `$id` URL is stable per major API version (`v1`). New optional fields are
+non-breaking for clients validating against the **current live** `v1` schema.
+Clients that pin a specific snapshot of a schema document may need to refresh
+it when fields are added: the published schemas set
+`additionalProperties: false`, so a pinned older copy will reject any new
+field as invalid. Always re-fetch the schema from
+`GET /api/v1/schemas/{name}` rather than embedding it in your build, or accept
+that your CI will fail-closed when the server adds a field.
+
+Field removals or type changes are breaking; they will only ship under
+`/api/v2/` with a new `$id`.
