@@ -2,15 +2,13 @@
 
 declare(strict_types=1);
 
-/**
- * GET /api/v1/schemas/{name} — serve a published JSON-Schema document.
- *
- * Currently:
- *   /api/v1/schemas/vlsm-session  →  api/schemas/vlsm-session.schema.json
- *
- * The route name is allowlisted (not user-controlled in any path concat),
- * so a malformed name returns 404 without ever touching the filesystem.
- */
+// GET /api/v1/schemas/{name} — serve a published JSON-Schema document.
+//
+// Currently:
+//   /api/v1/schemas/vlsm-session  →  api/schemas/vlsm-session.schema.json
+//
+// The route name is allowlisted (not user-controlled in any path concat),
+// so a malformed name returns 404 without ever touching the filesystem.
 
 $schema_name = '';
 if (preg_match('#^/schemas/([a-z0-9\-]+)$#', $uri, $sm)) {
