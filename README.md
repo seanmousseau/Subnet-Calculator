@@ -208,6 +208,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File | Description |
 | --- | --- | --- |
+| 2.12.1 | [subnet-calculator-2.12.1.tar.gz](releases/subnet-calculator-2.12.1.tar.gz) | Hotfix: meta endpoint null-coalesce on `$admin_ui_enabled` to survive opcache-stale window after a v2.12.0 deploy |
 | 2.12.0 | [subnet-calculator-2.12.0.tar.gz](releases/subnet-calculator-2.12.0.tar.gz) | API admin UI for self-hosters (`/admin/keys.php`, `/api/v1/admin/keys`) — bcrypt-hashed SQLite-backed API keys; `X-RateLimit-*` response headers exposed in HTTP and OpenAPI; published JSON-Schema for VLSM session payloads (`GET /api/v1/schemas/vlsm-session`) |
 | 2.11.0 | [subnet-calculator-2.11.0.tar.gz](releases/subnet-calculator-2.11.0.tar.gz) | IPv6 VLSM planner (UI + `POST /api/v1/vlsm6`); inverse subnet lookup (`POST /api/v1/lookup`); subnet aggregation diff (`POST /api/v1/diff`); copy-as-Markdown and copy-as-Cisco exports |
 | 2.10.0 | [subnet-calculator-2.10.0.tar.gz](releases/subnet-calculator-2.10.0.tar.gz) | Wildcard ↔ CIDR converter; sitemap.xml; PHP 8.2–8.4 CI matrix; dark-mode print stylesheet; docs URL → docs.subnetcalculator.app |
@@ -241,7 +242,7 @@ Pre-built release archives are available in `releases/`:
 Each archive contains the app files at the root level. Extract directly into your webroot to install or upgrade in place:
 
 ```bash
-tar -xzf subnet-calculator-2.12.0.tar.gz -C /var/www/html/subnet-calculator/
+tar -xzf subnet-calculator-2.12.1.tar.gz -C /var/www/html/subnet-calculator/
 ```
 
 ## Embedding

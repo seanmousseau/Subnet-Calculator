@@ -108,7 +108,11 @@ if ($uri === '/' && $method === 'GET') {
             'GET  /api/v1/changelog',
             'GET  /api/v1/schemas/vlsm-session',
         ],
-        'admin' => $admin_ui_enabled ? [
+        // Null-coalesce guards against opcache staleness mid-deploy: if a
+        // worker still has the pre-v2.12.0 bytecode for includes/config.php,
+        // $admin_ui_enabled won't have been set on this request and we'd emit
+        // a PHP warning before the JSON. Treat any unset value as disabled.
+        'admin' => ($admin_ui_enabled ?? false) ? [
             'GET    /api/v1/admin/keys',
             'POST   /api/v1/admin/keys',
             'DELETE /api/v1/admin/keys/{id}',

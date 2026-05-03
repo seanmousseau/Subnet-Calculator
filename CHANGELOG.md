@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.1] - 2026-05-03
+
+Hotfix for the v2.12.0 admin UI deploy.
+
+### Fixed
+
+- **Meta endpoint resilient to opcache staleness** — `api/v1/index.php` line
+  111 read `$admin_ui_enabled` directly. After a v2.11.0→v2.12.0 deploy the
+  PHP-FPM workers can hold pre-v2.12.0 bytecode for `includes/config.php`
+  during the warm-restart window, leaving the variable undefined on a few
+  early requests. PHP then emitted `Warning: Undefined variable` HTML
+  before the JSON envelope, corrupting the meta response body. Now wrapped
+  in `($admin_ui_enabled ?? false)` so the read is undefined-safe regardless
+  of opcache state. No functional change once opcache catches up.
+
 ## [2.12.0] - 2026-05-03
 
 API & integration enhancements release: rate-limit headers exposed in client-readable
