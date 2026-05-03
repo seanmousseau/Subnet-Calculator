@@ -28,12 +28,40 @@ require $base . 'functions-range.php';
 require $base . 'functions-tree.php';
 require $base . 'functions-lookup.php';
 require $base . 'functions-diff.php';
+require $base . 'functions-apikeys.php';
+require $base . 'functions-admin-auth.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
 api_cors();
-api_authenticate();
+
+// Rate-limiting runs before authentication so the X-RateLimit-* headers are
+// emitted on every response, including 401s from api_authenticate(). This
+// means anonymous probes count against the per-IP RPM ceiling — desirable,
+// since unbounded 401s are themselves an abuse vector.
 api_rate_limit(api_client_key());
+
+// Admin endpoints authenticate via HTTP Basic inside their handler, so the
+// Bearer check is skipped for them.
+$_raw_uri_check  = $_SERVER['REQUEST_URI'] ?? '/';
+$_uri_for_auth_check = is_string($_raw_uri_check)
+    ? (parse_url($_raw_uri_check, PHP_URL_PATH) ?? '/')
+    : '/';
+if (!is_string($_uri_for_auth_check)) {
+    $_uri_for_auth_check = '/';
+}
+$_raw_script_check = $_SERVER['SCRIPT_NAME'] ?? '';
+$_script_dir_check = is_string($_raw_script_check)
+    ? rtrim(dirname($_raw_script_check), '/')
+    : '';
+if ($_script_dir_check !== '' && str_starts_with($_uri_for_auth_check, $_script_dir_check)) {
+    $_uri_for_auth_check = substr($_uri_for_auth_check, strlen($_script_dir_check));
+}
+$_uri_for_auth_check = '/' . ltrim($_uri_for_auth_check, '/');
+if (!str_starts_with($_uri_for_auth_check, '/admin/')) {
+    api_authenticate();
+}
+unset($_uri_for_auth_check, $_script_dir_check, $_raw_uri_check, $_raw_script_check);
 
 $raw_method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $method     = is_string($raw_method) ? $raw_method : 'GET';
@@ -78,7 +106,13 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/lookup',
             'POST /api/v1/diff',
             'GET  /api/v1/changelog',
+            'GET  /api/v1/schemas/vlsm-session',
         ],
+        'admin' => $admin_ui_enabled ? [
+            'GET    /api/v1/admin/keys',
+            'POST   /api/v1/admin/keys',
+            'DELETE /api/v1/admin/keys/{id}',
+        ] : [],
     ]);
 }
 
@@ -90,6 +124,10 @@ if (!empty($api_allowed_endpoints) && $uri !== '/') {
     $ep = ltrim($uri, '/');
     if (str_starts_with($ep, 'sessions/')) {
         $ep = 'sessions';
+    } elseif (str_starts_with($ep, 'schemas/')) {
+        $ep = 'schemas';
+    } elseif (str_starts_with($ep, 'admin/keys')) {
+        $ep = 'admin';
     }
     if (!in_array($ep, $api_allowed_endpoints, true)) {
         json_err('Not found.', 404);
@@ -102,6 +140,21 @@ $route_key = $method . ' ' . $uri;
 if ($method === 'GET' && preg_match('#^/sessions/([0-9a-f]{8})$#', $uri, $m)) {
     $_GET['session_id'] = $m[1];
     require __DIR__ . '/handlers/sessions.php';
+}
+
+// Schema export: /schemas/{name}
+if ($method === 'GET' && preg_match('#^/schemas/[a-z0-9\-]+$#', $uri)) {
+    require __DIR__ . '/handlers/schemas.php';
+}
+
+// Admin: /admin/keys (POST, GET) and /admin/keys/{id} (DELETE).
+// Auth happens inside the handler so that every failure path emits JSON
+// with a proper WWW-Authenticate challenge on 401.
+if (
+    ($uri === '/admin/keys' && in_array($method, ['POST', 'GET'], true))
+    || (preg_match('#^/admin/keys/\d+$#', $uri) && $method === 'DELETE')
+) {
+    require __DIR__ . '/handlers/admin_keys.php';
 }
 
 // ── Dispatch ─────────────────────────────────────────────────────────────────

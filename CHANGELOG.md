@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.0] - 2026-05-03
+
+API & integration enhancements release: rate-limit headers exposed in client-readable
+HTTP response headers, JSON-Schema export for VLSM session payloads, and a new
+admin UI / JSON API for self-hosters to mint, list, and revoke API keys without
+editing `config.php`.
+
+### Added
+
+- **API rate-limit headers** (#298) — every response (including 4xx) now carries
+  `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` when
+  rate limiting is active, alongside the existing `Retry-After` on 429s.
+  Implemented in `api_rate_limit()` in `api/v1/helpers.php`. Documented under
+  `components.headers` in the OpenAPI spec and referenced explicitly on every
+  documented `429` response and on the `/` and `/schemas/vlsm-session` `200`
+  responses.
+- **VLSM session JSON-Schema** (#299) — new Draft 2020-12 schema at
+  `Subnet-Calculator/api/schemas/vlsm-session.schema.json` describing the
+  shape persisted by `POST /sessions` and returned by `GET /sessions/{id}`.
+  Served at `GET /api/v1/schemas/vlsm-session` with
+  `Content-Type: application/schema+json`. New docs page `docs/schemas.md`.
+- **API key management UI** (#297) — opt-in via `$admin_ui_enabled = true`
+  plus `$admin_user` / `$admin_pass_hash` (bcrypt) in `config.php`. Provides:
+  - Server-rendered admin web UI at `/admin/keys.php` (HTTP Basic, no JS,
+    CSRF-protected).
+  - JSON CRUD parallel at `/api/v1/admin/keys` — `GET` list, `POST` mint,
+    `DELETE /{id}` revoke.
+  - SQLite-backed `api_keys` table (token bcrypt-hashed; plaintext shown
+    once at creation).
+  - Token format `sk_live_<32 hex>`; first 8 hex chars stored as a public
+    prefix for UI identification.
+  - `api_authenticate()` extended to check SQLite keys after `$api_tokens`.
+    Both auth methods coexist; either one being non-empty triggers
+    auth-required mode.
+  - New docs page `docs/admin.md`.
+
+### Tests
+
+- PHPUnit grew from 226 tests / 379 assertions (v2.11.0) to **245 tests /
+  493 assertions** (14 still GMP-skipped):
+  - 7 new `SchemaTest.php` cases covering schema dialect, structure, regex
+    pattern, example conformance, and handler MIME advertisement.
+  - 11 new `ApiKeysTest.php` cases covering token format, bcrypt storage,
+    create/verify/list/revoke/record-use, name validation, and prefix
+    collision resolution.
+
+### Docs
+
+- `mkdocs.yml` `extra.version` bumped to 2.12.0; new nav entries for
+  `schemas.md` and `admin.md`.
+- `docs/index.md` tarball example bumped to `subnet-calculator-2.12.0.tar.gz`.
+- `Subnet-Calculator/config.php.example` extended with the new admin / API
+  key block; `$api_allowed_endpoints` allowlist comment refreshed to list
+  every endpoint name (including `schemas` and `admin`).
+
 ## [2.11.0] - 2026-04-27
 
 ### Added

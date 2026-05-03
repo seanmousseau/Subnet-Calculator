@@ -64,10 +64,12 @@ nav:
   - Reference:
     - REST API: api.md
     - PHP Client Library: client.md
+    - JSON-Schemas: schemas.md
+    - Admin UI & API Keys: admin.md
     - Operator Config: config.md
 
 extra:
-  version: "2.11.0"
+  version: "2.12.0"
 
 extra_css:
   - stylesheets/extra.css

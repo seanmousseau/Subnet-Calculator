@@ -4037,7 +4037,23 @@ async def main() -> None:
     print(f"{DIM}Target: {APP_URL}{RST}")
 
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
+        # Chromium 127+ aggressively auto-upgrades plain HTTP to HTTPS via
+        # several feature flags. The docker test harness serves the app over
+        # plain HTTP at http://webapp:8080/, so the full disable set + the
+        # docker-compose service rename to avoid ambiguity with the .app TLD
+        # are both needed to stop ERR_SSL_PROTOCOL_ERROR on page.goto().
+        browser = await pw.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-features=HttpsUpgrades,"
+                "AutoupgradeHttpsOnly,"
+                "HttpsFirstBalancedMode,"
+                "HttpsFirstModeV2,"
+                "HttpsFirstModeV2ForEngagedSites,"
+                "HttpsFirstModeIncognito",
+                "--allow-running-insecure-content",
+            ],
+        )
         ctx_kwargs: dict = {
             "ignore_https_errors": True,
             "permissions": ["clipboard-read", "clipboard-write"],

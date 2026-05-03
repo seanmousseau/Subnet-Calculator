@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://subnetcalculator.app/api/schemas/vlsm-session.schema.json",
+  "title": "VLSM Session Payload",
+  "description": "Persisted shape of a saved VLSM planner session as accepted by POST /api/v1/sessions and returned by GET /api/v1/sessions/{id}. Currently IPv4 only; IPv6 VLSM sessions are not persisted in this version.",
+  "type": "object",
+  "required": ["network", "cidr", "requirements"],
+  "additionalProperties": false,
+  "properties": {
+    "network": {
+      "type": "string",
+      "description": "Parent IPv4 network address (with or without an attached prefix).",
+      "minLength": 1,
+      "maxLength": 64,
+      "examples": ["10.0.0.0", "192.168.1.0/24"]
+    },
+    "cidr": {
+      "type": "string",
+      "description": "Parent prefix length as a bare number (no leading slash). Server-side handlers also accept this with a leading slash but it is normalised on save.",
+      "pattern": "^(3[0-2]|[12]?[0-9])$",
+      "examples": ["24", "16"]
+    },
+    "requirements": {
+      "type": "array",
+      "description": "Subnet requirements, sorted largest-first by the allocator at calculation time. Order is preserved as provided.",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "required": ["name", "hosts"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable label for the subnet.",
+            "minLength": 1,
+            "maxLength": 128,
+            "examples": ["LAN", "DMZ", "Mgmt"]
+          },
+          "hosts": {
+            "type": "integer",
+            "description": "Required number of usable host addresses.",
+            "minimum": 1,
+            "maximum": 1073741822,
+            "examples": [50, 14, 2]
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "network": "10.0.0.0",
+      "cidr": "24",
+      "requirements": [
+        {"name": "LAN", "hosts": 50},
+        {"name": "DMZ", "hosts": 14},
+        {"name": "Mgmt", "hosts": 2}
+      ]
+    }
+  ]
+}

@@ -17,6 +17,8 @@ parameters:
         - Subnet-Calculator/includes/functions-resolve.php
         - Subnet-Calculator/includes/functions-range.php
         - Subnet-Calculator/includes/functions-tree.php
+        - Subnet-Calculator/includes/functions-apikeys.php
+        - Subnet-Calculator/includes/functions-admin-auth.php
         - Subnet-Calculator/api/v1/helpers.php
         - Subnet-Calculator/api/v1/index.php
         - Subnet-Calculator/api/v1/handlers/ipv4.php
@@ -33,6 +35,8 @@ parameters:
         - Subnet-Calculator/api/v1/handlers/range.php
         - Subnet-Calculator/api/v1/handlers/tree.php
         - Subnet-Calculator/api/v1/handlers/changelog.php
+        - Subnet-Calculator/api/v1/handlers/schemas.php
+        - Subnet-Calculator/api/v1/handlers/admin_keys.php
         - Subnet-Calculator/clients/php/SubnetCalculatorClient.php
     # config.php is gitignored (user override) — skip if absent
     excludePaths:
@@ -52,9 +56,10 @@ parameters:
         - '#^Call to function in_array\(\) with arguments .+ will always evaluate to (true|false)\.$#'
         - '#^Strict comparison using === between .+ will always evaluate to (true|false)\.$#'
 
-        # api/v1/index.php uses $api_request_log from config.php (required at the
-        # top of index.php) — PHPStan cannot trace globals across require chains.
-        - message: '#Variable \$api_request_log might not be defined\.#'
+        # api/v1/index.php uses $api_request_log + $admin_ui_enabled from
+        # config.php (required at the top of index.php) — PHPStan cannot trace
+        # globals across require chains.
+        - message: '#Variable \$(api_request_log|admin_ui_enabled) might not be defined\.#'
           path: Subnet-Calculator/api/v1/index.php
 
         # API handlers are required by api/v1/index.php after helpers.php sets
@@ -81,3 +86,10 @@ parameters:
         # rdns.php: inet_pton/gethostbyaddr return string|false; validated above.
         - message: '#Parameter .+ of function (explode|str_replace) expects .+, string\|false given#'
           path: Subnet-Calculator/api/v1/handlers/rdns.php
+
+        # admin_keys.php: PHPStan infers from the inline callback (which calls
+        # json_err: never) that admin_authenticate cannot return. The success
+        # path of admin_authenticate does return — the callback is only invoked
+        # on auth failure. PHPStan's callback-effect inference is conservative.
+        - message: '#Unreachable statement - code above always terminates\.#'
+          path: Subnet-Calculator/api/v1/handlers/admin_keys.php
