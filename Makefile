@@ -7,6 +7,7 @@
 test-docker:
 	@PHPUNIT_TEST_DRAIN_TOKEN="$$(php -r 'echo bin2hex(random_bytes(16));')" ; \
 	export PHPUNIT_TEST_DRAIN_TOKEN ; \
+	docker compose build webapp playwright-tests ; \
 	docker compose run --rm \
 	    -e PHPUNIT_TEST_DRAIN_TOKEN \
 	    playwright-tests python3 testing/scripts/playwright_test.py
