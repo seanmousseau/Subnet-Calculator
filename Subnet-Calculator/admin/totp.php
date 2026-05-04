@@ -49,6 +49,17 @@ header('X-Frame-Options: DENY');
 // configured the sc_admin session; we only need to (re-)start it here in
 // case this page is hit directly without the keys.php prelude.
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    // Match the hardened sc_admin cookie params used by admin_authenticate()
+    // for the standalone-load path (e.g. opening /admin/totp.php directly).
+    $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'secure'   => $is_https,
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ]);
     session_name('sc_admin');
     session_start();
 }

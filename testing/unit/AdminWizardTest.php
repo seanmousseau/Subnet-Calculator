@@ -14,6 +14,33 @@ require_once __DIR__ . '/../../Subnet-Calculator/includes/functions-admin-wizard
  */
 class AdminWizardTest extends TestCase
 {
+    /** @var mixed */
+    private $prevAdminUiEnabled;
+    /** @var mixed */
+    private $prevAdminPassHash;
+
+    protected function setUp(): void
+    {
+        // Snapshot any pre-existing globals so each test runs in isolation
+        // and a previous test's mutation can't leak into later cases.
+        $this->prevAdminUiEnabled = $GLOBALS['admin_ui_enabled'] ?? null;
+        $this->prevAdminPassHash  = $GLOBALS['admin_pass_hash']  ?? null;
+    }
+
+    protected function tearDown(): void
+    {
+        if ($this->prevAdminUiEnabled === null) {
+            unset($GLOBALS['admin_ui_enabled']);
+        } else {
+            $GLOBALS['admin_ui_enabled'] = $this->prevAdminUiEnabled;
+        }
+        if ($this->prevAdminPassHash === null) {
+            unset($GLOBALS['admin_pass_hash']);
+        } else {
+            $GLOBALS['admin_pass_hash'] = $this->prevAdminPassHash;
+        }
+    }
+
     public function testNeededFlagsTrueWhenAdminEnabledWithEmptyHash(): void
     {
         $GLOBALS['admin_ui_enabled'] = true;

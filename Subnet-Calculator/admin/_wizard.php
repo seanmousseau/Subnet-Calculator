@@ -103,7 +103,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             } else {
                 $errors[] = $result['reason'] ?? 'Failed to save admin configuration.';
                 $fallback_user = trim($user_input);
-                $fallback_hash = $hash;
+                // $hash is non-string only on the password_hash() failure
+                // path above; in that case admin_wizard_snippet() must not
+                // be called with it. Guard so the strict-types signature
+                // doesn't fatal under a TypeError.
+                $fallback_hash = is_string($hash) ? $hash : '';
             }
         }
     }

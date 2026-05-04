@@ -230,14 +230,17 @@ function apikey_list(\SQLite3 $db): array
  */
 function apikey_exists(\SQLite3 $db, int $id): bool
 {
+    // Throw on prepare/execute failure so callers can surface a 500 instead
+    // of treating a DB error as "key not found" (which would mask real
+    // failures behind a 404 on idempotent PATCH paths).
     $stmt = $db->prepare('SELECT 1 FROM api_keys WHERE id = :id AND revoked_at IS NULL LIMIT 1');
     if ($stmt === false) {
-        return false;
+        throw new \RuntimeException('Failed to prepare apikey_exists statement.');
     }
     $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
     $res = $stmt->execute();
     if ($res === false) {
-        return false;
+        throw new \RuntimeException('Failed to execute apikey_exists statement.');
     }
     return $res->fetchArray(SQLITE3_NUM) !== false;
 }

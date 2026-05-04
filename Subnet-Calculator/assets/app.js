@@ -1169,7 +1169,7 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
             return;
         }
 
-        if (e.ctrlKey && e.shiftKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'c') {
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c') {
             const firstVal = document.querySelector('.panel.active .result-value');
             if (firstVal) {
                 copyText(firstVal.textContent.trim());

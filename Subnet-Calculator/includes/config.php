@@ -71,6 +71,7 @@ if (file_exists(__DIR__ . '/../config.php')) {
 }
 
 // Sanitise config values
+$admin_audit_trust_xff = (bool)($admin_audit_trust_xff ?? false);
 $split_max_subnets = max(1, min((int)$split_max_subnets, 256));
 $lookup_max_cidrs  = max(1, min((int)$lookup_max_cidrs, 1000));
 $lookup_max_ips    = max(1, min((int)$lookup_max_ips, 10000));

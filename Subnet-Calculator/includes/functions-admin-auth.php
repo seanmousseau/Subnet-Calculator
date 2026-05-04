@@ -117,6 +117,18 @@ function admin_totp_check_step_up(string $user, callable $onFail): bool
         return false;
     }
 
+    // API callers (no header, /api/v1/* path) must get a JSON 401 without
+    // a session ever being created. Detect before session_start() so the
+    // request stays stateless.
+    $selfRaw  = $_SERVER['REQUEST_URI'] ?? '';
+    $self     = is_string($selfRaw) ? $selfRaw : '';
+    $pathOnly = $self !== '' ? (parse_url($self, PHP_URL_PATH) ?: '') : '';
+    if (str_contains($pathOnly, '/api/v1/')) {
+        admin_audit_event('login.totp.fail', $user, ['via' => 'header.missing']);
+        $onFail('TOTP step-up required. Send the current code in X-Admin-TOTP.', 401);
+        return false;
+    }
+
     // UI session-cached step-up. We start the session lazily so non-UI
     // callers (e.g. API) don't pay for one.
     if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -144,19 +156,9 @@ function admin_totp_check_step_up(string $user, callable $onFail): bool
         return true;
     }
 
-    // Not verified or stale.  API callers (no header, /api/v1/* path) must
-    // get a JSON 401 — they have no UI to redirect to and HTML in a JSON
-    // response body breaks integrations.
-    $selfRaw = $_SERVER['REQUEST_URI'] ?? '';
-    $self    = is_string($selfRaw) ? $selfRaw : '';
-    $pathOnly = $self !== '' ? (parse_url($self, PHP_URL_PATH) ?: '') : '';
-    if (str_contains($pathOnly, '/api/v1/')) {
-        admin_audit_event('login.totp.fail', $user, ['via' => 'header.missing']);
-        $onFail('TOTP step-up required. Send the current code in X-Admin-TOTP.', 401);
-        return false;
-    }
-
-    // UI users get the redirect; a 303 forces a GET on the verify page.
+    // Not verified or stale — UI users get the redirect; a 303 forces a GET
+    // on the verify page.  API callers were already rejected above before
+    // any session was started.
     $_SESSION['totp_return_to'] = $self !== '' ? $self : '/admin/keys.php';
     header('Location: /admin/totp-verify.php', true, 303);
     exit;
