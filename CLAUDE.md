@@ -24,6 +24,11 @@ vendor/bin/phpunit
 # PHPCS (PSR-12) — use .phpcs.xml for config
 vendor/bin/phpcs --standard=PSR12 Subnet-Calculator/includes/ Subnet-Calculator/api/
 
+# PHPCS — admin/*.php template-aware ruleset (PSR-12 with relaxations for
+# inline `<?php if (...): ?>...<?php endif; ?>` patterns and HTML/PHP
+# transitions in mixed-output controller pages).
+vendor/bin/phpcs --standard=.phpcs-admin.xml Subnet-Calculator/admin/
+
 # JS/CSS linting (requires: npm install)
 npm run lint:js   # ESLint on app.js
 npm run lint:css  # Stylelint on app.css

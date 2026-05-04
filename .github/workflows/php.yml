@@ -56,6 +56,10 @@ jobs:
         if: hashFiles('composer.json') != ''
         run: vendor/bin/phpcs --standard=PSR12 Subnet-Calculator/includes/ Subnet-Calculator/api/
 
+      - name: PHPCS (admin/, template-aware ruleset)
+        if: hashFiles('composer.json') != ''
+        run: vendor/bin/phpcs --standard=.phpcs-admin.xml Subnet-Calculator/admin/
+
       - name: Spectral — lint OpenAPI spec
         if: hashFiles('Subnet-Calculator/api/openapi.yaml') != ''
         run: npx --yes @stoplight/spectral-cli@6 lint Subnet-Calculator/api/openapi.yaml
