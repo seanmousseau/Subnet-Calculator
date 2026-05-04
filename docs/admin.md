@@ -218,6 +218,13 @@ The release-tarball build step in [CLAUDE.md](../CLAUDE.md) excludes
 the file to a production host by accident, it stays inert because the
 production environment does not set `PHPUNIT_TEST_DRAIN_TOKEN`.
 
+**Threat model note:** anyone with Docker socket access on the test host
+can read `PHPUNIT_TEST_DRAIN_TOKEN` from `docker inspect <container>`.
+This is acceptable because the token is regenerated per `make test-docker`
+invocation and grants no production capability — the production webapp
+never has the env var set, so even an exfiltrated token is useless against
+the live deployment.
+
 ## Out of scope
 
 The following are intentionally not in v3.0.0 and are deferred to v3.1.0:

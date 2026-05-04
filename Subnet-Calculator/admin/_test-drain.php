@@ -24,6 +24,14 @@ if (!is_string($expected) || $expected === '') {
     exit;
 }
 
+// Documented contract is POST-only; reject everything else explicitly so the
+// behaviour does not depend on SAPI quirks that populate $_POST on PUT/PATCH.
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+    http_response_code(405);
+    header('Allow: POST');
+    exit;
+}
+
 $presented = $_POST['token'] ?? '';
 if (!is_string($presented) || !hash_equals($expected, $presented)) {
     http_response_code(403);
@@ -61,9 +69,14 @@ try {
     }
     $db->close();
 } catch (\Throwable $e) {
+    // Log the underlying message but do not echo it back — even though the
+    // endpoint is token-gated, leaking SQLite paths or driver text to the
+    // response body widens what a future misconfiguration could expose.
+    error_log('sc admin drain error: ' . $e->getMessage());
     http_response_code(500);
     header('Content-Type: application/json');
-    echo json_encode(['ok' => false, 'error' => 'drain failed: ' . $e->getMessage()]);
+    header('Cache-Control: no-store');
+    echo json_encode(['ok' => false, 'error' => 'drain failed']);
     exit;
 }
 
@@ -111,4 +124,5 @@ if (is_string($dirReal)) {
 $drained[] = 'sessions(' . $cleared . ')';
 
 header('Content-Type: application/json');
+header('Cache-Control: no-store');
 echo json_encode(['ok' => true, 'drained' => $drained]);

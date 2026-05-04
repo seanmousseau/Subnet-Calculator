@@ -22,6 +22,9 @@ parameters:
         - Subnet-Calculator/includes/functions-admin-totp.php
         - Subnet-Calculator/includes/functions-admin-wizard.php
         - Subnet-Calculator/includes/functions-audit.php
+        # admin/ pages — template-style mixed PHP/HTML, but the test-drain
+        # endpoint is pure PHP and benefits from L9 coverage.
+        - Subnet-Calculator/admin/_test-drain.php
         - Subnet-Calculator/api/v1/helpers.php
         - Subnet-Calculator/api/v1/index.php
         - Subnet-Calculator/api/v1/handlers/ipv4.php

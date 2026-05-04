@@ -3019,6 +3019,19 @@ async def test_admin_drain_endpoint_zeroes_state(page: Page) -> None:
     )
     assert_eq("drain fixture mint: 303 PRG", mint.status, 303)
 
+    # Pre-drain state proof: the row must be visible before we drain so the
+    # post-drain absence assertion is a real before-vs-after delta, not just
+    # "the mint endpoint redirected". A 303 alone doesn't prove insertion.
+    before_drain = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+    )
+    before_body = await before_drain.text()
+    assert_true(
+        "drain-fixture present BEFORE drain (mint actually inserted the row)",
+        ">drain-fixture<" in before_body,
+    )
+
     # Hit the drain endpoint with the token from the docker fixture env.
     token = os.environ.get("PHPUNIT_TEST_DRAIN_TOKEN", "")
     assert_true(
@@ -3044,9 +3057,14 @@ async def test_admin_drain_endpoint_zeroes_state(page: Page) -> None:
     )
     assert_eq("drain returns 200", drain.status, 200)
     drain_body = await drain.text()
+    try:
+        drain_json = json.loads(drain_body)
+    except (ValueError, TypeError):
+        drain_json = {}
+    assert_eq("drain JSON reports ok=true", drain_json.get("ok"), True)
     assert_true(
-        "drain JSON reports ok=true",
-        '"ok":true' in drain_body or '"ok": true' in drain_body,
+        "drain JSON reports api_keys was zeroed",
+        "api_keys" in (drain_json.get("drained") or []),
     )
 
     # api_keys must be empty after drain — the keys page must not list any
