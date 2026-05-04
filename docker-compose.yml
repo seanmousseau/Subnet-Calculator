@@ -6,6 +6,12 @@ services:
     build: .
     ports:
       - "8080:8080"
+    environment:
+      # v3.1.0 #324 — drain-endpoint token. Set per-run by `make test-docker`
+      # via a one-shot `php -r 'bin2hex(random_bytes(16))'`. Empty in dev
+      # `docker compose up` (the endpoint then 404s, fail-closed). Never
+      # baked into the image, never committed.
+      PHPUNIT_TEST_DRAIN_TOKEN: "${PHPUNIT_TEST_DRAIN_TOKEN:-}"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 5s
@@ -24,6 +30,8 @@ services:
       SKIP_SNAPSHOTS: "1"
       SKIP_LINT: "1"
       # No IPAM_BASIC_USER/PASS — no reverse proxy in Docker
+      # v3.1.0 #324 — must match the token passed to webapp.
+      PHPUNIT_TEST_DRAIN_TOKEN: "${PHPUNIT_TEST_DRAIN_TOKEN:-}"
     volumes:
       - ./testing/snapshots:/app/testing/snapshots
     working_dir: /app

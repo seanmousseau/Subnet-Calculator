@@ -17,6 +17,12 @@ RUN sed -ri '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/All
 RUN sed -i 's/Listen 80/Listen 8080/' /etc/apache2/ports.conf \
     && sed -i 's/<VirtualHost \*:80>/<VirtualHost *:8080>/' /etc/apache2/sites-enabled/000-default.conf
 
+# v3.1.0 #324 — let PHP read the test-drain token via getenv(). The variable
+# is supplied by docker-compose (Makefile generates it per `make test-docker`
+# invocation; empty in plain `docker compose up`, in which case the drain
+# endpoint 404s — fail closed).
+RUN echo 'PassEnv PHPUNIT_TEST_DRAIN_TOKEN' >> /etc/apache2/apache2.conf
+
 WORKDIR /var/www/html
 COPY Subnet-Calculator/ /var/www/html/
 COPY testing/fixtures/iframe-test.html /var/www/html/
