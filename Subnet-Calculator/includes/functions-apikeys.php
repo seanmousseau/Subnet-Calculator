@@ -189,7 +189,11 @@ function apikey_verify(\SQLite3 $db, string $token): ?array
 /**
  * List API keys (newest first) without ever returning the hash.
  *
- * @return array<int, array{id:int, name:string, prefix:string, created_at:int, last_used_at:?int, revoked_at:?int, rate_limit_rpm:?int}>
+ * @return array<int, array{
+ *     id:int, name:string, prefix:string,
+ *     created_at:int, last_used_at:?int, revoked_at:?int,
+ *     rate_limit_rpm:?int
+ * }>
  */
 function apikey_list(\SQLite3 $db): array
 {
