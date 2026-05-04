@@ -51,8 +51,16 @@ $admin_user        = '';     // Admin username for HTTP Basic Auth on /admin/
 $admin_pass_hash   = '';     // PASSWORD_BCRYPT hash of the admin password
 $apikey_db_path    = '';     // SQLite file for api_keys (auto: data/sessions.sqlite or data/admin.sqlite)
 
+// Admin audit log (v3.0.0, #306)
+$admin_audit_retention_days = 90;  // 0 = never purge; rows older than this are removed on each audit write
+
 if (file_exists(__DIR__ . '/../config.php')) {
     require __DIR__ . '/../config.php';
+}
+// Optional second-tier config written by the first-run admin wizard (v3.0.0, #311).
+// Hand-edited config.php takes precedence; config-admin.php only fills gaps.
+if (file_exists(__DIR__ . '/../config-admin.php')) {
+    require __DIR__ . '/../config-admin.php';
 }
 
 // Sanitise config values
@@ -121,3 +129,4 @@ $admin_ui_enabled = (bool)$admin_ui_enabled;
 $admin_user       = is_string($admin_user)      ? $admin_user      : '';
 $admin_pass_hash  = is_string($admin_pass_hash) ? $admin_pass_hash : '';
 $apikey_db_path   = is_string($apikey_db_path)  ? $apikey_db_path  : '';
+$admin_audit_retention_days = max(0, (int)$admin_audit_retention_days);

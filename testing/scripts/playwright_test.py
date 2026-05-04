@@ -9,6 +9,7 @@ Usage:
 """
 
 import asyncio
+import base64
 import json
 import os
 import re
@@ -2699,6 +2700,157 @@ async def test_session_forms_spacing(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# v3.0.0 — IPv6 VLSM session save/load round trip (#315)
+# ---------------------------------------------------------------------------
+
+async def test_vlsm6_session_save_load(page: Page) -> None:
+    section("v3.0.0 #315 IPv6 VLSM session save/load")
+    # Calculate first so the Save Session form is populated.
+    url = (APP_URL + "?tab=vlsm6&vlsm6_network=2001:db8::&vlsm6_cidr=32"
+           + "&vlsm6_name%5B%5D=Site-A&vlsm6_hosts%5B%5D=256")
+    await navigate(page, url)
+    panel = await page.query_selector("#vlsm6-session-controls")
+    if panel is None:
+        ok("vlsm6 session save/load: sessions not enabled on this server (skipped)")
+        return
+
+    # Click "Save Session" inside the IPv6 VLSM panel.
+    save_btn = page.locator(
+        '#vlsm6-session-controls button[name="session_action"][value="save"]'
+    )
+    if await save_btn.count() == 0:
+        ok("vlsm6 session save/load: save button not present (skipped)")
+        return
+    await save_btn.first.click()
+    await page.wait_for_load_state("networkidle")
+
+    # Saved session URL appears in the saved-bar; capture the 8-char id.
+    saved_bar = page.locator("#vlsm6-session-controls .session-saved-bar code.share-url")
+    assert_true(
+        "vlsm6 save: saved-bar appears after save",
+        await saved_bar.count() > 0,
+    )
+    href_text_raw = await saved_bar.first.text_content()
+    href_text = href_text_raw or ""
+    m = re.search(r"\?tab=vlsm6&s=([0-9a-f]{8})", href_text)
+    assert_true(
+        "vlsm6 save: URL contains tab=vlsm6 and 8-char id",
+        m is not None,
+        f"got: {href_text!r}",
+    )
+    if m is None:
+        return
+    sid = m.group(1)
+
+    # Reload via the session URL — fields must be restored.
+    await navigate(page, APP_URL + f"?tab=vlsm6&s={sid}")
+    network_val = await page.input_value("#vlsm6_network")
+    cidr_val    = await page.input_value("#vlsm6_cidr")
+    assert_eq("vlsm6 load: network restored", network_val, "2001:db8::")
+    assert_true(
+        "vlsm6 load: cidr restored to 32",
+        cidr_val.lstrip("/") == "32",
+        f"got: {cidr_val!r}",
+    )
+    # Result table from auto-calc on load.
+    result_count = await page.locator(".vlsm6-table tbody tr").count()
+    assert_true("vlsm6 load: results auto-render", result_count >= 1, f"rows={result_count}")
+
+
+# ---------------------------------------------------------------------------
+# v3.0.0 — Admin /admin/keys.php smoke (#307)
+# ---------------------------------------------------------------------------
+
+ADMIN_USER = "testadmin"
+ADMIN_PASS = "test-admin-password"
+
+
+async def test_admin_keys_unauth_challenge(page: Page) -> None:
+    section("v3.0.0 #307 admin/keys.php — unauth 401 + WWW-Authenticate")
+    # The page sends a Basic challenge; we use page.request to inspect the
+    # raw response without the browser intercepting the auth dialog.
+    resp = await page.context.request.get(APP_URL + "admin/keys.php")
+    assert_eq("admin/keys unauth: status 401", resp.status, 401)
+    www_auth = resp.headers.get("www-authenticate", "")
+    assert_true(
+        "admin/keys unauth: WWW-Authenticate Basic realm present",
+        www_auth.lower().startswith("basic "),
+        f"got: {www_auth!r}",
+    )
+
+
+async def test_admin_keys_authed_renders(page: Page) -> None:
+    section("v3.0.0 #307 admin/keys.php — authed renders")
+    auth = (ADMIN_USER, ADMIN_PASS)
+    resp = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": "Basic " + base64.b64encode(
+            f"{auth[0]}:{auth[1]}".encode()
+        ).decode()},
+    )
+    assert_eq("admin/keys authed: status 200", resp.status, 200)
+    body = await resp.text()
+    assert_true(
+        "admin/keys authed: page contains 'API Keys' heading",
+        "API Keys" in body,
+    )
+    assert_true(
+        "admin/keys authed: mint form RPM input present (#312)",
+        'name="rate_limit_rpm"' in body,
+    )
+
+
+async def test_admin_audit_renders(page: Page) -> None:
+    section("v3.0.0 #307 admin/audit.php — authed renders + filters present")
+    auth_header = "Basic " + base64.b64encode(
+        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
+    ).decode()
+    resp = await page.context.request.get(
+        APP_URL + "admin/audit.php",
+        headers={"Authorization": auth_header},
+    )
+    assert_eq("admin/audit authed: status 200", resp.status, 200)
+    body = await resp.text()
+    assert_true(
+        "admin/audit: page title present",
+        "Admin Audit Log" in body,
+    )
+    for label in ["all", "login", "key"]:
+        assert_true(
+            f"admin/audit: '{label}' filter link present",
+            f">{label}</a>" in body,
+            f"missing filter '{label}'",
+        )
+
+
+async def test_admin_audit_records_login_failure(page: Page) -> None:
+    section("v3.0.0 #306 audit log records failed admin login")
+    # Trigger a failed login (bad password) — should write a login.fail row.
+    bad_auth = "Basic " + base64.b64encode(
+        f"{ADMIN_USER}:wrong-password".encode()
+    ).decode()
+    bad_resp = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": bad_auth},
+    )
+    assert_eq("audit login.fail: bad creds → 401", bad_resp.status, 401)
+
+    # Now read audit page with the login.fail filter.
+    good_auth = "Basic " + base64.b64encode(
+        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
+    ).decode()
+    audit_resp = await page.context.request.get(
+        APP_URL + "admin/audit.php?filter=login.",
+        headers={"Authorization": good_auth},
+    )
+    body = await audit_resp.text()
+    assert_true(
+        "audit log: login.fail badge appears in body",
+        "login.fail" in body,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Permissions-Policy header directives (coverage gap)
 # ---------------------------------------------------------------------------
 
@@ -4169,6 +4321,11 @@ async def main() -> None:
             await test_api_bulk(page)
             await test_vlsm_session_ttl_notice(page)
             await test_session_forms_spacing(page)
+            await test_vlsm6_session_save_load(page)
+            await test_admin_keys_unauth_challenge(page)
+            await test_admin_keys_authed_renders(page)
+            await test_admin_audit_renders(page)
+            await test_admin_audit_records_login_failure(page)
             await test_permissions_policy_directives(page)
             await test_vlsm_utilisation_accuracy(page)
             await test_ipv4_binary_hex_decimal(page)

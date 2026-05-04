@@ -42,7 +42,34 @@ function apikey_db_open(string $path): \SQLite3
         CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(prefix);'
     );
 
+    // v3.0.0 (#312) — per-key rate-limit override. Backfilled NULL on
+    // existing rows so they continue to inherit the global setting.
+    apikey_migrate_add_rate_limit($db);
+
     return $db;
+}
+
+/**
+ * Idempotent migration: add the `rate_limit_rpm` column if it is missing.
+ * Safe to call on every open — costs a single PRAGMA query when present.
+ */
+function apikey_migrate_add_rate_limit(\SQLite3 $db): void
+{
+    $res = $db->query("PRAGMA table_info('api_keys')");
+    if ($res === false) {
+        return;
+    }
+    $hasColumn = false;
+    while (($row = $res->fetchArray(SQLITE3_ASSOC)) !== false) {
+        if ((string)($row['name'] ?? '') === 'rate_limit_rpm') {
+            $hasColumn = true;
+            break;
+        }
+    }
+    if (!$hasColumn) {
+        // ALTER TABLE ... ADD COLUMN is fully supported on SQLite >= 3.2.
+        $db->exec('ALTER TABLE api_keys ADD COLUMN rate_limit_rpm INTEGER');
+    }
 }
 
 /**
@@ -60,7 +87,7 @@ function apikey_db_open(string $path): \SQLite3
  * (the historical `false` return was removed); we therefore do not guard
  * against a hash failure on the happy path.
  */
-function apikey_create(\SQLite3 $db, string $name): array
+function apikey_create(\SQLite3 $db, string $name, ?int $rateLimitRpm = null): array
 {
     $name = trim($name);
     if ($name === '') {
@@ -69,6 +96,9 @@ function apikey_create(\SQLite3 $db, string $name): array
     if (strlen($name) > APIKEY_NAME_MAX) {
         throw new InvalidArgumentException('API key name exceeds ' . APIKEY_NAME_MAX . ' characters.');
     }
+    if ($rateLimitRpm !== null && $rateLimitRpm < 0) {
+        throw new InvalidArgumentException('Rate limit (RPM) must be 0 (unlimited) or a positive integer.');
+    }
 
     $hex    = bin2hex(random_bytes(APIKEY_RAND_HEX_LEN / 2));
     $token  = APIKEY_TOKEN_PREFIX . $hex;
@@ -76,8 +106,8 @@ function apikey_create(\SQLite3 $db, string $name): array
     $hash = password_hash($token, PASSWORD_BCRYPT);
     $now  = time();
     $stmt = $db->prepare(
-        'INSERT INTO api_keys (name, prefix, token_hash, created_at)
-         VALUES (:name, :prefix, :hash, :ts)'
+        'INSERT INTO api_keys (name, prefix, token_hash, created_at, rate_limit_rpm)
+         VALUES (:name, :prefix, :hash, :ts, :rpm)'
     );
     if ($stmt === false) {
         throw new \RuntimeException('Failed to prepare insert.');
@@ -86,14 +116,20 @@ function apikey_create(\SQLite3 $db, string $name): array
     $stmt->bindValue(':prefix', $prefix, SQLITE3_TEXT);
     $stmt->bindValue(':hash', $hash, SQLITE3_TEXT);
     $stmt->bindValue(':ts', $now, SQLITE3_INTEGER);
+    $stmt->bindValue(
+        ':rpm',
+        $rateLimitRpm,
+        $rateLimitRpm === null ? SQLITE3_NULL : SQLITE3_INTEGER
+    );
     $stmt->execute();
 
     return [
-        'id'         => (int)$db->lastInsertRowID(),
-        'token'      => $token,
-        'prefix'     => $prefix,
-        'name'       => $name,
-        'created_at' => $now,
+        'id'             => (int)$db->lastInsertRowID(),
+        'token'          => $token,
+        'prefix'         => $prefix,
+        'name'           => $name,
+        'created_at'     => $now,
+        'rate_limit_rpm' => $rateLimitRpm,
     ];
 }
 
@@ -119,7 +155,7 @@ function apikey_verify(\SQLite3 $db, string $token): ?array
     $prefix = substr($hex, 0, APIKEY_PUBLIC_PREFIX);
 
     $stmt = $db->prepare(
-        'SELECT id, name, prefix, token_hash, created_at, last_used_at
+        'SELECT id, name, prefix, token_hash, created_at, last_used_at, rate_limit_rpm
          FROM api_keys
          WHERE prefix = :p AND revoked_at IS NULL'
     );
@@ -134,11 +170,12 @@ function apikey_verify(\SQLite3 $db, string $token): ?array
     while (($row = $res->fetchArray(SQLITE3_ASSOC)) !== false) {
         if (password_verify($token, (string)$row['token_hash'])) {
             return [
-                'id'           => (int)$row['id'],
-                'name'         => (string)$row['name'],
-                'prefix'       => (string)$row['prefix'],
-                'created_at'   => (int)$row['created_at'],
-                'last_used_at' => $row['last_used_at'] !== null ? (int)$row['last_used_at'] : null,
+                'id'             => (int)$row['id'],
+                'name'           => (string)$row['name'],
+                'prefix'         => (string)$row['prefix'],
+                'created_at'     => (int)$row['created_at'],
+                'last_used_at'   => $row['last_used_at'] !== null ? (int)$row['last_used_at'] : null,
+                'rate_limit_rpm' => $row['rate_limit_rpm'] !== null ? (int)$row['rate_limit_rpm'] : null,
             ];
         }
     }
@@ -156,7 +193,7 @@ function apikey_list(\SQLite3 $db): array
     // enableExceptions(true) set in apikey_db_open). Callers must
     // surface errors — silently returning [] would mask DB failures.
     $res = $db->query(
-        'SELECT id, name, prefix, created_at, last_used_at, revoked_at
+        'SELECT id, name, prefix, created_at, last_used_at, revoked_at, rate_limit_rpm
          FROM api_keys
          ORDER BY id DESC'
     );
@@ -166,15 +203,43 @@ function apikey_list(\SQLite3 $db): array
     $rows = [];
     while (($r = $res->fetchArray(SQLITE3_ASSOC)) !== false) {
         $rows[] = [
-            'id'           => (int)$r['id'],
-            'name'         => (string)$r['name'],
-            'prefix'       => (string)$r['prefix'],
-            'created_at'   => (int)$r['created_at'],
-            'last_used_at' => $r['last_used_at'] !== null ? (int)$r['last_used_at'] : null,
-            'revoked_at'   => $r['revoked_at']   !== null ? (int)$r['revoked_at']   : null,
+            'id'             => (int)$r['id'],
+            'name'           => (string)$r['name'],
+            'prefix'         => (string)$r['prefix'],
+            'created_at'     => (int)$r['created_at'],
+            'last_used_at'   => $r['last_used_at']   !== null ? (int)$r['last_used_at']   : null,
+            'revoked_at'     => $r['revoked_at']     !== null ? (int)$r['revoked_at']     : null,
+            'rate_limit_rpm' => $r['rate_limit_rpm'] !== null ? (int)$r['rate_limit_rpm'] : null,
         ];
     }
     return $rows;
+}
+
+/**
+ * Set or clear the per-key RPM override. Pass null to revert to the
+ * global default. Returns true if the row existed and was active, false
+ * otherwise — matches apikey_revoke()'s convention so the admin UI can
+ * distinguish "no such key" from "DB error" (the latter throws).
+ *
+ * @throws InvalidArgumentException for negative RPM
+ * @throws \RuntimeException        on prepare failure
+ */
+function apikey_set_rate_limit(\SQLite3 $db, int $id, ?int $rpm): bool
+{
+    if ($rpm !== null && $rpm < 0) {
+        throw new InvalidArgumentException('Rate limit (RPM) must be 0 (unlimited) or a positive integer.');
+    }
+    $stmt = $db->prepare(
+        'UPDATE api_keys SET rate_limit_rpm = :rpm
+         WHERE id = :id AND revoked_at IS NULL'
+    );
+    if ($stmt === false) {
+        throw new \RuntimeException('Failed to prepare rate-limit update.');
+    }
+    $stmt->bindValue(':rpm', $rpm, $rpm === null ? SQLITE3_NULL : SQLITE3_INTEGER);
+    $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
+    $stmt->execute();
+    return $db->changes() > 0;
 }
 
 /**

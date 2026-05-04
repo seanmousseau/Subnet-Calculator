@@ -116,6 +116,7 @@ if ($uri === '/' && $method === 'GET') {
             'GET    /api/v1/admin/keys',
             'POST   /api/v1/admin/keys',
             'DELETE /api/v1/admin/keys/{id}',
+            'PATCH  /api/v1/admin/keys/{id}/rate-limit',
         ] : [],
     ]);
 }
@@ -151,12 +152,14 @@ if ($method === 'GET' && preg_match('#^/schemas/[a-z0-9\-]+$#', $uri)) {
     require __DIR__ . '/handlers/schemas.php';
 }
 
-// Admin: /admin/keys (POST, GET) and /admin/keys/{id} (DELETE).
+// Admin: /admin/keys (POST, GET), /admin/keys/{id} (DELETE),
+// /admin/keys/{id}/rate-limit (PATCH).
 // Auth happens inside the handler so that every failure path emits JSON
 // with a proper WWW-Authenticate challenge on 401.
 if (
     ($uri === '/admin/keys' && in_array($method, ['POST', 'GET'], true))
     || (preg_match('#^/admin/keys/\d+$#', $uri) && $method === 'DELETE')
+    || (preg_match('#^/admin/keys/\d+/rate-limit$#', $uri) && $method === 'PATCH')
 ) {
     require __DIR__ . '/handlers/admin_keys.php';
 }

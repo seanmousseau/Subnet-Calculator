@@ -34,7 +34,7 @@ function api_cors(): void
     global $api_cors_origins;
     $origin = (string)($api_cors_origins ?? '*');
     header('Access-Control-Allow-Origin: ' . $origin);
-    header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+    header('Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS');
     header('Access-Control-Allow-Headers: Authorization, Content-Type');
     header('Access-Control-Max-Age: 86400');
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
@@ -120,6 +120,23 @@ function api_sqlite_keys_present(): bool
     return $cached;
 }
 
+/**
+ * Stash the SQLite-verified key row so api_rate_limit() can read it
+ * without re-running bcrypt. Returns the previously-stashed value when
+ * called with no argument.
+ *
+ * @param  array<string, mixed>|null $row
+ * @return array<string, mixed>|null
+ */
+function api_verified_sqlite_key(?array $row = null): ?array
+{
+    static $stash = null;
+    if (func_num_args() > 0) {
+        $stash = $row;
+    }
+    return $stash;
+}
+
 function api_authenticate(): void
 {
     global $api_tokens;
@@ -151,6 +168,12 @@ function api_authenticate(): void
             $db = apikey_db_open($db_path);
             $row = apikey_verify($db, $token);
             if ($row !== null) {
+                // Stash the verified row for api_rate_limit() so it can
+                // honour the per-key rate_limit_rpm override (#312) without
+                // re-running bcrypt. Cleared at the end of the request by
+                // PHP's normal teardown — statics live for one request only.
+                api_verified_sqlite_key($row);
+
                 // Stat update is best-effort: a transient lock or perms blip
                 // here must NOT reject a token that just verified. Log and
                 // proceed so the caller sees a 200 with a stale last_used_at.
@@ -178,30 +201,58 @@ function api_rate_limit(string $key): void
 {
     global $api_rate_limit_rpm, $api_rate_limit_tokens, $api_tokens, $session_db_path;
 
-    // Determine effective RPM: per-token override takes precedence when a valid
-    // Bearer token is present and has an entry in $api_rate_limit_tokens.
-    $rpm = (int)($api_rate_limit_rpm ?? 0);
+    // Effective RPM lookup order (first match wins):
+    //   1. Static $api_rate_limit_tokens[token] override (operator-edited config)
+    //   2. SQLite api_keys.rate_limit_rpm override (#312, set via /admin/keys.php)
+    //   3. Global $api_rate_limit_rpm fallback
+    // An RPM of 0 at any tier means "unlimited" for that match.
+    $rpm    = (int)($api_rate_limit_rpm ?? 0);
     $rl_key = $key; // default: key by IP
+
+    $authRaw = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
+    $auth    = is_string($authRaw) ? $authRaw : '';
+    $token   = str_starts_with($auth, 'Bearer ') ? substr($auth, 7) : '';
+
+    // Tier 1 — static map from $api_tokens
+    $matched = false;
     if (
-        is_array($api_tokens) && $api_tokens !== []
+        $token !== ''
+        && is_array($api_tokens) && $api_tokens !== []
         && is_array($api_rate_limit_tokens) && $api_rate_limit_tokens !== []
+        && in_array($token, $api_tokens, true)
+        && array_key_exists($token, $api_rate_limit_tokens)
     ) {
-        $authRaw = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
-        $auth    = is_string($authRaw) ? $authRaw : '';
-        if (str_starts_with($auth, 'Bearer ')) {
-            $token = substr($auth, 7);
-            if (in_array($token, $api_tokens, true) && array_key_exists($token, $api_rate_limit_tokens)) {
-                $raw_rpm = $api_rate_limit_tokens[$token];
-                if (is_numeric($raw_rpm)) {
-                    $token_rpm = (int)$raw_rpm;
-                    if ($token_rpm === 0) {
-                        return; // explicit 0 = unlimited for this token
-                    }
-                    $rpm    = $token_rpm;
-                    $rl_key = 'tok:' . hash('sha256', $token); // key by token hash, not IP
-                }
-                // non-numeric entry: ignore override, fall through to global $rpm
+        $raw_rpm = $api_rate_limit_tokens[$token];
+        if (is_numeric($raw_rpm)) {
+            $token_rpm = (int)$raw_rpm;
+            $matched   = true;
+            if ($token_rpm === 0) {
+                return; // explicit 0 = unlimited for this token
             }
+            $rpm    = $token_rpm;
+            $rl_key = 'tok:' . hash('sha256', $token);
+        }
+        // non-numeric entry: ignore, fall through to next tier
+    }
+
+    // Tier 2 — SQLite per-key override (#312). Only applies when api_authenticate()
+    // already verified the bearer token via apikey_verify() and stashed the row.
+    if (!$matched && $token !== '' && function_exists('api_verified_sqlite_key')) {
+        $verified = api_verified_sqlite_key();
+        if (
+            is_array($verified)
+            && isset($verified['rate_limit_rpm']) && is_int($verified['rate_limit_rpm'])
+            && isset($verified['id'])             && is_int($verified['id'])
+        ) {
+            $sqlite_rpm = $verified['rate_limit_rpm'];
+            $matched    = true;
+            if ($sqlite_rpm === 0) {
+                return; // 0 = unlimited for this key
+            }
+            $rpm    = $sqlite_rpm;
+            // Bucket by key id, not token plaintext — stable across tokens
+            // sharing a prefix and avoids hashing the token here.
+            $rl_key = 'key:' . $verified['id'];
         }
     }
 

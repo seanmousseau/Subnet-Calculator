@@ -16,6 +16,7 @@ declare(strict_types=1);
 require __DIR__ . '/../includes/config.php';
 require __DIR__ . '/../includes/functions-admin-auth.php';
 require __DIR__ . '/../includes/functions-apikeys.php';
+require __DIR__ . '/../includes/functions-audit.php';
 
 admin_authenticate();
 
@@ -68,13 +69,60 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         try {
             if ($action === 'create') {
                 $name    = (string)($_POST['name'] ?? '');
-                $created = apikey_create($db, $name);
+                $rpmRaw  = trim((string)($_POST['rate_limit_rpm'] ?? ''));
+                $rpm     = $rpmRaw === '' ? null : (int)$rpmRaw;
+                if ($rpm !== null && (!ctype_digit($rpmRaw) || $rpm < 0)) {
+                    throw new InvalidArgumentException('Rate limit (RPM) must be empty, 0 (unlimited), or a positive integer.');
+                }
+                $created = apikey_create($db, $name, $rpm);
+                audit_log(
+                    $db,
+                    'key.mint',
+                    audit_actor_from_request(),
+                    audit_ip_from_request(),
+                    (int)$created['id'],
+                    [
+                        'name'           => $created['name'],
+                        'prefix'         => $created['prefix'],
+                        'rate_limit_rpm' => $rpm,
+                    ]
+                );
                 $flash_token = $created['token'];
                 $flash_msg   = 'Key "' . $created['name']
                              . '" created. Copy the token now — it is not shown again.';
+            } elseif ($action === 'set_rpm') {
+                $id     = (int)($_POST['id'] ?? 0);
+                $rpmRaw = trim((string)($_POST['rate_limit_rpm'] ?? ''));
+                $rpm    = $rpmRaw === '' ? null : (int)$rpmRaw;
+                if ($rpm !== null && (!ctype_digit($rpmRaw) || $rpm < 0)) {
+                    throw new InvalidArgumentException('Rate limit (RPM) must be empty, 0 (unlimited), or a positive integer.');
+                }
+                if ($id > 0 && apikey_set_rate_limit($db, $id, $rpm)) {
+                    audit_log(
+                        $db,
+                        'key.rate_limit',
+                        audit_actor_from_request(),
+                        audit_ip_from_request(),
+                        $id,
+                        ['rate_limit_rpm' => $rpm]
+                    );
+                    $flash_msg = $rpm === null
+                        ? 'Rate-limit override cleared (key inherits global default).'
+                        : 'Rate limit set to ' . ($rpm === 0 ? 'unlimited' : $rpm . ' RPM') . '.';
+                } else {
+                    $flash_error = 'Key not found, already revoked, or RPM unchanged.';
+                }
             } elseif ($action === 'revoke') {
                 $id = (int)($_POST['id'] ?? 0);
                 if ($id > 0 && apikey_revoke($db, $id)) {
+                    audit_log(
+                        $db,
+                        'key.revoke',
+                        audit_actor_from_request(),
+                        audit_ip_from_request(),
+                        $id,
+                        null
+                    );
                     $flash_msg = 'Key revoked.';
                 } else {
                     $flash_error = 'Key not found or already revoked.';
@@ -198,8 +246,10 @@ $h = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
     <input type="hidden" name="_csrf" value="<?= $h($csrf_expect) ?>">
     <input type="hidden" name="action" value="create">
     <label>Name <input type="text" name="name" required maxlength="128" placeholder="production"></label>
+    <label>RPM <input type="number" name="rate_limit_rpm" min="0" step="1" placeholder="(default)" style="width:7rem" title="Per-key rate limit. Leave blank to inherit global. 0 = unlimited."></label>
     <button class="btn" type="submit">Mint key</button>
   </form>
+  <p style="font-size:0.85rem;color:#9ca3af;margin-top:0.5rem">RPM blank = inherit global default (<code><?= (int)($api_rate_limit_rpm ?? 60) ?></code>); <code>0</code> = unlimited.</p>
 </div>
 
 <div class="card">
@@ -210,17 +260,35 @@ $h = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
     <table>
       <thead>
         <tr>
-          <th>Name</th><th>Prefix</th><th>Created</th><th>Last used</th><th>Status</th><th></th>
+          <th>Name</th><th>Prefix</th><th>Created</th><th>Last used</th><th>RPM</th><th>Status</th><th></th>
         </tr>
       </thead>
       <tbody>
       <?php foreach ($keys as $k) :
-            $is_revoked = $k['revoked_at'] !== null; ?>
+            $is_revoked = $k['revoked_at'] !== null;
+            $rpm        = $k['rate_limit_rpm']; ?>
         <tr<?= $is_revoked ? ' class="revoked"' : '' ?>>
           <td><?= $h($k['name']) ?></td>
           <td class="prefix">sk_live_<?= $h($k['prefix']) ?>…</td>
           <td><?= $h($fmt($k['created_at'])) ?></td>
           <td><?= $h($fmt($k['last_used_at'])) ?></td>
+          <td>
+            <?php if ($is_revoked) : ?>
+              <span class="badge badge-revoked">—</span>
+            <?php else : ?>
+              <form method="post" action="" class="inline">
+                <input type="hidden" name="_csrf" value="<?= $h($csrf_expect) ?>">
+                <input type="hidden" name="action" value="set_rpm">
+                <input type="hidden" name="id" value="<?= (int)$k['id'] ?>">
+                <input type="number" name="rate_limit_rpm" min="0" step="1"
+                       value="<?= $rpm === null ? '' : (int)$rpm ?>"
+                       placeholder="default"
+                       style="width:5rem"
+                       title="0 = unlimited; blank = inherit global default">
+                <button type="submit" class="btn" style="padding:0.25rem 0.6rem;font-size:0.85rem">Save</button>
+              </form>
+            <?php endif; ?>
+          </td>
           <td>
             <?php if ($is_revoked) : ?>
               <span class="badge badge-revoked">revoked <?= $h($fmt($k['revoked_at'])) ?></span>
@@ -248,6 +316,7 @@ $h = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 <footer>
   Keys authenticate against <code>POST/GET /api/v1/*</code> via <code>Authorization: Bearer &lt;token&gt;</code>.
   Plain-string entries in <code>$api_tokens</code> still work alongside SQLite-stored keys.
+  <br><a href="audit.php">View audit log →</a>
 </footer>
 </main>
 </body>

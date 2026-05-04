@@ -130,13 +130,75 @@ an attacker would need to crack the bcrypt hash to recover the token.
 - **Audit trail.** `last_used_at` updates on every successful API call,
   so you can spot keys that haven't been used in a while and revoke them.
 
+## Per-key rate limits (v3.0.0+, #312)
+
+Each SQLite-stored API key may carry an `rate_limit_rpm` override that takes
+precedence over the global `$api_rate_limit_rpm` ceiling. Set it in the
+**RPM** column on `/admin/keys.php`:
+
+- **blank** → key inherits the global default.
+- **`0`** → unlimited for this key.
+- any positive integer → that RPM ceiling for this key.
+
+The lookup order in `api_rate_limit()` is: static `$api_rate_limit_tokens`
+override → SQLite per-key override → global `$api_rate_limit_rpm`. Keys
+bucket by row id (`key:N`) so two tokens that share a prefix (a 1-in-4-billion
+collision) cannot interfere with each other's rate-limit window.
+
+There is no upper bound on the SQLite override — operators who configure
+themselves into a denial-of-service can revoke and re-mint at any time.
+
+JSON API:
+
+```bash
+# Mint a key with a 600 RPM ceiling
+curl -u admin:pass -X POST -H 'Content-Type: application/json' \
+  -d '{"name":"hot-svc","rate_limit_rpm":600}' \
+  https://host/api/v1/admin/keys
+
+# Update an existing key's override; null clears it back to the global default
+curl -u admin:pass -X PATCH -H 'Content-Type: application/json' \
+  -d '{"rate_limit_rpm":0}' \
+  https://host/api/v1/admin/keys/42/rate-limit
+```
+
+## Audit log (v3.0.0+, #306)
+
+Every admin auth attempt and every key.mint / key.revoke / key.rate_limit
+action writes a structured row to the `admin_audit` table. The log is
+viewable at `/admin/audit.php` with a paginated newest-first table and a
+prefix filter (`login.`, `key.`, `wizard.` reserved for v3 PR2, `totp.`
+reserved for v3 PR2).
+
+Schema:
+
+```sql
+CREATE TABLE admin_audit (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts        INTEGER NOT NULL,
+  actor     TEXT,           -- admin username or NULL on failed auth
+  ip        TEXT,           -- client IP from REMOTE_ADDR / X-Forwarded-For
+  action    TEXT NOT NULL,  -- 'login.ok', 'login.fail', 'key.mint', 'key.revoke', 'key.rate_limit'
+  target_id INTEGER,        -- e.g. api_keys.id for mint/revoke/rate_limit
+  meta      TEXT            -- JSON blob with action-specific detail
+);
+```
+
+Retention is bounded by `$admin_audit_retention_days` (default `90`; set to
+`0` to keep everything until manually rotated). Old rows are purged lazily
+on every audit write — there is no separate cron required.
+
+The audit module fails open: a write failure logs to `error_log` but never
+masks the underlying admin action.
+
 ## Out of scope
 
-The following are intentionally not in v2.12.0 and will land in v3.0.0:
+The following are intentionally not in v3.0.0 and are deferred to v3.1.0:
 
-- A first-run setup wizard for the admin password (currently it is a
-  manual `php -r` step so the hash never touches the wire).
-- Per-key rate-limit overrides via the UI (still possible via
-  `$api_rate_limit_tokens` for static tokens).
-- Audit log of admin actions (mint/revoke history beyond `revoked_at`).
-- TOTP / 2FA on admin login.
+- TOTP recovery codes beyond the 10 generated at TOTP enable (e.g. download
+  as printable PDF, automatic regeneration warnings).
+- Per-actor TOTP secrets (the v3 implementation is single-secret because
+  there is currently a single `$admin_user`).
+- Webhook / syslog integration for the audit log.
+- Multi-admin user support (separate row per admin in a future
+  `admin_users` table).

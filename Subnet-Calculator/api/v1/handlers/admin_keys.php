@@ -10,6 +10,7 @@ declare(strict_types=1);
 // down the JSON endpoints separately.
 
 require_once dirname(__DIR__, 3) . '/includes/functions-admin-auth.php';
+require_once dirname(__DIR__, 3) . '/includes/functions-audit.php';
 
 // Override the api-level Bearer auth challenge with a JSON envelope.
 admin_authenticate(static function (string $reason, int $status): void {
@@ -20,9 +21,17 @@ admin_authenticate(static function (string $reason, int $status): void {
 });
 
 // Route parsing happens against $uri, which the router already normalised.
-// Trailing /{id} extraction:
-$id = null;
-if (preg_match('#^/admin/keys/(\d+)$#', $uri, $m)) {
+// Supported routes:
+//   GET    /admin/keys
+//   POST   /admin/keys
+//   DELETE /admin/keys/{id}
+//   PATCH  /admin/keys/{id}/rate-limit  -- v3.0.0 (#312)
+$id            = null;
+$is_rate_route = false;
+if (preg_match('#^/admin/keys/(\d+)/rate-limit$#', $uri, $m)) {
+    $id            = (int)$m[1];
+    $is_rate_route = true;
+} elseif (preg_match('#^/admin/keys/(\d+)$#', $uri, $m)) {
     $id = (int)$m[1];
 }
 
@@ -43,19 +52,72 @@ try {
         if (!is_string($rawName)) {
             json_err('Field "name" must be a string.', 400);
         }
+        $rawRpm = $body['rate_limit_rpm'] ?? null;
+        $rpm    = null;
+        if ($rawRpm !== null) {
+            if (!is_int($rawRpm) || $rawRpm < 0) {
+                json_err('Field "rate_limit_rpm" must be null or a non-negative integer.', 400);
+            }
+            $rpm = $rawRpm;
+        }
         try {
-            $created = apikey_create($db, $rawName);
+            $created = apikey_create($db, $rawName, $rpm);
         } catch (\InvalidArgumentException $e) {
             json_err($e->getMessage(), 400);
         }
+        audit_log(
+            $db,
+            'key.mint',
+            audit_actor_from_request(),
+            audit_ip_from_request(),
+            (int)$created['id'],
+            ['name' => $created['name'], 'prefix' => $created['prefix'], 'rate_limit_rpm' => $rpm]
+        );
         json_ok($created, 201);
     }
 
-    if ($id !== null && $method === 'DELETE') {
+    if ($id !== null && $is_rate_route && $method === 'PATCH') {
+        $body   = api_body();
+        $rawRpm = $body['rate_limit_rpm'] ?? null;
+        $rpm    = null;
+        if ($rawRpm !== null) {
+            if (!is_int($rawRpm) || $rawRpm < 0) {
+                json_err('Field "rate_limit_rpm" must be null or a non-negative integer.', 400);
+            }
+            $rpm = $rawRpm;
+        }
+        try {
+            $changed = apikey_set_rate_limit($db, $id, $rpm);
+        } catch (\InvalidArgumentException $e) {
+            json_err($e->getMessage(), 400);
+        }
+        if (!$changed) {
+            json_err('Key not found, already revoked, or RPM unchanged.', 404);
+        }
+        audit_log(
+            $db,
+            'key.rate_limit',
+            audit_actor_from_request(),
+            audit_ip_from_request(),
+            $id,
+            ['rate_limit_rpm' => $rpm]
+        );
+        json_ok(['id' => $id, 'rate_limit_rpm' => $rpm]);
+    }
+
+    if ($id !== null && !$is_rate_route && $method === 'DELETE') {
         $ok = apikey_revoke($db, $id);
         if (!$ok) {
             json_err('Key not found or already revoked.', 404);
         }
+        audit_log(
+            $db,
+            'key.revoke',
+            audit_actor_from_request(),
+            audit_ip_from_request(),
+            $id,
+            null
+        );
         json_ok(['id' => $id, 'revoked' => true]);
     }
 } catch (\Throwable $e) {

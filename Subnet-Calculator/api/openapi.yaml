@@ -1971,12 +1971,13 @@ paths:
                               type: object
                               required: [id, name, prefix, created_at]
                               properties:
-                                id:           { type: integer }
-                                name:         { type: string }
-                                prefix:       { type: string, description: "First 8 hex chars of the token (non-secret)." }
-                                created_at:   { type: integer, description: "UNIX epoch seconds." }
-                                last_used_at: { type: [integer, "null"] }
-                                revoked_at:   { type: [integer, "null"] }
+                                id:             { type: integer }
+                                name:           { type: string }
+                                prefix:         { type: string, description: "First 8 hex chars of the token (non-secret)." }
+                                created_at:     { type: integer, description: "UNIX epoch seconds." }
+                                last_used_at:   { type: [integer, "null"] }
+                                revoked_at:     { type: [integer, "null"] }
+                                rate_limit_rpm: { type: [integer, "null"], description: "Per-key RPM override (v3.0.0+, #312). null = inherit global; 0 = unlimited." }
         "401":
           description: Missing or invalid admin credentials
           headers:
@@ -2021,6 +2022,12 @@ paths:
                   minLength: 1
                   maxLength: 128
                   example: "production"
+                rate_limit_rpm:
+                  description: "Per-key RPM override (v3.0.0+, #312). Omit or null to inherit the global default. 0 = unlimited."
+                  oneOf:
+                    - type: integer
+                      minimum: 0
+                    - type: "null"
       responses:
         "201":
           description: Key created
@@ -2035,11 +2042,12 @@ paths:
                         type: object
                         required: [id, token, prefix, name, created_at]
                         properties:
-                          id:         { type: integer, example: 1 }
-                          token:      { type: string,  example: "sk_live_a1b2c3d4e5f6...", description: "Returned exactly once — store securely." }
-                          prefix:     { type: string,  example: "a1b2c3d4" }
-                          name:       { type: string,  example: "production" }
-                          created_at: { type: integer, example: 1714742400 }
+                          id:             { type: integer, example: 1 }
+                          token:          { type: string,  example: "sk_live_a1b2c3d4e5f6...", description: "Returned exactly once — store securely." }
+                          prefix:         { type: string,  example: "a1b2c3d4" }
+                          name:           { type: string,  example: "production" }
+                          created_at:     { type: integer, example: 1714742400 }
+                          rate_limit_rpm: { type: [integer, "null"], description: "Echo of the per-key RPM override, if set." }
         "400":
           description: Missing or oversized name
           headers:
@@ -2067,6 +2075,62 @@ paths:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
             X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /admin/keys/{id}/rate-limit:
+    patch:
+      operationId: setAdminKeyRateLimit
+      tags: [Admin]
+      security:
+        - adminBasic: []
+      summary: Set or clear a per-key rate-limit override (v3.0.0+, #312)
+      description: |
+        Updates the `rate_limit_rpm` column on a single API key. Lookup
+        order in `api_rate_limit()` is: static `$api_rate_limit_tokens`
+        override → SQLite per-key override → global `$api_rate_limit_rpm`.
+        Authentication: HTTP Basic Auth.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rate_limit_rpm]
+              properties:
+                rate_limit_rpm:
+                  description: "Pass null to clear the override (key inherits the global default). 0 = unlimited."
+                  oneOf:
+                    - type: integer
+                      minimum: 0
+                    - type: "null"
+      responses:
+        "200":
+          description: Override updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [id, rate_limit_rpm]
+                        properties:
+                          id:             { type: integer }
+                          rate_limit_rpm: { type: [integer, "null"] }
+        "400":
+          description: rate_limit_rpm must be null or a non-negative integer
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid admin credentials
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Key not found, revoked, or RPM unchanged
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /admin/keys/{id}:
     delete:

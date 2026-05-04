@@ -44,6 +44,53 @@ if (!is_array($payload) || $payload === []) {
     json_err('Field "payload" must be a non-empty object.');
 }
 
+// v3.0.0 (#315) — validate the type discriminator. Missing `type` defaults
+// to 'ipv4' for back-compat with v2 callers. Unknown types are rejected.
+$type = $payload['type'] ?? 'ipv4';
+if (!is_string($type) || !in_array($type, ['ipv4', 'ipv6', 'tree'], true)) {
+    json_err('Field "type" must be one of: ipv4, ipv6, tree.');
+}
+$payload['type'] = $type; // normalise so the loaded session always has it
+
+if ($type === 'ipv4' || $type === 'ipv6') {
+    foreach (['network', 'cidr', 'requirements'] as $required) {
+        if (!array_key_exists($required, $payload)) {
+            json_err('Missing required field: ' . $required);
+        }
+    }
+    if (!is_array($payload['requirements']) || $payload['requirements'] === []) {
+        json_err('Field "requirements" must be a non-empty array.');
+    }
+    foreach ($payload['requirements'] as $i => $req) {
+        if (!is_array($req) || !isset($req['name'], $req['hosts'])) {
+            json_err("requirements[$i] must have name and hosts.");
+        }
+        // IPv6 'hosts' may be the "2^N" string form; ipv4 must be int.
+        if ($type === 'ipv4' && !is_int($req['hosts'])) {
+            json_err("requirements[$i].hosts must be an integer for ipv4.");
+        }
+        if (
+            $type === 'ipv6'
+            && !is_int($req['hosts'])
+            && !(
+                is_string($req['hosts'])
+                && preg_match('/^2\^([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/', $req['hosts'])
+            )
+        ) {
+            json_err("requirements[$i].hosts must be a positive integer or the string \"2^N\" with N in 0–128.");
+        }
+    }
+} elseif ($type === 'tree') {
+    // Schema-level validation only at this stage (PR1). Full tree_validate()
+    // ships in PR3 (#302) when the tree editor lands.
+    if (!isset($payload['root']) || !is_array($payload['root'])) {
+        json_err('Field "root" must be an object for tree sessions.');
+    }
+    if (!isset($payload['root']['cidr']) || !is_string($payload['root']['cidr'])) {
+        json_err('root.cidr is required for tree sessions.');
+    }
+}
+
 $db_dir = dirname($db_path);
 if (!is_dir($db_dir)) {
     mkdir($db_dir, 0755, true);

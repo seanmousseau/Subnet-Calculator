@@ -643,52 +643,125 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($is_session_save && !$form_blocked && $session_enabled) {
-        $vlsm_network    = trim((string)($_POST['vlsm_network'] ?? ''));
-        $vlsm_cidr_input = trim((string)($_POST['vlsm_cidr']   ?? ''));
-        $rv = resolve_ipv4_input($vlsm_network, $vlsm_cidr_input);
-        if (!$rv['result']) {
-            $session_error = 'Parent network: ' . ($rv['error'] ?? 'Invalid input.');
-        } else {
-            $names = $_POST['vlsm_name']  ?? [];
-            $hosts = $_POST['vlsm_hosts'] ?? [];
-            $reqs  = [];
-            if (is_array($names) && is_array($hosts)) {
-                foreach ($names as $i => $name) {
-                    $name = mb_substr(trim((string)$name), 0, 100);
-                    $hval = trim((string)($hosts[$i] ?? ''));
-                    if ($name !== '' && ctype_digit($hval) && (int)$hval >= 1) {
-                        $reqs[] = ['name' => $name, 'hosts' => (int)$hval];
+        // v3.0.0 (#315) — POST distinguishes ipv4 vs ipv6 sessions via the
+        // session_type hidden input on the IPv6 VLSM tab. Default 'ipv4' keeps
+        // back-compat with the original single-tab Save Session button.
+        $session_type_in = (string)($_POST['session_type'] ?? 'ipv4');
+        if (!in_array($session_type_in, ['ipv4', 'ipv6'], true)) {
+            $session_type_in = 'ipv4';
+        }
+
+        if ($session_type_in === 'ipv6') {
+            $vlsm6_network    = trim((string)($_POST['vlsm6_network'] ?? ''));
+            $vlsm6_cidr_input = trim((string)($_POST['vlsm6_cidr']   ?? ''));
+            $rv6 = resolve_ipv6_input($vlsm6_network, $vlsm6_cidr_input);
+            if (!$rv6['result6']) {
+                $session_error = 'Parent network: ' . ($rv6['error6'] ?? 'Invalid input.');
+            } else {
+                $names6 = $_POST['vlsm6_name']  ?? [];
+                $hosts6 = $_POST['vlsm6_hosts'] ?? [];
+                $reqs6  = [];
+                if (is_array($names6) && is_array($hosts6)) {
+                    foreach ($names6 as $i => $name) {
+                        $name = mb_substr(trim((string)$name), 0, 100);
+                        $hval = trim((string)($hosts6[$i] ?? ''));
+                        if ($name === '' || $hval === '') {
+                            continue;
+                        }
+                        if (ctype_digit($hval) && (int)$hval >= 1) {
+                            $reqs6[] = ['name' => $name, 'hosts' => (int)$hval];
+                        } elseif (preg_match('/^2\^([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/', $hval)) {
+                            // Preserve the "2^N" string form for sizings that overflow int64.
+                            $reqs6[] = ['name' => $name, 'hosts' => $hval];
+                        }
+                    }
+                }
+                if ($reqs6 === []) {
+                    $session_error = 'No valid IPv6 VLSM requirements to save.';
+                } else {
+                    $vlsm6_cidr_int   = (int)ltrim($rv6['result6']['prefix'], '/');
+                    $vlsm6_network_ip = explode('/', $rv6['result6']['network_cidr'])[0];
+                    $vlsm6_requirements = $reqs6;
+                    $vr6 = vlsm6_allocate($vlsm6_network_ip, $vlsm6_cidr_int, $reqs6);
+                    if (isset($vr6['error'])) {
+                        $session_error = $vr6['error'];
+                    } else {
+                        $vlsm6_result = $vr6['allocations'] ?? [];
+                        try {
+                            $db_path = $session_db_path !== '' ? $session_db_path
+                                : dirname(__DIR__) . '/data/sessions.sqlite';
+                            $db_dir  = dirname($db_path);
+                            if (!is_dir($db_dir)) {
+                                mkdir($db_dir, 0755, true);
+                            }
+                            $sdb  = session_db_open($db_path);
+                            $session_save_id = session_create($sdb, [
+                                'type'         => 'ipv6',
+                                'network'      => $vlsm6_network,
+                                'cidr'         => ltrim($vlsm6_cidr_input, '/'),
+                                'requirements' => $reqs6,
+                            ], $session_ttl_days);
+                            $sdb->close();
+                        } catch (\Exception $e) {
+                            error_log('sc session save (ipv6) error: ' . $e->getMessage());
+                            $session_error = 'Failed to save session. Please try again.';
+                        }
                     }
                 }
             }
-            if ($reqs === []) {
-                $session_error = 'No valid VLSM requirements to save.';
+        } else {
+            // IPv4 path — unchanged behaviour. The 'type' field is added
+            // explicitly so newly-saved IPv4 sessions are tagged for the v2
+            // schema; older payloads remain readable thanks to the default
+            // in the load path.
+            $vlsm_network    = trim((string)($_POST['vlsm_network'] ?? ''));
+            $vlsm_cidr_input = trim((string)($_POST['vlsm_cidr']   ?? ''));
+            $rv = resolve_ipv4_input($vlsm_network, $vlsm_cidr_input);
+            if (!$rv['result']) {
+                $session_error = 'Parent network: ' . ($rv['error'] ?? 'Invalid input.');
             } else {
-                $vlsm_cidr_int   = (int)ltrim($rv['result']['netmask_cidr'], '/');
-                $vlsm_network_ip = explode('/', $rv['result']['network_cidr'])[0];
-                $vlsm_requirements = $reqs;
-                $vr = vlsm_allocate($vlsm_network_ip, $vlsm_cidr_int, $reqs);
-                if (isset($vr['error'])) {
-                    $session_error = $vr['error'];
-                } else {
-                    $vlsm_result = $vr['allocations'] ?? [];
-                    try {
-                        $db_path = $session_db_path !== '' ? $session_db_path
-                            : dirname(__DIR__) . '/data/sessions.sqlite';
-                        $db_dir  = dirname($db_path);
-                        if (!is_dir($db_dir)) {
-                            mkdir($db_dir, 0755, true);
+                $names = $_POST['vlsm_name']  ?? [];
+                $hosts = $_POST['vlsm_hosts'] ?? [];
+                $reqs  = [];
+                if (is_array($names) && is_array($hosts)) {
+                    foreach ($names as $i => $name) {
+                        $name = mb_substr(trim((string)$name), 0, 100);
+                        $hval = trim((string)($hosts[$i] ?? ''));
+                        if ($name !== '' && ctype_digit($hval) && (int)$hval >= 1) {
+                            $reqs[] = ['name' => $name, 'hosts' => (int)$hval];
                         }
-                        $sdb  = session_db_open($db_path);
-                        $session_save_id = session_create($sdb, [
-                            'network'      => $vlsm_network,
-                            'cidr'         => ltrim($vlsm_cidr_input, '/'),
-                            'requirements' => $reqs,
-                        ], $session_ttl_days);
-                        $sdb->close();
-                    } catch (\Exception $e) {
-                        error_log('sc session save error: ' . $e->getMessage());
-                        $session_error = 'Failed to save session. Please try again.';
+                    }
+                }
+                if ($reqs === []) {
+                    $session_error = 'No valid VLSM requirements to save.';
+                } else {
+                    $vlsm_cidr_int   = (int)ltrim($rv['result']['netmask_cidr'], '/');
+                    $vlsm_network_ip = explode('/', $rv['result']['network_cidr'])[0];
+                    $vlsm_requirements = $reqs;
+                    $vr = vlsm_allocate($vlsm_network_ip, $vlsm_cidr_int, $reqs);
+                    if (isset($vr['error'])) {
+                        $session_error = $vr['error'];
+                    } else {
+                        $vlsm_result = $vr['allocations'] ?? [];
+                        try {
+                            $db_path = $session_db_path !== '' ? $session_db_path
+                                : dirname(__DIR__) . '/data/sessions.sqlite';
+                            $db_dir  = dirname($db_path);
+                            if (!is_dir($db_dir)) {
+                                mkdir($db_dir, 0755, true);
+                            }
+                            $sdb  = session_db_open($db_path);
+                            $session_save_id = session_create($sdb, [
+                                'type'         => 'ipv4',
+                                'network'      => $vlsm_network,
+                                'cidr'         => ltrim($vlsm_cidr_input, '/'),
+                                'requirements' => $reqs,
+                            ], $session_ttl_days);
+                            $sdb->close();
+                        } catch (\Exception $e) {
+                            error_log('sc session save error: ' . $e->getMessage());
+                            $session_error = 'Failed to save session. Please try again.';
+                        }
                     }
                 }
             }
@@ -774,8 +847,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    // Session load: ?tab=vlsm&s=<id>
-    if ($session_enabled && $active_tab === 'vlsm' && isset($_GET['s'])) {
+    // Session load: ?tab=vlsm&s=<id>  or  ?tab=vlsm6&s=<id>
+    // v3.0.0 (#315) — load path now dispatches on the payload's `type` field
+    // (default 'ipv4' for back-compat). The active tab determines which
+    // template variables get populated, so an IPv6 session loaded on the
+    // ipv4 tab is reported as a tab mismatch rather than silently mis-rendered.
+    if ($session_enabled && in_array($active_tab, ['vlsm', 'vlsm6'], true) && isset($_GET['s'])) {
         $session_load_id = trim((string)$_GET['s']);
         if (preg_match('/^[0-9a-f]{8}$/', $session_load_id)) {
             try {
@@ -788,29 +865,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($payload === null) {
                         $session_error = 'Session not found or expired.';
                     } else {
-                        $vlsm_network    = (string)($payload['network'] ?? '');
-                        $vlsm_cidr_input = (string)($payload['cidr']    ?? '');
-                        $raw_reqs        = $payload['requirements'] ?? [];
-                        if (is_array($raw_reqs)) {
-                            foreach ($raw_reqs as $req) {
-                                if (is_array($req) && isset($req['name'], $req['hosts'])) {
-                                    $vlsm_requirements[] = [
-                                        'name'  => (string)$req['name'],
-                                        'hosts' => (int)$req['hosts'],
-                                    ];
+                        $payload_type = (string)($payload['type'] ?? 'ipv4');
+                        $expected_type = $active_tab === 'vlsm6' ? 'ipv6' : 'ipv4';
+                        if ($payload_type !== $expected_type) {
+                            $session_error = 'Session is for the '
+                                . ($payload_type === 'ipv6' ? 'IPv6' : 'IPv4')
+                                . ' VLSM planner — switch tabs to load it.';
+                        } elseif ($payload_type === 'ipv6') {
+                            $vlsm6_network    = (string)($payload['network'] ?? '');
+                            $vlsm6_cidr_input = (string)($payload['cidr']    ?? '');
+                            $raw_reqs6        = $payload['requirements'] ?? [];
+                            if (is_array($raw_reqs6)) {
+                                foreach ($raw_reqs6 as $req) {
+                                    if (!is_array($req) || !isset($req['name'], $req['hosts'])) {
+                                        continue;
+                                    }
+                                    $hosts_in = $req['hosts'];
+                                    if (is_int($hosts_in) && $hosts_in >= 1) {
+                                        $vlsm6_requirements[] = ['name' => (string)$req['name'], 'hosts' => $hosts_in];
+                                    } elseif (
+                                        is_string($hosts_in)
+                                        && preg_match('/^2\^([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/', $hosts_in)
+                                    ) {
+                                        $vlsm6_requirements[] = ['name' => (string)$req['name'], 'hosts' => $hosts_in];
+                                    }
                                 }
                             }
-                        }
-                        if ($vlsm_requirements !== [] && $vlsm_network !== '') {
-                            $rv = resolve_ipv4_input($vlsm_network, $vlsm_cidr_input);
-                            if ($rv['result']) {
-                                $vlsm_cidr_int   = (int)ltrim($rv['result']['netmask_cidr'], '/');
-                                $vlsm_network_ip = explode('/', $rv['result']['network_cidr'])[0];
-                                $vr = vlsm_allocate($vlsm_network_ip, $vlsm_cidr_int, $vlsm_requirements);
-                                if (isset($vr['error'])) {
-                                    $vlsm_error = $vr['error'];
-                                } else {
-                                    $vlsm_result = $vr['allocations'] ?? [];
+                            if ($vlsm6_requirements !== [] && $vlsm6_network !== '') {
+                                $rv6 = resolve_ipv6_input($vlsm6_network, $vlsm6_cidr_input);
+                                if ($rv6['result6']) {
+                                    $vlsm6_cidr_int   = (int)ltrim($rv6['result6']['prefix'], '/');
+                                    $vlsm6_network_ip = explode('/', $rv6['result6']['network_cidr'])[0];
+                                    $vr6 = vlsm6_allocate($vlsm6_network_ip, $vlsm6_cidr_int, $vlsm6_requirements);
+                                    if (isset($vr6['error'])) {
+                                        $vlsm6_error = $vr6['error'];
+                                    } else {
+                                        $vlsm6_result = $vr6['allocations'] ?? [];
+                                    }
+                                }
+                            }
+                        } else {
+                            // ipv4 (or pre-v3 untyped payload)
+                            $vlsm_network    = (string)($payload['network'] ?? '');
+                            $vlsm_cidr_input = (string)($payload['cidr']    ?? '');
+                            $raw_reqs        = $payload['requirements'] ?? [];
+                            if (is_array($raw_reqs)) {
+                                foreach ($raw_reqs as $req) {
+                                    if (is_array($req) && isset($req['name'], $req['hosts'])) {
+                                        $vlsm_requirements[] = [
+                                            'name'  => (string)$req['name'],
+                                            'hosts' => (int)$req['hosts'],
+                                        ];
+                                    }
+                                }
+                            }
+                            if ($vlsm_requirements !== [] && $vlsm_network !== '') {
+                                $rv = resolve_ipv4_input($vlsm_network, $vlsm_cidr_input);
+                                if ($rv['result']) {
+                                    $vlsm_cidr_int   = (int)ltrim($rv['result']['netmask_cidr'], '/');
+                                    $vlsm_network_ip = explode('/', $rv['result']['network_cidr'])[0];
+                                    $vr = vlsm_allocate($vlsm_network_ip, $vlsm_cidr_int, $vlsm_requirements);
+                                    if (isset($vr['error'])) {
+                                        $vlsm_error = $vr['error'];
+                                    } else {
+                                        $vlsm_result = $vr['allocations'] ?? [];
+                                    }
                                 }
                             }
                         }
@@ -1053,4 +1172,10 @@ $share_base_server = $share_proto . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost
 $share_url_abs = $share_url !== '' ? $share_base_server . $share_url : '';
 
 // Session save URL (shown after a successful session save)
-$session_save_url = $session_save_id !== '' ? '?tab=vlsm&s=' . urlencode($session_save_id) : '';
+// v3.0.0 (#315) — anchor the share-link tab to the saved session's planner.
+// IPv6 saves go to ?tab=vlsm6, IPv4 stays on ?tab=vlsm. The active tab at
+// save time is the source of truth (IPv6 saves only happen on vlsm6).
+$session_save_tab = ($active_tab === 'vlsm6') ? 'vlsm6' : 'vlsm';
+$session_save_url = $session_save_id !== ''
+    ? '?tab=' . $session_save_tab . '&s=' . urlencode($session_save_id)
+    : '';

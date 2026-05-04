@@ -60,8 +60,49 @@ function admin_authenticate(?callable $onFail = null): void
     // Constant-time username compare; bcrypt verify is itself constant-time
     // for matching-cost hashes.
     if (!hash_equals($admin_user, $u) || !password_verify($p, $admin_pass_hash)) {
+        admin_audit_login_outcome(false, $u);
         $onFail('Invalid credentials.', 401);
         return;
+    }
+
+    admin_audit_login_outcome(true, $u);
+}
+
+/**
+ * Best-effort audit log entry for an admin auth attempt. Lazily loads
+ * functions-audit.php so the audit module remains optional at install time
+ * (some self-hosters may strip the admin DB writeability for read-only
+ * inspection). Any error is swallowed — auth must remain authoritative.
+ */
+function admin_audit_login_outcome(bool $ok, string $attemptedUser): void
+{
+    static $loaded = false;
+    if (!$loaded) {
+        $audit_path = __DIR__ . '/functions-audit.php';
+        if (!is_file($audit_path)) {
+            return;
+        }
+        require_once $audit_path;
+        $loaded = true;
+    }
+    if (!function_exists('audit_log') || !function_exists('audit_ip_from_request')) {
+        return;
+    }
+    try {
+        $db = new \SQLite3(admin_apikey_db_path());
+        $db->enableExceptions(true);
+        $db->busyTimeout(1500);
+        audit_log(
+            $db,
+            $ok ? 'login.ok' : 'login.fail',
+            $attemptedUser !== '' ? $attemptedUser : null,
+            audit_ip_from_request(),
+            null,
+            null
+        );
+        $db->close();
+    } catch (\Throwable $e) {
+        error_log('sc admin_audit_login_outcome error: ' . $e->getMessage());
     }
 }
 
