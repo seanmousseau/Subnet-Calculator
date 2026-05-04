@@ -9,6 +9,7 @@ Usage:
 """
 
 import asyncio
+import base64
 import json
 import os
 import re
@@ -2699,6 +2700,382 @@ async def test_session_forms_spacing(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# v3.0.0 — IPv6 VLSM session save/load round trip (#315)
+# ---------------------------------------------------------------------------
+
+async def test_vlsm6_session_save_load(page: Page) -> None:
+    section("v3.0.0 #315 IPv6 VLSM session save/load")
+    # Calculate first so the Save Session form is populated.
+    url = (APP_URL + "?tab=vlsm6&vlsm6_network=2001:db8::&vlsm6_cidr=32"
+           + "&vlsm6_name%5B%5D=Site-A&vlsm6_hosts%5B%5D=256")
+    await navigate(page, url)
+    panel = await page.query_selector("#vlsm6-session-controls")
+    if panel is None:
+        ok("vlsm6 session save/load: sessions not enabled on this server (skipped)")
+        return
+
+    # Click "Save Session" inside the IPv6 VLSM panel.
+    save_btn = page.locator(
+        '#vlsm6-session-controls button[name="session_action"][value="save"]'
+    )
+    if await save_btn.count() == 0:
+        ok("vlsm6 session save/load: save button not present (skipped)")
+        return
+    await save_btn.first.click()
+    await page.wait_for_load_state("networkidle")
+
+    # Saved session URL appears in the saved-bar; capture the 8-char id.
+    saved_bar = page.locator("#vlsm6-session-controls .session-saved-bar code.share-url")
+    assert_true(
+        "vlsm6 save: saved-bar appears after save",
+        await saved_bar.count() > 0,
+    )
+    href_text_raw = await saved_bar.first.text_content()
+    href_text = href_text_raw or ""
+    m = re.search(r"\?tab=vlsm6&s=([0-9a-f]{8})", href_text)
+    assert_true(
+        "vlsm6 save: URL contains tab=vlsm6 and 8-char id",
+        m is not None,
+        f"got: {href_text!r}",
+    )
+    if m is None:
+        return
+    sid = m.group(1)
+
+    # Reload via the session URL — fields must be restored.
+    await navigate(page, APP_URL + f"?tab=vlsm6&s={sid}")
+    network_val = await page.input_value("#vlsm6_network")
+    cidr_val    = await page.input_value("#vlsm6_cidr")
+    assert_eq("vlsm6 load: network restored", network_val, "2001:db8::")
+    assert_true(
+        "vlsm6 load: cidr restored to 32",
+        cidr_val.lstrip("/") == "32",
+        f"got: {cidr_val!r}",
+    )
+    # Result table from auto-calc on load.
+    result_count = await page.locator(".vlsm6-table tbody tr").count()
+    assert_true("vlsm6 load: results auto-render", result_count >= 1, f"rows={result_count}")
+
+
+# ---------------------------------------------------------------------------
+# v3.0.0 — Admin /admin/keys.php smoke (#307)
+# ---------------------------------------------------------------------------
+
+ADMIN_USER = "testadmin"
+ADMIN_PASS = "test-admin-password"
+
+
+async def test_admin_keys_unauth_challenge(page: Page) -> None:
+    section("v3.0.0 #307 admin/keys.php — unauth 401 + WWW-Authenticate")
+    # The page sends a Basic challenge; we use page.request to inspect the
+    # raw response without the browser intercepting the auth dialog.
+    resp = await page.context.request.get(APP_URL + "admin/keys.php")
+    assert_eq("admin/keys unauth: status 401", resp.status, 401)
+    www_auth = resp.headers.get("www-authenticate", "")
+    assert_true(
+        "admin/keys unauth: WWW-Authenticate Basic realm present",
+        www_auth.lower().startswith("basic "),
+        f"got: {www_auth!r}",
+    )
+
+
+async def test_admin_keys_authed_renders(page: Page) -> None:
+    section("v3.0.0 #307 admin/keys.php — authed renders")
+    auth = (ADMIN_USER, ADMIN_PASS)
+    resp = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": "Basic " + base64.b64encode(
+            f"{auth[0]}:{auth[1]}".encode()
+        ).decode()},
+    )
+    assert_eq("admin/keys authed: status 200", resp.status, 200)
+    body = await resp.text()
+    assert_true(
+        "admin/keys authed: page contains 'API Keys' heading",
+        "API Keys" in body,
+    )
+    assert_true(
+        "admin/keys authed: mint form RPM input present (#312)",
+        'name="rate_limit_rpm"' in body,
+    )
+
+
+async def test_admin_audit_renders(page: Page) -> None:
+    section("v3.0.0 #307 admin/audit.php — authed renders + filters present")
+    auth_header = "Basic " + base64.b64encode(
+        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
+    ).decode()
+    resp = await page.context.request.get(
+        APP_URL + "admin/audit.php",
+        headers={"Authorization": auth_header},
+    )
+    assert_eq("admin/audit authed: status 200", resp.status, 200)
+    body = await resp.text()
+    assert_true(
+        "admin/audit: page title present",
+        "Admin Audit Log" in body,
+    )
+    for label in ["all", "login", "key"]:
+        assert_true(
+            f"admin/audit: '{label}' filter link present",
+            f">{label}</a>" in body,
+            f"missing filter '{label}'",
+        )
+
+
+async def test_admin_audit_records_login_failure(page: Page) -> None:
+    section("v3.0.0 #306 audit log records failed admin login")
+    # Trigger a failed login (bad password) — should write a login.fail row.
+    bad_auth = "Basic " + base64.b64encode(
+        f"{ADMIN_USER}:wrong-password".encode()
+    ).decode()
+    bad_resp = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": bad_auth},
+    )
+    assert_eq("audit login.fail: bad creds → 401", bad_resp.status, 401)
+
+    # Now read audit page with the login.fail filter.
+    good_auth = "Basic " + base64.b64encode(
+        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
+    ).decode()
+    audit_resp = await page.context.request.get(
+        APP_URL + "admin/audit.php?filter=login.",
+        headers={"Authorization": good_auth},
+    )
+    body = await audit_resp.text()
+    assert_true(
+        "audit log: login.fail badge appears in body",
+        "login.fail" in body,
+    )
+
+
+# ---------------------------------------------------------------------------
+# v3.0.0 — PR2 admin hardening (#311 wizard, #313 TOTP, #307 matrix)
+# ---------------------------------------------------------------------------
+
+
+def _admin_basic_header() -> str:
+    return "Basic " + base64.b64encode(
+        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
+    ).decode()
+
+
+async def test_admin_keys_csrf_rejected(page: Page) -> None:
+    section("v3.0.0 #307 admin/keys.php — POST without CSRF token rejected")
+    # POST with no _csrf field; should land on the redirect with a flash error.
+    resp = await page.context.request.post(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": _admin_basic_header()},
+        form={"action": "create", "name": "csrf-test"},
+        max_redirects=0,
+    )
+    assert_eq("admin/keys CSRF: 303 redirect on bad token", resp.status, 303)
+    follow = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": _admin_basic_header()},
+    )
+    body = await follow.text()
+    # The flash on the next request from the same session would surface the
+    # error, but cookies don't survive request.get without the same context;
+    # verify instead that no key named csrf-test was created (the create
+    # path is what we want to confirm did NOT run).
+    assert_true(
+        "admin/keys CSRF: csrf-test key was not created",
+        ">csrf-test<" not in body,
+    )
+
+
+async def test_admin_keys_per_row_rpm_edit(page: Page) -> None:
+    section("v3.0.0 #312 admin/keys.php — per-row RPM editor present + posts")
+    auth = _admin_basic_header()
+    # Mint a key first so we have a row to edit.
+    keys_get = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+    )
+    body = await keys_get.text()
+    # CSRF token is the same for every form on the page.
+    import re
+    m = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    assert_true("admin/keys: CSRF token discoverable", m is not None)
+    csrf = m.group(1) if m else ""
+
+    mint = await page.context.request.post(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+        form={
+            "_csrf": csrf,
+            "action": "create",
+            "name": "rpm-edit-target",
+            "rate_limit_rpm": "120",
+        },
+        max_redirects=0,
+    )
+    assert_eq("admin/keys mint: 303 PRG", mint.status, 303)
+
+    listing = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+    )
+    body2 = await listing.text()
+    assert_true(
+        "admin/keys per-row RPM: editor input rendered for each row",
+        'name="rate_limit_rpm"' in body2 and 'action" value="set_rpm"' in body2,
+    )
+    assert_true(
+        "admin/keys per-row RPM: target row visible",
+        "rpm-edit-target" in body2,
+    )
+
+
+async def test_admin_keys_revoke_confirm_present(page: Page) -> None:
+    section("v3.0.0 #307 admin/keys.php — revoke form has confirm()")
+    auth = _admin_basic_header()
+    listing = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+    )
+    body = await listing.text()
+    assert_true(
+        "admin/keys revoke: onsubmit confirm guard present",
+        "onsubmit=\"return confirm('Revoke this key?');\"" in body,
+    )
+
+    # Cleanup: revoke every active key so subsequent open-API tests in this
+    # suite are not flipped into "auth required" mode. test_admin_keys_per_row_rpm_edit
+    # mints rpm-edit-target and leaves it active so this test can find a revoke
+    # form to assert against; once that assertion is done, drain the table.
+    csrf_match = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    if csrf_match is not None:
+        csrf = csrf_match.group(1)
+        for id_match in re.finditer(
+            r'<input type="hidden" name="action" value="revoke">\s*'
+            r'<input type="hidden" name="id" value="(\d+)">',
+            body,
+        ):
+            await page.context.request.post(
+                APP_URL + "admin/keys.php",
+                headers={"Authorization": auth},
+                form={
+                    "_csrf": csrf,
+                    "action": "revoke",
+                    "id": id_match.group(1),
+                },
+                max_redirects=0,
+            )
+
+
+async def test_admin_audit_pagination_param(page: Page) -> None:
+    section("v3.0.0 #306 admin/audit.php — page=2 query param accepted")
+    auth = _admin_basic_header()
+    resp = await page.context.request.get(
+        APP_URL + "admin/audit.php?page=2",
+        headers={"Authorization": auth},
+    )
+    assert_eq("admin/audit page=2: still 200", resp.status, 200)
+    body = await resp.text()
+    # Either a pagination footer is present, or the empty page renders cleanly;
+    # both are acceptable. We just need to confirm no crash.
+    assert_true(
+        "admin/audit page=2: page renders (Audit Log heading visible)",
+        "Admin Audit Log" in body,
+    )
+
+
+async def test_admin_totp_page_renders(page: Page) -> None:
+    section("v3.0.0 #313 admin/totp.php — authed renders status disabled")
+    auth = _admin_basic_header()
+    resp = await page.context.request.get(
+        APP_URL + "admin/totp.php",
+        headers={"Authorization": auth},
+    )
+    assert_eq("admin/totp: status 200", resp.status, 200)
+    body = await resp.text()
+    assert_true(
+        "admin/totp: page heading present",
+        ">TOTP / 2FA<" in body,
+    )
+    assert_true(
+        "admin/totp: status badge 'disabled' rendered (no secret in fixture)",
+        "disabled" in body,
+    )
+    assert_true(
+        "admin/totp: 'Generate a secret' form present when disabled",
+        'value="generate_secret"' in body,
+    )
+
+
+async def test_admin_totp_generate_secret_flow(page: Page) -> None:
+    section("v3.0.0 #313 admin/totp.php — generate_secret POST surfaces base32")
+    auth = _admin_basic_header()
+    # Pull CSRF from the page first.
+    initial = await page.context.request.get(
+        APP_URL + "admin/totp.php",
+        headers={"Authorization": auth},
+    )
+    body = await initial.text()
+    import re
+    m = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    assert_true("admin/totp: CSRF token discoverable", m is not None)
+    csrf = m.group(1) if m else ""
+
+    # Cookies must round-trip for the PRG flash to survive.
+    ctx = page.context
+    storage = await ctx.storage_state()  # noqa: F841 — keep handle, satisfies linters
+    post = await ctx.request.post(
+        APP_URL + "admin/totp.php",
+        headers={"Authorization": auth},
+        form={"_csrf": csrf, "action": "generate_secret"},
+        max_redirects=0,
+    )
+    assert_eq("admin/totp generate: 303 PRG", post.status, 303)
+
+    follow = await ctx.request.get(
+        APP_URL + "admin/totp.php",
+        headers={"Authorization": auth},
+    )
+    body2 = await follow.text()
+    assert_true(
+        "admin/totp generate: provisioning otpauth:// URI rendered",
+        "otpauth://totp/" in body2,
+    )
+    assert_true(
+        "admin/totp generate: snippet for $admin_totp_secret rendered",
+        "$admin_totp_secret" in body2,
+    )
+
+
+async def test_admin_totp_regenerate_blocked_when_disabled(page: Page) -> None:
+    section("v3.0.0 #313 admin/totp.php — regenerate_codes blocked when TOTP disabled")
+    auth = _admin_basic_header()
+    initial = await page.context.request.get(
+        APP_URL + "admin/totp.php",
+        headers={"Authorization": auth},
+    )
+    body = await initial.text()
+    import re
+    m = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    csrf = m.group(1) if m else ""
+    post = await page.context.request.post(
+        APP_URL + "admin/totp.php",
+        headers={"Authorization": auth},
+        form={"_csrf": csrf, "action": "regenerate_codes"},
+        max_redirects=0,
+    )
+    assert_eq("admin/totp regenerate (disabled): 303 PRG", post.status, 303)
+    follow = await page.context.request.get(
+        APP_URL + "admin/totp.php",
+        headers={"Authorization": auth},
+    )
+    body2 = await follow.text()
+    assert_true(
+        "admin/totp regenerate: error mentions TOTP must be enabled first",
+        "Enable TOTP first" in body2,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Permissions-Policy header directives (coverage gap)
 # ---------------------------------------------------------------------------
 
@@ -3929,6 +4306,173 @@ async def test_a11y_reduced_motion_css(page: Page) -> None:
     assert_true("prefers-reduced-motion media query present", has_rule)
 
 
+# ---------------------------------------------------------------------------
+# v3.0.0 — keyboard shortcut overlay (#300) and recent calculations (#301)
+# ---------------------------------------------------------------------------
+
+async def test_kbd_overlay_question_mark_opens(page: Page) -> None:
+    section("v3.0.0 #300 keyboard overlay — '?' opens, Esc closes")
+    await navigate(page, APP_URL)
+    overlay = page.locator("#kbd-overlay")
+    assert_true("kbd overlay: hidden by default", await overlay.is_hidden())
+    # Press ? on the body (not in any input).
+    await page.locator("body").click()
+    await page.keyboard.press("Shift+/")
+    assert_true(
+        "kbd overlay: visible after '?'",
+        await overlay.is_visible(),
+    )
+    assert_true(
+        "kbd overlay: shows shortcut entries",
+        await overlay.locator(".kbd-list dt").count() >= 5,
+    )
+    await page.keyboard.press("Escape")
+    assert_true(
+        "kbd overlay: hidden after Esc",
+        await overlay.is_hidden(),
+    )
+
+
+async def test_kbd_overlay_header_button_opens(page: Page) -> None:
+    section("v3.0.0 #300 keyboard overlay — header button opens it")
+    await navigate(page, APP_URL)
+    await page.click("#kbd-help-toggle")
+    assert_true(
+        "kbd overlay: visible after header click",
+        await page.locator("#kbd-overlay").is_visible(),
+    )
+    # Backdrop click closes.
+    await page.locator("#kbd-overlay").click(position={"x": 5, "y": 5})
+    assert_true(
+        "kbd overlay: hidden after backdrop click",
+        await page.locator("#kbd-overlay").is_hidden(),
+    )
+
+
+async def test_kbd_tab_switching_digits(page: Page) -> None:
+    section("v3.0.0 #300 keyboard — digits 1-4 switch tabs")
+    await navigate(page, APP_URL)
+    await page.locator("body").click()
+    await page.keyboard.press("3")
+    assert_eq(
+        "kbd: '3' selects vlsm tab",
+        await page.get_attribute("#tab-vlsm", "aria-selected"),
+        "true",
+    )
+    await page.keyboard.press("1")
+    assert_eq(
+        "kbd: '1' selects ipv4 tab",
+        await page.get_attribute("#tab-ipv4", "aria-selected"),
+        "true",
+    )
+
+
+async def test_kbd_slash_focuses_input(page: Page) -> None:
+    section("v3.0.0 #300 keyboard — '/' focuses first input on active tab")
+    await navigate(page, APP_URL)
+    await page.locator("body").click()
+    await page.keyboard.press("/")
+    focused_id = await page.evaluate("() => document.activeElement?.id")
+    assert_eq("kbd: '/' focuses #ip on IPv4 tab", focused_id, "ip")
+
+
+async def test_kbd_help_button_hidden_on_touch(page: Page) -> None:
+    section("v3.0.0 #300 keyboard — help button hidden on coarse pointers (CSS @media)")
+    await navigate(page, APP_URL)
+    has_rule = await page.evaluate("""() => {
+        for (const sheet of document.styleSheets) {
+            try {
+                for (const rule of sheet.cssRules) {
+                    if (rule.conditionText?.includes('hover: none')) {
+                        const css = rule.cssText || '';
+                        if (css.includes('kbd-help-toggle')) return true;
+                    }
+                }
+            } catch (e) {}
+        }
+        return false;
+    }""")
+    assert_true("kbd help: @media (hover: none) hides #kbd-help-toggle", has_rule)
+
+
+async def test_history_disabled_by_default(page: Page) -> None:
+    section("v3.0.0 #301 history — disabled by default; opening overlay shows opt-in")
+    await navigate(page, APP_URL)
+    # Clear any localStorage from previous tests in this context.
+    await page.evaluate("() => localStorage.clear()")
+    await page.click("#history-toggle")
+    overlay = page.locator("#history-overlay")
+    assert_true("history: overlay visible", await overlay.is_visible())
+    cb = page.locator("#history-enabled-toggle")
+    assert_eq("history: toggle starts unchecked", await cb.is_checked(), False)
+    assert_true(
+        "history: disabled-msg is shown when off",
+        await page.locator("#history-disabled-msg").is_visible(),
+    )
+
+
+async def test_history_opt_in_records_calculation(page: Page) -> None:
+    section("v3.0.0 #301 history — enabling, calculating, then re-opening shows entry")
+    await navigate(page, APP_URL)
+    await page.evaluate("() => localStorage.clear()")
+    await page.click("#history-toggle")
+    await page.locator("#history-enabled-toggle").check()
+    await page.locator("#history-overlay .modal-close").click()
+
+    # Run a successful calculation; module captures URL on next page load.
+    await navigate(page, APP_URL + "?ip=192.168.50.0&mask=24&tab=ipv4")
+    # Open history again and assert the entry appears.
+    await page.click("#history-toggle")
+    items = page.locator("#history-list .history-item")
+    assert_true(
+        "history: at least one entry recorded",
+        await items.count() >= 1,
+    )
+    first_link = items.first.locator(".history-link")
+    label = await first_link.text_content()
+    assert_true(
+        "history: entry label contains the input",
+        bool(label) and "192.168.50.0" in (label or ""),
+    )
+
+
+async def test_history_clear_removes_entries(page: Page) -> None:
+    section("v3.0.0 #301 history — Clear all empties the list")
+    await navigate(page, APP_URL)
+    # Seed an entry directly so this test does not depend on order.
+    await page.evaluate(
+        """() => {
+            localStorage.setItem('sc.history.enabled', '1');
+            localStorage.setItem('sc.history.entries',
+                JSON.stringify([{url: '?ip=10.0.0.0&mask=8', tab: 'ipv4', label: '10.0.0.0', ts: 1}]));
+        }"""
+    )
+    await page.click("#history-toggle")
+    assert_true(
+        "history: seeded entry visible",
+        await page.locator("#history-list .history-item").count() == 1,
+    )
+    await page.click("#history-clear")
+    assert_eq(
+        "history: cleared list is empty",
+        await page.locator("#history-list .history-item").count(),
+        0,
+    )
+    stored = await page.evaluate("() => localStorage.getItem('sc.history.entries')")
+    assert_eq("history: localStorage cleared", stored, "[]")
+
+
+async def test_history_h_key_opens(page: Page) -> None:
+    section("v3.0.0 #301 history — 'h' key opens overlay")
+    await navigate(page, APP_URL)
+    await page.locator("body").click()
+    await page.keyboard.press("h")
+    assert_true(
+        "history: 'h' opens overlay",
+        await page.locator("#history-overlay").is_visible(),
+    )
+
+
 async def test_vlsm_keyboard_delete(page: Page) -> None:
     section("VLSM — keyboard Delete on remove button")
     await navigate(page, APP_URL)
@@ -3962,6 +4506,202 @@ async def test_vlsm_keyboard_delete(page: Page) -> None:
         "focus moves to name input after Backspace delete",
         "vlsm-name-input" in (focused_class_bs or ""),
         str(focused_class_bs),
+    )
+
+
+async def _open_tree_editor(page: Page, root_cidr: str = "10.0.0.0/24") -> None:
+    """Open the IPv4 tab, expand the Tree Editor tool drawer, and start editing."""
+    await navigate(page, APP_URL)
+    await page.evaluate("() => localStorage.clear()")
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='tree-editor']")
+    await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
+    await page.fill("#tree_editor_cidr", root_cidr)
+    await page.click("#tree-editor-init button[type='submit']")
+    await page.wait_for_selector(".tree-editor-canvas .tree-editor-card")
+
+
+async def test_tree_editor_split(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — split root into 4 children")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    await page.wait_for_selector("[data-role='split-modal']:not([hidden])")
+    await page.click("[data-split-into='4']")
+    cidrs = await page.evaluate(
+        "() => Array.from(document.querySelectorAll('.tree-editor-cidr')).map(e=>e.textContent)"
+    )
+    assert_eq("split /24 into 4 → 5 nodes total", str(len(cidrs)), "5")
+    assert_true("first child is 10.0.0.0/26", "10.0.0.0/26" in cidrs)
+    assert_true("last child is 10.0.0.192/26", "10.0.0.192/26" in cidrs)
+
+
+async def test_tree_editor_merge_via_drag(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — drag-merge sibling restores parent")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    await page.click("[data-split-into='2']")
+    # Verify split happened.
+    initial = await page.locator(".tree-editor-cidr").count()
+    assert_true("split occurred before merge", initial == 3)
+    # Drag first child onto second.
+    children = page.locator(".tree-editor-children .tree-editor-card")
+    src = await children.nth(0).bounding_box()
+    dst = await children.nth(1).bounding_box()
+    if src and dst:
+        await page.mouse.move(src["x"] + 5, src["y"] + 5)
+        await page.mouse.down()
+        await page.mouse.move(dst["x"] + 5, dst["y"] + 5, steps=5)
+        await page.mouse.up()
+    after = await page.locator(".tree-editor-cidr").count()
+    assert_eq("after drag-merge → 1 node remains", str(after), "1")
+
+
+async def test_tree_editor_rename(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — rename + notes persist")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-pencil")
+    await page.wait_for_selector("[data-role='rename-modal']:not([hidden])")
+    await page.fill("[data-role='rename-name']", "Corp HQ")
+    await page.fill("[data-role='rename-notes']", "edge router")
+    await page.click("[data-role='rename-save']")
+    name = await page.locator(".tree-editor-name").first.text_content()
+    notes = await page.locator(".tree-editor-notes").first.text_content()
+    assert_eq("name renders", name, "Corp HQ")
+    assert_eq("notes render", notes, "edge router")
+
+
+async def test_tree_editor_undo(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — Ctrl+Z reverts last edit")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    await page.click("[data-split-into='2']")
+    assert_true("split happened", await page.locator(".tree-editor-cidr").count() == 3)
+    await page.locator(".tree-editor-canvas").click()  # focus inside editor
+    await page.keyboard.press("Control+z")
+    after = await page.locator(".tree-editor-cidr").count()
+    assert_eq("after undo → 1 node", str(after), "1")
+
+
+async def test_tree_editor_autosave_round_trip(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — localStorage autosave restores on reload")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    await page.click("[data-split-into='2']")
+    # autosave is debounced 300 ms.
+    await page.wait_for_timeout(400)
+    stored = await page.evaluate("() => localStorage.getItem('sc.tree.draft.10.0.0.0/24')")
+    assert_true("autosave wrote a draft", stored is not None and "10.0.0.0/25" in stored)
+    # Reload and verify the editor restores from autosave.
+    await navigate(page, APP_URL)
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='tree-editor']")
+    await page.fill("#tree_editor_cidr", "10.0.0.0/24")
+    await page.click("#tree-editor-init button[type='submit']")
+    await page.wait_for_selector(".tree-editor-canvas .tree-editor-card")
+    cidrs = await page.evaluate(
+        "() => Array.from(document.querySelectorAll('.tree-editor-cidr')).map(e=>e.textContent)"
+    )
+    assert_true("reload: split children present", "10.0.0.0/25" in cidrs and "10.0.0.128/25" in cidrs)
+
+
+async def test_tree_editor_save_session(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — Save Session POSTs and returns id")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    await page.click("[data-split-into='2']")
+    await page.click("[data-action='save-session']")
+    # status banner shows "Saved as session XXXXXXXX".
+    await page.wait_for_function(
+        "() => /Saved as session [0-9a-f]{8}/.test(document.querySelector('.tree-editor-status').textContent || '')",
+        timeout=5000,
+    )
+    status = await page.locator(".tree-editor-status").text_content()
+    assert_true("save status surfaces session id", bool(status) and "Saved as session" in (status or ""))
+
+
+async def test_tree_editor_share_url(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — Share URL emits ?tree=… and is copyable")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    await page.click("[data-split-into='2']")
+    # Stub clipboard so the test never depends on a real clipboard surface.
+    await page.add_init_script(
+        "window.__lastClipboard = null; "
+        "navigator.clipboard = navigator.clipboard || {}; "
+        "navigator.clipboard.writeText = function(t){ window.__lastClipboard = t; return Promise.resolve(); };"
+    )
+    await page.click("[data-action='share-url']")
+    share_url = await page.locator("[data-role='share-url']").text_content()
+    assert_true("share URL contains ?tree=", bool(share_url) and "tree=" in (share_url or ""))
+
+
+async def test_tree_editor_copy_formats(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — copy CIDR / Markdown / Cisco")
+    # Install clipboard stub BEFORE app.js boots. On insecure HTTP
+    # (test rig) navigator.clipboard is undefined and a plain assignment
+    # is silently swallowed; defineProperty with configurable:true wins.
+    await page.add_init_script(
+        "window.__clip = [];"
+        "try {"
+        "  Object.defineProperty(navigator, 'clipboard', {"
+        "    value: { writeText: function(t){ window.__clip.push(t); return Promise.resolve(); } },"
+        "    configurable: true,"
+        "    writable: true"
+        "  });"
+        "} catch (e) {}"
+    )
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    await page.click("[data-split-into='2']")
+    await page.click("[data-action='copy-cidr']")
+    await page.click("[data-action='copy-md']")
+    await page.click("[data-action='copy-cisco']")
+    captured = await page.evaluate("() => window.__clip || []")
+    assert_eq("3 clipboard payloads recorded", str(len(captured)), "3")
+    assert_true("CIDR list contains /25 children", "10.0.0.0/25" in captured[0] and "10.0.0.128/25" in captured[0])
+    assert_true("Markdown export starts with heading", captured[1].startswith("# Subnet Plan"))
+    assert_true("Cisco export contains interface stanza", "interface XX" in captured[2])
+
+
+async def test_tree_editor_action_sheet_on_touch(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — action sheet appears on touch (hover:none)")
+    # Force the (hover:none) media-query branch to activate.
+    await page.emulate_media(reduced_motion=None)
+    # Playwright does not directly emulate hover:none, but matchMedia can be overridden
+    # via add_init_script — test the actual branch path.
+    await page.add_init_script(
+        "(() => { const orig = window.matchMedia.bind(window);"
+        " window.matchMedia = function(q){ if (q.indexOf('hover: none') !== -1) "
+        "{ return { matches: true, media: q, addListener:()=>{}, removeListener:()=>{}, "
+        "addEventListener:()=>{}, removeEventListener:()=>{}, onchange: null, dispatchEvent: ()=>true }; } "
+        "return orig(q); }; })();"
+    )
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    visible = await page.locator("[data-role='action-sheet']").is_visible()
+    assert_true("touch: tap opens action sheet (not split modal)", visible)
+    split_visible = await page.locator("[data-role='split-modal']").is_visible()
+    assert_true("touch: split modal stays closed on initial tap", not split_visible)
+
+
+async def test_tree_editor_share_too_large_fallback(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — share-URL fallback when >50 nodes")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    # Inject a large fake state with >50 nodes via the public-ish localStorage path,
+    # then re-open the editor so it loads the autosave.
+    big_root = '{"cidr":"10.0.0.0/24","children":[' + ','.join(
+        ['{"cidr":"10.0.0.' + str(i) + '/32"}' for i in range(0, 60)]
+    ) + ']}'
+    await page.evaluate(f"() => localStorage.setItem('sc.tree.draft.10.0.0.0/24', {big_root!r})")
+    await navigate(page, APP_URL)
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='tree-editor']")
+    await page.fill("#tree_editor_cidr", "10.0.0.0/24")
+    await page.click("#tree-editor-init button[type='submit']")
+    await page.wait_for_selector(".tree-editor-canvas .tree-editor-card")
+    await page.click("[data-action='share-url']")
+    status = await page.locator(".tree-editor-status").text_content()
+    assert_true(
+        "share-url too-large fallback message surfaces",
+        bool(status) and "too large" in (status or "").lower(),
+        str(status),
     )
 
 
@@ -4169,6 +4909,18 @@ async def main() -> None:
             await test_api_bulk(page)
             await test_vlsm_session_ttl_notice(page)
             await test_session_forms_spacing(page)
+            await test_vlsm6_session_save_load(page)
+            await test_admin_keys_unauth_challenge(page)
+            await test_admin_keys_authed_renders(page)
+            await test_admin_audit_renders(page)
+            await test_admin_audit_records_login_failure(page)
+            await test_admin_keys_csrf_rejected(page)
+            await test_admin_keys_per_row_rpm_edit(page)
+            await test_admin_keys_revoke_confirm_present(page)
+            await test_admin_audit_pagination_param(page)
+            await test_admin_totp_page_renders(page)
+            await test_admin_totp_generate_secret_flow(page)
+            await test_admin_totp_regenerate_blocked_when_disabled(page)
             await test_permissions_policy_directives(page)
             await test_vlsm_utilisation_accuracy(page)
             await test_ipv4_binary_hex_decimal(page)
@@ -4198,6 +4950,27 @@ async def main() -> None:
             await test_a11y_help_bubble_keyboard(page)
             await test_a11y_reduced_motion_css(page)
             await test_vlsm_keyboard_delete(page)
+            # v3.0.0 PR3a — keyboard shortcut overlay (#300) + history (#301)
+            await test_kbd_overlay_question_mark_opens(page)
+            await test_kbd_overlay_header_button_opens(page)
+            await test_kbd_tab_switching_digits(page)
+            await test_kbd_slash_focuses_input(page)
+            await test_kbd_help_button_hidden_on_touch(page)
+            await test_history_disabled_by_default(page)
+            await test_history_opt_in_records_calculation(page)
+            await test_history_clear_removes_entries(page)
+            await test_history_h_key_opens(page)
+            # v3.0.0 PR3b — interactive subnet tree editor (#302)
+            await test_tree_editor_split(page)
+            await test_tree_editor_merge_via_drag(page)
+            await test_tree_editor_rename(page)
+            await test_tree_editor_undo(page)
+            await test_tree_editor_autosave_round_trip(page)
+            await test_tree_editor_save_session(page)
+            await test_tree_editor_share_url(page)
+            await test_tree_editor_copy_formats(page)
+            await test_tree_editor_action_sheet_on_touch(page)
+            await test_tree_editor_share_too_large_fallback(page)
             await test_v290_typography(page)
         finally:
             await context.close()

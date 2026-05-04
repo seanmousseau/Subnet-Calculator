@@ -6,7 +6,7 @@ declare(strict_types=1);
 // These are the built-in defaults. To override, copy config.php.example to
 // config.php alongside this file — config.php is never overwritten by upgrades.
 
-$app_version          = '2.12.1';
+$app_version          = '3.0.0';
 $locale               = 'en'; // BCP 47 locale tag for number formatting (e.g. 'de', 'fr')
 $fixed_bg_color       = 'null';
 $default_tab          = 'ipv4'; // 'ipv4', 'ipv6', or 'vlsm'
@@ -51,11 +51,34 @@ $admin_user        = '';     // Admin username for HTTP Basic Auth on /admin/
 $admin_pass_hash   = '';     // PASSWORD_BCRYPT hash of the admin password
 $apikey_db_path    = '';     // SQLite file for api_keys (auto: data/sessions.sqlite or data/admin.sqlite)
 
+// Admin audit log (v3.0.0, #306)
+$admin_audit_retention_days = 90;  // 0 = never purge; rows older than this are removed on each audit write
+// When true, prefer X-Forwarded-For over REMOTE_ADDR for audit IPs.
+// Only enable behind a known-good reverse proxy that strips client-supplied XFF.
+$admin_audit_trust_xff = false;
+
+// Admin TOTP / 2FA (v3.0.0, #313)
+$admin_totp_secret = '';  // base32 RFC 6238 secret; empty = TOTP disabled
+
+// Wizard-written config first (lowest tier); hand-edited config.php overrides.
+// Order matters: PHP resolves the *last* assignment to a variable, so config.php
+// runs second so an operator edit always wins over auto-written values.
+if (file_exists(__DIR__ . '/../config-admin.php')) {
+    require __DIR__ . '/../config-admin.php';
+}
 if (file_exists(__DIR__ . '/../config.php')) {
     require __DIR__ . '/../config.php';
 }
 
 // Sanitise config values
+// Strict boolean parsing — `(bool)'false'` is true, but operators commonly
+// write the word "false" in config strings.  filter_var with FILTER_VALIDATE_BOOLEAN
+// handles "true"/"false"/"yes"/"no"/"on"/"off"/"0"/"1" correctly.
+$admin_audit_trust_xff = filter_var(
+    $admin_audit_trust_xff ?? false,
+    FILTER_VALIDATE_BOOLEAN,
+    FILTER_NULL_ON_FAILURE
+) ?? false;
 $split_max_subnets = max(1, min((int)$split_max_subnets, 256));
 $lookup_max_cidrs  = max(1, min((int)$lookup_max_cidrs, 1000));
 $lookup_max_ips    = max(1, min((int)$lookup_max_ips, 10000));
@@ -121,3 +144,5 @@ $admin_ui_enabled = (bool)$admin_ui_enabled;
 $admin_user       = is_string($admin_user)      ? $admin_user      : '';
 $admin_pass_hash  = is_string($admin_pass_hash) ? $admin_pass_hash : '';
 $apikey_db_path   = is_string($apikey_db_path)  ? $apikey_db_path  : '';
+$admin_audit_retention_days = max(0, (int)$admin_audit_retention_days);
+$admin_totp_secret = is_string($admin_totp_secret ?? null) ? trim((string)$admin_totp_secret) : '';

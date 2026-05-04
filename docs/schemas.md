@@ -17,12 +17,20 @@ dialect.
 
 ## VLSM session payload
 
-The `vlsm-session` schema describes the JSON shape a VLSM planner session is
-persisted in. Today the calculator only persists IPv4 VLSM state; the schema
-will be expanded if/when IPv6 VLSM session save lands.
+The `vlsm-session` schema (**v2** as of v3.0.0, #315) is a `oneOf` over three
+discriminated branches via a `type` field: `'ipv4'`, `'ipv6'`, or `'tree'`.
+The `type` field is optional on the IPv4 branch — when omitted, it defaults
+to `'ipv4'` so payloads written by v2.x callers continue to validate.
+
+The published `$id` is now
+`https://subnetcalculator.app/api/schemas/vlsm-session.v2.schema.json`. v1
+consumers that pinned the prior `$id` are unaffected; the v1 document remains
+the historical record of what shipped before v3.0.0.
 
 ```json
+// IPv4 (legacy & v3.0.0)
 {
+  "type": "ipv4",
   "network": "10.0.0.0",
   "cidr": "24",
   "requirements": [
@@ -30,6 +38,31 @@ will be expanded if/when IPv6 VLSM session save lands.
     {"name": "DMZ",  "hosts": 14},
     {"name": "Mgmt", "hosts": 2}
   ]
+}
+
+// IPv6 — `hosts` can be an integer OR the "2^N" string form for sizings
+// that overflow a signed 64-bit integer (N = 0–128).
+{
+  "type": "ipv6",
+  "network": "2001:db8::",
+  "cidr": "48",
+  "requirements": [
+    {"name": "Site-A", "hosts": "2^16"},
+    {"name": "Site-B", "hosts": 100}
+  ]
+}
+
+// Tree (v3.0.0 #302 — interactive subnet tree editor; lands in PR3)
+{
+  "type": "tree",
+  "root": {
+    "cidr":     "10.0.0.0/16",
+    "name":     "Corp HQ",
+    "children": [
+      {"cidr": "10.0.0.0/17",   "name": "Production"},
+      {"cidr": "10.0.128.0/17", "name": "Lab"}
+    ]
+  }
 }
 ```
 

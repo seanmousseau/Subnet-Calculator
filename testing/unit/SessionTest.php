@@ -121,4 +121,82 @@ class SessionTest extends TestCase
         session_purge($this->db);
         $this->assertNotNull(session_load($this->db, $id));
     }
+
+    // ── v3.0.0 (#315) — schema v2 discriminator round-trips ────────────────────
+
+    public function testCreate_Ipv4PayloadWithExplicitTypeRoundTrips(): void
+    {
+        $payload = [
+            'type'         => 'ipv4',
+            'network'      => '10.0.0.0',
+            'cidr'         => '24',
+            'requirements' => [['name' => 'LAN', 'hosts' => 50]],
+        ];
+        $id = session_create($this->db, $payload, 30);
+        $this->assertSame($payload, session_load($this->db, $id));
+    }
+
+    public function testCreate_Ipv6PayloadWithIntHostsRoundTrips(): void
+    {
+        $payload = [
+            'type'         => 'ipv6',
+            'network'      => '2001:db8::',
+            'cidr'         => '48',
+            'requirements' => [['name' => 'Site-A', 'hosts' => 256]],
+        ];
+        $id = session_create($this->db, $payload, 30);
+        $this->assertSame($payload, session_load($this->db, $id));
+    }
+
+    public function testCreate_Ipv6PayloadWithPowerOfTwoStringHostsRoundTrips(): void
+    {
+        // The "2^N" string form is required for sizings that overflow int64.
+        // session_create stores arbitrary JSON-serialisable arrays, so this
+        // should round-trip byte-identical.
+        $payload = [
+            'type'         => 'ipv6',
+            'network'      => 'fd00:1234::',
+            'cidr'         => '16',
+            'requirements' => [
+                ['name' => 'Site-Huge',  'hosts' => '2^96'],
+                ['name' => 'Site-Small', 'hosts' => 50],
+            ],
+        ];
+        $id = session_create($this->db, $payload, 30);
+        $this->assertSame($payload, session_load($this->db, $id));
+    }
+
+    public function testLoad_LegacyUntypedPayloadRetainsAbsentType(): void
+    {
+        // Pre-v3.0.0 payloads omit `type`. The session store must return them
+        // unchanged so callers can apply their own back-compat default.
+        $payload = [
+            'network'      => '192.168.0.0',
+            'cidr'         => '24',
+            'requirements' => [['name' => 'LAN', 'hosts' => 100]],
+        ];
+        $id = session_create($this->db, $payload, 30);
+        $loaded = session_load($this->db, $id);
+        $this->assertArrayNotHasKey('type', $loaded, 'absent type must remain absent on load');
+        $this->assertSame($payload, $loaded);
+    }
+
+    public function testCreate_TreePayloadRoundTrips(): void
+    {
+        // Schema-supported in PR1; full editor lands in PR3 (#302). Storage
+        // must already accept tree payloads so PR3 has nothing to migrate.
+        $payload = [
+            'type' => 'tree',
+            'root' => [
+                'cidr'     => '10.0.0.0/16',
+                'name'     => 'Corp HQ',
+                'children' => [
+                    ['cidr' => '10.0.0.0/17',   'name' => 'Production'],
+                    ['cidr' => '10.0.128.0/17', 'name' => 'Lab'],
+                ],
+            ],
+        ];
+        $id = session_create($this->db, $payload, 30);
+        $this->assertSame($payload, session_load($this->db, $id));
+    }
 }

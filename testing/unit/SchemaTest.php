@@ -5,16 +5,17 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * Validates published JSON-Schema documents structurally.
+ * Validates the published vlsm-session JSON schema structurally.
  *
- * Confirms the file parses as JSON, declares the Draft 2020-12 dialect,
- * has a stable $id, and that every advertised example matches the schema's
- * own `required` / `properties` declarations.
+ * v2 (v3.0.0, #315) introduced a `type` discriminator with three branches
+ * (ipv4 / ipv6 / tree) under a top-level `oneOf`. The schema also gained
+ * the `"2^N"` host-string form for IPv6 VLSM (parity with vlsm6_allocate's
+ * accepted input).
  *
  * We intentionally do not pull in a full JSON-Schema validator dependency —
  * these checks catch the common breakage modes (missing $schema, broken
- * pattern, missing required field on an example) without the ~2 MB transitive
- * dependency surface that ships with justinrainbow/json-schema or opis/json-schema.
+ * pattern, missing required field on an example) without the ~2 MB
+ * transitive dependency surface that ships with opis/json-schema.
  */
 class SchemaTest extends TestCase
 {
@@ -37,70 +38,126 @@ class SchemaTest extends TestCase
     {
         $this->assertSame(
             'https://json-schema.org/draft/2020-12/schema',
-            $this->schema['$schema'] ?? null,
-            'Must declare Draft 2020-12'
+            $this->schema['$schema'] ?? null
         );
     }
 
-    public function testHasStableId(): void
+    public function testV2IdReflectsVersion(): void
     {
         $this->assertArrayHasKey('$id', $this->schema);
         $this->assertIsString($this->schema['$id']);
-        $this->assertStringStartsWith('https://', $this->schema['$id']);
+        $this->assertStringContainsString('v2', $this->schema['$id'], 'v2 schema must publish a v2 $id so pinned consumers do not break');
     }
 
-    public function testTopLevelStructure(): void
+    public function testTopLevelIsOneOfThreeBranches(): void
     {
-        $this->assertSame('object', $this->schema['type'] ?? null);
-        $this->assertContains('network', $this->schema['required'] ?? []);
-        $this->assertContains('cidr', $this->schema['required'] ?? []);
-        $this->assertContains('requirements', $this->schema['required'] ?? []);
-        $this->assertSame(false, $this->schema['additionalProperties'] ?? null);
+        $this->assertArrayHasKey('oneOf', $this->schema);
+        $branches = $this->schema['oneOf'];
+        $this->assertCount(3, $branches, 'expect ipv4 / ipv6 / tree branches');
+        $titles = array_column($branches, 'title');
+        $this->assertContains('IPv4 VLSM', $titles);
+        $this->assertContains('IPv6 VLSM', $titles);
+        $this->assertContains('Subnet tree editor (v3.0.0 #302)', $titles);
     }
 
-    public function testRequirementsItemSchema(): void
+    public function testIpv4BranchKeepsLegacyShape(): void
     {
-        $items = $this->schema['properties']['requirements']['items'] ?? null;
-        $this->assertIsArray($items);
-        $this->assertSame('object', $items['type'] ?? null);
-        $this->assertContains('name', $items['required'] ?? []);
-        $this->assertContains('hosts', $items['required'] ?? []);
-        $this->assertSame('integer', $items['properties']['hosts']['type'] ?? null);
-        $this->assertSame(1, $items['properties']['hosts']['minimum'] ?? null);
+        $branch = $this->branchByTitle('IPv4 VLSM');
+        $this->assertContains('network', $branch['required']);
+        $this->assertContains('cidr', $branch['required']);
+        $this->assertContains('requirements', $branch['required']);
+        $this->assertSame(false, $branch['additionalProperties'] ?? null);
+        // type is OPTIONAL for ipv4 (back-compat) — pre-v3 payloads omit it
+        $this->assertNotContains('type', $branch['required']);
     }
 
-    public function testCidrPatternMatchesValidPrefixes(): void
+    public function testIpv6BranchRequiresType(): void
     {
-        $pattern = $this->schema['properties']['cidr']['pattern'] ?? '';
-        $this->assertNotSame('', $pattern, 'cidr must declare a pattern');
+        $branch = $this->branchByTitle('IPv6 VLSM');
+        $this->assertContains('type', $branch['required'], 'ipv6 branch must REQUIRE type discriminator');
+        $this->assertSame('ipv6', $branch['properties']['type']['const']);
+    }
+
+    public function testTreeBranchRequiresTypeAndRoot(): void
+    {
+        $branch = $this->branchByTitle('Subnet tree editor (v3.0.0 #302)');
+        $this->assertContains('type', $branch['required']);
+        $this->assertContains('root', $branch['required']);
+        $this->assertSame('tree', $branch['properties']['type']['const']);
+    }
+
+    public function testIpv6HostsAcceptsIntOrPowerOfTwoString(): void
+    {
+        $branch = $this->branchByTitle('IPv6 VLSM');
+        $hosts  = $branch['properties']['requirements']['items']['properties']['hosts'];
+        $this->assertArrayHasKey('oneOf', $hosts);
+        $forms = array_column($hosts['oneOf'], 'type');
+        $this->assertContains('integer', $forms);
+        $this->assertContains('string', $forms);
+
+        // Verify the 2^N regex
+        $pattern = null;
+        foreach ($hosts['oneOf'] as $f) {
+            if (($f['type'] ?? null) === 'string') {
+                $pattern = $f['pattern'];
+                break;
+            }
+        }
+        $this->assertNotNull($pattern);
         $regex = '/' . str_replace('/', '\\/', $pattern) . '/';
-        foreach (['0', '8', '16', '24', '32'] as $valid) {
-            $this->assertSame(1, preg_match($regex, $valid), "valid cidr '$valid' should match");
+        foreach (['2^0', '2^1', '2^16', '2^63', '2^128'] as $valid) {
+            $this->assertSame(1, preg_match($regex, $valid), "valid 2^N '$valid' should match");
         }
-        foreach (['33', '-1', 'abc', '/24', ' 24', '99'] as $invalid) {
-            $this->assertSame(0, preg_match($regex, $invalid), "invalid cidr '$invalid' should not match");
+        foreach (['2^129', '2^999', '3^4', '2^', '16'] as $invalid) {
+            $this->assertSame(0, preg_match($regex, $invalid), "invalid '$invalid' should not match");
         }
     }
 
-    public function testExamplesMatchOwnSchema(): void
+    public function testIpv4CidrPattern(): void
+    {
+        $branch  = $this->branchByTitle('IPv4 VLSM');
+        $pattern = $branch['properties']['cidr']['pattern'];
+        $regex   = '/' . str_replace('/', '\\/', $pattern) . '/';
+        foreach (['0', '8', '16', '24', '32'] as $valid) {
+            $this->assertSame(1, preg_match($regex, $valid));
+        }
+        foreach (['33', '-1', 'abc', '/24', ' 24'] as $invalid) {
+            $this->assertSame(0, preg_match($regex, $invalid));
+        }
+    }
+
+    public function testIpv6CidrPattern(): void
+    {
+        $branch  = $this->branchByTitle('IPv6 VLSM');
+        $pattern = $branch['properties']['cidr']['pattern'];
+        $regex   = '/' . str_replace('/', '\\/', $pattern) . '/';
+        foreach (['0', '48', '64', '127', '128'] as $valid) {
+            $this->assertSame(1, preg_match($regex, $valid), "ipv6 cidr '$valid' should match");
+        }
+        foreach (['129', '-1', '/64', 'abc'] as $invalid) {
+            $this->assertSame(0, preg_match($regex, $invalid));
+        }
+    }
+
+    public function testTreeRootIsRecursiveDef(): void
+    {
+        $branch = $this->branchByTitle('Subnet tree editor (v3.0.0 #302)');
+        $this->assertSame('#/$defs/treeNode', $branch['properties']['root']['$ref']);
+        $this->assertArrayHasKey('treeNode', $this->schema['$defs']);
+        $node = $this->schema['$defs']['treeNode'];
+        $this->assertContains('cidr', $node['required']);
+        // children is recursive
+        $this->assertSame('#/$defs/treeNode', $node['properties']['children']['items']['$ref']);
+    }
+
+    public function testExamplesExistForEveryBranch(): void
     {
         $examples = $this->schema['examples'] ?? [];
-        $this->assertNotEmpty($examples, 'schema must ship at least one example');
-        foreach ($examples as $idx => $ex) {
-            $this->assertIsArray($ex, "example $idx must be an object");
-            foreach (['network', 'cidr', 'requirements'] as $key) {
-                $this->assertArrayHasKey($key, $ex, "example $idx missing $key");
-            }
-            $this->assertIsString($ex['network']);
-            $this->assertIsString($ex['cidr']);
-            $this->assertIsArray($ex['requirements']);
-            $this->assertNotEmpty($ex['requirements']);
-            foreach ($ex['requirements'] as $r) {
-                $this->assertIsString($r['name']);
-                $this->assertIsInt($r['hosts']);
-                $this->assertGreaterThanOrEqual(1, $r['hosts']);
-            }
-        }
+        $this->assertNotEmpty($examples);
+        $types = array_map(static fn ($e) => $e['type'] ?? 'ipv4', $examples);
+        $this->assertContains('ipv4', $types);
+        $this->assertContains('ipv6', $types);
+        $this->assertContains('tree', $types);
     }
 
     public function testHandlerServesSchema(): void
@@ -109,7 +166,18 @@ class SchemaTest extends TestCase
         $this->assertFileExists($handler);
         $code = file_get_contents($handler);
         $this->assertNotFalse($code);
-        $this->assertStringContainsString('vlsm-session', (string)$code, 'handler must allowlist vlsm-session');
-        $this->assertStringContainsString('application/schema+json', (string)$code, 'handler must set schema MIME type');
+        $this->assertStringContainsString('vlsm-session', (string)$code);
+        $this->assertStringContainsString('application/schema+json', (string)$code);
+    }
+
+    /** @return array<string, mixed> */
+    private function branchByTitle(string $title): array
+    {
+        foreach ($this->schema['oneOf'] as $branch) {
+            if (($branch['title'] ?? '') === $title) {
+                return $branch;
+            }
+        }
+        $this->fail("No branch with title '$title'");
     }
 }

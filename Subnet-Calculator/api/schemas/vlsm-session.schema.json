@@ -1,55 +1,143 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://subnetcalculator.app/api/schemas/vlsm-session.schema.json",
-  "title": "VLSM Session Payload",
-  "description": "Persisted shape of a saved VLSM planner session as accepted by POST /api/v1/sessions and returned by GET /api/v1/sessions/{id}. Currently IPv4 only; IPv6 VLSM sessions are not persisted in this version.",
+  "$id": "https://subnetcalculator.app/api/schemas/vlsm-session.v2.schema.json",
+  "title": "VLSM / Tree Session Payload (v2)",
+  "description": "Persisted shape of a saved planner session as accepted by POST /api/v1/sessions and returned by GET /api/v1/sessions/{id}. v2 (v3.0.0, #315) introduces a `type` discriminator so IPv4 VLSM, IPv6 VLSM, and (v3.0.0, #302) tree-editor sessions share one endpoint. Payloads written before v3.0.0 omit `type`; the server treats a missing `type` as `'ipv4'` so existing sessions continue to load. The schema permits all three discriminator values from v3.0.0 PR1; server validation for `type='tree'` activates in PR3 (#302).",
   "type": "object",
-  "required": ["network", "cidr", "requirements"],
-  "additionalProperties": false,
-  "properties": {
-    "network": {
-      "type": "string",
-      "description": "Parent IPv4 network address (with or without an attached prefix).",
-      "minLength": 1,
-      "maxLength": 64,
-      "examples": ["10.0.0.0", "192.168.1.0/24"]
-    },
-    "cidr": {
-      "type": "string",
-      "description": "Parent prefix length as a bare number (no leading slash). Server-side handlers also accept this with a leading slash but it is normalised on save.",
-      "pattern": "^(3[0-2]|[12]?[0-9])$",
-      "examples": ["24", "16"]
-    },
-    "requirements": {
-      "type": "array",
-      "description": "Subnet requirements, sorted largest-first by the allocator at calculation time. Order is preserved as provided.",
-      "minItems": 1,
-      "maxItems": 256,
-      "items": {
-        "type": "object",
-        "required": ["name", "hosts"],
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Human-readable label for the subnet.",
-            "minLength": 1,
-            "maxLength": 128,
-            "examples": ["LAN", "DMZ", "Mgmt"]
-          },
-          "hosts": {
-            "type": "integer",
-            "description": "Required number of usable host addresses.",
-            "minimum": 1,
-            "maximum": 1073741822,
-            "examples": [50, 14, 2]
+  "oneOf": [
+    {
+      "title": "IPv4 VLSM",
+      "type": "object",
+      "required": ["network", "cidr", "requirements"],
+      "properties": {
+        "type": { "const": "ipv4" },
+        "network": {
+          "type": "string",
+          "description": "Parent IPv4 network address (with or without an attached prefix).",
+          "minLength": 1,
+          "maxLength": 64,
+          "examples": ["10.0.0.0", "192.168.1.0/24"]
+        },
+        "cidr": {
+          "type": "string",
+          "description": "Parent prefix length as a bare number.",
+          "pattern": "^(3[0-2]|[12]?[0-9])$",
+          "examples": ["24", "16"]
+        },
+        "requirements": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "required": ["name", "hosts"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "hosts": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1073741822
+              }
+            }
           }
         }
-      }
+      },
+      "additionalProperties": false
+    },
+    {
+      "title": "IPv6 VLSM",
+      "type": "object",
+      "required": ["type", "network", "cidr", "requirements"],
+      "properties": {
+        "type": { "const": "ipv6" },
+        "network": {
+          "type": "string",
+          "description": "Parent IPv6 network address (with or without an attached prefix).",
+          "minLength": 1,
+          "maxLength": 64,
+          "examples": ["2001:db8::", "fd00:1234::/48"]
+        },
+        "cidr": {
+          "type": "string",
+          "description": "Parent prefix length as a bare number (0–128).",
+          "pattern": "^(12[0-8]|1[01][0-9]|[1-9]?[0-9])$",
+          "examples": ["48", "64", "126"]
+        },
+        "requirements": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "required": ["name", "hosts"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "hosts": {
+                "description": "Required addresses. Integer for sizings within PHP's signed 64-bit range; the string form `\"2^N\"` (N is 0–128) is required for larger sizings since `2^63` overflows a PHP int.",
+                "oneOf": [
+                  { "type": "integer", "minimum": 1 },
+                  { "type": "string", "pattern": "^2\\^([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$" }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "title": "Subnet tree editor (v3.0.0 #302)",
+      "type": "object",
+      "required": ["type", "root"],
+      "properties": {
+        "type": { "const": "tree" },
+        "root": { "$ref": "#/$defs/treeNode" }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "treeNode": {
+      "type": "object",
+      "required": ["cidr"],
+      "properties": {
+        "cidr": {
+          "type": "string",
+          "description": "IPv4 or IPv6 CIDR with prefix.",
+          "minLength": 3,
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "children": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/treeNode" }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "examples": [
     {
+      "type": "ipv4",
       "network": "10.0.0.0",
       "cidr": "24",
       "requirements": [
@@ -57,6 +145,26 @@
         {"name": "DMZ", "hosts": 14},
         {"name": "Mgmt", "hosts": 2}
       ]
+    },
+    {
+      "type": "ipv6",
+      "network": "2001:db8::",
+      "cidr": "48",
+      "requirements": [
+        {"name": "Site-A", "hosts": "2^16"},
+        {"name": "Site-B", "hosts": 100}
+      ]
+    },
+    {
+      "type": "tree",
+      "root": {
+        "cidr": "10.0.0.0/16",
+        "name": "Corp HQ",
+        "children": [
+          {"cidr": "10.0.0.0/17", "name": "Production"},
+          {"cidr": "10.0.128.0/17", "name": "Lab"}
+        ]
+      }
     }
   ]
 }

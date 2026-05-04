@@ -1,0 +1,16 @@
+.git
+node_modules
+vendor
+docs
+releases
+testing/snapshots
+# Exclude local SQLite/state files; the test image generates its own.
+Subnet-Calculator/data/sessions.sqlite
+Subnet-Calculator/data/admin_keys.sqlite
+Subnet-Calculator/data/admin_audit.sqlite
+# Exclude the docroot-level operator override config (NOT includes/config.php
+# which is the base config and required at runtime). The Dockerfile generates
+# a test-rig docroot config.php at build time.
+Subnet-Calculator/config.php
+Subnet-Calculator/config-admin.php
+.phpunit.result.cache
