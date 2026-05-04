@@ -4509,6 +4509,202 @@ async def test_vlsm_keyboard_delete(page: Page) -> None:
     )
 
 
+async def _open_tree_editor(page: Page, root_cidr: str = "10.0.0.0/24") -> None:
+    """Open the IPv4 tab, expand the Tree Editor tool drawer, and start editing."""
+    await navigate(page, APP_URL)
+    await page.evaluate("() => localStorage.clear()")
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='tree-editor']")
+    await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
+    await page.fill("#tree_editor_cidr", root_cidr)
+    await page.click("#tree-editor-init button[type='submit']")
+    await page.wait_for_selector(".tree-editor-canvas .tree-editor-card")
+
+
+async def test_tree_editor_split(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — split root into 4 children")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    await page.wait_for_selector("[data-role='split-modal']:not([hidden])")
+    await page.click("[data-split-into='4']")
+    cidrs = await page.evaluate(
+        "() => Array.from(document.querySelectorAll('.tree-editor-cidr')).map(e=>e.textContent)"
+    )
+    assert_eq("split /24 into 4 → 5 nodes total", str(len(cidrs)), "5")
+    assert_true("first child is 10.0.0.0/26", "10.0.0.0/26" in cidrs)
+    assert_true("last child is 10.0.0.192/26", "10.0.0.192/26" in cidrs)
+
+
+async def test_tree_editor_merge_via_drag(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — drag-merge sibling restores parent")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    await page.click("[data-split-into='2']")
+    # Verify split happened.
+    initial = await page.locator(".tree-editor-cidr").count()
+    assert_true("split occurred before merge", initial == 3)
+    # Drag first child onto second.
+    children = page.locator(".tree-editor-children .tree-editor-card")
+    src = await children.nth(0).bounding_box()
+    dst = await children.nth(1).bounding_box()
+    if src and dst:
+        await page.mouse.move(src["x"] + 5, src["y"] + 5)
+        await page.mouse.down()
+        await page.mouse.move(dst["x"] + 5, dst["y"] + 5, steps=5)
+        await page.mouse.up()
+    after = await page.locator(".tree-editor-cidr").count()
+    assert_eq("after drag-merge → 1 node remains", str(after), "1")
+
+
+async def test_tree_editor_rename(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — rename + notes persist")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-pencil")
+    await page.wait_for_selector("[data-role='rename-modal']:not([hidden])")
+    await page.fill("[data-role='rename-name']", "Corp HQ")
+    await page.fill("[data-role='rename-notes']", "edge router")
+    await page.click("[data-role='rename-save']")
+    name = await page.locator(".tree-editor-name").first.text_content()
+    notes = await page.locator(".tree-editor-notes").first.text_content()
+    assert_eq("name renders", name, "Corp HQ")
+    assert_eq("notes render", notes, "edge router")
+
+
+async def test_tree_editor_undo(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — Ctrl+Z reverts last edit")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    await page.click("[data-split-into='2']")
+    assert_true("split happened", await page.locator(".tree-editor-cidr").count() == 3)
+    await page.locator(".tree-editor-canvas").click()  # focus inside editor
+    await page.keyboard.press("Control+z")
+    after = await page.locator(".tree-editor-cidr").count()
+    assert_eq("after undo → 1 node", str(after), "1")
+
+
+async def test_tree_editor_autosave_round_trip(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — localStorage autosave restores on reload")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    await page.click("[data-split-into='2']")
+    # autosave is debounced 300 ms.
+    await page.wait_for_timeout(400)
+    stored = await page.evaluate("() => localStorage.getItem('sc.tree.draft.10.0.0.0/24')")
+    assert_true("autosave wrote a draft", stored is not None and "10.0.0.0/25" in stored)
+    # Reload and verify the editor restores from autosave.
+    await navigate(page, APP_URL)
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='tree-editor']")
+    await page.fill("#tree_editor_cidr", "10.0.0.0/24")
+    await page.click("#tree-editor-init button[type='submit']")
+    await page.wait_for_selector(".tree-editor-canvas .tree-editor-card")
+    cidrs = await page.evaluate(
+        "() => Array.from(document.querySelectorAll('.tree-editor-cidr')).map(e=>e.textContent)"
+    )
+    assert_true("reload: split children present", "10.0.0.0/25" in cidrs and "10.0.0.128/25" in cidrs)
+
+
+async def test_tree_editor_save_session(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — Save Session POSTs and returns id")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    await page.click("[data-split-into='2']")
+    await page.click("[data-action='save-session']")
+    # status banner shows "Saved as session XXXXXXXX".
+    await page.wait_for_function(
+        "() => /Saved as session [0-9a-f]{8}/.test(document.querySelector('.tree-editor-status').textContent || '')",
+        timeout=5000,
+    )
+    status = await page.locator(".tree-editor-status").text_content()
+    assert_true("save status surfaces session id", bool(status) and "Saved as session" in (status or ""))
+
+
+async def test_tree_editor_share_url(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — Share URL emits ?tree=… and is copyable")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    await page.click("[data-split-into='2']")
+    # Stub clipboard so the test never depends on a real clipboard surface.
+    await page.add_init_script(
+        "window.__lastClipboard = null; "
+        "navigator.clipboard = navigator.clipboard || {}; "
+        "navigator.clipboard.writeText = function(t){ window.__lastClipboard = t; return Promise.resolve(); };"
+    )
+    await page.click("[data-action='share-url']")
+    share_url = await page.locator("[data-role='share-url']").text_content()
+    assert_true("share URL contains ?tree=", bool(share_url) and "tree=" in (share_url or ""))
+
+
+async def test_tree_editor_copy_formats(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — copy CIDR / Markdown / Cisco")
+    # Install clipboard stub BEFORE app.js boots. On insecure HTTP
+    # (test rig) navigator.clipboard is undefined and a plain assignment
+    # is silently swallowed; defineProperty with configurable:true wins.
+    await page.add_init_script(
+        "window.__clip = [];"
+        "try {"
+        "  Object.defineProperty(navigator, 'clipboard', {"
+        "    value: { writeText: function(t){ window.__clip.push(t); return Promise.resolve(); } },"
+        "    configurable: true,"
+        "    writable: true"
+        "  });"
+        "} catch (e) {}"
+    )
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    await page.click("[data-split-into='2']")
+    await page.click("[data-action='copy-cidr']")
+    await page.click("[data-action='copy-md']")
+    await page.click("[data-action='copy-cisco']")
+    captured = await page.evaluate("() => window.__clip || []")
+    assert_eq("3 clipboard payloads recorded", str(len(captured)), "3")
+    assert_true("CIDR list contains /25 children", "10.0.0.0/25" in captured[0] and "10.0.0.128/25" in captured[0])
+    assert_true("Markdown export starts with heading", captured[1].startswith("# Subnet Plan"))
+    assert_true("Cisco export contains interface stanza", "interface XX" in captured[2])
+
+
+async def test_tree_editor_action_sheet_on_touch(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — action sheet appears on touch (hover:none)")
+    # Force the (hover:none) media-query branch to activate.
+    await page.emulate_media(reduced_motion=None)
+    # Playwright does not directly emulate hover:none, but matchMedia can be overridden
+    # via add_init_script — test the actual branch path.
+    await page.add_init_script(
+        "(() => { const orig = window.matchMedia.bind(window);"
+        " window.matchMedia = function(q){ if (q.indexOf('hover: none') !== -1) "
+        "{ return { matches: true, media: q, addListener:()=>{}, removeListener:()=>{}, "
+        "addEventListener:()=>{}, removeEventListener:()=>{}, onchange: null, dispatchEvent: ()=>true }; } "
+        "return orig(q); }; })();"
+    )
+    await _open_tree_editor(page, "10.0.0.0/24")
+    await page.click(".tree-editor-canvas .tree-editor-card")
+    visible = await page.locator("[data-role='action-sheet']").is_visible()
+    assert_true("touch: tap opens action sheet (not split modal)", visible)
+    split_visible = await page.locator("[data-role='split-modal']").is_visible()
+    assert_true("touch: split modal stays closed on initial tap", not split_visible)
+
+
+async def test_tree_editor_share_too_large_fallback(page: Page) -> None:
+    section("v3.0.0 #302 tree editor — share-URL fallback when >50 nodes")
+    await _open_tree_editor(page, "10.0.0.0/24")
+    # Inject a large fake state with >50 nodes via the public-ish localStorage path,
+    # then re-open the editor so it loads the autosave.
+    big_root = '{"cidr":"10.0.0.0/24","children":[' + ','.join(
+        ['{"cidr":"10.0.0.' + str(i) + '/32"}' for i in range(0, 60)]
+    ) + ']}'
+    await page.evaluate(f"() => localStorage.setItem('sc.tree.draft.10.0.0.0/24', {big_root!r})")
+    await navigate(page, APP_URL)
+    await page.click("#panel-ipv4 .tool-trigger[data-tool='tree-editor']")
+    await page.fill("#tree_editor_cidr", "10.0.0.0/24")
+    await page.click("#tree-editor-init button[type='submit']")
+    await page.wait_for_selector(".tree-editor-canvas .tree-editor-card")
+    await page.click("[data-action='share-url']")
+    status = await page.locator(".tree-editor-status").text_content()
+    assert_true(
+        "share-url too-large fallback message surfaces",
+        bool(status) and "too large" in (status or "").lower(),
+        str(status),
+    )
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -4764,6 +4960,17 @@ async def main() -> None:
             await test_history_opt_in_records_calculation(page)
             await test_history_clear_removes_entries(page)
             await test_history_h_key_opens(page)
+            # v3.0.0 PR3b — interactive subnet tree editor (#302)
+            await test_tree_editor_split(page)
+            await test_tree_editor_merge_via_drag(page)
+            await test_tree_editor_rename(page)
+            await test_tree_editor_undo(page)
+            await test_tree_editor_autosave_round_trip(page)
+            await test_tree_editor_save_session(page)
+            await test_tree_editor_share_url(page)
+            await test_tree_editor_copy_formats(page)
+            await test_tree_editor_action_sheet_on_touch(page)
+            await test_tree_editor_share_too_large_fallback(page)
             await test_v290_typography(page)
         finally:
             await context.close()

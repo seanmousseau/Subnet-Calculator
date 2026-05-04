@@ -257,8 +257,10 @@ function tree_validate(array $tree): void
     }
 
     $count = 0;
-    $family = tree_node_family($tree['root']);
-    tree_validate_node($tree['root'], null, $family, 0, $count);
+    /** @var array<string,mixed> $root */
+    $root = $tree['root'];
+    $family = tree_node_family($root);
+    tree_validate_node($root, null, $family, 0, $count);
 }
 
 /**
@@ -312,7 +314,8 @@ function tree_validate_node(array $node, ?array $parent, string $family, int $de
 
     // Containment: child must be inside parent, and child prefix > parent prefix.
     if ($parent !== null) {
-        [$pip, $ppx] = tree_split_cidr((string)$parent['cidr'], $family);
+        $parent_cidr = isset($parent['cidr']) && is_string($parent['cidr']) ? $parent['cidr'] : '';
+        [$pip, $ppx] = tree_split_cidr($parent_cidr, $family);
         if ($px <= $ppx) {
             throw new \InvalidArgumentException(
                 'tree_validate: child "' . $cidr . '" prefix /' . $px
@@ -321,7 +324,7 @@ function tree_validate_node(array $node, ?array $parent, string $family, int $de
         }
         if (!tree_contains($pip, $ppx, $ip, $family)) {
             throw new \InvalidArgumentException(
-                'tree_validate: child "' . $cidr . '" is not inside parent "' . $parent['cidr'] . '".'
+                'tree_validate: child "' . $cidr . '" is not inside parent "' . $parent_cidr . '".'
             );
         }
     }
