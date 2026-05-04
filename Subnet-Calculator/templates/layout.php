@@ -1450,7 +1450,7 @@ if ($i < 3) {
             <dl class="kbd-list">
                 <dt><kbd>?</kbd></dt><dd>Show this help</dd>
                 <dt><kbd>Esc</kbd></dt><dd>Close any open overlay or tool drawer</dd>
-                <dt><kbd>1</kbd> &hellip; <kbd>4</kbd></dt><dd>Switch to tab (IPv4, IPv6, VLSM, VLSM IPv6)</dd>
+                <dt><kbd>1</kbd> &hellip; <kbd>4</kbd></dt><dd>Switch tabs (IPv4, IPv6, VLSM, VLSM IPv6) and focus the first input</dd>
                 <dt><kbd>/</kbd></dt><dd>Focus the first input on the active tab</dd>
                 <dt><kbd>Enter</kbd></dt><dd>Submit the current form (native; from any input)</dd>
                 <dt><kbd>Ctrl</kbd>+<kbd>R</kbd> / <kbd>Cmd</kbd>+<kbd>R</kbd></dt><dd>Reset the active tab (intercepts browser reload)</dd>

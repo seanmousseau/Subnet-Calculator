@@ -1200,6 +1200,16 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
             if (btn) {
                 btn.click();
                 btn.focus();
+                // v3.1.0 (#328): after the tab switch settles, move focus to the
+                // first text input on the newly active panel so the user can
+                // start typing immediately. rAF fences against any deferred
+                // .panel.active toggling inside the tab click handler.
+                requestAnimationFrame(() => {
+                    const firstInput = document.querySelector(
+                        '.panel.active input[type="text"], .panel.active input:not([type]), .panel.active textarea'
+                    );
+                    if (firstInput) firstInput.focus();
+                });
                 e.preventDefault();
             }
             return;
