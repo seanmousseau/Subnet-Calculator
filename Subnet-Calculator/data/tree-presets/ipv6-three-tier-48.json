@@ -1,0 +1,15 @@
+{
+  "id": "ipv6-three-tier-48",
+  "name": "IPv6 Production / Staging / Dev (/48)",
+  "description": "Three-tier IPv6 environment split of a /48 into 4 × /50 blocks with a reserve.",
+  "family": "ipv6",
+  "rootPrefix": 48,
+  "rootCidr": "2001:db8::/48",
+  "operations": [
+    { "op": "split", "cidr": "2001:db8::/48", "into": 4 },
+    { "op": "rename", "cidr": "2001:db8::/50", "name": "Production" },
+    { "op": "rename", "cidr": "2001:db8:0:4000::/50", "name": "Staging" },
+    { "op": "rename", "cidr": "2001:db8:0:8000::/50", "name": "Dev" },
+    { "op": "rename", "cidr": "2001:db8:0:c000::/50", "name": "Reserve" }
+  ]
+}

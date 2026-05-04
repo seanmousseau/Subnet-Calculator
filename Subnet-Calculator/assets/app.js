@@ -2289,6 +2289,303 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
         }
     });
 
+    // ── Apply Template / preset picker (#323, v3.1.0) ──────────────────────
+    //
+    // Fetches the manifest from GET /api/v1/tree-presets on first open
+    // (cached per-page-load).  Selecting a preset reveals a confirm pane
+    // with an editable Root CIDR.  Apply replays the preset's operations
+    // through dispatch() so undo/redo works normally.
+
+    const presetModal = root.querySelector('[data-role="preset-modal"]');
+    let presetManifest = null;
+    let presetSelectedFull = null; // full preset (with operations)
+    let presetLastFocused = null;  // focus return target on close
+
+    function presetApiBase() {
+        // Match the convention used by saveSession() — relative path so the
+        // app works regardless of install sub-path.
+        return 'api/v1/tree-presets';
+    }
+
+    function presetShowError(msg) {
+        const err = presetModal && presetModal.querySelector('[data-role="preset-error"]');
+        if (!err) { return; }
+        if (!msg) { err.hidden = true; err.textContent = ''; return; }
+        err.hidden = false;
+        err.textContent = msg;
+    }
+
+    function presetSwitchToList() {
+        const list = presetModal.querySelector('[data-role="preset-list"]');
+        const confirm = presetModal.querySelector('[data-role="preset-confirm"]');
+        const footer = presetModal.querySelector('[data-role="preset-list-footer"]');
+        const listActions = presetModal.querySelector('[data-role="preset-list-actions"]');
+        if (list) { list.hidden = false; }
+        if (confirm) { confirm.hidden = true; }
+        if (footer) { footer.hidden = false; }
+        if (listActions) { listActions.hidden = false; }
+        presetShowError('');
+    }
+
+    function presetSwitchToConfirm() {
+        const list = presetModal.querySelector('[data-role="preset-list"]');
+        const confirm = presetModal.querySelector('[data-role="preset-confirm"]');
+        const footer = presetModal.querySelector('[data-role="preset-list-footer"]');
+        const listActions = presetModal.querySelector('[data-role="preset-list-actions"]');
+        if (list) { list.hidden = true; }
+        if (confirm) { confirm.hidden = false; }
+        if (footer) { footer.hidden = true; }
+        if (listActions) { listActions.hidden = true; }
+        presetShowError('');
+    }
+
+    function presetRenderList(manifest) {
+        const list = presetModal.querySelector('[data-role="preset-list"]');
+        if (!list) { return; }
+        list.replaceChildren();
+        if (!manifest || !manifest.length) {
+            const empty = document.createElement('p');
+            empty.className = 'tree-modal-help';
+            empty.textContent = 'No presets available on this server.';
+            list.appendChild(empty);
+            return;
+        }
+        manifest.forEach(function (p, idx) {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'tree-preset-item';
+            item.setAttribute('role', 'option');
+            item.setAttribute('data-preset-id', p.id);
+            item.setAttribute('aria-selected', idx === 0 ? 'true' : 'false');
+
+            const head = document.createElement('div');
+            head.className = 'tree-preset-item-head';
+            const name = document.createElement('span');
+            name.className = 'tree-preset-item-name';
+            name.textContent = p.name;
+            head.appendChild(name);
+            const fam = document.createElement('span');
+            fam.className = 'tree-preset-item-family';
+            fam.textContent = p.family === 'ipv6' ? 'v6' : 'v4';
+            head.appendChild(fam);
+            item.appendChild(head);
+
+            if (p.description) {
+                const desc = document.createElement('div');
+                desc.className = 'tree-preset-item-desc';
+                desc.textContent = p.description;
+                item.appendChild(desc);
+            }
+            const meta = document.createElement('div');
+            meta.className = 'tree-preset-item-meta';
+            meta.textContent = 'Root /' + p.rootPrefix + ' · ' + p.operationCount + ' operation' + (p.operationCount === 1 ? '' : 's');
+            item.appendChild(meta);
+
+            list.appendChild(item);
+        });
+    }
+
+    function presetFetchManifest() {
+        if (presetManifest) { return Promise.resolve(presetManifest); }
+        return fetch(presetApiBase(), { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (json) {
+                if (!json || !json.ok || !json.data || !Array.isArray(json.data.presets)) {
+                    throw new Error((json && json.error) || 'Bad manifest response');
+                }
+                presetManifest = json.data.presets;
+                return presetManifest;
+            });
+    }
+
+    function presetFetchOne(id) {
+        return fetch(presetApiBase() + '/' + encodeURIComponent(id), {
+            headers: { 'Accept': 'application/json' }
+        }).then(function (r) { return r.json(); }).then(function (json) {
+            if (!json || !json.ok || !json.data || !json.data.preset) {
+                throw new Error((json && json.error) || 'Preset not found.');
+            }
+            return json.data.preset;
+        });
+    }
+
+    function presetOpen() {
+        presetLastFocused = document.activeElement;
+        openModal(presetModal);
+        presetSwitchToList();
+        const list = presetModal.querySelector('[data-role="preset-list"]');
+        if (list) {
+            list.replaceChildren();
+            const loading = document.createElement('p');
+            loading.className = 'tree-modal-help';
+            loading.textContent = 'Loading templates…';
+            list.appendChild(loading);
+        }
+        presetFetchManifest().then(function (manifest) {
+            presetRenderList(manifest);
+            const first = presetModal.querySelector('.tree-preset-item');
+            if (first) { first.focus(); }
+        }).catch(function (e) {
+            presetShowError('Could not load templates: ' + e.message);
+        });
+    }
+
+    function presetClose() {
+        closeModal(presetModal);
+        presetSelectedFull = null;
+        if (presetLastFocused && typeof presetLastFocused.focus === 'function') {
+            presetLastFocused.focus();
+        }
+    }
+
+    function presetSelectById(id) {
+        if (!presetManifest) { return; }
+        const row = presetManifest.find(function (p) { return p.id === id; });
+        if (!row) { return; }
+        // mark aria-selected
+        presetModal.querySelectorAll('.tree-preset-item').forEach(function (el) {
+            el.setAttribute('aria-selected', el.getAttribute('data-preset-id') === id ? 'true' : 'false');
+        });
+        presetShowError('');
+        presetFetchOne(id).then(function (full) {
+            presetSelectedFull = full;
+            const meta = presetModal.querySelector('[data-role="preset-confirm-meta"]');
+            if (meta) {
+                meta.textContent = full.name
+                    + (full.description ? ' — ' + full.description : '')
+                    + ' (family ' + (full.family === 'ipv6' ? 'IPv6' : 'IPv4')
+                    + ', root /' + full.rootPrefix + ', '
+                    + (full.operations ? full.operations.length : 0) + ' op'
+                    + ((full.operations && full.operations.length === 1) ? '' : 's') + ')';
+            }
+            const inp = presetModal.querySelector('[data-role="preset-root-cidr"]');
+            if (inp) {
+                inp.value = full.rootCidr || '';
+            }
+            presetSwitchToConfirm();
+            if (inp) { inp.focus(); inp.select(); }
+        }).catch(function (e) {
+            presetShowError('Could not load preset: ' + e.message);
+        });
+    }
+
+    function presetRebaseCidr(cidr, family, fromRootCidr) {
+        // Rewrite each operation cidr from the preset's baked-in root to the
+        // user-chosen root.  Both must be the same family + same prefix len.
+        // The operation's prefix delta from the original root is applied to
+        // the new root by adding the same offset.
+        const fromRoot = cidrParts(fromRootCidr);
+        const toRoot = cidrParts(cidr);
+        // Compute offset of the op's network from the *original* root, then
+        // translate by the same offset relative to the *user's* root.
+        return function (opCidr) {
+            const o = cidrParts(opCidr);
+            const fromBase = ipToBig(fromRoot.ip, family);
+            const opNet = ipToBig(o.ip, family);
+            const delta = opNet - fromBase;
+            const newBase = ipToBig(toRoot.ip, family);
+            return bigToIp(newBase + delta, family) + '/' + o.prefix;
+        };
+    }
+
+    function presetApply() {
+        presetShowError('');
+        if (!presetSelectedFull) { presetShowError('No preset selected.'); return; }
+        const inp = presetModal.querySelector('[data-role="preset-root-cidr"]');
+        const raw = inp ? inp.value.trim() : '';
+        if (!raw || raw.indexOf('/') === -1) {
+            presetShowError('CIDR must include a prefix, e.g. 10.0.0.0/24.');
+            return;
+        }
+        const fam = cidrFamily(raw);
+        if (fam !== presetSelectedFull.family) {
+            presetShowError('This preset is ' + (presetSelectedFull.family === 'ipv6' ? 'IPv6' : 'IPv4')
+                + '. Enter a matching root CIDR.');
+            return;
+        }
+        const parts = cidrParts(raw);
+        if (parts.prefix !== presetSelectedFull.rootPrefix) {
+            presetShowError('Root CIDR must use prefix /' + presetSelectedFull.rootPrefix
+                + ' (got /' + parts.prefix + ').');
+            return;
+        }
+        let canon;
+        try { canon = canonicalCidr(raw, fam); }
+        catch (e) { presetShowError('Invalid CIDR: ' + e.message); return; }
+
+        // If the editor isn't started yet, start it on the chosen root first.
+        if (!state) {
+            startEditor(canon);
+            if (!state) { presetShowError('Could not start editor on ' + canon + '.'); return; }
+        } else if (state.root.cidr !== canon) {
+            // Replace the current root with the chosen one (RESET equivalent
+            // to a fresh root). This also clears children — desirable for a
+            // preset apply.
+            state.root = { cidr: canon };
+            state.family = fam;
+            undoStack = [];
+            redoStack = [];
+        }
+
+        const fromRoot = presetSelectedFull.rootCidr || (
+            // Best-effort: derive from first split op's cidr if not set.
+            (presetSelectedFull.operations[0] && presetSelectedFull.operations[0].cidr) || canon
+        );
+        const rebase = presetRebaseCidr(canon, fam, fromRoot);
+
+        // Replay each op via dispatch() so undo lands on a single coherent
+        // pre-apply snapshot — push the snapshot ourselves, then run ops with
+        // history-disabled inserts via direct state edits *only* if dispatch
+        // produces one entry per op.  Simpler: just call dispatch() per op;
+        // each dispatch pushes its own undo frame, which gives operators
+        // step-by-step undo through the preset.  Documented behaviour.
+        try {
+            (presetSelectedFull.operations || []).forEach(function (op) {
+                if (op.op === 'split') {
+                    dispatch({ type: 'SPLIT', cidr: rebase(op.cidr), count: op.into });
+                } else if (op.op === 'rename') {
+                    dispatch({ type: 'RENAME', cidr: rebase(op.cidr), name: op.name, notes: op.notes || '' });
+                }
+            });
+        } catch (e) {
+            presetShowError('Apply failed: ' + e.message);
+            return;
+        }
+
+        setStatus('Applied template "' + presetSelectedFull.name + '". Press Ctrl+Z to undo.');
+        presetClose();
+    }
+
+    if (presetModal) {
+        presetModal.addEventListener('click', function (e) {
+            const item = e.target.closest('.tree-preset-item');
+            if (item) { presetSelectById(item.getAttribute('data-preset-id')); return; }
+            if (e.target.matches('[data-role="preset-cancel"]')) { presetClose(); return; }
+            if (e.target.matches('[data-role="preset-back"]')) { presetSwitchToList(); return; }
+            if (e.target.matches('[data-role="preset-apply"]')) { presetApply(); return; }
+        });
+        // Arrow-key navigation across the listbox.
+        presetModal.addEventListener('keydown', function (e) {
+            const list = presetModal.querySelector('[data-role="preset-list"]');
+            if (list && list.hidden === false && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                const items = Array.prototype.slice.call(list.querySelectorAll('.tree-preset-item'));
+                if (!items.length) { return; }
+                const cur = document.activeElement;
+                let idx = items.indexOf(cur);
+                if (idx === -1) { idx = 0; }
+                else { idx += (e.key === 'ArrowDown' ? 1 : -1); }
+                if (idx < 0) { idx = items.length - 1; }
+                if (idx >= items.length) { idx = 0; }
+                items[idx].focus();
+                e.preventDefault();
+            }
+            if (e.key === 'Escape') { presetClose(); e.preventDefault(); }
+        });
+    }
+
+    const applyBtn = root.querySelector('.tree-editor-toolbar [data-action="apply-template"]');
+    if (applyBtn) { applyBtn.addEventListener('click', presetOpen); }
+
     // Keyboard: Ctrl/Cmd+Z = undo, +Shift = redo (only when editor is open
     // and focus is inside it, to avoid clobbering page-level shortcuts).
     document.addEventListener('keydown', function (e) {

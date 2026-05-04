@@ -1,0 +1,11 @@
+{
+  "id": "flat-equal-split-24",
+  "name": "Flat 4-way split (/24)",
+  "description": "Plain four-way split of a /24 into 4 × /26 with no naming. Useful as a starting building block.",
+  "family": "ipv4",
+  "rootPrefix": 24,
+  "rootCidr": "10.0.0.0/24",
+  "operations": [
+    { "op": "split", "cidr": "10.0.0.0/24", "into": 4 }
+  ]
+}
