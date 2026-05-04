@@ -1,2 +1,32 @@
 Subnet-Calculator/config.php
 .worktrees/
+
+# Editor / tooling
+.vscode/
+.idea/
+.DS_Store
+
+# Test runner caches
+.phpunit.result.cache
+.playwright-mcp/
+
+# Claude Code session marker
+.claude/first_launch
+
+# Stray browser-test screenshots — never commit. Real visual baselines live
+# under testing/snapshots/.
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+
+# Composer / npm artefacts
+/vendor/
+/node_modules/
+
+# MkDocs build output
+/site/
+
+# Python bytecode (Playwright test scripts)
+__pycache__/
+*.pyc
