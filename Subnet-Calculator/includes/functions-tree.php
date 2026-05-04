@@ -220,3 +220,302 @@ function tree_compute_gaps(string $parent, array $sorted_children): array
 
     return $gaps;
 }
+
+// ─── Tree-editor payload validation (#302, v3.0.0) ────────────────────────────
+
+/**
+ * Validate a tree-editor session payload against the rules locked in the
+ * 2026-05-03 design doc:
+ *
+ *  - root.cidr is a valid IPv4 or IPv6 CIDR with prefix.
+ *  - Each node's CIDR is canonical (host bits zeroed; for IPv6 also lower-case
+ *    compressed form).
+ *  - Each `children` array, if present, has 2..64 entries (matches schema).
+ *  - Every child is contained within its parent (network falls inside parent
+ *    and child prefix > parent prefix).
+ *  - Children are non-overlapping (gaps allowed; sibling-merge invariant).
+ *  - `name` ≤ 128 chars; `notes` ≤ 1024 chars.
+ *  - Tree depth ≤ 16.
+ *  - Total node count ≤ 1024.
+ *  - Whole tree is single-family (all-IPv4 or all-IPv6).
+ *
+ * Throws \InvalidArgumentException on the first rule violation.  The message
+ * is safe to surface in API responses (no PII, no stack info).
+ *
+ * @param array<string,mixed> $tree The full tree-session payload (with `type`
+ *                                   and `root` keys, as accepted by
+ *                                   POST /api/v1/sessions).
+ * @throws \InvalidArgumentException
+ */
+function tree_validate(array $tree): void
+{
+    if (($tree['type'] ?? null) !== 'tree') {
+        throw new \InvalidArgumentException('tree_validate: type must be "tree".');
+    }
+    if (!isset($tree['root']) || !is_array($tree['root'])) {
+        throw new \InvalidArgumentException('tree_validate: root must be an object.');
+    }
+
+    $count = 0;
+    $family = tree_node_family($tree['root']);
+    tree_validate_node($tree['root'], null, $family, 0, $count);
+}
+
+/**
+ * Detect whether the root node CIDR is IPv4 or IPv6.
+ * Throws if the root CIDR is malformed.
+ *
+ * @param array<string,mixed> $node
+ * @return 'ipv4'|'ipv6'
+ */
+function tree_node_family(array $node): string
+{
+    if (!isset($node['cidr']) || !is_string($node['cidr'])) {
+        throw new \InvalidArgumentException('tree_validate: root.cidr is required.');
+    }
+    if (strpos($node['cidr'], ':') !== false) {
+        return 'ipv6';
+    }
+    return 'ipv4';
+}
+
+/**
+ * Recursive node validator.  Mutates $count by reference for the global cap.
+ *
+ * @param array<string,mixed>      $node
+ * @param array<string,mixed>|null $parent
+ * @param 'ipv4'|'ipv6'            $family
+ */
+function tree_validate_node(array $node, ?array $parent, string $family, int $depth, int &$count): void
+{
+    $count++;
+    if ($count > 1024) {
+        throw new \InvalidArgumentException('tree_validate: total node count exceeds 1024.');
+    }
+    if ($depth > 16) {
+        throw new \InvalidArgumentException('tree_validate: tree depth exceeds 16.');
+    }
+    if (!isset($node['cidr']) || !is_string($node['cidr'])) {
+        throw new \InvalidArgumentException('tree_validate: every node requires a string cidr.');
+    }
+
+    $cidr = $node['cidr'];
+    [$ip, $px] = tree_split_cidr($cidr, $family);
+
+    // Canonical-form check + family-mismatch rejection.
+    $canonical = tree_canonical_cidr($ip, $px, $family);
+    if ($canonical !== $cidr) {
+        throw new \InvalidArgumentException(
+            'tree_validate: cidr "' . $cidr . '" is not canonical (expected "' . $canonical . '").'
+        );
+    }
+
+    // Containment: child must be inside parent, and child prefix > parent prefix.
+    if ($parent !== null) {
+        [$pip, $ppx] = tree_split_cidr((string)$parent['cidr'], $family);
+        if ($px <= $ppx) {
+            throw new \InvalidArgumentException(
+                'tree_validate: child "' . $cidr . '" prefix /' . $px
+                . ' must be longer than parent /' . $ppx . '.'
+            );
+        }
+        if (!tree_contains($pip, $ppx, $ip, $family)) {
+            throw new \InvalidArgumentException(
+                'tree_validate: child "' . $cidr . '" is not inside parent "' . $parent['cidr'] . '".'
+            );
+        }
+    }
+
+    // String length caps for name / notes.
+    if (isset($node['name'])) {
+        if (!is_string($node['name'])) {
+            throw new \InvalidArgumentException('tree_validate: name must be a string.');
+        }
+        if (strlen($node['name']) > 128) {
+            throw new \InvalidArgumentException('tree_validate: name exceeds 128 characters.');
+        }
+    }
+    if (isset($node['notes'])) {
+        if (!is_string($node['notes'])) {
+            throw new \InvalidArgumentException('tree_validate: notes must be a string.');
+        }
+        if (strlen($node['notes']) > 1024) {
+            throw new \InvalidArgumentException('tree_validate: notes exceed 1024 characters.');
+        }
+    }
+
+    // Children: ≥2 entries, no overlaps, recursively validate.
+    if (isset($node['children'])) {
+        if (!is_array($node['children']) || count($node['children']) < 2) {
+            throw new \InvalidArgumentException(
+                'tree_validate: children of "' . $cidr . '" must be a list with at least 2 entries.'
+            );
+        }
+        if (count($node['children']) > 64) {
+            throw new \InvalidArgumentException(
+                'tree_validate: children of "' . $cidr . '" exceed 64 entries.'
+            );
+        }
+
+        $ranges = []; // [ [start_gmp_or_int, end_gmp_or_int, cidr_string] ]
+        foreach ($node['children'] as $child) {
+            if (!is_array($child)) {
+                throw new \InvalidArgumentException('tree_validate: each child must be an object.');
+            }
+            $cstr = isset($child['cidr']) && is_string($child['cidr']) ? $child['cidr'] : '?';
+            [$cip, $cpx] = tree_split_cidr($cstr, $family);
+            [$start, $end] = tree_range($cip, $cpx, $family);
+
+            // Overlap check against earlier siblings.
+            foreach ($ranges as $prev) {
+                if (tree_ranges_overlap($start, $end, $prev[0], $prev[1], $family)) {
+                    throw new \InvalidArgumentException(
+                        'tree_validate: child "' . $cstr . '" overlaps sibling "' . $prev[2] . '".'
+                    );
+                }
+            }
+            $ranges[] = [$start, $end, $cstr];
+
+            tree_validate_node($child, $node, $family, $depth + 1, $count);
+        }
+    }
+}
+
+/**
+ * Split "ip/prefix" and validate the IP belongs to the expected family.
+ *
+ * @return array{0:string,1:int}
+ */
+function tree_split_cidr(string $cidr, string $family): array
+{
+    $parts = explode('/', $cidr, 2);
+    if (count($parts) !== 2) {
+        throw new \InvalidArgumentException('tree_validate: cidr "' . $cidr . '" missing prefix.');
+    }
+    [$ip, $px_str] = $parts;
+    if ($px_str === '' || !ctype_digit($px_str)) {
+        throw new \InvalidArgumentException('tree_validate: cidr "' . $cidr . '" has non-numeric prefix.');
+    }
+    $px = (int)$px_str;
+
+    if ($family === 'ipv4') {
+        if (!is_valid_ipv4($ip)) {
+            throw new \InvalidArgumentException('tree_validate: cidr "' . $cidr . '" is not a valid IPv4 address.');
+        }
+        if ($px < 0 || $px > 32) {
+            throw new \InvalidArgumentException('tree_validate: IPv4 prefix /' . $px . ' out of range (0–32).');
+        }
+    } else {
+        if (!is_valid_ipv6($ip)) {
+            throw new \InvalidArgumentException('tree_validate: cidr "' . $cidr . '" is not a valid IPv6 address.');
+        }
+        if ($px < 0 || $px > 128) {
+            throw new \InvalidArgumentException('tree_validate: IPv6 prefix /' . $px . ' out of range (0–128).');
+        }
+    }
+    return [$ip, $px];
+}
+
+/**
+ * Canonical CIDR string: host bits zeroed; IPv6 lowercased + compressed via
+ * inet_ntop().
+ */
+function tree_canonical_cidr(string $ip, int $px, string $family): string
+{
+    if ($family === 'ipv4') {
+        $long = ip2long($ip);
+        if ($long === false) {
+            throw new \InvalidArgumentException('tree_validate: ip2long failed for "' . $ip . '".');
+        }
+        $mask = $px === 0 ? 0 : ((~0 << (32 - $px)) & 0xFFFFFFFF);
+        $net  = $long & $mask;
+        $canon = long2ip($net & 0xFFFFFFFF);
+        if (!is_string($canon)) {
+            throw new \InvalidArgumentException('tree_validate: long2ip failed.');
+        }
+        return $canon . '/' . $px;
+    }
+
+    // IPv6: zero host bits via GMP.
+    $bin = inet_pton($ip);
+    if ($bin === false) {
+        throw new \InvalidArgumentException('tree_validate: inet_pton failed for "' . $ip . '".');
+    }
+    $hex = bin2hex($bin);
+    $g = gmp_init($hex, 16);
+    if ($px < 128) {
+        $shift = 128 - $px;
+        $mask = gmp_mul(gmp_sub(gmp_pow(2, $px), 1), gmp_pow(2, $shift));
+    } else {
+        $mask = gmp_sub(gmp_pow(2, 128), 1);
+    }
+    $masked = gmp_and($g, $mask);
+    $hexOut = str_pad(gmp_strval($masked, 16), 32, '0', STR_PAD_LEFT);
+    $bin = hex2bin($hexOut);
+    if ($bin === false) {
+        throw new \InvalidArgumentException('tree_validate: hex2bin failed.');
+    }
+    $canon = inet_ntop($bin);
+    if (!is_string($canon)) {
+        throw new \InvalidArgumentException('tree_validate: inet_ntop failed.');
+    }
+    return $canon . '/' . $px;
+}
+
+/**
+ * Return the [start, end] inclusive numeric range covered by a CIDR, as
+ * either two ints (IPv4) or two GMP resources (IPv6).
+ *
+ * @return array{0:int|\GMP,1:int|\GMP}
+ */
+function tree_range(string $ip, int $px, string $family): array
+{
+    if ($family === 'ipv4') {
+        $long = ip2long($ip) & 0xFFFFFFFF;
+        $size = $px === 32 ? 1 : (1 << (32 - $px));
+        return [$long, $long + $size - 1];
+    }
+    $g = ipv6_to_gmp($ip);
+    $size = gmp_pow(2, 128 - $px);
+    $end = gmp_sub(gmp_add($g, $size), 1);
+    return [$g, $end];
+}
+
+/**
+ * True when parent (pip/ppx) contains child IP.
+ */
+function tree_contains(string $pip, int $ppx, string $cip, string $family): bool
+{
+    if ($family === 'ipv4') {
+        $pmask = $ppx === 0 ? 0 : ((~0 << (32 - $ppx)) & 0xFFFFFFFF);
+        $pnet  = ip2long($pip) & $pmask;
+        $cnet  = ip2long($cip) & $pmask;
+        return $pnet === $cnet;
+    }
+    $pg = ipv6_to_gmp($pip);
+    $cg = ipv6_to_gmp($cip);
+    if ($ppx === 0) {
+        return true;
+    }
+    $shift = 128 - $ppx;
+    $mask = gmp_mul(gmp_sub(gmp_pow(2, $ppx), 1), gmp_pow(2, $shift));
+    return gmp_cmp(gmp_and($pg, $mask), gmp_and($cg, $mask)) === 0;
+}
+
+/**
+ * @param int|\GMP $a_start
+ * @param int|\GMP $a_end
+ * @param int|\GMP $b_start
+ * @param int|\GMP $b_end
+ */
+function tree_ranges_overlap($a_start, $a_end, $b_start, $b_end, string $family): bool
+{
+    if ($family === 'ipv4') {
+        return !($a_end < $b_start || $b_end < $a_start);
+    }
+    /** @var \GMP $a_start */
+    /** @var \GMP $a_end */
+    /** @var \GMP $b_start */
+    /** @var \GMP $b_end */
+    return !(gmp_cmp($a_end, $b_start) < 0 || gmp_cmp($b_end, $a_start) < 0);
+}
