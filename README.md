@@ -208,6 +208,7 @@ Pre-built release archives are available in `releases/`:
 
 | Version | File | Description |
 | --- | --- | --- |
+| 3.0.0 | [subnet-calculator-3.0.0.tar.gz](releases/subnet-calculator-3.0.0.tar.gz) | **Major release.** Interactive subnet tree editor with click-split, drag-merge, undo/redo, autosave, exports, share URLs (#302); admin first-run wizard (#311); TOTP/2FA + recovery codes for `/admin/` (#313); admin audit log + `/admin/audit.php` (#306); per-key rate-limit overrides (#312); IPv6 VLSM session persistence + schema v2 with `type` discriminator (#315); keyboard shortcut overlay (#300); recent-calculations history pane (#301); expanded `/admin/keys.php` Playwright matrix (#307) |
 | 2.12.1 | [subnet-calculator-2.12.1.tar.gz](releases/subnet-calculator-2.12.1.tar.gz) | Hotfix: meta endpoint null-coalesce on `$admin_ui_enabled` to survive opcache-stale window after a v2.12.0 deploy |
 | 2.12.0 | [subnet-calculator-2.12.0.tar.gz](releases/subnet-calculator-2.12.0.tar.gz) | API admin UI for self-hosters (`/admin/keys.php`, `/api/v1/admin/keys`) — bcrypt-hashed SQLite-backed API keys; `X-RateLimit-*` response headers exposed in HTTP and OpenAPI; published JSON-Schema for VLSM session payloads (`GET /api/v1/schemas/vlsm-session`) |
 | 2.11.0 | [subnet-calculator-2.11.0.tar.gz](releases/subnet-calculator-2.11.0.tar.gz) | IPv6 VLSM planner (UI + `POST /api/v1/vlsm6`); inverse subnet lookup (`POST /api/v1/lookup`); subnet aggregation diff (`POST /api/v1/diff`); copy-as-Markdown and copy-as-Cisco exports |

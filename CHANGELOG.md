@@ -5,6 +5,112 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-05-04
+
+Major release. Headlined by an interactive subnet tree editor; rounded out by a
+substantial admin-hardening pass and several power-user UX improvements.
+
+### Added
+
+- **Interactive subnet tree editor** (#302) — new "Tree Editor" panel in the IPv4
+  Tools drawer. Click-split picker (2 / 4 / 8 / 16 children); desktop drag-merge
+  between siblings; mobile action sheet (`@media (hover: none)`) replacing
+  drag-merge on touch; inline rename + notes per node; undo / redo
+  (`Ctrl/Cmd+Z`, `+Shift`; 50-deep stack); 300 ms-debounced `localStorage`
+  autosave under `sc.tree.draft.<rootCidr>`; exports — copy as CIDR / Markdown
+  / Cisco, CSV (lossy) / JSON (lossless) download, base64url shareable URL
+  (`?tree=…`) with a 50-node soft cap; Save Session via the existing
+  `POST /api/v1/sessions` endpoint with the new `type: 'tree'` payload form;
+  plain JS (~676 LOC), no new runtime dependencies. New PHP helper
+  `tree_validate()` enforces canonical CIDR form, containment, sibling
+  non-overlap (gaps allowed), `name` ≤128 / `notes` ≤1024, depth ≤16, total
+  nodes ≤1024, and single-family per tree.
+- **Admin first-run wizard** (#311) — when `$admin_ui_enabled` is on but
+  `$admin_pass_hash` is empty, `/admin/keys.php` shows a one-shot setup form.
+  Atomic temp-file + rename writer to `Subnet-Calculator/config-admin.php`
+  (sibling to `config.php`, never overwrites); double-submit CSRF via dedicated
+  cookie since no auth context exists yet; manual fallback shows a
+  `var_export` snippet for read-only filesystems. Self-locks once
+  `$admin_pass_hash` is set. Audit-logs `wizard.complete`.
+- **TOTP / 2FA + recovery codes for `/admin/`** (#313) — pure-PHP RFC 6238
+  in `functions-admin-totp.php` (~250 LOC including recovery codes). Base32
+  codec, HOTP truncation, ±1 step drift, 6 digits, 30 s period, 160-bit
+  secret. New `admin_recovery_codes` SQLite table; 10 bcrypt-hashed codes
+  minted per regenerate, formatted `XXXX-XXXX`, shown once. New
+  `/admin/totp.php` (status banner, generate-secret helper, regenerate-codes
+  button) and `/admin/totp-verify.php` (step-up form). API callers use
+  `X-Admin-TOTP` header (or recovery code); UI callers complete the form
+  and the result is cached in the `sc_admin` PHP session for 30 min.
+  Audit-logs `login.totp.fail`, `totp.recovery.use`, `totp.recovery.regenerate`.
+- **Admin audit log** (#306) — new `admin_audit` SQLite table + paginated
+  `/admin/audit.php` with prefix filter (`login.` / `key.` / `wizard.` /
+  `totp.`). Hooks: `login.ok`, `login.fail`, `key.mint`, `key.revoke`,
+  `key.rate_limit`, `wizard.complete`, plus the TOTP events above. Lazy
+  purge on every write; `$admin_audit_retention_days` config (default 90).
+- **Per-API-key rate-limit overrides** (#312) — `ALTER TABLE api_keys ADD
+  COLUMN rate_limit_rpm INTEGER NULL` (idempotent migration).
+  `apikey_create()` accepts an optional RPM; new `apikey_set_rate_limit()`.
+  `api_rate_limit()` 3-tier lookup: static `$api_rate_limit_tokens` →
+  SQLite per-key → global fallback. `/admin/keys.php` mint form gained an
+  RPM field plus a per-row inline editor; new `PATCH /api/v1/admin/keys/{id}/rate-limit`.
+- **IPv6 VLSM session persistence** (#315) — `vlsm-session.schema.json`
+  rewritten as `oneOf` over a `type: 'ipv4' | 'ipv6' | 'tree'` discriminator
+  (schema v2; `$id` ends in `.v2.schema.json` so pinned consumers don't break).
+  IPv6 `hosts` accepts integer **or** the `"2^N"` string form. Missing
+  `type` defaults to `'ipv4'` for back-compat. New IPv6 "Save & Restore IPv6
+  Session" card on the IPv6 VLSM panel. Share URLs are tab-bound
+  (`?tab=vlsm` vs `?tab=vlsm6`).
+- **Keyboard shortcut overlay** (#300) — global modal triggered by `?` (Shift+/)
+  or a header icon button. Implemented shortcuts: `1`–`4` switch tabs;
+  `/` focuses the first text input on the active tab; `Ctrl/Cmd+R`
+  intercepted to reset the active tab; `Ctrl+Shift+C` copies the first
+  `.result-value`; `H` opens history. `?` and `/` are ignored while typing
+  in inputs. The header help button is hidden via `@media (hover: none)`.
+- **Recent calculations history** (#301) — opt-in pane in the header (`H`
+  key or icon button). Backed by `localStorage` (`sc.history.enabled`,
+  `sc.history.entries`, capped at 50 FIFO). Captures the current page URL
+  on load whenever any result block is present; consecutive duplicates
+  de-duped. Per-row remove + Clear All; clicking an entry re-runs via
+  `location.assign`.
+
+### Changed
+
+- **Session schema bumped to v2.** Versioned via `$id` so callers pinned to
+  the v1 URL keep working unchanged. The schema is permissive on the `tree`
+  branch from PR1; PR3 activated the strict `tree_validate()` server gate.
+- **Admin config split.** `config-admin.php` is the wizard's write target;
+  `config.php` remains hand-edited only. `index.php` requires both.
+- **`admin/` is now in the Semgrep scan path** (was previously not). 0 new
+  findings; capturing this so future changes there don't go unscanned.
+
+### Fixed
+
+- **Dockerfile printf escape bug** in the test-rig `config.php` generator —
+  inherited from PR1; single-quoted printf format was treating `\$` as a
+  literal `\$`, producing a parse error in the generated file. Fixed by
+  dropping the backslashes; added `php -l` on the generated file as a
+  build-time guard.
+
+### Tests
+
+- PHPUnit: 226 → 325 cases (+99). New test files: `AuditTest`,
+  `AdminWizardTest`, `AdminTotpTest`, `TreeValidateTest`. Existing
+  `ApiKeysTest`, `SessionTest`, `SchemaTest` extended.
+- Playwright: 720 → 840 assertions (+120 across ~40 new test groups
+  covering admin auth, audit, TOTP, wizard, keyboard overlay, history
+  pane, tree editor split / merge / rename / undo / autosave / save / share /
+  copy formats / mobile action sheet / share-too-large fallback).
+- All QA gates green on fresh containers: PHPUnit, PHPStan L9, PHPCS PSR-12,
+  Spectral OpenAPI, Semgrep (php + owasp + sql-injection), ESLint + Stylelint.
+
+### Pull requests
+
+- PR1 (#317) — Foundations (#315, #312, #306, #307 smoke set)
+- PR2 (#318) — Admin hardening (#311, #313, #307 matrix)
+- PR3a (#319) — Power-user UX (#300, #301)
+- PR3b (#320) — Tree editor (#302)
+- PR4 — Release cut (this release)
+
 ## [2.12.1] - 2026-05-03
 
 Hotfix for the v2.12.0 admin UI deploy.
