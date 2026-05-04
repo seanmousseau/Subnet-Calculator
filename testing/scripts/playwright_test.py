@@ -2680,11 +2680,13 @@ async def test_session_forms_spacing(page: Page) -> None:
     section("VLSM session forms spacing")
     await navigate(page, APP_URL)
     await page.click("#tab-vlsm")
-    panel = await page.query_selector(".session-ttl-notice")
+    panel = await page.query_selector("#panel-vlsm .session-ttl-notice")
     if panel is None:
         ok("session forms spacing: sessions not enabled on this server (skipped)")
         return
-    forms = page.locator(".session-forms")
+    # v3.1.0 #321 — vlsm6 also renders .session-forms now; scope to the
+    # IPv4 VLSM panel so the locator resolves uniquely.
+    forms = page.locator("#panel-vlsm .session-forms")
     if await forms.count() == 0:
         ok("session forms spacing: .session-forms not found (skipped)")
         return
@@ -2704,19 +2706,35 @@ async def test_session_forms_spacing(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 async def test_vlsm6_session_save_load(page: Page) -> None:
-    section("v3.0.0 #315 IPv6 VLSM session save/load")
+    section("v3.0.0 #315 / v3.1.0 #321 IPv6 VLSM session save/load (drawer pattern)")
     # Calculate first so the Save Session form is populated.
     url = (APP_URL + "?tab=vlsm6&vlsm6_network=2001:db8::&vlsm6_cidr=32"
            + "&vlsm6_name%5B%5D=Site-A&vlsm6_hosts%5B%5D=256")
     await navigate(page, url)
-    panel = await page.query_selector("#vlsm6-session-controls")
+    # v3.1.0 #321 — session UI now lives inside the vlsm6 tool-drawer.
+    panel = await page.query_selector(
+        '#panel-vlsm6 .tool-panel[data-tool="session6"]'
+    )
     if panel is None:
         ok("vlsm6 session save/load: sessions not enabled on this server (skipped)")
         return
 
-    # Click "Save Session" inside the IPv6 VLSM panel.
+    # v3.1.0 #321 — open the session6 drawer first; the save button lives
+    # inside a tool-panel that is hidden until the drawer is opened.
+    trigger = page.locator(
+        '#panel-vlsm6 .tool-toolbar .tool-trigger[data-tool="session6"]'
+    )
+    if await trigger.count() > 0:
+        await trigger.first.click()
+        await page.wait_for_function(
+            "() => document.querySelector('#panel-vlsm6 .tool-drawer.open') !== null",
+            timeout=2000,
+        )
+
+    # Click "Save Session" inside the IPv6 VLSM session6 tool panel.
     save_btn = page.locator(
-        '#vlsm6-session-controls button[name="session_action"][value="save"]'
+        '#panel-vlsm6 .tool-panel[data-tool="session6"] '
+        'button[name="session_action"][value="save"]'
     )
     if await save_btn.count() == 0:
         ok("vlsm6 session save/load: save button not present (skipped)")
@@ -2725,7 +2743,10 @@ async def test_vlsm6_session_save_load(page: Page) -> None:
     await page.wait_for_load_state("networkidle")
 
     # Saved session URL appears in the saved-bar; capture the 8-char id.
-    saved_bar = page.locator("#vlsm6-session-controls .session-saved-bar code.share-url")
+    saved_bar = page.locator(
+        '#panel-vlsm6 .tool-panel[data-tool="session6"] '
+        '.session-saved-bar code.share-url'
+    )
     assert_true(
         "vlsm6 save: saved-bar appears after save",
         await saved_bar.count() > 0,
@@ -2755,6 +2776,107 @@ async def test_vlsm6_session_save_load(page: Page) -> None:
     # Result table from auto-calc on load.
     result_count = await page.locator(".vlsm6-table tbody tr").count()
     assert_true("vlsm6 load: results auto-render", result_count >= 1, f"rows={result_count}")
+
+
+# ---------------------------------------------------------------------------
+# v3.1.0 #321 — IPv6 VLSM Save Session lives in the tool-drawer pattern
+# ---------------------------------------------------------------------------
+
+async def test_vlsm6_session_drawer_pattern(page: Page) -> None:
+    section("v3.1.0 #321 IPv6 VLSM Save Session drawer parity with IPv4")
+    # Calculate first so the panel is populated and the trigger is meaningful.
+    url = (APP_URL + "?tab=vlsm6&vlsm6_network=2001:db8::&vlsm6_cidr=32"
+           + "&vlsm6_name%5B%5D=Site-A&vlsm6_hosts%5B%5D=256")
+    await navigate(page, url)
+
+    # 1. The Save Session toolbar trigger exists on the vlsm6 panel.
+    trigger = page.locator(
+        '#panel-vlsm6 .tool-toolbar .tool-trigger[data-tool="session6"]'
+    )
+    trig_count = await trigger.count()
+    if trig_count == 0:
+        ok("vlsm6 session drawer: sessions disabled on this server (skipped)")
+        return
+    assert_eq("vlsm6 drawer: Save Session trigger present", trig_count, 1)
+    trig_text = (await trigger.first.text_content()) or ""
+    assert_true(
+        "vlsm6 drawer: trigger labelled 'Save Session'",
+        trig_text.strip() == "Save Session",
+        f"got: {trig_text!r}",
+    )
+
+    # 2. Clicking the trigger opens the drawer (matches `.tool-drawer.open`).
+    drawer = page.locator('#panel-vlsm6 .tool-drawer')
+    assert_eq("vlsm6 drawer: drawer element present", await drawer.count(), 1)
+    await trigger.first.click()
+    # JS adds .open after click; wait briefly for the class to land.
+    await page.wait_for_function(
+        "() => document.querySelector('#panel-vlsm6 .tool-drawer.open') !== null",
+        timeout=2000,
+    )
+    open_count = await page.locator('#panel-vlsm6 .tool-drawer.open').count()
+    assert_eq("vlsm6 drawer: opens on trigger click", open_count, 1)
+
+    # 3. The save form (POST + session_action=save) is rendered inside the panel.
+    save_form_btn = page.locator(
+        '#panel-vlsm6 .tool-panel[data-tool="session6"] '
+        'button[name="session_action"][value="save"]'
+    )
+    assert_eq(
+        "vlsm6 drawer: save-form button rendered inside panel",
+        await save_form_btn.count(),
+        1,
+    )
+
+    # 4. After a ?tab=vlsm6&s=<id> GET (the session-load URL — equivalent of
+    #    the task's `?session_id=` description), the drawer auto-opens because
+    #    request.php sets $session_error / $session_save_id which the template
+    #    promotes to data-open-tool="session6".
+    #    We mint a save first by clicking, then capture the id from the URL.
+    await save_form_btn.first.click()
+    await page.wait_for_load_state("networkidle")
+    saved_url_node = page.locator(
+        '#panel-vlsm6 .tool-panel[data-tool="session6"] '
+        '.session-saved-bar code.share-url'
+    )
+    saved_text = (await saved_url_node.first.text_content()) or ""
+    m = re.search(r"\?tab=vlsm6&s=([0-9a-f]{8})", saved_text)
+    assert_true(
+        "vlsm6 drawer: post-save share URL has 8-char id",
+        m is not None,
+        f"got: {saved_text!r}",
+    )
+    if m is None:
+        return
+    sid = m.group(1)
+
+    # Now navigate to the load URL — the toolbar should carry data-open-tool.
+    await navigate(page, APP_URL + f"?tab=vlsm6&s={sid}")
+    open_attr = await page.locator('#panel-vlsm6 .tool-toolbar').first.get_attribute(
+        "data-open-tool"
+    )
+    # On a successful load with no error and no fresh save_id, the drawer
+    # does NOT auto-open (mirrors IPv4 behaviour — load is silent). We still
+    # assert the trigger remained available so the user can re-open manually.
+    re_trigger = await page.locator(
+        '#panel-vlsm6 .tool-toolbar .tool-trigger[data-tool="session6"]'
+    ).count()
+    assert_eq(
+        "vlsm6 drawer: trigger still available after session-load GET",
+        re_trigger,
+        1,
+    )
+    # Exercise the auto-open path by visiting an INVALID id — request.php
+    # sets $session_error, which the template promotes to data-open-tool.
+    await navigate(page, APP_URL + "?tab=vlsm6&s=deadbeef")
+    open_attr_err = await page.locator('#panel-vlsm6 .tool-toolbar').first.get_attribute(
+        "data-open-tool"
+    )
+    assert_eq(
+        "vlsm6 drawer: data-open-tool=session6 on session error GET",
+        open_attr_err,
+        "session6",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -5029,6 +5151,8 @@ async def main() -> None:
             await test_vlsm_session_ttl_notice(page)
             await test_session_forms_spacing(page)
             await test_vlsm6_session_save_load(page)
+            # v3.1.0 #321 — IPv6 VLSM Save Session drawer parity
+            await test_vlsm6_session_drawer_pattern(page)
             await test_admin_keys_unauth_challenge(page)
             await test_admin_keys_authed_renders(page)
             await test_admin_audit_renders(page)

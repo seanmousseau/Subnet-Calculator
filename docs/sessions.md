@@ -1,6 +1,6 @@
 # VLSM Sessions
 
-Session controls are available on **both the IPv4 VLSM tab** (in the Tool Drawer) **and the IPv6 VLSM tab** (in the Save & Restore IPv6 Session card under the results, v3.0.0+). They let you save your planner inputs and share them via a link.
+Session controls are available on **both the IPv4 VLSM tab and the IPv6 VLSM tab**, in each tab's Tool Drawer (v3.1.0+; the IPv6 drawer was previously an inline card and was unified with the IPv4 pattern in v3.1.0 / #321). They let you save your planner inputs and share them via a link.
 
 ## Saving
 
