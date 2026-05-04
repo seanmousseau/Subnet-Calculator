@@ -2942,6 +2942,29 @@ async def test_admin_keys_revoke_confirm_present(page: Page) -> None:
         "onsubmit=\"return confirm('Revoke this key?');\"" in body,
     )
 
+    # Cleanup: revoke every active key so subsequent open-API tests in this
+    # suite are not flipped into "auth required" mode. test_admin_keys_per_row_rpm_edit
+    # mints rpm-edit-target and leaves it active so this test can find a revoke
+    # form to assert against; once that assertion is done, drain the table.
+    csrf_match = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    if csrf_match is not None:
+        csrf = csrf_match.group(1)
+        for id_match in re.finditer(
+            r'<input type="hidden" name="action" value="revoke">\s*'
+            r'<input type="hidden" name="id" value="(\d+)">',
+            body,
+        ):
+            await page.context.request.post(
+                APP_URL + "admin/keys.php",
+                headers={"Authorization": auth},
+                form={
+                    "_csrf": csrf,
+                    "action": "revoke",
+                    "id": id_match.group(1),
+                },
+                max_redirects=0,
+            )
+
 
 async def test_admin_audit_pagination_param(page: Page) -> None:
     section("v3.0.0 #306 admin/audit.php — page=2 query param accepted")
