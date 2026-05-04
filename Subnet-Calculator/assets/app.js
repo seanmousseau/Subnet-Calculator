@@ -1139,11 +1139,22 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
 
     function captureCurrentPage() {
         if (!historyEnabled()) return;
-        const hasResult = document.querySelector('.results, .vlsm-results, .overlap-result, .split-list');
-        if (!hasResult) return;
+        // v3.1.0 (#327): prefer the new attribute pattern when present — it
+        // covers tool-drawer-only outcomes (Lookup, Diff, Tree, Wildcard,
+        // Range, Supernet/Summarise, ULA) and carries a per-tool label.
+        // Fall back to the v3.0.0 four-container selectors for back-compat.
         const url = window.location.pathname + window.location.search;
         const tabId = activeTabId();
         const tab = tabId ? tabId.replace(/^tab-/, '') : '';
+        const sourceEl = document.querySelector('[data-history-source][data-history-active="1"]');
+        if (sourceEl) {
+            const attrLabel = sourceEl.getAttribute('data-history-label');
+            const label = (attrLabel && attrLabel.trim()) || url;
+            pushHistory({ url, tab, label, ts: Date.now() });
+            return;
+        }
+        const hasResult = document.querySelector('.results, .vlsm-results, .overlap-result, .split-list');
+        if (!hasResult) return;
         const labelInput = document.querySelector('.panel.active input[type="text"], .panel.active textarea');
         const label = (labelInput && labelInput.value.trim()) || url;
         pushHistory({ url, tab, label, ts: Date.now() });

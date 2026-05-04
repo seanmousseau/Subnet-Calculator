@@ -76,3 +76,24 @@ The tree form is the persistence path for the [interactive Tree Editor](tree.md#
 Server-side validation (`tree_validate()`) enforces canonical CIDR form (host bits zeroed; IPv6 lower-case compressed), containment (children fall inside their parent), non-overlap (siblings may have gaps but cannot overlap), `name` ≤128 / `notes` ≤1024 chars, tree depth ≤16, and total nodes ≤1024. Trees are single-family (all-IPv4 or all-IPv6).
 
 See [REST API](api.md#post-apiv1sessions) for curl examples.
+
+## Recent calculations history (v3.0.0+)
+
+The header shows a **Recent calculations** button that opens an opt-in history pane. When enabled (toggle inside the pane), every successful calculation is recorded as you navigate the app. Click any entry to re-run that calculation; entries are capped at 50 and stored in `localStorage` (`sc.history.enabled`, `sc.history.entries`).
+
+### What gets captured
+
+The history pane records URLs from the four core result containers (`.results`, `.vlsm-results`, `.overlap-result`, `.split-list`) and — as of **v3.1.0 (#327)** — also from tool-drawer-only outcomes via the `data-history-source` attribute pattern. Each annotated source produces a per-tool label so the entry list is self-describing:
+
+| Source | Label format |
+|--------|--------------|
+| Lookup (IPv4 / IPv6) | `Lookup: <N> IPs in <M> CIDRs` |
+| Subnet Diff (IPv4 / IPv6) | `Diff: +<added> −<removed> ~<changed>` |
+| Subnet Allocation Tree | `Tree: <parent_cidr>` |
+| Wildcard ↔ CIDR | `Wildcard: <input>` |
+| IP Range → CIDR | `Range: <start> → <end>` |
+| Supernet | `Supernet: <N> CIDRs` |
+| Summarise | `Summarise: <N> → <M>` |
+| ULA generator | `ULA: <prefix>` |
+
+Result blocks that surface a calculation expose `data-history-source="<tool>" data-history-active="1" data-history-label="<phrasing>"`; the front-end picks up the new attribute path before falling back to the legacy four-container selectors. No server-side changes are needed to extend coverage to a new tool — annotate the result block with the trio and the entry will appear automatically.

@@ -15,8 +15,20 @@ $_diff_removed   = $diff_result['removed']   ?? [];
 $_diff_unchanged = $diff_result['unchanged'] ?? [];
 $_diff_changed   = $diff_result['changed']   ?? [];
 $_diff_total     = count($_diff_added) + count($_diff_removed) + count($_diff_unchanged) + count($_diff_changed);
+// v3.1.0 (#327) — history-source attributes for the recent-calculations pane.
+// Caller may pre-set $_diff_history_source (defaults to "diff").
+$_diff_history_source = $_diff_history_source ?? 'diff';
+$_diff_history_label  = sprintf(
+    'Diff: +%d −%d ~%d',
+    count($_diff_added),
+    count($_diff_removed),
+    count($_diff_changed)
+);
 ?>
-<div class="diff-results">
+<div class="diff-results"
+     data-history-source="<?= htmlspecialchars($_diff_history_source) ?>"
+     data-history-active="1"
+     data-history-label="<?= htmlspecialchars($_diff_history_label) ?>">
     <div class="diff-summary">
         <span class="diff-summary-pill diff-summary-pill--added"><?= count($_diff_added) ?> added</span>
         <span class="diff-summary-pill diff-summary-pill--removed"><?= count($_diff_removed) ?> removed</span>
