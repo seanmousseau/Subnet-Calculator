@@ -65,7 +65,163 @@ function admin_authenticate(?callable $onFail = null): void
         return;
     }
 
+    // TOTP step-up (v3.0.0, #313). Only enforced when the operator has set
+    // $admin_totp_secret. UI callers complete a form posted to
+    // /admin/totp-verify.php; API callers send X-Admin-TOTP. Both paths
+    // hit admin_totp_check_step_up() which returns true on success. The
+    // TOTP module is only loaded when needed so non-admin requests don't
+    // pay for it.
+    if (admin_totp_step_up_required()) {
+        require_once __DIR__ . '/functions-admin-totp.php';
+        if (!admin_totp_check_step_up($u, $onFail)) {
+            return;
+        }
+    }
+
     admin_audit_login_outcome(true, $u);
+}
+
+/**
+ * Whether TOTP step-up is required for the current request. Wraps the
+ * config check in a function so callers don't have to import the global.
+ */
+function admin_totp_step_up_required(): bool
+{
+    global $admin_totp_secret;
+    return is_string($admin_totp_secret ?? null) && $admin_totp_secret !== '';
+}
+
+/**
+ * Run after password verify when TOTP is enabled. Returns true if the
+ * caller is allowed through; otherwise calls $onFail (which exits).
+ *
+ * - API requests (no PHP session, X-Admin-TOTP header present) are
+ *   verified against the live TOTP code on every request — the header
+ *   acts as a per-request second factor.
+ * - UI requests with an active sc_admin session whose `totp_verified_at`
+ *   is within ADMIN_TOTP_SESSION_TTL pass without re-prompting. Otherwise
+ *   the caller is redirected to /admin/totp-verify.php.
+ *
+ * Recovery codes can substitute for either path (header value `recovery:CODE`
+ * or the verify form's recovery input).
+ */
+function admin_totp_check_step_up(string $user, callable $onFail): bool
+{
+    $hdr = $_SERVER['HTTP_X_ADMIN_TOTP'] ?? '';
+    if (is_string($hdr) && $hdr !== '') {
+        if (admin_totp_consume_attempt($user, (string)$hdr)) {
+            return true;
+        }
+        admin_audit_event('login.totp.fail', $user, ['via' => 'header']);
+        $onFail('Invalid or missing TOTP code.', 401);
+        return false;
+    }
+
+    // UI session-cached step-up. We start the session lazily so non-UI
+    // callers (e.g. API) don't pay for one.
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path'     => '/',
+            'secure'   => $is_https,
+            'httponly' => true,
+            'samesite' => 'Strict',
+        ]);
+        session_name('sc_admin');
+        @session_start();
+    }
+    $verifiedAt = isset($_SESSION['totp_verified_at']) && is_int($_SESSION['totp_verified_at'])
+        ? $_SESSION['totp_verified_at'] : 0;
+    $verifiedFor = isset($_SESSION['totp_verified_user']) && is_string($_SESSION['totp_verified_user'])
+        ? $_SESSION['totp_verified_user'] : '';
+    if (
+        $verifiedFor === $user
+        && $verifiedAt > 0
+        && (time() - $verifiedAt) < ADMIN_TOTP_SESSION_TTL
+    ) {
+        return true;
+    }
+
+    // Not verified or stale — redirect UI users to the verify page.
+    // A POST to keys.php (e.g. mint key) without TOTP shouldn't silently
+    // succeed; a 303 forces a GET on the redirect target.
+    $selfRaw = $_SERVER['REQUEST_URI'] ?? '';
+    $self    = is_string($selfRaw) ? $selfRaw : '';
+    $_SESSION['totp_return_to'] = $self !== '' ? $self : '/admin/keys.php';
+    header('Location: /admin/totp-verify.php', true, 303);
+    exit;
+}
+
+/**
+ * Verify either a TOTP code or a recovery code; audit-log the outcome.
+ * Returns true on success.
+ */
+function admin_totp_consume_attempt(string $user, string $submitted): bool
+{
+    global $admin_totp_secret;
+    require_once __DIR__ . '/functions-admin-totp.php';
+
+    $submitted = trim($submitted);
+    // Recovery codes are 8 base32 chars (optionally split with `-`); TOTP
+    // is 6 digits. We classify by shape so a TOTP look-alike isn't tried
+    // against the recovery table.
+    $isRecovery = (bool)preg_match('/^[A-Za-z2-7]{4}-?[A-Za-z2-7]{4}$/', $submitted);
+    if ($isRecovery) {
+        require_once __DIR__ . '/functions-apikeys.php';
+        try {
+            $db = new \SQLite3(admin_apikey_db_path());
+            $db->enableExceptions(true);
+            $db->busyTimeout(1500);
+            $rowId = admin_recovery_verify_and_consume($db, $submitted);
+            if ($rowId !== null) {
+                admin_audit_event('totp.recovery.use', $user, ['code_id' => $rowId]);
+                $db->close();
+                return true;
+            }
+            $db->close();
+        } catch (\Throwable $e) {
+            error_log('sc admin totp recovery verify error: ' . $e->getMessage());
+        }
+        return false;
+    }
+    if (admin_totp_verify((string)$admin_totp_secret, $submitted)) {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Best-effort wrapper around audit_log() that swallows DB errors and only
+ * loads the audit module when needed. Callers in the auth path use this so
+ * audit failures never block login decisions.
+ *
+ * @param array<string, mixed>|null $meta
+ */
+function admin_audit_event(string $action, ?string $actor, ?array $meta = null): void
+{
+    static $loaded = false;
+    if (!$loaded) {
+        $audit_path = __DIR__ . '/functions-audit.php';
+        if (!is_file($audit_path)) {
+            return;
+        }
+        require_once $audit_path;
+        $loaded = true;
+    }
+    if (!function_exists('audit_log') || !function_exists('audit_ip_from_request')) {
+        return;
+    }
+    try {
+        $db = new \SQLite3(admin_apikey_db_path());
+        $db->enableExceptions(true);
+        $db->busyTimeout(1500);
+        audit_log($db, $action, $actor, audit_ip_from_request(), null, $meta);
+        $db->close();
+    } catch (\Throwable $e) {
+        error_log('sc admin_audit_event error: ' . $e->getMessage());
+    }
 }
 
 /**

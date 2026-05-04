@@ -19,6 +19,9 @@ parameters:
         - Subnet-Calculator/includes/functions-tree.php
         - Subnet-Calculator/includes/functions-apikeys.php
         - Subnet-Calculator/includes/functions-admin-auth.php
+        - Subnet-Calculator/includes/functions-admin-totp.php
+        - Subnet-Calculator/includes/functions-admin-wizard.php
+        - Subnet-Calculator/includes/functions-audit.php
         - Subnet-Calculator/api/v1/helpers.php
         - Subnet-Calculator/api/v1/index.php
         - Subnet-Calculator/api/v1/handlers/ipv4.php

@@ -54,6 +54,9 @@ $apikey_db_path    = '';     // SQLite file for api_keys (auto: data/sessions.sq
 // Admin audit log (v3.0.0, #306)
 $admin_audit_retention_days = 90;  // 0 = never purge; rows older than this are removed on each audit write
 
+// Admin TOTP / 2FA (v3.0.0, #313)
+$admin_totp_secret = '';  // base32 RFC 6238 secret; empty = TOTP disabled
+
 if (file_exists(__DIR__ . '/../config.php')) {
     require __DIR__ . '/../config.php';
 }
@@ -130,3 +133,4 @@ $admin_user       = is_string($admin_user)      ? $admin_user      : '';
 $admin_pass_hash  = is_string($admin_pass_hash) ? $admin_pass_hash : '';
 $apikey_db_path   = is_string($apikey_db_path)  ? $apikey_db_path  : '';
 $admin_audit_retention_days = max(0, (int)$admin_audit_retention_days);
+$admin_totp_secret = is_string($admin_totp_secret ?? null) ? trim((string)$admin_totp_secret) : '';

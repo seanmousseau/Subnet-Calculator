@@ -12,6 +12,12 @@ declare(strict_types=1);
 require __DIR__ . '/../includes/config.php';
 require __DIR__ . '/../includes/functions-admin-auth.php';
 require __DIR__ . '/../includes/functions-audit.php';
+require __DIR__ . '/../includes/functions-admin-wizard.php';
+
+if (admin_wizard_needed()) {
+    header('Location: keys.php', true, 303);
+    exit;
+}
 
 admin_authenticate();
 
