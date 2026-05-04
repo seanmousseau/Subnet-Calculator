@@ -42,7 +42,31 @@ function admin_wizard_needed(): bool
  */
 function admin_wizard_config_path(): string
 {
+    $override = admin_wizard_set_path_for_tests();
+    if ($override !== null) {
+        return $override;
+    }
     return dirname(__DIR__) . '/config-admin.php';
+}
+
+/**
+ * Test-only override for admin_wizard_config_path().  Pass a string to set
+ * the override; pass null to clear it; pass nothing to read the current
+ * value.  Production callers never invoke this with an argument — keeping
+ * the override behind a function (rather than a static global) keeps the
+ * surface area auditable.
+ */
+function admin_wizard_set_path_for_tests(?string $path = null, bool $clear = false): ?string
+{
+    static $override = null;
+    if ($clear || ($path === null && func_num_args() > 0)) {
+        $override = null;
+        return null;
+    }
+    if ($path !== null) {
+        $override = $path;
+    }
+    return $override;
 }
 
 /**
@@ -105,7 +129,14 @@ function admin_wizard_validate(string $user, string $password, string $passwordC
  */
 function admin_wizard_write(string $user, string $passwordHash): array
 {
-    if ($passwordHash === '' || strpos($passwordHash, '$') !== 0) {
+    // password_get_info() returns algoName 'unknown' for malformed strings
+    // like '$bad' that pass a naive leading-`$` check.  Restrict to bcrypt
+    // explicitly so a self-locking malformed hash never reaches disk.
+    $info = $passwordHash !== '' ? password_get_info($passwordHash) : ['algoName' => 'unknown'];
+    if (
+        $passwordHash === ''
+        || ($info['algoName'] ?? 'unknown') !== 'bcrypt'
+    ) {
         return [
             'ok'      => false,
             'reason'  => 'Refusing to write an empty or non-bcrypt password hash.',

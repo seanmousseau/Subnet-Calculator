@@ -144,11 +144,19 @@ function admin_totp_check_step_up(string $user, callable $onFail): bool
         return true;
     }
 
-    // Not verified or stale — redirect UI users to the verify page.
-    // A POST to keys.php (e.g. mint key) without TOTP shouldn't silently
-    // succeed; a 303 forces a GET on the redirect target.
+    // Not verified or stale.  API callers (no header, /api/v1/* path) must
+    // get a JSON 401 — they have no UI to redirect to and HTML in a JSON
+    // response body breaks integrations.
     $selfRaw = $_SERVER['REQUEST_URI'] ?? '';
     $self    = is_string($selfRaw) ? $selfRaw : '';
+    $pathOnly = $self !== '' ? (parse_url($self, PHP_URL_PATH) ?: '') : '';
+    if (str_contains($pathOnly, '/api/v1/')) {
+        admin_audit_event('login.totp.fail', $user, ['via' => 'header.missing']);
+        $onFail('TOTP step-up required. Send the current code in X-Admin-TOTP.', 401);
+        return false;
+    }
+
+    // UI users get the redirect; a 303 forces a GET on the verify page.
     $_SESSION['totp_return_to'] = $self !== '' ? $self : '/admin/keys.php';
     header('Location: /admin/totp-verify.php', true, 303);
     exit;
@@ -164,6 +172,11 @@ function admin_totp_consume_attempt(string $user, string $submitted): bool
     require_once __DIR__ . '/functions-admin-totp.php';
 
     $submitted = trim($submitted);
+    // Strip the documented `recovery:CODE` header prefix if present so callers
+    // can disambiguate explicitly without us having to guess by shape.
+    if (stripos($submitted, 'recovery:') === 0) {
+        $submitted = trim(substr($submitted, strlen('recovery:')));
+    }
     // Recovery codes are 8 base32 chars (optionally split with `-`); TOTP
     // is 6 digits. We classify by shape so a TOTP look-alike isn't tried
     // against the recovery table.

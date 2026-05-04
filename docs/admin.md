@@ -156,9 +156,10 @@ curl -u admin:pass -X POST -H 'Content-Type: application/json' \
   -d '{"name":"hot-svc","rate_limit_rpm":600}' \
   https://host/api/v1/admin/keys
 
-# Update an existing key's override; null clears it back to the global default
+# Update an existing key's override; null clears it back to the global default.
+# Note: 0 means "unlimited" (no rate-limit cap), NOT "clear" — use null for that.
 curl -u admin:pass -X PATCH -H 'Content-Type: application/json' \
-  -d '{"rate_limit_rpm":0}' \
+  -d '{"rate_limit_rpm":null}' \
   https://host/api/v1/admin/keys/42/rate-limit
 ```
 

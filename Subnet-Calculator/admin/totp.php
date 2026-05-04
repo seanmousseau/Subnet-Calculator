@@ -45,17 +45,13 @@ header('X-Frame-Options: DENY');
 
 // PRG flash carrier. The freshly-minted recovery codes pass through here
 // so a refresh after the mint doesn't replay the action and re-mint.
-$is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-    || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
-session_set_cookie_params([
-    'lifetime' => 0,
-    'path'     => '/',
-    'secure'   => $is_https,
-    'httponly' => true,
-    'samesite' => 'Strict',
-]);
-session_name('sc_admin');
-session_start();
+// admin_authenticate() (called via the admin/keys.php boot) already
+// configured the sc_admin session; we only need to (re-)start it here in
+// case this page is hit directly without the keys.php prelude.
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_name('sc_admin');
+    session_start();
+}
 
 $csrf_seed   = ($admin_pass_hash ?? '') . '|' . ($_SERVER['REMOTE_ADDR'] ?? '');
 $csrf_expect = hash('sha256', $csrf_seed);

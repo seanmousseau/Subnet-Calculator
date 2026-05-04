@@ -78,6 +78,8 @@ $error = null;
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $submitted = trim((string)($_POST['code'] ?? ''));
     if ($submitted !== '' && admin_totp_consume_attempt($u, $submitted)) {
+        // Rotate session ID after privilege elevation to defang fixation.
+        session_regenerate_id(true);
         $_SESSION['totp_verified_at']   = time();
         $_SESSION['totp_verified_user'] = $u;
         $return = isset($_SESSION['totp_return_to']) && is_string($_SESSION['totp_return_to'])

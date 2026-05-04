@@ -238,9 +238,24 @@ function audit_actor_from_request(): ?string
 
 function audit_ip_from_request(): ?string
 {
-    $ipRaw = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? null;
-    if (!is_string($ipRaw) || $ipRaw === '') {
-        return null;
+    // Audit IP must be the *direct* client unless the operator has explicitly
+    // opted-in to a trusted-proxy header. Blindly trusting X-Forwarded-For
+    // lets a direct caller spoof the recorded source IP.
+    $remote = $_SERVER['REMOTE_ADDR'] ?? null;
+    $remote = is_string($remote) && $remote !== '' ? trim($remote) : null;
+
+    global $admin_audit_trust_xff;
+    if (!empty($admin_audit_trust_xff)) {
+        $xffRaw = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
+        if (is_string($xffRaw) && $xffRaw !== '') {
+            $first = trim(explode(',', $xffRaw)[0]);
+            if ($first !== '' && filter_var($first, FILTER_VALIDATE_IP) !== false) {
+                return $first;
+            }
+        }
     }
-    return trim(explode(',', $ipRaw)[0]);
+
+    return $remote !== null && filter_var($remote, FILTER_VALIDATE_IP) !== false
+        ? $remote
+        : $remote; // pass-through unfiltered fallback (Unix socket, etc.)
 }

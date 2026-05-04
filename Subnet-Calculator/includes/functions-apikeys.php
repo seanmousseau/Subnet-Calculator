@@ -224,6 +224,24 @@ function apikey_list(\SQLite3 $db): array
  * @throws InvalidArgumentException for negative RPM
  * @throws \RuntimeException        on prepare failure
  */
+/**
+ * Return true when an active (non-revoked) API key with the given id exists.
+ * Distinguishes "missing" (404) from "no-op" (200) on idempotent PATCH paths.
+ */
+function apikey_exists(\SQLite3 $db, int $id): bool
+{
+    $stmt = $db->prepare('SELECT 1 FROM api_keys WHERE id = :id AND revoked_at IS NULL LIMIT 1');
+    if ($stmt === false) {
+        return false;
+    }
+    $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
+    $res = $stmt->execute();
+    if ($res === false) {
+        return false;
+    }
+    return $res->fetchArray(SQLITE3_NUM) !== false;
+}
+
 function apikey_set_rate_limit(\SQLite3 $db, int $id, ?int $rpm): bool
 {
     if ($rpm !== null && $rpm < 0) {

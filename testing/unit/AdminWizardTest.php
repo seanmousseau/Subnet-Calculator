@@ -76,29 +76,42 @@ class AdminWizardTest extends TestCase
 
     public function testWriteCreatesConfigFileWithUserAndHash(): void
     {
-        $tmp = sys_get_temp_dir() . '/sc-wizard-' . bin2hex(random_bytes(4));
+        // Exercise the real admin_wizard_write() — earlier this test wrote a
+        // handcrafted file, which let regressions in the wizard's existence
+        // checks / temp-file flow / error returns slip through.  We force
+        // the writer's target path into a tempdir via the dedicated test
+        // override hook (admin_wizard_set_path_for_tests) so no production
+        // config-admin.php is touched.
+        $tmp  = sys_get_temp_dir() . '/sc-wizard-' . bin2hex(random_bytes(4));
         mkdir($tmp);
+        $path = $tmp . '/config-admin.php';
+        admin_wizard_set_path_for_tests($path);
         try {
-            // Re-route admin_wizard_config_path() via a wrapper trick: the
-            // real function uses dirname(__DIR__) of its source file, so we
-            // exercise it via a one-off path-isolated copy.
             $hash = password_hash('verysecretpassword', PASSWORD_BCRYPT);
-            $body = "<?php\n\$admin_user = " . var_export('admin', true) . ";\n"
-                  . "\$admin_pass_hash = " . var_export($hash, true) . ";\n";
-            $path = $tmp . '/config-admin.php';
-            file_put_contents($path, $body);
+            $r    = admin_wizard_write('admin', $hash);
 
-            // Confirm shape: parsing it back gives matching globals.
+            $this->assertTrue($r['ok'], 'wizard write should succeed: ' . ($r['reason'] ?? ''));
+            $this->assertSame($path, $r['path'] ?? null);
+            $this->assertFileExists($path);
+
+            // Re-locking guarantee: a second write to the same path must
+            // refuse rather than overwrite.
+            $r2 = admin_wizard_write('admin', $hash);
+            $this->assertFalse($r2['ok']);
+            $this->assertStringContainsString('already exists', $r2['reason'] ?? '');
+
+            // Parsed-back shape matches what we asked for.
             $admin_user = '';
             $admin_pass_hash = '';
             include $path;
             $this->assertSame('admin', $admin_user);
             $this->assertTrue(password_verify('verysecretpassword', $admin_pass_hash));
         } finally {
+            admin_wizard_set_path_for_tests(null);
             // Path is fully test-derived via sys_get_temp_dir() + random_bytes;
             // no user input touches it.
             // nosemgrep: php.lang.security.unlink-use.unlink-use
-            if (file_exists($tmp . '/config-admin.php')) { unlink($tmp . '/config-admin.php'); }
+            if (file_exists($path)) { unlink($path); }
             rmdir($tmp);
         }
     }

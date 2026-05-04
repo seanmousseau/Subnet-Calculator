@@ -281,7 +281,11 @@ function admin_recovery_verify_and_consume(\SQLite3 $db, string $submitted): ?in
             $upd->bindValue(':t', time(), SQLITE3_INTEGER);
             $upd->bindValue(':id', (int)$r['id'], SQLITE3_INTEGER);
             $upd->execute();
-            return (int)$r['id'];
+            // Confirm the guarded UPDATE actually changed a row — concurrent
+            // submits of the same code race here, and only one must succeed.
+            if ($db->changes() > 0) {
+                return (int)$r['id'];
+            }
         }
     }
     return null;

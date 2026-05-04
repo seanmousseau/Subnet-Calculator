@@ -53,17 +53,21 @@ $apikey_db_path    = '';     // SQLite file for api_keys (auto: data/sessions.sq
 
 // Admin audit log (v3.0.0, #306)
 $admin_audit_retention_days = 90;  // 0 = never purge; rows older than this are removed on each audit write
+// When true, prefer X-Forwarded-For over REMOTE_ADDR for audit IPs.
+// Only enable behind a known-good reverse proxy that strips client-supplied XFF.
+$admin_audit_trust_xff = false;
 
 // Admin TOTP / 2FA (v3.0.0, #313)
 $admin_totp_secret = '';  // base32 RFC 6238 secret; empty = TOTP disabled
 
-if (file_exists(__DIR__ . '/../config.php')) {
-    require __DIR__ . '/../config.php';
-}
-// Optional second-tier config written by the first-run admin wizard (v3.0.0, #311).
-// Hand-edited config.php takes precedence; config-admin.php only fills gaps.
+// Wizard-written config first (lowest tier); hand-edited config.php overrides.
+// Order matters: PHP resolves the *last* assignment to a variable, so config.php
+// runs second so an operator edit always wins over auto-written values.
 if (file_exists(__DIR__ . '/../config-admin.php')) {
     require __DIR__ . '/../config-admin.php';
+}
+if (file_exists(__DIR__ . '/../config.php')) {
+    require __DIR__ . '/../config.php';
 }
 
 // Sanitise config values

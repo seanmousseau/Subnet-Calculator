@@ -58,26 +58,49 @@ if ($type === 'ipv4' || $type === 'ipv6') {
             json_err('Missing required field: ' . $required);
         }
     }
+    // network must be a non-empty string; cidr must be a numeric string in
+    // the family's prefix range. The schema (vlsm-session.schema.json v2)
+    // already declares these shapes; this is the runtime enforcement layer
+    // that schema-unaware writers (e.g. a hand-rolled PUT) bypass.
+    if (!is_string($payload['network']) || trim($payload['network']) === '' || strlen($payload['network']) > 64) {
+        json_err('Field "network" must be a non-empty string up to 64 chars.');
+    }
+    if (!is_string($payload['cidr']) || !ctype_digit($payload['cidr'])) {
+        json_err('Field "cidr" must be a numeric string.');
+    }
+    $cidr_max = $type === 'ipv6' ? 128 : 32;
+    if ((int)$payload['cidr'] < 0 || (int)$payload['cidr'] > $cidr_max) {
+        json_err('Field "cidr" out of range for ' . $type . ' (0–' . $cidr_max . ').');
+    }
     if (!is_array($payload['requirements']) || $payload['requirements'] === []) {
         json_err('Field "requirements" must be a non-empty array.');
+    }
+    if (count($payload['requirements']) > 256) {
+        json_err('"requirements" exceeds the maximum of 256 entries.');
     }
     foreach ($payload['requirements'] as $i => $req) {
         if (!is_array($req) || !isset($req['name'], $req['hosts'])) {
             json_err("requirements[$i] must have name and hosts.");
         }
-        // IPv6 'hosts' may be the "2^N" string form; ipv4 must be int.
-        if ($type === 'ipv4' && !is_int($req['hosts'])) {
-            json_err("requirements[$i].hosts must be an integer for ipv4.");
+        if (!is_string($req['name']) || trim($req['name']) === '' || strlen($req['name']) > 128) {
+            json_err("requirements[$i].name must be a non-empty string up to 128 chars.");
         }
-        if (
-            $type === 'ipv6'
-            && !is_int($req['hosts'])
-            && !(
-                is_string($req['hosts'])
-                && preg_match('/^2\^([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/', $req['hosts'])
-            )
-        ) {
-            json_err("requirements[$i].hosts must be a positive integer or the string \"2^N\" with N in 0–128.");
+        // IPv6 'hosts' may be the "2^N" string form; ipv4 must be int >= 1.
+        if ($type === 'ipv4') {
+            if (!is_int($req['hosts']) || $req['hosts'] < 1 || $req['hosts'] > 1073741822) {
+                json_err("requirements[$i].hosts must be a positive integer (1–1073741822) for ipv4.");
+            }
+        }
+        if ($type === 'ipv6') {
+            if (
+                !(is_int($req['hosts']) && $req['hosts'] >= 1)
+                && !(
+                    is_string($req['hosts'])
+                    && preg_match('/^2\^([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/', $req['hosts'])
+                )
+            ) {
+                json_err("requirements[$i].hosts must be a positive integer or the string \"2^N\" with N in 0–128.");
+            }
         }
     }
 } elseif ($type === 'tree') {

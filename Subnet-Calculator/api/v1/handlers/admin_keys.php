@@ -77,8 +77,14 @@ try {
     }
 
     if ($id !== null && $is_rate_route && $method === 'PATCH') {
-        $body   = api_body();
-        $rawRpm = $body['rate_limit_rpm'] ?? null;
+        $body = api_body();
+        // The body must explicitly contain rate_limit_rpm — `{}` previously
+        // collapsed to "clear the override" via `?? null`, which let a
+        // malformed client silently wipe a per-key limit.
+        if (!is_array($body) || !array_key_exists('rate_limit_rpm', $body)) {
+            json_err('Field "rate_limit_rpm" is required.', 400);
+        }
+        $rawRpm = $body['rate_limit_rpm'];
         $rpm    = null;
         if ($rawRpm !== null) {
             if (!is_int($rawRpm) || $rawRpm < 0) {
@@ -92,7 +98,14 @@ try {
             json_err($e->getMessage(), 400);
         }
         if (!$changed) {
-            json_err('Key not found, already revoked, or RPM unchanged.', 404);
+            // Distinguish "not found" (key id absent or revoked) from "already
+            // in this state" (idempotent no-op): the latter must be a 200,
+            // not a 404 — clients re-issuing the same PATCH expect success.
+            $exists = apikey_exists($db, $id);
+            if (!$exists) {
+                json_err('Key not found or already revoked.', 404);
+            }
+            // No-op: value already matches the request.
         }
         audit_log(
             $db,

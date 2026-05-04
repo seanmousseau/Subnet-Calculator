@@ -70,8 +70,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
         $errors = admin_wizard_validate($user_input, $password, $passwordAgain);
         if ($errors === []) {
-            $hash   = password_hash($password, PASSWORD_BCRYPT);
-            $result = admin_wizard_write(trim($user_input), $hash);
+            $hash = password_hash($password, PASSWORD_BCRYPT);
+            // PASSWORD_BCRYPT can return false on rare implementations / OOM.
+            // Refuse to call admin_wizard_write() with a non-string value —
+            // strict types would otherwise throw a TypeError + 500.
+            $result = ['ok' => false, 'reason' => ''];
+            if (!is_string($hash) || $hash === '') {
+                $errors[] = 'Password hashing failed unexpectedly. Try again or set $admin_pass_hash by hand.';
+            } else {
+                $result = admin_wizard_write(trim($user_input), $hash);
+            }
             if ($result['ok']) {
                 $success_path = $result['path'] ?? admin_wizard_config_path();
                 // Audit-log the completion. The wizard runs unauthenticated,

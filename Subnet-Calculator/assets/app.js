@@ -1665,7 +1665,7 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
     }
 
     function saveSession() {
-        try { tree_validate_client(state.root, state.family); }
+        try { tree_validate_client(state.root); }
         catch (e) { setStatus('Cannot save: ' + e.message); return; }
         fetch('api/v1/sessions', {
             method: 'POST',
@@ -1686,37 +1686,72 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
     }
 
     // Mirror of server tree_validate() — minimal client-side checks before
-    // POSTing.  Server is the authority; this is for UX.
-    function tree_validate_client(node, family) {
-        function visit(n, parent, depth) {
+    // POSTing or before assigning a deserialized payload to state.root.
+    // Server is the authority; this is for UX + to keep render() from
+    // exploding on malformed localStorage / share-URL / paste input.
+    function tree_validate_client(node) {
+        if (!node || typeof node !== 'object') { throw new Error('not an object'); }
+        let total = 0;
+        function visit(n, depth) {
+            total++;
+            if (total > 1024) { throw new Error('total node count exceeds 1024'); }
             if (depth > 16) { throw new Error('depth exceeds 16'); }
-            if (!n.cidr) { throw new Error('node missing cidr'); }
-            if (n.name && n.name.length > 128) { throw new Error('name exceeds 128 characters'); }
-            if (n.notes && n.notes.length > 1024) { throw new Error('notes exceed 1024 characters'); }
-            if (n.children) {
+            if (!n || typeof n !== 'object') { throw new Error('node must be an object'); }
+            if (typeof n.cidr !== 'string' || n.cidr.indexOf('/') === -1) {
+                throw new Error('node missing valid cidr');
+            }
+            if (n.name !== undefined && (typeof n.name !== 'string' || n.name.length > 128)) {
+                throw new Error('name must be a string up to 128 chars');
+            }
+            if (n.notes !== undefined && (typeof n.notes !== 'string' || n.notes.length > 1024)) {
+                throw new Error('notes must be a string up to 1024 chars');
+            }
+            if (n.children !== undefined) {
+                if (!Array.isArray(n.children)) { throw new Error('children must be an array'); }
                 if (n.children.length < 2) { throw new Error('children must be >=2'); }
                 if (n.children.length > 64) { throw new Error('children exceed 64'); }
-                n.children.forEach(function (c) { visit(c, n, depth + 1); });
+                n.children.forEach(function (c) { visit(c, depth + 1); });
             }
         }
-        visit(node, null, 0);
+        visit(node, 0);
     }
 
     // ── Wiring ──────────────────────────────────────────────────────────────
 
     function startEditor(rootCidr) {
-        const family = cidrFamily(rootCidr);
-        const canon = canonicalCidr(rootCidr, family);
-        if (canon !== rootCidr) {
+        // Validate shape before BigInt math — malformed input like "10.0.0.1/x"
+        // would otherwise reach canonicalCidr() and throw, breaking startup.
+        const raw = String(rootCidr || '').trim();
+        const m = raw.match(/^(.+)\/(\d{1,3})$/);
+        if (!m) {
+            setStatus('CIDR must be like 10.0.0.0/24 or 2001:db8::/32');
+            return;
+        }
+        const family = cidrFamily(raw);
+        let canon;
+        try {
+            canon = canonicalCidr(raw, family);
+        } catch (e) {
+            setStatus('Invalid CIDR: ' + e.message);
+            return;
+        }
+        if (canon !== raw) {
             setStatus('Normalised to ' + canon);
             rootCidr = canon;
+        } else {
+            rootCidr = raw;
         }
         state = { root: { cidr: rootCidr }, family: family };
 
         const draft = loadAutosave(rootCidr);
         if (draft && draft.cidr === rootCidr) {
-            state.root = draft;
-            setStatus('Restored from autosave.');
+            try {
+                tree_validate_client(draft);
+                state.root = draft;
+                setStatus('Restored from autosave.');
+            } catch (e) {
+                setStatus('Discarded malformed autosave (' + e.message + ').');
+            }
         }
 
         // ?tree=… overrides autosave on first load.
@@ -1726,10 +1761,13 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
             try {
                 const decoded = JSON.parse(base64UrlDecode(treeParam));
                 if (decoded && decoded.cidr === rootCidr) {
+                    tree_validate_client(decoded);
                     state.root = decoded;
                     setStatus('Loaded tree from URL.');
                 }
-            } catch (e) { /* ignore bad share */ }
+            } catch (e) {
+                setStatus('Ignored malformed share-URL tree.');
+            }
         }
 
         initForm.hidden = true;
