@@ -57,6 +57,17 @@ $admin_audit_retention_days = 90;  // 0 = never purge; rows older than this are 
 // Only enable behind a known-good reverse proxy that strips client-supplied XFF.
 $admin_audit_trust_xff = false;
 
+// Audit purge strategy (v3.1.0, #325). Controls when audit_log() invokes
+// audit_purge() — the legacy 'inline' path purges on every write, which scales
+// poorly under high audit volume (mass key rotation, login.fail floods).
+//   'inline'  — purge on every write (legacy v3.0.0 behaviour)
+//   'sampled' — purge probabilistically per $admin_audit_purge_sample_rate
+//   'cron'    — never purge inline; operator runs bin/sc-audit-purge.php
+$admin_audit_purge_strategy    = 'sampled';
+// Probability (0.0–1.0) that any given audit_log() call triggers a purge when
+// strategy is 'sampled'. Default 0.1% means ~1 in 1000 writes pays the cost.
+$admin_audit_purge_sample_rate = 0.001;
+
 // Admin TOTP / 2FA (v3.0.0, #313)
 $admin_totp_secret = '';  // base32 RFC 6238 secret; empty = TOTP disabled
 
@@ -145,4 +156,20 @@ $admin_user       = is_string($admin_user)      ? $admin_user      : '';
 $admin_pass_hash  = is_string($admin_pass_hash) ? $admin_pass_hash : '';
 $apikey_db_path   = is_string($apikey_db_path)  ? $apikey_db_path  : '';
 $admin_audit_retention_days = max(0, (int)$admin_audit_retention_days);
+// #325 — clamp purge strategy to one of the three known values; anything else
+// (typo, malicious config, accidental int) falls back to the safe default.
+if (
+    !is_string($admin_audit_purge_strategy ?? null)
+    || !in_array($admin_audit_purge_strategy, ['inline', 'sampled', 'cron'], true)
+) {
+    $admin_audit_purge_strategy = 'sampled';
+}
+// #325 — clamp the sample rate to [0.0, 1.0] and cast to float. Non-numeric
+// input (string, null, array) collapses to 0.0 via (float) — fail closed:
+// no purges rather than running every write.
+if (!is_numeric($admin_audit_purge_sample_rate ?? null)) {
+    $admin_audit_purge_sample_rate = 0.0;
+} else {
+    $admin_audit_purge_sample_rate = max(0.0, min(1.0, (float)$admin_audit_purge_sample_rate));
+}
 $admin_totp_secret = is_string($admin_totp_secret ?? null) ? trim((string)$admin_totp_secret) : '';

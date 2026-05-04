@@ -44,6 +44,8 @@ parameters:
         - Subnet-Calculator/api/v1/handlers/schemas.php
         - Subnet-Calculator/api/v1/handlers/admin_keys.php
         - Subnet-Calculator/clients/php/SubnetCalculatorClient.php
+        # Operator CLI (v3.1.0, #325) — bin/ is non-web-served (htaccess-denied).
+        - Subnet-Calculator/bin/sc-audit-purge.php
     # config.php is gitignored (user override) — skip if absent
     excludePaths:
         - Subnet-Calculator/config.php (?)

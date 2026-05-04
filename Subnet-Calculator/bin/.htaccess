@@ -1,0 +1,14 @@
+# Defense-in-depth: bin/ holds operator CLI scripts that must never be served
+# over HTTP. The directory should not be web-reachable in the first place
+# (the docroot is Subnet-Calculator/ and the top-level .htaccess already
+# blocks subdirs), but a misconfigured docroot or symlink could expose it.
+# Both Apache 2.4+ and OpenLiteSpeed honour the legacy Order/Deny syntax;
+# Apache 2.4+ also honours Require — emitting both keeps either server safe.
+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order deny,allow
+    Deny from all
+</IfModule>
