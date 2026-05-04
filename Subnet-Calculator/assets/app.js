@@ -993,3 +993,222 @@ document.addEventListener('click', function (e) {
 if (window.self === window.top && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+
+// ── v3.0.0 (#300) keyboard shortcut overlay + (#301) history pane ─────────
+(function () {
+    const TAB_KEY_MAP = { '1': 'tab-ipv4', '2': 'tab-ipv6', '3': 'tab-vlsm', '4': 'tab-vlsm6' };
+    const HISTORY_ENABLED_KEY = 'sc.history.enabled';
+    const HISTORY_ENTRIES_KEY = 'sc.history.entries';
+    const HISTORY_CAP = 50;
+
+    const kbdOverlay = document.getElementById('kbd-overlay');
+    const historyOverlay = document.getElementById('history-overlay');
+    const kbdToggle = document.getElementById('kbd-help-toggle');
+    const historyToggle = document.getElementById('history-toggle');
+    const historyEnabledToggle = document.getElementById('history-enabled-toggle');
+    const historyClearBtn = document.getElementById('history-clear');
+    const historyList = document.getElementById('history-list');
+    const historyEmptyMsg = document.getElementById('history-empty-msg');
+    const historyDisabledMsg = document.getElementById('history-disabled-msg');
+
+    if (!kbdOverlay || !historyOverlay) return;
+
+    function isEditableTarget(el) {
+        if (!el) return false;
+        const tag = el.tagName;
+        return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+    }
+
+    function activeTabId() {
+        const active = document.querySelector('.tab-btn.active');
+        return active ? active.id : null;
+    }
+
+    function openOverlay(overlay) {
+        // Close the other overlay first so only one is visible at a time.
+        [kbdOverlay, historyOverlay].forEach(o => { if (o !== overlay) o.hidden = true; });
+        overlay.hidden = false;
+        const closeBtn = overlay.querySelector('.modal-close');
+        if (closeBtn) closeBtn.focus();
+    }
+
+    function closeOverlays() {
+        kbdOverlay.hidden = true;
+        historyOverlay.hidden = true;
+    }
+
+    function isAnyOverlayOpen() {
+        return !kbdOverlay.hidden || !historyOverlay.hidden;
+    }
+
+    [kbdOverlay, historyOverlay].forEach(overlay => {
+        overlay.addEventListener('click', e => { if (e.target === overlay) closeOverlays(); });
+        const btn = overlay.querySelector('.modal-close');
+        if (btn) btn.addEventListener('click', closeOverlays);
+    });
+
+    if (kbdToggle) kbdToggle.addEventListener('click', () => openOverlay(kbdOverlay));
+    if (historyToggle) historyToggle.addEventListener('click', () => { renderHistory(); openOverlay(historyOverlay); });
+
+    // ── History storage ──────────────────────────────────────────────────
+    function historyEnabled() {
+        try { return localStorage.getItem(HISTORY_ENABLED_KEY) === '1'; } catch { return false; }
+    }
+
+    function setHistoryEnabled(on) {
+        try { localStorage.setItem(HISTORY_ENABLED_KEY, on ? '1' : '0'); } catch (e) { void e; }
+    }
+
+    function loadHistory() {
+        try {
+            const raw = localStorage.getItem(HISTORY_ENTRIES_KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch { return []; }
+    }
+
+    function saveHistory(entries) {
+        try { localStorage.setItem(HISTORY_ENTRIES_KEY, JSON.stringify(entries)); } catch (e) { void e; }
+    }
+
+    function pushHistory(entry) {
+        if (!historyEnabled()) return;
+        const entries = loadHistory();
+        // De-dupe consecutive identical URLs.
+        if (entries.length > 0 && entries[entries.length - 1].url === entry.url) return;
+        entries.push(entry);
+        while (entries.length > HISTORY_CAP) entries.shift();
+        saveHistory(entries);
+    }
+
+    function clearChildren(node) {
+        while (node.firstChild) node.removeChild(node.firstChild);
+    }
+
+    function renderHistory() {
+        const enabled = historyEnabled();
+        if (historyEnabledToggle) historyEnabledToggle.checked = enabled;
+        const entries = loadHistory();
+        clearChildren(historyList);
+        historyDisabledMsg.hidden = enabled;
+        historyEmptyMsg.hidden = !enabled || entries.length > 0;
+        historyClearBtn.hidden = entries.length === 0;
+        for (let i = entries.length - 1; i >= 0; i--) {
+            const entry = entries[i];
+            const li = document.createElement('li');
+            li.className = 'history-item';
+            const badge = document.createElement('span');
+            badge.className = 'history-tab-badge';
+            badge.textContent = entry.tab || '?';
+            const link = document.createElement('button');
+            link.type = 'button';
+            link.className = 'history-link';
+            link.textContent = entry.label || entry.url;
+            link.title = entry.url;
+            link.addEventListener('click', () => { window.location.assign(entry.url); });
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'history-remove';
+            remove.setAttribute('aria-label', 'Remove from history');
+            remove.textContent = '×';
+            remove.addEventListener('click', () => {
+                const all = loadHistory();
+                all.splice(i, 1);
+                saveHistory(all);
+                renderHistory();
+            });
+            li.append(badge, link, remove);
+            historyList.appendChild(li);
+        }
+    }
+
+    if (historyEnabledToggle) {
+        historyEnabledToggle.addEventListener('change', () => {
+            setHistoryEnabled(historyEnabledToggle.checked);
+            renderHistory();
+        });
+    }
+
+    if (historyClearBtn) {
+        historyClearBtn.addEventListener('click', () => {
+            saveHistory([]);
+            renderHistory();
+        });
+    }
+
+    function captureCurrentPage() {
+        if (!historyEnabled()) return;
+        const hasResult = document.querySelector('.results, .vlsm-results, .overlap-result, .split-list');
+        if (!hasResult) return;
+        const url = window.location.pathname + window.location.search;
+        const tabId = activeTabId();
+        const tab = tabId ? tabId.replace(/^tab-/, '') : '';
+        const labelInput = document.querySelector('.panel.active input[type="text"], .panel.active textarea');
+        const label = (labelInput && labelInput.value.trim()) || url;
+        pushHistory({ url, tab, label, ts: Date.now() });
+    }
+    captureCurrentPage();
+
+    // ── Keyboard handler ─────────────────────────────────────────────────
+    document.addEventListener('keydown', e => {
+        const inEditable = isEditableTarget(e.target);
+
+        if (e.key === 'Escape' && isAnyOverlayOpen()) {
+            closeOverlays();
+            e.preventDefault();
+            return;
+        }
+
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'r') {
+            const tabId = activeTabId();
+            const tabSlug = tabId ? tabId.replace(/^tab-/, '') : '';
+            const target = window.location.pathname + (tabSlug ? '?tab=' + encodeURIComponent(tabSlug) : '');
+            window.location.assign(target);
+            e.preventDefault();
+            return;
+        }
+
+        if (e.ctrlKey && e.shiftKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'c') {
+            const firstVal = document.querySelector('.panel.active .result-value');
+            if (firstVal) {
+                copyText(firstVal.textContent.trim());
+                e.preventDefault();
+            }
+            return;
+        }
+
+        if (inEditable) return;
+
+        if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+            openOverlay(kbdOverlay);
+            e.preventDefault();
+            return;
+        }
+
+        if (e.key === '/' && !e.shiftKey) {
+            const firstInput = document.querySelector('.panel.active input[type="text"], .panel.active input:not([type]), .panel.active textarea');
+            if (firstInput) {
+                firstInput.focus();
+                e.preventDefault();
+            }
+            return;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(TAB_KEY_MAP, e.key)) {
+            const btn = document.getElementById(TAB_KEY_MAP[e.key]);
+            if (btn) {
+                btn.click();
+                btn.focus();
+                e.preventDefault();
+            }
+            return;
+        }
+
+        if (e.key === 'h' || e.key === 'H') {
+            renderHistory();
+            openOverlay(historyOverlay);
+            e.preventDefault();
+        }
+    });
+})();

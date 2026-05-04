@@ -79,6 +79,14 @@
             <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
             <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         </button>
+        <button id="history-toggle" class="header-icon-btn" type="button"
+                title="Recent calculations (H)" aria-label="Recent calculations" aria-haspopup="dialog">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+        </button>
+        <button id="kbd-help-toggle" class="header-icon-btn" type="button"
+                title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" aria-haspopup="dialog">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M10 14h4"/></svg>
+        </button>
     </div>
 
     <div class="tabs" role="tablist" aria-label="IP version">
@@ -1400,6 +1408,52 @@ if ($i < 3) {
 </main>
 
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">Copied!</div>
+
+<!-- v3.0.0 (#300) keyboard shortcut overlay -->
+<div id="kbd-overlay" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="kbd-overlay-title">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 id="kbd-overlay-title">Keyboard shortcuts</h2>
+            <button type="button" class="modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <dl class="kbd-list">
+                <dt><kbd>?</kbd></dt><dd>Show this help</dd>
+                <dt><kbd>Esc</kbd></dt><dd>Close any open overlay or tool drawer</dd>
+                <dt><kbd>1</kbd> &hellip; <kbd>4</kbd></dt><dd>Switch to tab (IPv4, IPv6, VLSM, VLSM IPv6)</dd>
+                <dt><kbd>/</kbd></dt><dd>Focus the first input on the active tab</dd>
+                <dt><kbd>Enter</kbd></dt><dd>Submit the current form (native; from any input)</dd>
+                <dt><kbd>Ctrl</kbd>+<kbd>R</kbd> / <kbd>Cmd</kbd>+<kbd>R</kbd></dt><dd>Reset the active tab (intercepts browser reload)</dd>
+                <dt><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd></dt><dd>Copy the first result on the active tab</dd>
+                <dt><kbd>H</kbd></dt><dd>Open recent calculations history</dd>
+            </dl>
+            <p class="modal-note">Shortcuts are ignored while typing in inputs (other than <kbd>Enter</kbd>, <kbd>Esc</kbd>, and <kbd>Ctrl</kbd>+<kbd>R</kbd>).</p>
+        </div>
+    </div>
+</div>
+
+<!-- v3.0.0 (#301) recent calculations history overlay -->
+<div id="history-overlay" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="history-overlay-title">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 id="history-overlay-title">Recent calculations</h2>
+            <button type="button" class="modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="history-controls">
+                <label class="history-toggle-label">
+                    <input type="checkbox" id="history-enabled-toggle">
+                    <span>Remember calculations on this device</span>
+                </label>
+                <button type="button" id="history-clear" class="btn btn-small" hidden>Clear all</button>
+            </div>
+            <p class="modal-note" id="history-empty-msg" hidden>No history yet. Run a calculation with history enabled and it will appear here.</p>
+            <p class="modal-note" id="history-disabled-msg" hidden>History is off. Enable it above to start recording calculations on this device.</p>
+            <ul class="history-list" id="history-list"></ul>
+            <p class="modal-note">Stored in this browser only. Up to 50 most-recent entries (FIFO).</p>
+        </div>
+    </div>
+</div>
 
 <script defer src="assets/vendor/xlsx/xlsx.full.min.js" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
 <script src="assets/app.js?v=<?= $app_version ?>"></script>
