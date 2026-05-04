@@ -21,6 +21,14 @@ WORKDIR /var/www/html
 COPY Subnet-Calculator/ /var/www/html/
 COPY testing/fixtures/iframe-test.html /var/www/html/
 
+# COPY runs as root and preserves uid 0 on the copied tree. Apache runs as
+# www-data, which needs write access to data/ (SQLite session DB) and to any
+# admin config file the first-run wizard may create at runtime. Hand both to
+# www-data; everything else stays root-owned and read-only.
+RUN chown -R www-data:www-data /var/www/html/data \
+    && rm -f /var/www/html/data/sessions.sqlite \
+    && chown www-data:www-data /var/www/html
+
 # Test-rig configuration. Generated at build time so no bcrypt hash is
 # committed to source — the plaintext "test-admin-password" is hashed
 # fresh each build. This config is ONLY present in the test image; release
