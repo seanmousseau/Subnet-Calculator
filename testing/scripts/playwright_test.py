@@ -2851,6 +2851,208 @@ async def test_admin_audit_records_login_failure(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# v3.0.0 — PR2 admin hardening (#311 wizard, #313 TOTP, #307 matrix)
+# ---------------------------------------------------------------------------
+
+
+def _admin_basic_header() -> str:
+    return "Basic " + base64.b64encode(
+        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
+    ).decode()
+
+
+async def test_admin_keys_csrf_rejected(page: Page) -> None:
+    section("v3.0.0 #307 admin/keys.php — POST without CSRF token rejected")
+    # POST with no _csrf field; should land on the redirect with a flash error.
+    resp = await page.context.request.post(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": _admin_basic_header()},
+        form={"action": "create", "name": "csrf-test"},
+        max_redirects=0,
+    )
+    assert_eq("admin/keys CSRF: 303 redirect on bad token", resp.status, 303)
+    follow = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": _admin_basic_header()},
+    )
+    body = await follow.text()
+    # The flash on the next request from the same session would surface the
+    # error, but cookies don't survive request.get without the same context;
+    # verify instead that no key named csrf-test was created (the create
+    # path is what we want to confirm did NOT run).
+    assert_true(
+        "admin/keys CSRF: csrf-test key was not created",
+        ">csrf-test<" not in body,
+    )
+
+
+async def test_admin_keys_per_row_rpm_edit(page: Page) -> None:
+    section("v3.0.0 #312 admin/keys.php — per-row RPM editor present + posts")
+    auth = _admin_basic_header()
+    # Mint a key first so we have a row to edit.
+    keys_get = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+    )
+    body = await keys_get.text()
+    # CSRF token is the same for every form on the page.
+    import re
+    m = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    assert_true("admin/keys: CSRF token discoverable", m is not None)
+    csrf = m.group(1) if m else ""
+
+    mint = await page.context.request.post(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+        form={
+            "_csrf": csrf,
+            "action": "create",
+            "name": "rpm-edit-target",
+            "rate_limit_rpm": "120",
+        },
+        max_redirects=0,
+    )
+    assert_eq("admin/keys mint: 303 PRG", mint.status, 303)
+
+    listing = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+    )
+    body2 = await listing.text()
+    assert_true(
+        "admin/keys per-row RPM: editor input rendered for each row",
+        'name="rate_limit_rpm"' in body2 and 'action" value="set_rpm"' in body2,
+    )
+    assert_true(
+        "admin/keys per-row RPM: target row visible",
+        "rpm-edit-target" in body2,
+    )
+
+
+async def test_admin_keys_revoke_confirm_present(page: Page) -> None:
+    section("v3.0.0 #307 admin/keys.php — revoke form has confirm()")
+    auth = _admin_basic_header()
+    listing = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+    )
+    body = await listing.text()
+    assert_true(
+        "admin/keys revoke: onsubmit confirm guard present",
+        "onsubmit=\"return confirm('Revoke this key?');\"" in body,
+    )
+
+
+async def test_admin_audit_pagination_param(page: Page) -> None:
+    section("v3.0.0 #306 admin/audit.php — page=2 query param accepted")
+    auth = _admin_basic_header()
+    resp = await page.context.request.get(
+        APP_URL + "admin/audit.php?page=2",
+        headers={"Authorization": auth},
+    )
+    assert_eq("admin/audit page=2: still 200", resp.status, 200)
+    body = await resp.text()
+    # Either a pagination footer is present, or the empty page renders cleanly;
+    # both are acceptable. We just need to confirm no crash.
+    assert_true(
+        "admin/audit page=2: page renders (Audit Log heading visible)",
+        "Admin Audit Log" in body,
+    )
+
+
+async def test_admin_totp_page_renders(page: Page) -> None:
+    section("v3.0.0 #313 admin/totp.php — authed renders status disabled")
+    auth = _admin_basic_header()
+    resp = await page.context.request.get(
+        APP_URL + "admin/totp.php",
+        headers={"Authorization": auth},
+    )
+    assert_eq("admin/totp: status 200", resp.status, 200)
+    body = await resp.text()
+    assert_true(
+        "admin/totp: page heading present",
+        ">TOTP / 2FA<" in body,
+    )
+    assert_true(
+        "admin/totp: status badge 'disabled' rendered (no secret in fixture)",
+        "disabled" in body,
+    )
+    assert_true(
+        "admin/totp: 'Generate a secret' form present when disabled",
+        'value="generate_secret"' in body,
+    )
+
+
+async def test_admin_totp_generate_secret_flow(page: Page) -> None:
+    section("v3.0.0 #313 admin/totp.php — generate_secret POST surfaces base32")
+    auth = _admin_basic_header()
+    # Pull CSRF from the page first.
+    initial = await page.context.request.get(
+        APP_URL + "admin/totp.php",
+        headers={"Authorization": auth},
+    )
+    body = await initial.text()
+    import re
+    m = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    assert_true("admin/totp: CSRF token discoverable", m is not None)
+    csrf = m.group(1) if m else ""
+
+    # Cookies must round-trip for the PRG flash to survive.
+    ctx = page.context
+    storage = await ctx.storage_state()  # noqa: F841 — keep handle, satisfies linters
+    post = await ctx.request.post(
+        APP_URL + "admin/totp.php",
+        headers={"Authorization": auth},
+        form={"_csrf": csrf, "action": "generate_secret"},
+        max_redirects=0,
+    )
+    assert_eq("admin/totp generate: 303 PRG", post.status, 303)
+
+    follow = await ctx.request.get(
+        APP_URL + "admin/totp.php",
+        headers={"Authorization": auth},
+    )
+    body2 = await follow.text()
+    assert_true(
+        "admin/totp generate: provisioning otpauth:// URI rendered",
+        "otpauth://totp/" in body2,
+    )
+    assert_true(
+        "admin/totp generate: snippet for $admin_totp_secret rendered",
+        "$admin_totp_secret" in body2,
+    )
+
+
+async def test_admin_totp_regenerate_blocked_when_disabled(page: Page) -> None:
+    section("v3.0.0 #313 admin/totp.php — regenerate_codes blocked when TOTP disabled")
+    auth = _admin_basic_header()
+    initial = await page.context.request.get(
+        APP_URL + "admin/totp.php",
+        headers={"Authorization": auth},
+    )
+    body = await initial.text()
+    import re
+    m = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    csrf = m.group(1) if m else ""
+    post = await page.context.request.post(
+        APP_URL + "admin/totp.php",
+        headers={"Authorization": auth},
+        form={"_csrf": csrf, "action": "regenerate_codes"},
+        max_redirects=0,
+    )
+    assert_eq("admin/totp regenerate (disabled): 303 PRG", post.status, 303)
+    follow = await page.context.request.get(
+        APP_URL + "admin/totp.php",
+        headers={"Authorization": auth},
+    )
+    body2 = await follow.text()
+    assert_true(
+        "admin/totp regenerate: error mentions TOTP must be enabled first",
+        "Enable TOTP first" in body2,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Permissions-Policy header directives (coverage gap)
 # ---------------------------------------------------------------------------
 
@@ -4326,6 +4528,13 @@ async def main() -> None:
             await test_admin_keys_authed_renders(page)
             await test_admin_audit_renders(page)
             await test_admin_audit_records_login_failure(page)
+            await test_admin_keys_csrf_rejected(page)
+            await test_admin_keys_per_row_rpm_edit(page)
+            await test_admin_keys_revoke_confirm_present(page)
+            await test_admin_audit_pagination_param(page)
+            await test_admin_totp_page_renders(page)
+            await test_admin_totp_generate_secret_flow(page)
+            await test_admin_totp_regenerate_blocked_when_disabled(page)
             await test_permissions_policy_directives(page)
             await test_vlsm_utilisation_accuracy(page)
             await test_ipv4_binary_hex_decimal(page)

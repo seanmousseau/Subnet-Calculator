@@ -17,6 +17,12 @@ require __DIR__ . '/../includes/config.php';
 require __DIR__ . '/../includes/functions-admin-auth.php';
 require __DIR__ . '/../includes/functions-apikeys.php';
 require __DIR__ . '/../includes/functions-audit.php';
+require __DIR__ . '/../includes/functions-admin-wizard.php';
+
+if (admin_wizard_needed()) {
+    require __DIR__ . '/_wizard.php';
+    exit;
+}
 
 admin_authenticate();
 
@@ -316,7 +322,9 @@ $h = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 <footer>
   Keys authenticate against <code>POST/GET /api/v1/*</code> via <code>Authorization: Bearer &lt;token&gt;</code>.
   Plain-string entries in <code>$api_tokens</code> still work alongside SQLite-stored keys.
-  <br><a href="audit.php">View audit log →</a>
+  <br>
+  <a href="totp.php">TOTP / 2FA →</a> &nbsp;·&nbsp;
+  <a href="audit.php">View audit log →</a>
 </footer>
 </main>
 </body>

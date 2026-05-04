@@ -30,8 +30,9 @@ COPY testing/fixtures/iframe-test.html /var/www/html/
 #   - $session_enabled  : powers Playwright IPv4 + IPv6 VLSM session save/load tests
 #   - $admin_ui_enabled : powers /admin/keys.php and /admin/audit.php tests
 RUN HASH=$(php -r "echo password_hash('test-admin-password', PASSWORD_BCRYPT);") \
-    && printf '<?php\n\$session_enabled=true;\n\$session_ttl_days=1;\n\$admin_ui_enabled=true;\n\$admin_user="testadmin";\n\$admin_pass_hash=%s;\n\$admin_audit_retention_days=1;\n' \
-        "'$HASH'" > /var/www/html/config.php
+    && printf '<?php\n$session_enabled=true;\n$session_ttl_days=1;\n$admin_ui_enabled=true;\n$admin_user="testadmin";\n$admin_pass_hash=%s;\n$admin_audit_retention_days=1;\n' \
+        "'$HASH'" > /var/www/html/config.php \
+    && php -l /var/www/html/config.php
 
 # www-data already owns /var/www/html inside the base image; no chown needed.
 USER www-data
