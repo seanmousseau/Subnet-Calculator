@@ -4306,6 +4306,173 @@ async def test_a11y_reduced_motion_css(page: Page) -> None:
     assert_true("prefers-reduced-motion media query present", has_rule)
 
 
+# ---------------------------------------------------------------------------
+# v3.0.0 — keyboard shortcut overlay (#300) and recent calculations (#301)
+# ---------------------------------------------------------------------------
+
+async def test_kbd_overlay_question_mark_opens(page: Page) -> None:
+    section("v3.0.0 #300 keyboard overlay — '?' opens, Esc closes")
+    await navigate(page, APP_URL)
+    overlay = page.locator("#kbd-overlay")
+    assert_true("kbd overlay: hidden by default", await overlay.is_hidden())
+    # Press ? on the body (not in any input).
+    await page.locator("body").click()
+    await page.keyboard.press("Shift+/")
+    assert_true(
+        "kbd overlay: visible after '?'",
+        await overlay.is_visible(),
+    )
+    assert_true(
+        "kbd overlay: shows shortcut entries",
+        await overlay.locator(".kbd-list dt").count() >= 5,
+    )
+    await page.keyboard.press("Escape")
+    assert_true(
+        "kbd overlay: hidden after Esc",
+        await overlay.is_hidden(),
+    )
+
+
+async def test_kbd_overlay_header_button_opens(page: Page) -> None:
+    section("v3.0.0 #300 keyboard overlay — header button opens it")
+    await navigate(page, APP_URL)
+    await page.click("#kbd-help-toggle")
+    assert_true(
+        "kbd overlay: visible after header click",
+        await page.locator("#kbd-overlay").is_visible(),
+    )
+    # Backdrop click closes.
+    await page.locator("#kbd-overlay").click(position={"x": 5, "y": 5})
+    assert_true(
+        "kbd overlay: hidden after backdrop click",
+        await page.locator("#kbd-overlay").is_hidden(),
+    )
+
+
+async def test_kbd_tab_switching_digits(page: Page) -> None:
+    section("v3.0.0 #300 keyboard — digits 1-4 switch tabs")
+    await navigate(page, APP_URL)
+    await page.locator("body").click()
+    await page.keyboard.press("3")
+    assert_eq(
+        "kbd: '3' selects vlsm tab",
+        await page.get_attribute("#tab-vlsm", "aria-selected"),
+        "true",
+    )
+    await page.keyboard.press("1")
+    assert_eq(
+        "kbd: '1' selects ipv4 tab",
+        await page.get_attribute("#tab-ipv4", "aria-selected"),
+        "true",
+    )
+
+
+async def test_kbd_slash_focuses_input(page: Page) -> None:
+    section("v3.0.0 #300 keyboard — '/' focuses first input on active tab")
+    await navigate(page, APP_URL)
+    await page.locator("body").click()
+    await page.keyboard.press("/")
+    focused_id = await page.evaluate("() => document.activeElement?.id")
+    assert_eq("kbd: '/' focuses #ip on IPv4 tab", focused_id, "ip")
+
+
+async def test_kbd_help_button_hidden_on_touch(page: Page) -> None:
+    section("v3.0.0 #300 keyboard — help button hidden on coarse pointers (CSS @media)")
+    await navigate(page, APP_URL)
+    has_rule = await page.evaluate("""() => {
+        for (const sheet of document.styleSheets) {
+            try {
+                for (const rule of sheet.cssRules) {
+                    if (rule.conditionText?.includes('hover: none')) {
+                        const css = rule.cssText || '';
+                        if (css.includes('kbd-help-toggle')) return true;
+                    }
+                }
+            } catch (e) {}
+        }
+        return false;
+    }""")
+    assert_true("kbd help: @media (hover: none) hides #kbd-help-toggle", has_rule)
+
+
+async def test_history_disabled_by_default(page: Page) -> None:
+    section("v3.0.0 #301 history — disabled by default; opening overlay shows opt-in")
+    await navigate(page, APP_URL)
+    # Clear any localStorage from previous tests in this context.
+    await page.evaluate("() => localStorage.clear()")
+    await page.click("#history-toggle")
+    overlay = page.locator("#history-overlay")
+    assert_true("history: overlay visible", await overlay.is_visible())
+    cb = page.locator("#history-enabled-toggle")
+    assert_eq("history: toggle starts unchecked", await cb.is_checked(), False)
+    assert_true(
+        "history: disabled-msg is shown when off",
+        await page.locator("#history-disabled-msg").is_visible(),
+    )
+
+
+async def test_history_opt_in_records_calculation(page: Page) -> None:
+    section("v3.0.0 #301 history — enabling, calculating, then re-opening shows entry")
+    await navigate(page, APP_URL)
+    await page.evaluate("() => localStorage.clear()")
+    await page.click("#history-toggle")
+    await page.locator("#history-enabled-toggle").check()
+    await page.locator("#history-overlay .modal-close").click()
+
+    # Run a successful calculation; module captures URL on next page load.
+    await navigate(page, APP_URL + "?ip=192.168.50.0&mask=24&tab=ipv4")
+    # Open history again and assert the entry appears.
+    await page.click("#history-toggle")
+    items = page.locator("#history-list .history-item")
+    assert_true(
+        "history: at least one entry recorded",
+        await items.count() >= 1,
+    )
+    first_link = items.first.locator(".history-link")
+    label = await first_link.text_content()
+    assert_true(
+        "history: entry label contains the input",
+        bool(label) and "192.168.50.0" in (label or ""),
+    )
+
+
+async def test_history_clear_removes_entries(page: Page) -> None:
+    section("v3.0.0 #301 history — Clear all empties the list")
+    await navigate(page, APP_URL)
+    # Seed an entry directly so this test does not depend on order.
+    await page.evaluate(
+        """() => {
+            localStorage.setItem('sc.history.enabled', '1');
+            localStorage.setItem('sc.history.entries',
+                JSON.stringify([{url: '?ip=10.0.0.0&mask=8', tab: 'ipv4', label: '10.0.0.0', ts: 1}]));
+        }"""
+    )
+    await page.click("#history-toggle")
+    assert_true(
+        "history: seeded entry visible",
+        await page.locator("#history-list .history-item").count() == 1,
+    )
+    await page.click("#history-clear")
+    assert_eq(
+        "history: cleared list is empty",
+        await page.locator("#history-list .history-item").count(),
+        0,
+    )
+    stored = await page.evaluate("() => localStorage.getItem('sc.history.entries')")
+    assert_eq("history: localStorage cleared", stored, "[]")
+
+
+async def test_history_h_key_opens(page: Page) -> None:
+    section("v3.0.0 #301 history — 'h' key opens overlay")
+    await navigate(page, APP_URL)
+    await page.locator("body").click()
+    await page.keyboard.press("h")
+    assert_true(
+        "history: 'h' opens overlay",
+        await page.locator("#history-overlay").is_visible(),
+    )
+
+
 async def test_vlsm_keyboard_delete(page: Page) -> None:
     section("VLSM — keyboard Delete on remove button")
     await navigate(page, APP_URL)
@@ -4587,6 +4754,16 @@ async def main() -> None:
             await test_a11y_help_bubble_keyboard(page)
             await test_a11y_reduced_motion_css(page)
             await test_vlsm_keyboard_delete(page)
+            # v3.0.0 PR3a — keyboard shortcut overlay (#300) + history (#301)
+            await test_kbd_overlay_question_mark_opens(page)
+            await test_kbd_overlay_header_button_opens(page)
+            await test_kbd_tab_switching_digits(page)
+            await test_kbd_slash_focuses_input(page)
+            await test_kbd_help_button_hidden_on_touch(page)
+            await test_history_disabled_by_default(page)
+            await test_history_opt_in_records_calculation(page)
+            await test_history_clear_removes_entries(page)
+            await test_history_h_key_opens(page)
             await test_v290_typography(page)
         finally:
             await context.close()
