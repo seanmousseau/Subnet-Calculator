@@ -4,18 +4,32 @@
 
     Admin pages are template-style mixed PHP/HTML: a top-level controller block
     (auth, CSRF, audit-log writes, redirects) followed by direct HTML output.
-    Strict PSR-12 trips on three patterns that are idiomatic for this layer:
+    PSR-12 trips on seven sniffs that are unavoidable in this layer; each is
+    fully excluded (not relaxed via properties — PSR-12's whitespace sniffs
+    do not expose enough config surface to handle mixed PHP/HTML cleanly):
 
-      - Generic.Files.LineLength: HTML attribute soup + i18n strings legitimately
-        run past 120 chars. Wrapping them harms readability without changing
-        semantics.
-      - PSR1.Files.SideEffects: every admin page IS a side-effect — it boots
-        the SQLite admin DB, validates the session, and emits HTML. Splitting
+      - Generic.Files.LineLength — HTML attribute soup + i18n strings
+        legitimately exceed 120 chars; wrapping hurts readability.
+      - PSR1.Files.SideEffects — every admin page IS a side-effect (boots
+        the SQLite admin DB, validates the session, emits HTML); splitting
         declarations from execution is not appropriate for a front controller.
-      - Generic.WhiteSpace.ScopeIndent (relaxed to exact=false): mixed
-        PHP/HTML blocks intentionally re-anchor indentation when transitioning
-        between markup and control flow. The relaxed mode still flags clearly
-        wrong indentation but tolerates the alternation.
+      - Squiz.ControlStructures.ControlSignature — fires on inline
+        alternative-syntax `<?php if (...): ?>...<?php endif; ?>` patterns.
+      - Generic.WhiteSpace.ScopeIndent — fires across PHP/HTML transitions
+        where indentation re-anchors to outer markup, not PHP scope depth.
+      - Squiz.WhiteSpace.ScopeClosingBrace — fires on single-line
+        inline-template rows where `endif` shares a line with HTML output.
+      - Squiz.WhiteSpace.ControlStructureSpacing — fires on intentional
+        blank lines inside `<?php else : ?>` branches that let embedded
+        HTML breathe.
+      - PSR12.ControlStructures.ControlStructureSpacing.FirstExpressionLine —
+        fires on multi-line auth predicates wrapped on the opening `if (`.
+
+    Trade-off: PSR1.Files.SideEffects becomes an unenforced convention for
+    admin/. A future `admin/lib/foo.php` library file mixing declarations
+    and execution would not be caught here. Discipline: library code under
+    admin/ should live under admin/lib/ with its own targeted ruleset, or
+    be promoted to includes/, not absorbed silently here.
     </description>
 
     <file>Subnet-Calculator/admin</file>
