@@ -57,7 +57,11 @@ function apikey_migrate_add_rate_limit(\SQLite3 $db): void
 {
     $res = $db->query("PRAGMA table_info('api_keys')");
     if ($res === false) {
-        return;
+        // Hard-fail rather than continue: silently returning here would let
+        // a partially-applied migration ship and crash later when other
+        // code reads rate_limit_rpm. The caller (apikey_db_open) wraps
+        // open + migrate, so a thrown exception surfaces deterministically.
+        throw new \RuntimeException('apikey migration failed: ' . $db->lastErrorMsg());
     }
     $hasColumn = false;
     while (($row = $res->fetchArray(SQLITE3_ASSOC)) !== false) {
@@ -79,7 +83,7 @@ function apikey_migrate_add_rate_limit(\SQLite3 $db): void
  * token is only ever returned from this function — it is never readable from
  * the database after this point.
  *
- * @return array{id:int, token:string, prefix:string, name:string, created_at:int}
+ * @return array{id:int, token:string, prefix:string, name:string, created_at:int, rate_limit_rpm:?int}
  * @throws InvalidArgumentException on empty / oversized name
  * @throws \RuntimeException        on prepare failure
  *
@@ -141,7 +145,7 @@ function apikey_create(\SQLite3 $db, string $name, ?int $rateLimitRpm = null): a
  * a matching prefix so that prefix collisions (extremely unlikely but
  * possible after manual edits) still resolve correctly.
  *
- * @return array{id:int, name:string, prefix:string, created_at:int, last_used_at:?int}|null
+ * @return array{id:int, name:string, prefix:string, created_at:int, last_used_at:?int, rate_limit_rpm:?int}|null
  */
 function apikey_verify(\SQLite3 $db, string $token): ?array
 {
@@ -185,7 +189,7 @@ function apikey_verify(\SQLite3 $db, string $token): ?array
 /**
  * List API keys (newest first) without ever returning the hash.
  *
- * @return array<int, array{id:int, name:string, prefix:string, created_at:int, last_used_at:?int, revoked_at:?int}>
+ * @return array<int, array{id:int, name:string, prefix:string, created_at:int, last_used_at:?int, revoked_at:?int, rate_limit_rpm:?int}>
  */
 function apikey_list(\SQLite3 $db): array
 {
@@ -216,17 +220,10 @@ function apikey_list(\SQLite3 $db): array
 }
 
 /**
- * Set or clear the per-key RPM override. Pass null to revert to the
- * global default. Returns true if the row existed and was active, false
- * otherwise — matches apikey_revoke()'s convention so the admin UI can
- * distinguish "no such key" from "DB error" (the latter throws).
- *
- * @throws InvalidArgumentException for negative RPM
- * @throws \RuntimeException        on prepare failure
- */
-/**
  * Return true when an active (non-revoked) API key with the given id exists.
  * Distinguishes "missing" (404) from "no-op" (200) on idempotent PATCH paths.
+ *
+ * @throws \RuntimeException on prepare/execute failure
  */
 function apikey_exists(\SQLite3 $db, int $id): bool
 {
@@ -245,6 +242,15 @@ function apikey_exists(\SQLite3 $db, int $id): bool
     return $res->fetchArray(SQLITE3_NUM) !== false;
 }
 
+/**
+ * Set or clear the per-key RPM override. Pass null to revert to the
+ * global default. Returns true if the row existed and was active, false
+ * otherwise — matches apikey_revoke()'s convention so the admin UI can
+ * distinguish "no such key" from "DB error" (the latter throws).
+ *
+ * @throws InvalidArgumentException for negative RPM
+ * @throws \RuntimeException        on prepare failure
+ */
 function apikey_set_rate_limit(\SQLite3 $db, int $id, ?int $rpm): bool
 {
     if ($rpm !== null && $rpm < 0) {

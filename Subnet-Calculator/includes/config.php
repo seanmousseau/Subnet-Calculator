@@ -71,7 +71,14 @@ if (file_exists(__DIR__ . '/../config.php')) {
 }
 
 // Sanitise config values
-$admin_audit_trust_xff = (bool)($admin_audit_trust_xff ?? false);
+// Strict boolean parsing — `(bool)'false'` is true, but operators commonly
+// write the word "false" in config strings.  filter_var with FILTER_VALIDATE_BOOLEAN
+// handles "true"/"false"/"yes"/"no"/"on"/"off"/"0"/"1" correctly.
+$admin_audit_trust_xff = filter_var(
+    $admin_audit_trust_xff ?? false,
+    FILTER_VALIDATE_BOOLEAN,
+    FILTER_NULL_ON_FAILURE
+) ?? false;
 $split_max_subnets = max(1, min((int)$split_max_subnets, 256));
 $lookup_max_cidrs  = max(1, min((int)$lookup_max_cidrs, 1000));
 $lookup_max_ips    = max(1, min((int)$lookup_max_ips, 10000));
