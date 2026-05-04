@@ -1935,6 +1935,360 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
         });
     }
 
+    // ── Tree diff (#322, v3.1.0) ────────────────────────────────────────────
+    //
+    // Two source pickers (paste JSON / share URL / current draft) feed
+    // treeDiff() (a client-side mirror of PHP tree_diff()).  Annotations
+    // ride on data-diff attributes that the existing renderNode() can also
+    // expose when called in diff-mode below.
+
+    const diffModal = root.querySelector('[data-role="diff-modal"]');
+
+    function diffCanonicalNode(node, family) {
+        if (!node || typeof node !== 'object' || typeof node.cidr !== 'string') { return node; }
+        const out = {};
+        try { out.cidr = canonicalCidr(node.cidr, family); }
+        catch (e) { out.cidr = node.cidr; }
+        if (typeof node.name === 'string' && node.name) { out.name = node.name; }
+        if (typeof node.notes === 'string' && node.notes) { out.notes = node.notes; }
+        if (Array.isArray(node.children)) {
+            out.children = node.children.map(function (c) { return diffCanonicalNode(c, family); });
+        }
+        return out;
+    }
+
+    function diffIndex(rootNode) {
+        const map = {};
+        (function walk(n) {
+            if (!n || typeof n !== 'object' || typeof n.cidr !== 'string') { return; }
+            const slash = n.cidr.indexOf('/');
+            if (slash === -1) { return; }
+            const network = n.cidr.slice(0, slash);
+            const prefix = parseInt(n.cidr.slice(slash + 1), 10);
+            map[n.cidr] = {
+                cidr: n.cidr,
+                network: network,
+                prefix: prefix,
+                name: n.name || '',
+                notes: n.notes || ''
+            };
+            if (Array.isArray(n.children)) { n.children.forEach(walk); }
+        })(rootNode);
+        return map;
+    }
+
+    function treeDiff(payloadA, payloadB) {
+        const a = (payloadA && typeof payloadA === 'object' && payloadA.root) ? payloadA.root : payloadA;
+        const b = (payloadB && typeof payloadB === 'object' && payloadB.root) ? payloadB.root : payloadB;
+        if (!a || !b) { throw new Error('Both trees are required.'); }
+        const fa = cidrFamily(a.cidr || '');
+        const fb = cidrFamily(b.cidr || '');
+        const aCanon = diffCanonicalNode(a, fa);
+        const bCanon = diffCanonicalNode(b, fb);
+        const aMap = diffIndex(aCanon);
+        const bMap = diffIndex(bCanon);
+
+        const added = [];
+        const removed = [];
+        const changed = [];
+        const aUnmatched = {};
+        const bUnmatched = {};
+
+        Object.keys(aMap).forEach(function (cidr) {
+            if (bMap[cidr]) {
+                const an = aMap[cidr];
+                const bn = bMap[cidr];
+                if (an.name !== bn.name) {
+                    changed.push({ cidr: cidr, kind: 'rename', before: an.name, after: bn.name });
+                }
+                if (an.notes !== bn.notes) {
+                    changed.push({ cidr: cidr, kind: 'notes', before: an.notes, after: bn.notes });
+                }
+            } else {
+                aUnmatched[cidr] = aMap[cidr];
+            }
+        });
+        Object.keys(bMap).forEach(function (cidr) {
+            if (!aMap[cidr]) { bUnmatched[cidr] = bMap[cidr]; }
+        });
+
+        Object.keys(aUnmatched).forEach(function (aCidr) {
+            const an = aUnmatched[aCidr];
+            const matchKey = Object.keys(bUnmatched).find(function (k) {
+                return bUnmatched[k].network === an.network;
+            });
+            if (matchKey) {
+                const bn = bUnmatched[matchKey];
+                changed.push({ cidr: bn.cidr, kind: 'prefix', before: aCidr, after: bn.cidr });
+                if (an.name !== bn.name) {
+                    changed.push({ cidr: bn.cidr, kind: 'rename', before: an.name, after: bn.name });
+                }
+                if (an.notes !== bn.notes) {
+                    changed.push({ cidr: bn.cidr, kind: 'notes', before: an.notes, after: bn.notes });
+                }
+                delete bUnmatched[matchKey];
+            } else {
+                removed.push(diffStripEmpty(an));
+            }
+        });
+        Object.keys(bUnmatched).forEach(function (k) {
+            added.push(diffStripEmpty(bUnmatched[k]));
+        });
+
+        return { added: added, removed: removed, changed: changed };
+    }
+
+    function diffStripEmpty(entry) {
+        const out = { cidr: entry.cidr };
+        if (entry.name)  { out.name  = entry.name; }
+        if (entry.notes) { out.notes = entry.notes; }
+        return out;
+    }
+
+    function diffMarkdown(diff) {
+        const lines = ['# Subnet diff'];
+        diff.added.forEach(function (n) {
+            lines.push('- + ' + n.cidr + (n.name ? ' (' + n.name + ')' : ''));
+        });
+        diff.removed.forEach(function (n) {
+            lines.push('- − ' + n.cidr + (n.name ? ' (' + n.name + ')' : ''));
+        });
+        diff.changed.forEach(function (c) {
+            if (c.kind === 'prefix') {
+                lines.push('- Δ ' + c.before + ' → ' + c.after + ' (prefix)');
+            } else if (c.kind === 'rename') {
+                lines.push('- ~ ' + c.cidr + ': name "' + (c.before || '') + '" → "' + (c.after || '') + '"');
+            } else if (c.kind === 'notes') {
+                lines.push('- ~ ' + c.cidr + ': notes changed');
+            }
+        });
+        return lines.join('\n');
+    }
+
+    function diffRender(diff, treeB) {
+        const annotations = {};
+        diff.added.forEach(function (n)   { annotations[n.cidr] = { kind: 'added', reasons: [] }; });
+        diff.changed.forEach(function (c) {
+            if (!annotations[c.cidr]) { annotations[c.cidr] = { kind: 'changed', reasons: [] }; }
+            else if (annotations[c.cidr].kind !== 'added') { annotations[c.cidr].kind = 'changed'; }
+            const reason = c.kind === 'prefix'
+                ? 'prefix changed ' + c.before + ' → ' + c.after
+                : c.kind === 'rename'
+                    ? 'name "' + (c.before || '') + '" → "' + (c.after || '') + '"'
+                    : 'notes changed';
+            annotations[c.cidr].reasons.push(reason);
+        });
+
+        const canvas = diffModal.querySelector('[data-role="diff-canvas"]');
+        canvas.replaceChildren();
+        canvas.setAttribute('data-mode', 'diff');
+
+        function renderDiffNode(node, depth, isRoot) {
+            const wrap = document.createElement('div');
+            wrap.className = 'tree-editor-node' + (isRoot ? ' tree-editor-node-root' : '');
+            wrap.setAttribute('data-cidr', node.cidr);
+            const ann = annotations[node.cidr];
+            if (ann) { wrap.setAttribute('data-diff', ann.kind); }
+            const card = document.createElement('div');
+            card.className = 'tree-editor-card';
+            const cidr = document.createElement('code');
+            cidr.className = 'tree-editor-cidr';
+            cidr.textContent = node.cidr;
+            card.appendChild(cidr);
+            if (node.name) {
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'tree-editor-name';
+                nameSpan.textContent = node.name;
+                card.appendChild(nameSpan);
+            }
+            if (node.notes) {
+                const notesSpan = document.createElement('span');
+                notesSpan.className = 'tree-editor-notes';
+                notesSpan.textContent = node.notes;
+                card.appendChild(notesSpan);
+            }
+            if (ann && ann.reasons.length) {
+                const r = document.createElement('span');
+                r.className = 'tree-diff-reason';
+                r.textContent = ann.reasons.join('; ');
+                card.appendChild(r);
+            }
+            wrap.appendChild(card);
+            if (node.children && node.children.length) {
+                const kids = document.createElement('div');
+                kids.className = 'tree-editor-children';
+                node.children.forEach(function (c) { kids.appendChild(renderDiffNode(c, depth + 1, false)); });
+                wrap.appendChild(kids);
+            }
+            return wrap;
+        }
+        canvas.appendChild(renderDiffNode(treeB, 0, true));
+
+        diff.removed.forEach(function (n) {
+            const ghost = document.createElement('div');
+            ghost.className = 'tree-editor-node';
+            ghost.setAttribute('data-cidr', n.cidr);
+            ghost.setAttribute('data-diff', 'removed');
+            const card = document.createElement('div');
+            card.className = 'tree-editor-card';
+            const cidr = document.createElement('code');
+            cidr.className = 'tree-editor-cidr';
+            cidr.textContent = n.cidr;
+            card.appendChild(cidr);
+            if (n.name) {
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'tree-editor-name';
+                nameSpan.textContent = n.name;
+                card.appendChild(nameSpan);
+            }
+            ghost.appendChild(card);
+            canvas.appendChild(ghost);
+        });
+
+        const summary = diffModal.querySelector('[data-role="diff-summary"]');
+        if (summary) {
+            summary.textContent = '+' + diff.added.length + '  −' + diff.removed.length + '  Δ' + diff.changed.length;
+        }
+    }
+
+    function diffActiveTab(fieldset) {
+        const tab = fieldset.querySelector('[role="tab"][aria-selected="true"]');
+        return tab ? tab.getAttribute('data-source-tab') : 'paste';
+    }
+    function diffSwitchTab(fieldset, name) {
+        fieldset.querySelectorAll('[role="tab"]').forEach(function (t) {
+            t.setAttribute('aria-selected', t.getAttribute('data-source-tab') === name ? 'true' : 'false');
+        });
+        fieldset.querySelectorAll('[data-source-pane]').forEach(function (p) {
+            p.hidden = p.getAttribute('data-source-pane') !== name;
+        });
+    }
+
+    function diffParseSourceUrl(value) {
+        if (!value) { return null; }
+        let q = value.trim();
+        const idx = q.indexOf('?');
+        if (idx !== -1) { q = q.slice(idx + 1); }
+        const params = new URLSearchParams(q);
+        const treeParam = params.get('tree');
+        if (treeParam) {
+            try { return JSON.parse(base64UrlDecode(treeParam)); } catch (e) { /* fall through */ }
+        }
+        try { return JSON.parse(base64UrlDecode(q)); } catch (e) { /* fall through */ }
+        try { return JSON.parse(value); } catch (e) { return null; }
+    }
+
+    function diffReadSide(fieldset) {
+        const tab = diffActiveTab(fieldset);
+        if (tab === 'paste') {
+            const ta = fieldset.querySelector('[data-source-pane="paste"]');
+            const txt = (ta.value || '').trim();
+            if (!txt) { throw new Error('Paste a tree JSON.'); }
+            let parsed;
+            try { parsed = JSON.parse(txt); }
+            catch (e) { throw new Error('Invalid JSON: ' + e.message); }
+            return (parsed && parsed.root) ? parsed.root : parsed;
+        }
+        if (tab === 'url') {
+            const inp = fieldset.querySelector('[data-source-pane="url"]');
+            const parsed = diffParseSourceUrl(inp.value);
+            if (!parsed) { throw new Error('Could not extract a tree from the URL.'); }
+            return (parsed && parsed.root) ? parsed.root : parsed;
+        }
+        if (!state || !state.root) { throw new Error('No current draft. Open a tree first.'); }
+        const draft = loadAutosave(state.root.cidr);
+        if (!draft) { throw new Error('No autosaved draft found for ' + state.root.cidr); }
+        return draft;
+    }
+
+    function diffShowError(msg) {
+        const err = diffModal.querySelector('[data-role="diff-error"]');
+        if (!err) { return; }
+        if (!msg) { err.hidden = true; err.textContent = ''; return; }
+        err.hidden = false;
+        err.textContent = msg;
+    }
+
+    function diffOpen() {
+        diffShowError('');
+        const result = diffModal.querySelector('[data-role="diff-result"]');
+        const inputs = diffModal.querySelector('[data-role="diff-inputs"]');
+        const actions = diffModal.querySelector('[data-role="diff-actions"]');
+        if (result) { result.hidden = true; }
+        if (inputs) { inputs.hidden = false; }
+        if (actions) { actions.hidden = false; }
+        openModal(diffModal);
+        const firstTab = diffModal.querySelector('[role="tab"]');
+        if (firstTab) { firstTab.focus(); }
+    }
+    function diffClose() { closeModal(diffModal); }
+
+    function diffCompare() {
+        diffShowError('');
+        const sides = diffModal.querySelectorAll('[data-side]');
+        let a, b;
+        try { a = diffReadSide(sides[0]); }
+        catch (e) { diffShowError('Tree A: ' + e.message); return; }
+        try { b = diffReadSide(sides[1]); }
+        catch (e) { diffShowError('Tree B: ' + e.message); return; }
+        try { tree_validate_client(a); }
+        catch (e) { diffShowError('Tree A invalid: ' + e.message); return; }
+        try { tree_validate_client(b); }
+        catch (e) { diffShowError('Tree B invalid: ' + e.message); return; }
+
+        let diff;
+        try { diff = treeDiff({ root: a }, { root: b }); }
+        catch (e) { diffShowError(e.message); return; }
+
+        const inputs = diffModal.querySelector('[data-role="diff-inputs"]');
+        const actions = diffModal.querySelector('[data-role="diff-actions"]');
+        const result = diffModal.querySelector('[data-role="diff-result"]');
+        if (inputs) { inputs.hidden = true; }
+        if (actions) { actions.hidden = true; }
+        if (result) { result.hidden = false; }
+        diffRender(diff, diffCanonicalNode(b, cidrFamily(b.cidr || '')));
+        diffModal.__lastDiff = diff;
+    }
+
+    if (diffModal) {
+        diffModal.addEventListener('click', function (e) {
+            const tab = e.target.closest('[role="tab"]');
+            if (tab) {
+                const fs = tab.closest('[data-side]');
+                if (fs) { diffSwitchTab(fs, tab.getAttribute('data-source-tab')); }
+                return;
+            }
+            if (e.target.matches('[data-role="diff-cancel"]')) { diffClose(); return; }
+            if (e.target.matches('[data-role="diff-compare"]')) { diffCompare(); return; }
+            if (e.target.matches('[data-role="diff-back"]')) {
+                const inputs = diffModal.querySelector('[data-role="diff-inputs"]');
+                const actions = diffModal.querySelector('[data-role="diff-actions"]');
+                const result = diffModal.querySelector('[data-role="diff-result"]');
+                if (inputs) { inputs.hidden = false; }
+                if (actions) { actions.hidden = false; }
+                if (result) { result.hidden = true; }
+                return;
+            }
+            if (e.target.matches('[data-role="diff-copy-md"]')) {
+                if (diffModal.__lastDiff) {
+                    copyText(diffMarkdown(diffModal.__lastDiff));
+                    setStatus('Copied diff as Markdown.');
+                }
+                return;
+            }
+        });
+    }
+
+    const diffBtn = root.querySelector('.tree-editor-toolbar [data-action="diff"]');
+    if (diffBtn) { diffBtn.addEventListener('click', diffOpen); }
+
+    document.addEventListener('keydown', function (e) {
+        if (diffModal && !diffModal.hidden && e.key === 'Escape') {
+            diffClose();
+            e.preventDefault();
+        }
+    });
+
     // Keyboard: Ctrl/Cmd+Z = undo, +Shift = redo (only when editor is open
     // and focus is inside it, to avoid clobbering page-level shortcuts).
     document.addEventListener('keydown', function (e) {

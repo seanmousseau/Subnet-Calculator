@@ -35,6 +35,7 @@
             <button type="button" class="tree-editor-btn" data-action="download-csv">CSV</button>
             <button type="button" class="tree-editor-btn" data-action="download-json">JSON</button>
             <button type="button" class="tree-editor-btn" data-action="share-url">Share URL</button>
+            <button type="button" class="tree-editor-btn" data-action="diff">Diff</button>
             <span class="tree-editor-spacer"></span>
             <button type="button" class="tree-editor-btn tree-editor-btn-danger" data-action="reset">Reset</button>
         </div>
@@ -80,6 +81,49 @@
             <div class="tree-modal-actions">
                 <button type="button" class="splitter-btn" data-role="rename-save">Save</button>
                 <button type="button" class="tree-modal-cancel" data-role="rename-cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Multi-tree diff modal (#322, v3.1.0) -->
+    <div class="tree-modal" data-role="diff-modal" role="dialog" aria-modal="true" aria-labelledby="tree-diff-title" hidden>
+        <div class="tree-modal-backdrop" data-role="diff-cancel"></div>
+        <div class="tree-modal-card tree-diff-card">
+            <h3 id="tree-diff-title">Compare two trees</h3>
+            <p class="tree-modal-help">Pick two saved trees and compare added, removed, and changed subnets.</p>
+            <div class="tree-diff-error" data-role="diff-error" role="alert" hidden></div>
+            <div class="tree-diff-inputs" data-role="diff-inputs">
+                <?php foreach (['a' => 'Tree A (before)', 'b' => 'Tree B (after)'] as $side => $label): ?>
+                <fieldset class="tree-diff-source" data-side="<?= htmlspecialchars($side) ?>">
+                    <legend><?= htmlspecialchars($label) ?></legend>
+                    <div class="tree-diff-source-tabs" role="tablist" aria-label="<?= htmlspecialchars($label) ?> source">
+                        <button type="button" class="tree-editor-btn" role="tab" aria-selected="true" data-source-tab="paste">Paste JSON</button>
+                        <button type="button" class="tree-editor-btn" role="tab" aria-selected="false" data-source-tab="url">Share URL</button>
+                        <button type="button" class="tree-editor-btn" role="tab" aria-selected="false" data-source-tab="draft">Current draft</button>
+                    </div>
+                    <textarea class="tree-diff-source-paste" data-source-pane="paste" rows="6" placeholder='{"cidr":"10.0.0.0/24","children":[…]}' autocomplete="off" spellcheck="false"></textarea>
+                    <input type="text" class="tree-diff-source-url" data-source-pane="url" placeholder="Paste a Share URL or ?tree=… fragment" autocomplete="off" spellcheck="false" hidden>
+                    <div class="tree-diff-source-draft" data-source-pane="draft" hidden>Use the autosaved draft for the current root CIDR.</div>
+                </fieldset>
+                <?php endforeach; ?>
+            </div>
+            <div class="tree-modal-actions" data-role="diff-actions">
+                <button type="button" class="splitter-btn" data-role="diff-compare">Compare</button>
+                <button type="button" class="tree-modal-cancel" data-role="diff-cancel">Cancel</button>
+            </div>
+
+            <div class="tree-diff-result" data-role="diff-result" hidden>
+                <div class="tree-diff-result-toolbar">
+                    <button type="button" class="tree-editor-btn" data-role="diff-back">&larr; Back</button>
+                    <button type="button" class="tree-editor-btn" data-role="diff-copy-md">Copy diff as Markdown</button>
+                    <span class="tree-diff-summary" data-role="diff-summary"></span>
+                </div>
+                <div class="tree-diff-canvas" data-role="diff-canvas"></div>
+                <div class="tree-diff-legend" role="note">
+                    <span class="tree-diff-legend-item" data-diff="added">added</span>
+                    <span class="tree-diff-legend-item" data-diff="removed">removed</span>
+                    <span class="tree-diff-legend-item" data-diff="changed">changed</span>
+                </div>
             </div>
         </div>
     </div>

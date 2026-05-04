@@ -17,6 +17,7 @@ parameters:
         - Subnet-Calculator/includes/functions-resolve.php
         - Subnet-Calculator/includes/functions-range.php
         - Subnet-Calculator/includes/functions-tree.php
+        - Subnet-Calculator/includes/functions-tree-diff.php
         - Subnet-Calculator/includes/functions-apikeys.php
         - Subnet-Calculator/includes/functions-admin-auth.php
         - Subnet-Calculator/includes/functions-admin-totp.php

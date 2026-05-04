@@ -73,3 +73,43 @@ to the server for each edit.
 The mobile interaction model is desktop-first with a touch fallback: on
 `@media (hover: none)` devices, tapping a node opens a bottom action sheet
 instead of the click-split picker, and drag-merge is disabled.
+
+### Diff (v3.1.0+)
+
+Click **Diff** in the toolbar to compare two trees side-by-side.
+
+The Diff modal accepts each tree from one of three sources:
+
+- **Paste JSON** — drop in the JSON exported by the **JSON** download button
+  (or any `{"type":"tree","root":{…}}` payload).
+- **Share URL** — paste a full Share URL or a `?tree=…` fragment; the modal
+  decodes the embedded base64url payload.
+- **Current draft** — uses the autosaved draft for whichever root CIDR is open
+  in the editor (handy for "what changed since last save").
+
+Compare runs both inputs through the same canonicalisation as
+`tree_validate()` — host bits are zeroed and IPv6 is compressed before
+matching, so `10.0.0.5/24` and `10.0.0.0/24` collapse to the same node.
+
+Each result node is annotated:
+
+| Glyph | Border colour | Meaning |
+|---|---|---|
+| `+` | green | Added in Tree B |
+| `−` | red | Removed (struck through) |
+| `Δ` | amber | Prefix length, name, or notes changed |
+
+The toolbar above the result has a **Copy diff as Markdown** button that
+emits a checklist suitable for change-management tickets:
+
+```markdown
+# Subnet diff
+- + 10.0.4.0/24 (DC4)
+- − 10.0.5.0/24 (legacy)
+- Δ 10.0.0.0/24 → 10.0.0.0/23 (prefix)
+- ~ 10.0.1.0/24: name "DMZ" → "Edge"
+```
+
+The diff is computed client-side; the same algorithm is exposed as
+`tree_diff()` in `includes/functions-tree-diff.php` for tests and any future
+batch / API integration.
