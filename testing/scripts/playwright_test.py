@@ -2861,6 +2861,35 @@ def _admin_basic_header() -> str:
     ).decode()
 
 
+def _drain_admin_state() -> None:
+    """Zero api_keys + admin_audit + admin_recovery_codes + sc_admin sessions.
+
+    Called once at the top of main() before any admin-touching test. Lets
+    `make test-docker` run repeatedly against a non-fresh container without
+    leftover rows tripping later tests (#324).
+
+    Idempotent: 200 on first call, still 200 on subsequent calls (truncates
+    already-empty tables). No-op when PHPUNIT_TEST_DRAIN_TOKEN is unset
+    (e.g. running against a non-test deployment).
+    """
+    token = os.environ.get("PHPUNIT_TEST_DRAIN_TOKEN", "")
+    if not token:
+        return
+    try:
+        resp = _SESSION.post(
+            APP_URL + "admin/_test-drain.php",
+            data={"token": token},
+            timeout=10,
+            allow_redirects=False,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"admin drain failed (network): {exc}") from exc
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"admin drain failed: HTTP {resp.status_code} {resp.text[:200]}"
+        )
+
+
 async def test_admin_keys_csrf_rejected(page: Page) -> None:
     section("v3.0.0 #307 admin/keys.php — POST without CSRF token rejected")
     # POST with no _csrf field; should land on the redirect with a flash error.
@@ -2964,6 +2993,73 @@ async def test_admin_keys_revoke_confirm_present(page: Page) -> None:
                 },
                 max_redirects=0,
             )
+
+
+async def test_admin_drain_endpoint_zeroes_state(page: Page) -> None:
+    section("v3.1.0 #324 — drain endpoint zeroes api_keys + admin_audit + sessions")
+    auth = _admin_basic_header()
+
+    # Mint a key via the admin UI so we can prove the drain removes it.
+    listing = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+    )
+    body = await listing.text()
+    csrf_match = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    assert_true("admin/keys: CSRF token discoverable for drain fixture",
+                csrf_match is not None)
+    if csrf_match is None:
+        return
+    csrf = csrf_match.group(1)
+    mint = await page.context.request.post(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+        form={"_csrf": csrf, "action": "create", "name": "drain-fixture"},
+        max_redirects=0,
+    )
+    assert_eq("drain fixture mint: 303 PRG", mint.status, 303)
+
+    # Hit the drain endpoint with the token from the docker fixture env.
+    token = os.environ.get("PHPUNIT_TEST_DRAIN_TOKEN", "")
+    assert_true(
+        "PHPUNIT_TEST_DRAIN_TOKEN present in test container env",
+        token != "",
+    )
+
+    # Without the token: must 403 (and 404 if env not set on server).
+    bad = await page.context.request.post(
+        APP_URL + "admin/_test-drain.php",
+        form={"token": "wrong"},
+        max_redirects=0,
+    )
+    assert_true(
+        "drain rejects bad token: 403 (or 404 if env unset on server)",
+        bad.status in (403, 404),
+    )
+
+    drain = await page.context.request.post(
+        APP_URL + "admin/_test-drain.php",
+        form={"token": token},
+        max_redirects=0,
+    )
+    assert_eq("drain returns 200", drain.status, 200)
+    drain_body = await drain.text()
+    assert_true(
+        "drain JSON reports ok=true",
+        '"ok":true' in drain_body or '"ok": true' in drain_body,
+    )
+
+    # api_keys must be empty after drain — the keys page must not list any
+    # active row (the drain-fixture row should be gone).
+    after = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+    )
+    after_body = await after.text()
+    assert_true(
+        "api_keys empty after drain: drain-fixture not listed",
+        ">drain-fixture<" not in after_body,
+    )
 
 
 async def test_admin_audit_pagination_param(page: Page) -> None:
@@ -4776,6 +4872,11 @@ async def main() -> None:
     print(f"{BOLD}Subnet Calculator — Playwright browser tests{RST}")
     print(f"{DIM}Target: {APP_URL}{RST}")
 
+    # v3.1.0 #324 — zero admin state at suite setup so a non-fresh webapp
+    # container does not carry api_keys / admin_audit rows from a previous
+    # crashed run. No-op when PHPUNIT_TEST_DRAIN_TOKEN is unset.
+    _drain_admin_state()
+
     async with async_playwright() as pw:
         # Chromium 127+ aggressively auto-upgrades plain HTTP to HTTPS via
         # several feature flags. The docker test harness serves the app over
@@ -4917,6 +5018,7 @@ async def main() -> None:
             await test_admin_keys_csrf_rejected(page)
             await test_admin_keys_per_row_rpm_edit(page)
             await test_admin_keys_revoke_confirm_present(page)
+            await test_admin_drain_endpoint_zeroes_state(page)
             await test_admin_audit_pagination_param(page)
             await test_admin_totp_page_renders(page)
             await test_admin_totp_generate_secret_flow(page)

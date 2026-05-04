@@ -51,7 +51,9 @@ scp testing/fixtures/iframe-test.html root@192.168.80.15:/opt/container_data/dev
 # Also bump $app_version in Subnet-Calculator/includes/config.php before building
 # CHANGELOG.md is bundled so GET /api/v1/changelog works in tarball installs
 cp CHANGELOG.md Subnet-Calculator/CHANGELOG.md
-tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
+# admin/_test-drain.php is a test-rig-only endpoint (#324) — never ship it.
+tar --exclude='admin/_test-drain.php' \
+    -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
 rm Subnet-Calculator/CHANGELOG.md
 ```
 

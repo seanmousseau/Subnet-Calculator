@@ -192,6 +192,32 @@ on every audit write — there is no separate cron required.
 The audit module fails open: a write failure logs to `error_log` but never
 masks the underlying admin action.
 
+## Test-only drain endpoint (v3.1.0+, #324)
+
+The `admin/_test-drain.php` endpoint exists **only** in the docker test rig.
+It zeroes `api_keys`, `admin_audit`, and `admin_recovery_codes` and clears
+sc_admin PHP-session files so the Playwright suite can run repeatedly
+against a non-fresh `webapp` container without leftover rows tripping
+later assertions.
+
+The endpoint is hard-gated by the `PHPUNIT_TEST_DRAIN_TOKEN` environment
+variable:
+
+- `getenv('PHPUNIT_TEST_DRAIN_TOKEN')` empty / unset → endpoint returns
+  `404` and reveals nothing. This is the production case.
+- Token present, request `token` mismatched → `403`.
+- Token matched (timing-safe `hash_equals()`) → tables truncated, response
+  `{"ok":true,"drained":[…]}`.
+
+The token is generated per-run by `make test-docker` and passed to both
+the `webapp` and `playwright-tests` containers via docker-compose env. It
+is never baked into the image and never committed to source.
+
+The release-tarball build step in [CLAUDE.md](../CLAUDE.md) excludes
+`admin/_test-drain.php` so the file never ships to operators. If you copy
+the file to a production host by accident, it stays inert because the
+production environment does not set `PHPUNIT_TEST_DRAIN_TOKEN`.
+
 ## Out of scope
 
 The following are intentionally not in v3.0.0 and are deferred to v3.1.0:
