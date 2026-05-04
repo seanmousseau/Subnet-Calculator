@@ -81,13 +81,13 @@ if ($type === 'ipv4' || $type === 'ipv6') {
         }
     }
 } elseif ($type === 'tree') {
-    // Schema-level validation only at this stage (PR1). Full tree_validate()
-    // ships in PR3 (#302) when the tree editor lands.
-    if (!isset($payload['root']) || !is_array($payload['root'])) {
-        json_err('Field "root" must be an object for tree sessions.');
-    }
-    if (!isset($payload['root']['cidr']) || !is_string($payload['root']['cidr'])) {
-        json_err('root.cidr is required for tree sessions.');
+    // v3.0.0 PR3 (#302): full structural + semantic validation via
+    // tree_validate(). Throws \InvalidArgumentException on the first rule
+    // violation — message is safe to surface to the API caller.
+    try {
+        tree_validate($payload);
+    } catch (\InvalidArgumentException $e) {
+        json_err($e->getMessage());
     }
 }
 

@@ -50,6 +50,29 @@ The payload accepts a `type` discriminator (v3.0.0+):
 }
 ```
 
-`type` defaults to `'ipv4'` when omitted, so v2.x callers keep working unchanged. Allowed values: `'ipv4'`, `'ipv6'`, `'tree'` (the tree form is reserved for the v3.0.0 #302 interactive editor and lands in PR3).
+`type` defaults to `'ipv4'` when omitted, so v2.x callers keep working unchanged. Allowed values: `'ipv4'`, `'ipv6'`, `'tree'`.
+
+### `type: 'tree'` (v3.0.0+)
+
+The tree form is the persistence path for the [interactive Tree Editor](tree.md#interactive-tree-editor-v300). The payload mirrors the editor state directly:
+
+```json
+{
+  "payload": {
+    "type": "tree",
+    "root": {
+      "cidr": "10.0.0.0/16",
+      "name": "Corp HQ",
+      "notes": "WAN edge → distribution",
+      "children": [
+        {"cidr": "10.0.0.0/17", "name": "Production"},
+        {"cidr": "10.0.128.0/17", "name": "Lab"}
+      ]
+    }
+  }
+}
+```
+
+Server-side validation (`tree_validate()`) enforces canonical CIDR form (host bits zeroed; IPv6 lower-case compressed), containment (children fall inside their parent), non-overlap (siblings may have gaps but cannot overlap), `name` ≤128 / `notes` ≤1024 chars, tree depth ≤16, and total nodes ≤1024. Trees are single-family (all-IPv4 or all-IPv6).
 
 See [REST API](api.md#post-apiv1sessions) for curl examples.

@@ -1590,3 +1590,266 @@
 @media (width <= 480px) {
     .modal-overlay { padding: 2rem 0.5rem; }
 }
+
+/* ─── Subnet Tree Editor (#302, v3.0.0) ───────────────────────────────────── */
+
+.tree-editor-panel { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.tree-editor-init {
+    display: flex;
+    gap: 0.5rem;
+    align-items: end;
+    flex-wrap: wrap;
+}
+.tree-editor-init input[type="text"] {
+    flex: 1 1 14ch;
+    min-width: 12ch;
+}
+
+.tree-editor[hidden] { display: none; }
+
+.tree-editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.tree-editor-spacer { flex: 1 1 auto; }
+
+.tree-editor-btn {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    padding: 0.35rem 0.7rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 120ms, border-color 120ms;
+}
+.tree-editor-btn:hover { border-color: var(--color-accent); }
+.tree-editor-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+.tree-editor-btn:disabled { opacity: 40%; cursor: not-allowed; }
+.tree-editor-btn-danger { color: #c0392b; }
+
+.tree-editor-status {
+    font-size: 0.8rem;
+    color: var(--color-text);
+    opacity: 75%;
+    min-height: 1.2em;
+}
+
+.tree-editor-canvas {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.5rem 0;
+    max-height: 60vh;
+    overflow: auto;
+}
+
+.tree-editor-node { display: flex; flex-direction: column; }
+
+.tree-editor-card {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    cursor: pointer;
+    user-select: none;
+    margin-left: calc(var(--depth, 0) * 1.4rem);
+    max-width: 100%;
+}
+.tree-editor-card:hover { border-color: var(--color-accent); }
+.tree-editor-card:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+.tree-editor-node-root > .tree-editor-card {
+    border-color: var(--color-accent);
+    font-weight: 600;
+}
+
+.tree-editor-cidr {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9rem;
+}
+.tree-editor-name {
+    color: var(--color-accent);
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+.tree-editor-notes {
+    opacity: 70%;
+    font-size: 0.8rem;
+    font-style: italic;
+}
+
+.tree-editor-pencil {
+    margin-left: auto;
+    background: transparent;
+    border: 0;
+    color: var(--color-text);
+    cursor: pointer;
+    font-size: 0.95rem;
+    padding: 0 0.25rem;
+    opacity: 60%;
+}
+.tree-editor-pencil:hover { opacity: 100%; }
+.tree-editor-pencil:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+}
+
+.tree-editor-children {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+}
+
+.tree-editor-share {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--color-border);
+    flex-wrap: wrap;
+}
+.tree-editor-share-label { font-size: 0.85rem; opacity: 75%; }
+.tree-editor-share-url {
+    flex: 1 1 12rem;
+    overflow-x: auto;
+    white-space: nowrap;
+    background: var(--color-bg);
+    padding: 0.25rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+.tree-editor-share-copy {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+.tree-editor-share-copy:hover { border-color: var(--color-accent); }
+
+/* ── Modals ─────────────────────────────────────────────────────────────── */
+
+.tree-modal[hidden],
+.tree-action-sheet[hidden] { display: none; }
+
+.tree-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.tree-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgb(0 0 0 / 50%);
+}
+.tree-modal-card {
+    position: relative;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    min-width: 18rem;
+    max-width: 92vw;
+    box-shadow: 0 10px 30px rgb(0 0 0 / 40%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.tree-modal-card h3 { margin: 0; font-size: 1rem; }
+.tree-modal-help { margin: 0; font-size: 0.85rem; opacity: 75%; }
+.tree-modal-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.tree-modal-cancel {
+    align-self: flex-end;
+    background: transparent;
+    border: 0;
+    color: var(--color-text);
+    cursor: pointer;
+    font-size: 0.85rem;
+    opacity: 70%;
+}
+.tree-modal-cancel:hover { opacity: 100%; }
+.tree-modal-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+}
+.tree-modal-label input,
+.tree-modal-label textarea {
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font: inherit;
+    box-sizing: border-box;
+}
+
+/* ── Mobile action sheet ───────────────────────────────────────────────── */
+
+.tree-action-sheet {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+.tree-action-sheet-card {
+    position: relative;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-top: 1px solid var(--color-border);
+    border-radius: 12px 12px 0 0;
+    padding: 1rem;
+    width: 100%;
+    max-width: 32rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    box-shadow: 0 -8px 24px rgb(0 0 0 / 40%);
+}
+.tree-action-sheet-card h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+.tree-action-sheet-btn {
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    padding: 0.7rem 0.9rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    text-align: left;
+    cursor: pointer;
+}
+.tree-action-sheet-btn:hover { border-color: var(--color-accent); }
+.tree-action-sheet-btn-cancel {
+    text-align: center;
+    margin-top: 0.4rem;
+    opacity: 70%;
+}
+
+@media (hover: none) {
+    .tree-editor-card { cursor: pointer; }
+}

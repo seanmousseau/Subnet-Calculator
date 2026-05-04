@@ -1212,3 +1212,679 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
         }
     });
 })();
+
+// ─── Subnet Tree Editor (#302, v3.0.0) ──────────────────────────────────────
+//
+// Client-only reducer-style editor.  All state lives in JS; localStorage
+// autosave covers reload-recovery; explicit "Save Session" persists via
+// POST /api/v1/sessions (type: 'tree') for cross-device share.  See
+// docs/superpowers/plans/2026-05-03-v3.0.0-tree-editor-design.md for the
+// design lock.  No new runtime deps — plain JS + BigInt for v6 math.
+
+(function () {
+    'use strict';
+
+    const root = document.querySelector('.tool-panel[data-tool="tree-editor"]');
+    if (!root) { return; }
+
+    const initForm = root.querySelector('#tree-editor-init');
+    const initInput = root.querySelector('#tree_editor_cidr');
+    const editorEl = root.querySelector('.tree-editor');
+    const canvas = root.querySelector('[data-role="canvas"]');
+    const statusEl = root.querySelector('[data-role="status"]');
+    const splitModal = root.querySelector('[data-role="split-modal"]');
+    const renameModal = root.querySelector('[data-role="rename-modal"]');
+    const sheet = root.querySelector('[data-role="action-sheet"]');
+    const undoBtn = root.querySelector('[data-action="undo"]');
+    const redoBtn = root.querySelector('[data-action="redo"]');
+    const shareBox = root.querySelector('[data-role="share"]');
+
+    const MAX_UNDO = 50;
+    const SHARE_NODE_CAP = 50;
+    const AUTOSAVE_DELAY = 300;
+
+    let state = null;       // { root: TreeNode, family: 'ipv4'|'ipv6' }
+    let undoStack = [];     // serialized prior states
+    let redoStack = [];
+    let autosaveTimer = null;
+    let pickerTarget = null;   // CIDR string the picker is acting on
+    let renameTarget = null;
+    let sheetTarget = null;
+    let dragSource = null;
+
+    // ── CIDR math (BigInt for unified v4 + v6) ──────────────────────────────
+
+    function cidrFamily(cidr) {
+        return cidr.indexOf(':') !== -1 ? 'ipv6' : 'ipv4';
+    }
+
+    function cidrParts(cidr) {
+        const [ip, pxStr] = cidr.split('/');
+        return { ip: ip, prefix: parseInt(pxStr, 10) };
+    }
+
+    function ipv4ToBig(ip) {
+        const o = ip.split('.').map(function (s) { return parseInt(s, 10); });
+        return (BigInt(o[0]) << 24n) | (BigInt(o[1]) << 16n) | (BigInt(o[2]) << 8n) | BigInt(o[3]);
+    }
+
+    function bigToIpv4(n) {
+        return [
+            Number((n >> 24n) & 0xffn),
+            Number((n >> 16n) & 0xffn),
+            Number((n >> 8n) & 0xffn),
+            Number(n & 0xffn)
+        ].join('.');
+    }
+
+    function ipv6ToBig(ip) {
+        // Expand :: and parse 8 hextets.
+        const halves = ip.split('::');
+        const left = halves[0] ? halves[0].split(':') : [];
+        const right = halves.length > 1 && halves[1] ? halves[1].split(':') : [];
+        const missing = 8 - left.length - right.length;
+        const parts = left.concat(Array(missing).fill('0'), right);
+        let n = 0n;
+        for (let i = 0; i < 8; i++) {
+            n = (n << 16n) | BigInt(parseInt(parts[i] || '0', 16));
+        }
+        return n;
+    }
+
+    function bigToIpv6(n) {
+        const parts = [];
+        for (let i = 7; i >= 0; i--) {
+            parts.push(Number((n >> BigInt(i * 16)) & 0xffffn).toString(16));
+        }
+        // Compress longest run of zeros.
+        let bestStart = -1, bestLen = 0, curStart = -1, curLen = 0;
+        for (let i = 0; i < parts.length; i++) {
+            if (parts[i] === '0') {
+                if (curStart === -1) { curStart = i; }
+                curLen++;
+                if (curLen > bestLen) { bestStart = curStart; bestLen = curLen; }
+            } else { curStart = -1; curLen = 0; }
+        }
+        if (bestLen >= 2) {
+            return parts.slice(0, bestStart).join(':') + '::' + parts.slice(bestStart + bestLen).join(':');
+        }
+        return parts.join(':');
+    }
+
+    function ipToBig(ip, family) { return family === 'ipv6' ? ipv6ToBig(ip) : ipv4ToBig(ip); }
+    function bigToIp(n, family) { return family === 'ipv6' ? bigToIpv6(n) : bigToIpv4(n); }
+    function familyMaxBits(family) { return family === 'ipv6' ? 128 : 32; }
+
+    function canonicalCidr(cidr, family) {
+        const { ip, prefix } = cidrParts(cidr);
+        const bits = familyMaxBits(family);
+        const n = ipToBig(ip, family);
+        const shift = BigInt(bits - prefix);
+        const mask = prefix === 0 ? 0n : (((1n << BigInt(prefix)) - 1n) << shift);
+        return bigToIp(n & mask, family) + '/' + prefix;
+    }
+
+    function splitInto(cidr, count, family) {
+        // count must be a power of 2, 2..16.
+        const { ip, prefix } = cidrParts(cidr);
+        const bits = Math.log2(count);
+        if (!Number.isInteger(bits) || bits < 1) { return []; }
+        const newPx = prefix + bits;
+        if (newPx > familyMaxBits(family)) { return []; }
+        const start = ipToBig(ip, family);
+        const stride = 1n << BigInt(familyMaxBits(family) - newPx);
+        const out = [];
+        for (let i = 0; i < count; i++) {
+            out.push(bigToIp(start + BigInt(i) * stride, family) + '/' + newPx);
+        }
+        return out;
+    }
+
+    // ── Tree state helpers ──────────────────────────────────────────────────
+
+    function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
+
+    function findNode(node, cidr) {
+        if (node.cidr === cidr) { return node; }
+        if (node.children) {
+            for (let i = 0; i < node.children.length; i++) {
+                const r = findNode(node.children[i], cidr);
+                if (r) { return r; }
+            }
+        }
+        return null;
+    }
+
+    function findParent(node, cidr, parent) {
+        if (node.cidr === cidr) { return parent; }
+        if (node.children) {
+            for (let i = 0; i < node.children.length; i++) {
+                const r = findParent(node.children[i], cidr, node);
+                if (r !== undefined) { return r; }
+            }
+        }
+        return undefined;
+    }
+
+    function countNodes(node) {
+        let n = 1;
+        if (node.children) {
+            node.children.forEach(function (c) { n += countNodes(c); });
+        }
+        return n;
+    }
+
+    // ── Reducer ─────────────────────────────────────────────────────────────
+
+    function pushHistory() {
+        undoStack.push(JSON.stringify(state.root));
+        if (undoStack.length > MAX_UNDO) { undoStack.shift(); }
+        redoStack = [];
+        updateUndoButtons();
+    }
+
+    function updateUndoButtons() {
+        if (undoBtn) { undoBtn.disabled = undoStack.length === 0; }
+        if (redoBtn) { redoBtn.disabled = redoStack.length === 0; }
+    }
+
+    function dispatch(action) {
+        if (!state) { return; }
+        const before = JSON.stringify(state.root);
+        switch (action.type) {
+            case 'SPLIT': {
+                const node = findNode(state.root, action.cidr);
+                if (!node || (node.children && node.children.length)) { return; }
+                const kids = splitInto(node.cidr, action.count, state.family);
+                if (!kids.length) { return; }
+                pushHistory();
+                node.children = kids.map(function (c) { return { cidr: c }; });
+                break;
+            }
+            case 'MERGE': {
+                const parent = findParent(state.root, action.cidr, null);
+                if (!parent) { return; }
+                pushHistory();
+                delete parent.children;
+                break;
+            }
+            case 'RENAME': {
+                const node = findNode(state.root, action.cidr);
+                if (!node) { return; }
+                pushHistory();
+                if (action.name) { node.name = action.name; } else { delete node.name; }
+                if (action.notes) { node.notes = action.notes; } else { delete node.notes; }
+                break;
+            }
+            case 'UNDO': {
+                if (!undoStack.length) { return; }
+                redoStack.push(JSON.stringify(state.root));
+                state.root = JSON.parse(undoStack.pop());
+                break;
+            }
+            case 'REDO': {
+                if (!redoStack.length) { return; }
+                undoStack.push(JSON.stringify(state.root));
+                state.root = JSON.parse(redoStack.pop());
+                break;
+            }
+            case 'LOAD': {
+                state.root = action.root;
+                undoStack = [];
+                redoStack = [];
+                break;
+            }
+            case 'RESET': {
+                pushHistory();
+                state.root = { cidr: state.root.cidr };
+                break;
+            }
+        }
+        if (JSON.stringify(state.root) !== before) {
+            updateUndoButtons();
+            render();
+            scheduleAutosave();
+        }
+    }
+
+    // ── Autosave (localStorage) ─────────────────────────────────────────────
+
+    function autosaveKey() { return 'sc.tree.draft.' + state.root.cidr; }
+
+    function scheduleAutosave() {
+        if (autosaveTimer) { clearTimeout(autosaveTimer); }
+        autosaveTimer = setTimeout(function () {
+            try {
+                localStorage.setItem(autosaveKey(), JSON.stringify(state.root));
+                setStatus('Autosaved.');
+            } catch (e) { /* quota exceeded — surface silently */ }
+        }, AUTOSAVE_DELAY);
+    }
+
+    function loadAutosave(rootCidr) {
+        try {
+            const raw = localStorage.getItem('sc.tree.draft.' + rootCidr);
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) { return null; }
+    }
+
+    // ── Rendering ───────────────────────────────────────────────────────────
+
+    function setStatus(msg) {
+        if (statusEl) { statusEl.textContent = msg || ''; }
+    }
+
+    function render() {
+        if (!state) { return; }
+        canvas.innerHTML = '';
+        canvas.appendChild(renderNode(state.root, 0, true));
+    }
+
+    function renderNode(node, depth, isRoot) {
+        const wrap = document.createElement('div');
+        wrap.className = 'tree-editor-node' + (isRoot ? ' tree-editor-node-root' : '');
+        wrap.setAttribute('data-cidr', node.cidr);
+        wrap.style.setProperty('--depth', depth);
+
+        const card = document.createElement('div');
+        card.className = 'tree-editor-card';
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('role', 'button');
+        card.setAttribute('draggable', 'true');
+
+        const cidrSpan = document.createElement('code');
+        cidrSpan.className = 'tree-editor-cidr';
+        cidrSpan.textContent = node.cidr;
+        card.appendChild(cidrSpan);
+
+        if (node.name) {
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'tree-editor-name';
+            nameSpan.textContent = node.name;
+            card.appendChild(nameSpan);
+        }
+        if (node.notes) {
+            const notesSpan = document.createElement('span');
+            notesSpan.className = 'tree-editor-notes';
+            notesSpan.textContent = node.notes;
+            card.appendChild(notesSpan);
+        }
+
+        // Pencil icon (rename)
+        const pencil = document.createElement('button');
+        pencil.type = 'button';
+        pencil.className = 'tree-editor-pencil';
+        pencil.setAttribute('aria-label', 'Rename ' + node.cidr);
+        pencil.setAttribute('data-rename', node.cidr);
+        pencil.textContent = '✎';
+        card.appendChild(pencil);
+
+        wrap.appendChild(card);
+
+        if (node.children && node.children.length) {
+            const kidsWrap = document.createElement('div');
+            kidsWrap.className = 'tree-editor-children';
+            node.children.forEach(function (c) {
+                kidsWrap.appendChild(renderNode(c, depth + 1, false));
+            });
+            wrap.appendChild(kidsWrap);
+        }
+        return wrap;
+    }
+
+    // ── Modal helpers ──────────────────────────────────────────────────────
+
+    function openModal(el) { if (el) { el.hidden = false; } }
+    function closeModal(el) { if (el) { el.hidden = true; } }
+
+    function openSplitPicker(cidr) {
+        pickerTarget = cidr;
+        const cidrSpan = splitModal.querySelector('[data-role="split-cidr"]');
+        if (cidrSpan) { cidrSpan.textContent = cidr; }
+        openModal(splitModal);
+    }
+
+    function openRenameModal(cidr) {
+        renameTarget = cidr;
+        const node = findNode(state.root, cidr);
+        if (!node) { return; }
+        renameModal.querySelector('[data-role="rename-cidr"]').textContent = cidr;
+        renameModal.querySelector('[data-role="rename-name"]').value = node.name || '';
+        renameModal.querySelector('[data-role="rename-notes"]').value = node.notes || '';
+        openModal(renameModal);
+    }
+
+    function openSheet(cidr) {
+        sheetTarget = cidr;
+        sheet.querySelector('[data-role="sheet-cidr"]').textContent = cidr;
+        openModal(sheet);
+    }
+
+    // ── Exports ────────────────────────────────────────────────────────────
+
+    function flatten(node, out) {
+        out.push(node);
+        if (node.children) { node.children.forEach(function (c) { flatten(c, out); }); }
+        return out;
+    }
+
+    function leafCidrs() {
+        return flatten(state.root, []).filter(function (n) { return !n.children || !n.children.length; }).map(function (n) { return n.cidr; });
+    }
+
+    function copyText(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).catch(function () {});
+        } else {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch (e) { /* fallback failed */ }
+            document.body.removeChild(ta);
+        }
+    }
+
+    function exportCidrList() { return leafCidrs().join('\n'); }
+
+    function exportMarkdown() {
+        const lines = ['# Subnet Plan: ' + state.root.cidr, ''];
+        function walk(node, depth) {
+            const indent = '  '.repeat(depth);
+            const label = node.name ? ' — ' + node.name : '';
+            lines.push(indent + '- `' + node.cidr + '`' + label);
+            if (node.notes) { lines.push(indent + '  > ' + node.notes); }
+            if (node.children) { node.children.forEach(function (c) { walk(c, depth + 1); }); }
+        }
+        walk(state.root, 0);
+        return lines.join('\n');
+    }
+
+    function exportCisco() {
+        return leafCidrs().map(function (c) {
+            const [ip, px] = c.split('/');
+            return 'interface XX\n ip address ' + ip + ' /' + px;
+        }).join('\n!\n');
+    }
+
+    function exportCsv() {
+        const rows = [['cidr', 'name', 'notes', 'is_leaf']];
+        flatten(state.root, []).forEach(function (n) {
+            rows.push([
+                n.cidr,
+                n.name || '',
+                (n.notes || '').replace(/"/g, '""'),
+                (!n.children || !n.children.length) ? '1' : '0'
+            ]);
+        });
+        return rows.map(function (r) {
+            return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(',');
+        }).join('\n');
+    }
+
+    function exportJson() {
+        return JSON.stringify({ type: 'tree', root: state.root }, null, 2);
+    }
+
+    function downloadFile(name, mime, body) {
+        const blob = new Blob([body], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function base64UrlEncode(s) {
+        return btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+    function base64UrlDecode(s) {
+        const pad = s + '==='.slice((s.length + 3) % 4);
+        return decodeURIComponent(escape(atob(pad.replace(/-/g, '+').replace(/_/g, '/'))));
+    }
+
+    function shareUrl() {
+        const total = countNodes(state.root);
+        if (total > SHARE_NODE_CAP) {
+            return null;
+        }
+        const enc = base64UrlEncode(JSON.stringify(state.root));
+        const u = new URL(window.location.href);
+        u.searchParams.set('tab', 'ipv4');
+        u.searchParams.set('tree', enc);
+        return u.toString();
+    }
+
+    function showShare(url) {
+        const out = root.querySelector('[data-role="share-url"]');
+        if (out) { out.textContent = url; }
+        if (shareBox) { shareBox.hidden = false; }
+    }
+
+    function saveSession() {
+        try { tree_validate_client(state.root, state.family); }
+        catch (e) { setStatus('Cannot save: ' + e.message); return; }
+        fetch('api/v1/sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payload: { type: 'tree', root: state.root } })
+        }).then(function (r) { return r.json(); })
+            .then(function (json) {
+                if (json && json.ok && json.data && json.data.id) {
+                    const u = new URL(window.location.href);
+                    u.searchParams.set('tab', 'ipv4');
+                    u.searchParams.set('session_id', json.data.id);
+                    showShare(u.toString());
+                    setStatus('Saved as session ' + json.data.id);
+                } else {
+                    setStatus('Save failed: ' + ((json && json.error) || 'unknown error'));
+                }
+            }).catch(function (e) { setStatus('Save failed: ' + e.message); });
+    }
+
+    // Mirror of server tree_validate() — minimal client-side checks before
+    // POSTing.  Server is the authority; this is for UX.
+    function tree_validate_client(node, family) {
+        function visit(n, parent, depth) {
+            if (depth > 16) { throw new Error('depth exceeds 16'); }
+            if (!n.cidr) { throw new Error('node missing cidr'); }
+            if (n.name && n.name.length > 128) { throw new Error('name exceeds 128 characters'); }
+            if (n.notes && n.notes.length > 1024) { throw new Error('notes exceed 1024 characters'); }
+            if (n.children) {
+                if (n.children.length < 2) { throw new Error('children must be >=2'); }
+                if (n.children.length > 64) { throw new Error('children exceed 64'); }
+                n.children.forEach(function (c) { visit(c, n, depth + 1); });
+            }
+        }
+        visit(node, null, 0);
+    }
+
+    // ── Wiring ──────────────────────────────────────────────────────────────
+
+    function startEditor(rootCidr) {
+        const family = cidrFamily(rootCidr);
+        const canon = canonicalCidr(rootCidr, family);
+        if (canon !== rootCidr) {
+            setStatus('Normalised to ' + canon);
+            rootCidr = canon;
+        }
+        state = { root: { cidr: rootCidr }, family: family };
+
+        const draft = loadAutosave(rootCidr);
+        if (draft && draft.cidr === rootCidr) {
+            state.root = draft;
+            setStatus('Restored from autosave.');
+        }
+
+        // ?tree=… overrides autosave on first load.
+        const params = new URLSearchParams(window.location.search);
+        const treeParam = params.get('tree');
+        if (treeParam) {
+            try {
+                const decoded = JSON.parse(base64UrlDecode(treeParam));
+                if (decoded && decoded.cidr === rootCidr) {
+                    state.root = decoded;
+                    setStatus('Loaded tree from URL.');
+                }
+            } catch (e) { /* ignore bad share */ }
+        }
+
+        initForm.hidden = true;
+        editorEl.hidden = false;
+        undoStack = [];
+        redoStack = [];
+        updateUndoButtons();
+        render();
+    }
+
+    if (initForm) {
+        initForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            const v = initInput.value.trim();
+            if (!v) { return; }
+            if (v.indexOf('/') === -1) {
+                setStatus('CIDR must include a prefix, e.g. 10.0.0.0/24');
+                return;
+            }
+            startEditor(v);
+        });
+    }
+
+    // Auto-start if ?tree=… and a session already running on the page,
+    // or if a session_id with type=tree was loaded by the server.
+    document.addEventListener('DOMContentLoaded', function () {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('tree') && initInput && initInput.value) {
+            startEditor(initInput.value);
+        }
+    });
+
+    // Click on a node card → split picker (desktop) or sheet (touch).
+    canvas.addEventListener('click', function (e) {
+        const pencil = e.target.closest('[data-rename]');
+        if (pencil) {
+            openRenameModal(pencil.getAttribute('data-rename'));
+            return;
+        }
+        const card = e.target.closest('.tree-editor-card');
+        if (!card) { return; }
+        const cidr = card.parentElement.getAttribute('data-cidr');
+        if (window.matchMedia('(hover: none)').matches) {
+            openSheet(cidr);
+        } else {
+            openSplitPicker(cidr);
+        }
+    });
+
+    // Drag-merge (desktop only).
+    canvas.addEventListener('dragstart', function (e) {
+        if (window.matchMedia('(hover: none)').matches) { e.preventDefault(); return; }
+        const card = e.target.closest('.tree-editor-card');
+        if (!card) { return; }
+        dragSource = card.parentElement.getAttribute('data-cidr');
+        e.dataTransfer.effectAllowed = 'move';
+    });
+    canvas.addEventListener('dragover', function (e) {
+        if (dragSource) { e.preventDefault(); }
+    });
+    canvas.addEventListener('drop', function (e) {
+        e.preventDefault();
+        if (!dragSource) { return; }
+        const card = e.target.closest('.tree-editor-card');
+        if (!card) { dragSource = null; return; }
+        const target = card.parentElement.getAttribute('data-cidr');
+        if (target === dragSource) { dragSource = null; return; }
+        // Both must share a parent → merge that parent.
+        const sourceParent = findParent(state.root, dragSource, null);
+        const targetParent = findParent(state.root, target, null);
+        if (sourceParent && sourceParent === targetParent) {
+            dispatch({ type: 'MERGE', cidr: dragSource });
+        } else {
+            setStatus('Drag-merge only works between siblings.');
+        }
+        dragSource = null;
+    });
+
+    // Modal interactions.
+    splitModal.addEventListener('click', function (e) {
+        const into = e.target.closest('[data-split-into]');
+        if (into) {
+            dispatch({ type: 'SPLIT', cidr: pickerTarget, count: parseInt(into.getAttribute('data-split-into'), 10) });
+            closeModal(splitModal);
+            return;
+        }
+        if (e.target.matches('[data-role="split-cancel"]')) { closeModal(splitModal); }
+    });
+
+    renameModal.addEventListener('click', function (e) {
+        if (e.target.matches('[data-role="rename-save"]')) {
+            const name = renameModal.querySelector('[data-role="rename-name"]').value.trim();
+            const notes = renameModal.querySelector('[data-role="rename-notes"]').value.trim();
+            dispatch({ type: 'RENAME', cidr: renameTarget, name: name, notes: notes });
+            closeModal(renameModal);
+        } else if (e.target.matches('[data-role="rename-cancel"]')) {
+            closeModal(renameModal);
+        }
+    });
+
+    sheet.addEventListener('click', function (e) {
+        const action = e.target.getAttribute && e.target.getAttribute('data-sheet-action');
+        if (action === 'split') { closeModal(sheet); openSplitPicker(sheetTarget); }
+        else if (action === 'merge') { closeModal(sheet); dispatch({ type: 'MERGE', cidr: sheetTarget }); }
+        else if (action === 'rename') { closeModal(sheet); openRenameModal(sheetTarget); }
+        else if (e.target.matches('[data-role="sheet-cancel"]')) { closeModal(sheet); }
+    });
+
+    // Toolbar buttons.
+    root.querySelectorAll('.tree-editor-toolbar [data-action]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const a = btn.getAttribute('data-action');
+            if (a === 'undo') { dispatch({ type: 'UNDO' }); }
+            else if (a === 'redo') { dispatch({ type: 'REDO' }); }
+            else if (a === 'reset') {
+                if (confirm('Reset the tree? This drops all edits but keeps autosave history.')) {
+                    dispatch({ type: 'RESET' });
+                }
+            }
+            else if (a === 'save-session') { saveSession(); }
+            else if (a === 'copy-cidr') { copyText(exportCidrList()); setStatus('Copied CIDR list.'); }
+            else if (a === 'copy-md') { copyText(exportMarkdown()); setStatus('Copied Markdown.'); }
+            else if (a === 'copy-cisco') { copyText(exportCisco()); setStatus('Copied Cisco config.'); }
+            else if (a === 'download-csv') { downloadFile('subnet-tree.csv', 'text/csv', exportCsv()); }
+            else if (a === 'download-json') { downloadFile('subnet-tree.json', 'application/json', exportJson()); }
+            else if (a === 'share-url') {
+                const u = shareUrl();
+                if (!u) {
+                    setStatus('Tree too large to share — save as session and share that URL instead.');
+                } else {
+                    showShare(u);
+                    copyText(u);
+                    setStatus('Share URL copied.');
+                }
+            }
+        });
+    });
+
+    const shareCopyBtn = root.querySelector('[data-action="copy-share"]');
+    if (shareCopyBtn) {
+        shareCopyBtn.addEventListener('click', function () {
+            const u = root.querySelector('[data-role="share-url"]');
+            if (u) { copyText(u.textContent || ''); setStatus('Share URL copied.'); }
+        });
+    }
+
+    // Keyboard: Ctrl/Cmd+Z = undo, +Shift = redo (only when editor is open
+    // and focus is inside it, to avoid clobbering page-level shortcuts).
+    document.addEventListener('keydown', function (e) {
+        if (!state || editorEl.hidden) { return; }
+        if (!root.contains(document.activeElement) && document.activeElement !== document.body) { return; }
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+            if (e.shiftKey) { dispatch({ type: 'REDO' }); }
+            else { dispatch({ type: 'UNDO' }); }
+            e.preventDefault();
+        }
+    });
+})();

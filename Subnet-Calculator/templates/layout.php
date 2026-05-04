@@ -255,6 +255,7 @@ if ($i < 3) {
             <button type="button" class="tool-trigger" data-tool="supernet" aria-expanded="false">Supernet</button>
             <button type="button" class="tool-trigger" data-tool="range" aria-expanded="false">Range&rarr;CIDR</button>
             <button type="button" class="tool-trigger" data-tool="tree" aria-expanded="false">Subnet Tree</button>
+            <button type="button" class="tool-trigger" data-tool="tree-editor" aria-expanded="false">Tree Editor</button>
             <button type="button" class="tool-trigger" data-tool="wildcard" aria-expanded="false">Wildcard&harr;CIDR</button>
             <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
             <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
@@ -439,6 +440,13 @@ if ($i < 3) {
                         </div>
                     <?php endif; ?>
                 </div>
+            </div>
+
+            <div class="tool-panel" data-tool="tree-editor">
+                <?php
+                $tree_editor_initial_cidr = $result['cidr'] ?? '';
+                require __DIR__ . '/_tree_editor.php';
+                ?>
             </div>
 
             <div class="tool-panel" data-tool="wildcard">
