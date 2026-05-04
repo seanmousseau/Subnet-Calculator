@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 // ─── Input resolvers (shared by GET/POST handlers and API) ────────────────────
 require_once __DIR__ . '/functions-resolve.php';
+require_once __DIR__ . '/functions-tree-diff.php';
 
 // ─── Turnstile verification ───────────────────────────────────────────────────
 

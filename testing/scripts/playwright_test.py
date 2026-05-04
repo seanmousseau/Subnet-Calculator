@@ -5067,6 +5067,76 @@ async def test_tree_editor_share_too_large_fallback(page: Page) -> None:
     )
 
 
+# v3.1.0 #322 — multi-tree diff
+async def test_tree_editor_diff_two_sessions(page: Page) -> None:
+    section("v3.1.0 #322 tree editor — diff modal renders four categories")
+    # Stub clipboard *before* navigating so the production navigator.clipboard
+    # path is overridden when the diff "Copy Markdown" button fires.
+    await page.add_init_script(
+        "Object.defineProperty(navigator, 'clipboard', {"
+        " configurable: true, value: {"
+        "  writeText: function (t) { window.__lastClipboard = t;"
+        "  return Promise.resolve(); }"
+        " }});"
+    )
+    await _open_tree_editor(page, "10.0.0.0/24")
+
+    tree_a = (
+        '{"type":"tree","root":{"cidr":"10.0.0.0/24","name":"DMZ",'
+        '"children":[{"cidr":"10.0.0.0/25"},{"cidr":"10.0.0.128/25"}]}}'
+    )
+    # Tree B: rename root, change /25 → /26 prefix on first child,
+    # remove second child, add a fresh /26 sibling.
+    tree_b = (
+        '{"type":"tree","root":{"cidr":"10.0.0.0/24","name":"Edge",'
+        '"children":[{"cidr":"10.0.0.0/26"},{"cidr":"10.0.0.64/26"}]}}'
+    )
+
+    await page.click(".tree-editor-toolbar [data-action='diff']")
+    await page.wait_for_selector("[data-role='diff-modal']:not([hidden])")
+
+    # Tab "Paste JSON" is active by default. Fill both textareas.
+    fields = page.locator("[data-role='diff-modal'] .tree-diff-source-paste")
+    await fields.nth(0).fill(tree_a)
+    await fields.nth(1).fill(tree_b)
+    await page.click("[data-role='diff-compare']")
+    await page.wait_for_selector("[data-role='diff-result']:not([hidden])")
+
+    # Inspect the rendered annotations.
+    diffs = await page.evaluate(
+        "() => Array.from(document.querySelectorAll("
+        "'[data-role=\"diff-canvas\"] .tree-editor-node[data-diff]'"
+        ")).map(n => ({cidr: n.getAttribute('data-cidr'),"
+        " kind: n.getAttribute('data-diff')}))"
+    )
+    by_cidr = {d["cidr"]: d["kind"] for d in diffs}
+    assert_true("added 10.0.0.64/26 marked added", by_cidr.get("10.0.0.64/26") == "added")
+    assert_true("removed 10.0.0.128/25 marked removed", by_cidr.get("10.0.0.128/25") == "removed")
+    # The first child changes prefix from /25 to /26 — stored under the new CIDR.
+    assert_true(
+        "prefix-changed node marked changed",
+        by_cidr.get("10.0.0.0/26") in ("changed", "added"),
+    )
+    # Root rename → changed annotation on root (10.0.0.0/24).
+    assert_true(
+        "root rename marked changed",
+        by_cidr.get("10.0.0.0/24") == "changed",
+    )
+
+    # Summary line emits +/-/Δ counts.
+    summary = await page.locator("[data-role='diff-summary']").text_content()
+    assert_true("summary emits counts", bool(summary) and "+" in (summary or "") and "−" in (summary or ""))
+
+    # Markdown export records every category — clipboard stub installed pre-nav.
+    await page.click("[data-role='diff-copy-md']")
+    await page.wait_for_function("() => typeof window.__lastClipboard === 'string'")
+    md = await page.evaluate("() => window.__lastClipboard || ''")
+    assert_true("markdown contains added marker",   "+ 10.0.0.64/26" in md)
+    assert_true("markdown contains removed marker", "− 10.0.0.128/25" in md)
+    assert_true("markdown contains prefix marker",  "Δ 10.0.0.0/25 → 10.0.0.0/26" in md)
+    assert_true("markdown contains rename marker",  '~ 10.0.0.0/24: name "DMZ" → "Edge"' in md)
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -5347,6 +5417,8 @@ async def main() -> None:
             await test_tree_editor_copy_formats(page)
             await test_tree_editor_action_sheet_on_touch(page)
             await test_tree_editor_share_too_large_fallback(page)
+            # v3.1.0 #322 — multi-tree diff
+            await test_tree_editor_diff_two_sessions(page)
             await test_v290_typography(page)
         finally:
             await context.close()
