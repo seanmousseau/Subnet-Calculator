@@ -21,13 +21,19 @@ class AuditTest extends TestCase
         $this->db = new \SQLite3(':memory:');
         $this->db->enableExceptions(true);
         audit_db_init($this->db);
+        // These tests assert legacy "purge on every write" semantics; pin the
+        // v3.1.0 strategy switch to 'inline' so the cases continue to exercise
+        // that path regardless of the production default ('sampled').
+        $GLOBALS['admin_audit_purge_strategy'] = 'inline';
     }
 
     protected function tearDown(): void
     {
         $this->db->close();
-        // Reset the global so retention tests do not bleed across cases.
-        $GLOBALS['admin_audit_retention_days'] = AUDIT_RETENTION_DEFAULT_DAYS;
+        // Reset the globals so retention/strategy tests do not bleed across cases.
+        $GLOBALS['admin_audit_retention_days']    = AUDIT_RETENTION_DEFAULT_DAYS;
+        $GLOBALS['admin_audit_purge_strategy']    = 'inline';
+        $GLOBALS['admin_audit_purge_sample_rate'] = 0.001;
     }
 
     public function testInitCreatesTableAndIndexes(): void
