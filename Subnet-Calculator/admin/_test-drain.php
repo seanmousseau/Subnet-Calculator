@@ -13,9 +13,9 @@ declare(strict_types=1);
 // existence. Token comparison is timing-safe via hash_equals().
 //
 // This file MUST NOT ship in release tarballs. The release-build step in
-// CLAUDE.md excludes admin/_test-drain.php; the docroot .htaccess also
-// blocks any underscore-prefixed admin file as a belt-and-suspenders
-// fallback so a stray copy on a production host stays inert.
+// CLAUDE.md excludes admin/_test-drain.php via `tar --exclude=…`; on top of
+// that, this endpoint fails closed (404) whenever PHPUNIT_TEST_DRAIN_TOKEN
+// is unset, so a stray copy on a production host stays inert by default.
 
 $expected = getenv('PHPUNIT_TEST_DRAIN_TOKEN');
 if (!is_string($expected) || $expected === '') {
