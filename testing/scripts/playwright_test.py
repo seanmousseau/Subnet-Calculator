@@ -4595,6 +4595,11 @@ async def test_kbd_tab_switching_digits(page: Page) -> None:
         await page.get_attribute("#tab-vlsm", "aria-selected"),
         "true",
     )
+    # v3.1.0 (#328): digit presses now also focus the first input on the
+    # destination panel, so we must blur before the next digit press —
+    # otherwise the inEditable gate (correctly) swallows it.
+    await page.evaluate("() => document.activeElement && document.activeElement.blur()")
+    await page.locator("body").click()
     await page.keyboard.press("1")
     assert_eq(
         "kbd: '1' selects ipv4 tab",
@@ -4610,6 +4615,34 @@ async def test_kbd_slash_focuses_input(page: Page) -> None:
     await page.keyboard.press("/")
     focused_id = await page.evaluate("() => document.activeElement?.id")
     assert_eq("kbd: '/' focuses #ip on IPv4 tab", focused_id, "ip")
+
+
+async def test_kbd_tab_switch_focuses_input(page: Page) -> None:
+    section("v3.1.0 #328 — tab-switch digits focus the first input on the destination panel")
+    await navigate(page, APP_URL)
+    await page.locator("body").click()
+    expectations = [
+        ("1", "ip"),
+        ("2", "ipv6"),
+        ("3", "vlsm_network"),
+        ("4", "vlsm6_network"),
+    ]
+    for key, expected_id in expectations:
+        # Reload between iterations: each digit press lands on an input, and a
+        # follow-up digit press would otherwise be (correctly) swallowed by the
+        # inEditable gate.
+        await navigate(page, APP_URL)
+        await page.locator("body").click()
+        await page.evaluate("() => document.activeElement && document.activeElement.blur()")
+        await page.keyboard.press(key)
+        await page.wait_for_function(
+            "id => document.activeElement && document.activeElement.id === id",
+            arg=expected_id,
+        )
+        active_tag = await page.evaluate("() => document.activeElement?.tagName")
+        active_id = await page.evaluate("() => document.activeElement?.id")
+        assert_eq(f"kbd: '{key}' focuses INPUT after tab switch", active_tag, "INPUT")
+        assert_eq(f"kbd: '{key}' focuses #{expected_id}", active_id, expected_id)
 
 
 async def test_kbd_help_button_hidden_on_touch(page: Page) -> None:
@@ -5199,6 +5232,8 @@ async def main() -> None:
             await test_kbd_overlay_header_button_opens(page)
             await test_kbd_tab_switching_digits(page)
             await test_kbd_slash_focuses_input(page)
+            # v3.1.0 #328 — tab-switch focus
+            await test_kbd_tab_switch_focuses_input(page)
             await test_kbd_help_button_hidden_on_touch(page)
             await test_history_disabled_by_default(page)
             await test_history_opt_in_records_calculation(page)
