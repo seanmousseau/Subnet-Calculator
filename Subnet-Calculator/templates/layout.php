@@ -323,12 +323,27 @@ if ($i < 3) {
                     <?php if ($supernet_error) : ?>
                         <div class="error"><?= htmlspecialchars($supernet_error) ?></div>
                     <?php elseif ($supernet_result !== null) : ?>
+                        <?php
+                        $_supernet_inputs = count(array_filter(array_map('trim', explode("\n", $supernet_input))));
+                        if ($supernet_action === 'find') {
+                            $_supernet_label = 'Supernet: ' . $_supernet_inputs . ' CIDR' . ($_supernet_inputs !== 1 ? 's' : '');
+                        } else {
+                            $_supernet_outs  = count($supernet_result['summaries'] ?? []);
+                            $_supernet_label = 'Summarise: ' . $_supernet_inputs . ' → ' . $_supernet_outs;
+                        }
+                        ?>
                         <?php if ($supernet_action === 'find') : ?>
-                            <div class="overlap-result overlap-contains">
+                            <div class="overlap-result overlap-contains"
+                                 data-history-source="supernet"
+                                 data-history-active="1"
+                                 data-history-label="<?= htmlspecialchars($_supernet_label) ?>">
                                 <?= htmlspecialchars($supernet_result['supernet'] ?? '') ?>
                             </div>
                         <?php else : ?>
-                            <div class="split-list split-list--mt">
+                            <div class="split-list split-list--mt"
+                                 data-history-source="supernet"
+                                 data-history-active="1"
+                                 data-history-label="<?= htmlspecialchars($_supernet_label) ?>">
                                 <button type="button" class="copy-all-btn" data-target="supernet">Copy All</button>
                                 <?php foreach ($supernet_result['summaries'] ?? [] as $s) : ?>
                                     <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
@@ -370,7 +385,11 @@ if ($i < 3) {
                     <?php if ($range_error) : ?>
                         <div class="error"><?= htmlspecialchars($range_error) ?></div>
                     <?php elseif ($range_result !== null) : ?>
-                        <div class="split-list split-list--mt">
+                        <?php $_range_label = 'Range: ' . $range_start . ' → ' . $range_end; ?>
+                        <div class="split-list split-list--mt"
+                             data-history-source="range"
+                             data-history-active="1"
+                             data-history-label="<?= htmlspecialchars($_range_label) ?>">
                             <button type="button" class="copy-all-btn" data-target="range">Copy All</button>
                             <?php foreach ($range_result as $r_cidr) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($r_cidr) ?>">
@@ -407,7 +426,11 @@ if ($i < 3) {
                     <?php if ($tree_error) : ?>
                         <div class="error"><?= htmlspecialchars($tree_error) ?></div>
                     <?php elseif ($tree_result !== null) : ?>
-                        <div class="tree-view">
+                        <?php $_tree_label = 'Tree: ' . (string)($tree_result['cidr'] ?? $tree_parent); ?>
+                        <div class="tree-view"
+                             data-history-source="tree"
+                             data-history-active="1"
+                             data-history-label="<?= htmlspecialchars($_tree_label) ?>">
                             <?php
                             /**
                              * @param array<string, mixed> $node
@@ -466,7 +489,11 @@ if ($i < 3) {
                     <?php if ($wildcard_error) : ?>
                         <div class="error wildcard-error"><?= htmlspecialchars($wildcard_error) ?></div>
                     <?php elseif ($wildcard_result !== null) : ?>
-                        <div class="split-list split-list--mt">
+                        <?php $_wildcard_label = 'Wildcard: ' . $wildcard_input; ?>
+                        <div class="split-list split-list--mt"
+                             data-history-source="wildcard"
+                             data-history-active="1"
+                             data-history-label="<?= htmlspecialchars($_wildcard_label) ?>">
                             <div class="split-item" tabindex="0" role="button"
                                  data-copy="<?= htmlspecialchars($wildcard_result['cidr']) ?>">
                                 <span class="split-subnet-text" id="wildcard-result-cidr">CIDR: <?= htmlspecialchars($wildcard_result['cidr']) ?></span>
@@ -512,7 +539,21 @@ if ($i < 3) {
                     <?php if ($active_tab === 'ipv4' && $lookup_error) : ?>
                         <div class="error"><?= htmlspecialchars($lookup_error) ?></div>
                     <?php elseif ($active_tab === 'ipv4' && $lookup_result !== null) : ?>
-                        <div class="lookup-results">
+                        <?php
+                        $_lookup_ips_count   = count(array_filter(array_map('trim', explode("\n", $lookup_ips_input))));
+                        $_lookup_cidrs_count = count(array_filter(array_map('trim', explode("\n", $lookup_cidrs_input))));
+                        $_lookup_label = sprintf(
+                            'Lookup: %d IP%s in %d CIDR%s',
+                            $_lookup_ips_count,
+                            $_lookup_ips_count !== 1 ? 's' : '',
+                            $_lookup_cidrs_count,
+                            $_lookup_cidrs_count !== 1 ? 's' : ''
+                        );
+                        ?>
+                        <div class="lookup-results"
+                             data-history-source="lookup"
+                             data-history-active="1"
+                             data-history-label="<?= htmlspecialchars($_lookup_label) ?>">
                             <button type="button" class="copy-all-btn" data-target="lookup">Copy All</button>
                             <div class="lookup-table-wrap">
                                 <table class="lookup-table" aria-label="IP lookup results">
@@ -816,7 +857,11 @@ if ($i < 3) {
                     <?php if ($ula_error) : ?>
                         <div class="error"><?= htmlspecialchars($ula_error) ?></div>
                     <?php elseif ($ula_result !== null) : ?>
-                        <div class="ula-result">
+                        <?php $_ula_label = 'ULA: ' . (string)($ula_result['prefix'] ?? ''); ?>
+                        <div class="ula-result"
+                             data-history-source="ula"
+                             data-history-active="1"
+                             data-history-label="<?= htmlspecialchars($_ula_label) ?>">
                             <div class="overlap-result overlap-contains"><?= htmlspecialchars($ula_result['prefix'] ?? '') ?></div>
                             <div class="ula-meta">
                                 <span>Global ID: <code><?= htmlspecialchars($ula_result['global_id'] ?? '') ?></code></span>
@@ -862,7 +907,21 @@ if ($i < 3) {
                     <?php if ($active_tab === 'ipv6' && $lookup_error) : ?>
                         <div class="error"><?= htmlspecialchars($lookup_error) ?></div>
                     <?php elseif ($active_tab === 'ipv6' && $lookup_result !== null) : ?>
-                        <div class="lookup-results">
+                        <?php
+                        $_lookup_ips_count6   = count(array_filter(array_map('trim', explode("\n", $lookup_ips_input))));
+                        $_lookup_cidrs_count6 = count(array_filter(array_map('trim', explode("\n", $lookup_cidrs_input))));
+                        $_lookup_label6 = sprintf(
+                            'Lookup: %d IP%s in %d CIDR%s',
+                            $_lookup_ips_count6,
+                            $_lookup_ips_count6 !== 1 ? 's' : '',
+                            $_lookup_cidrs_count6,
+                            $_lookup_cidrs_count6 !== 1 ? 's' : ''
+                        );
+                        ?>
+                        <div class="lookup-results"
+                             data-history-source="lookup"
+                             data-history-active="1"
+                             data-history-label="<?= htmlspecialchars($_lookup_label6) ?>">
                             <button type="button" class="copy-all-btn" data-target="lookup">Copy All</button>
                             <div class="lookup-table-wrap">
                                 <table class="lookup-table" aria-label="IP lookup results">

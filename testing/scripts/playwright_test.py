@@ -4742,6 +4742,99 @@ async def test_history_h_key_opens(page: Page) -> None:
     )
 
 
+async def _enable_history(page: Page) -> None:
+    """Helper: enable the history opt-in via the overlay UI."""
+    await page.evaluate("() => localStorage.clear()")
+    await page.click("#history-toggle")
+    await page.locator("#history-enabled-toggle").check()
+    await page.locator("#history-overlay .modal-close").click()
+
+
+# v3.1.0 #327 — data-history-source extension
+async def test_history_captures_lookup_result(page: Page) -> None:
+    section("v3.1.0 #327 history — IP Lookup result captured via data-history-source")
+    await navigate(page, APP_URL)
+    await _enable_history(page)
+    # Run a lookup via shareable GET URL — history-capture fires on next page load.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv4&lookup_cidrs=10.0.0.0%2F8%0A192.168.0.0%2F16&lookup_ips=10.1.2.3%0A192.168.5.5%0A8.8.8.8",
+    )
+    # Verify the result block carries the new trio of attributes.
+    block = page.locator('[data-history-source="lookup"][data-history-active="1"]').first
+    assert_true("history #327: lookup result has data-history-source", await block.count() >= 1)
+    label = await block.get_attribute("data-history-label")
+    assert_true(
+        "history #327: lookup label uses 'Lookup:' prefix with counts",
+        bool(label) and label.startswith("Lookup:") and "IP" in (label or "") and "CIDR" in (label or ""),
+    )
+    # Close the auto-opened tool drawer so the history toggle is clickable.
+    await page.locator(".panel.active .tool-drawer.open .tool-drawer-close").first.click()
+    await page.click("#history-toggle")
+    items = page.locator("#history-list .history-item")
+    assert_true("history #327: lookup entry recorded", await items.count() >= 1)
+    first_label = await items.first.locator(".history-link").text_content()
+    assert_true(
+        "history #327: lookup history label starts with 'Lookup:'",
+        bool(first_label) and (first_label or "").startswith("Lookup:"),
+    )
+
+
+async def test_history_captures_diff_result(page: Page) -> None:
+    section("v3.1.0 #327 history — Subnet Diff result captured via data-history-source")
+    await navigate(page, APP_URL)
+    await _enable_history(page)
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv4&diff_before=10.0.0.0%2F24%0A10.0.1.0%2F24&diff_after=10.0.0.0%2F23%0A10.0.2.0%2F24",
+    )
+    block = page.locator('[data-history-source="diff"][data-history-active="1"]').first
+    assert_true("history #327: diff result has data-history-source", await block.count() >= 1)
+    label = await block.get_attribute("data-history-label")
+    assert_true(
+        "history #327: diff label uses 'Diff:' prefix",
+        bool(label) and (label or "").startswith("Diff:"),
+    )
+    await page.locator(".panel.active .tool-drawer.open .tool-drawer-close").first.click()
+    await page.click("#history-toggle")
+    items = page.locator("#history-list .history-item")
+    assert_true("history #327: diff entry recorded", await items.count() >= 1)
+    first_label = await items.first.locator(".history-link").text_content()
+    assert_true(
+        "history #327: diff history label starts with 'Diff:'",
+        bool(first_label) and (first_label or "").startswith("Diff:"),
+    )
+
+
+async def test_history_captures_wildcard_result(page: Page) -> None:
+    section("v3.1.0 #327 history — Wildcard result captured via data-history-source")
+    await navigate(page, APP_URL)
+    await _enable_history(page)
+    # Wildcard is POST-only; submit via the tool drawer form.
+    await navigate(page, APP_URL + "?tab=ipv4")
+    # Open the wildcard tool drawer.
+    await page.locator('.tool-trigger[data-tool="wildcard"]').first.click()
+    await page.locator("#wildcard_input").fill("/24")
+    await page.locator('.tool-panel[data-tool="wildcard"] form button[type="submit"]').click()
+    # After POST submit, the page reloads with the result rendered.
+    block = page.locator('[data-history-source="wildcard"][data-history-active="1"]').first
+    assert_true("history #327: wildcard result has data-history-source", await block.count() >= 1)
+    label = await block.get_attribute("data-history-label")
+    assert_true(
+        "history #327: wildcard label uses 'Wildcard:' prefix with input",
+        bool(label) and (label or "").startswith("Wildcard:") and "/24" in (label or ""),
+    )
+    await page.locator(".panel.active .tool-drawer.open .tool-drawer-close").first.click()
+    await page.click("#history-toggle")
+    items = page.locator("#history-list .history-item")
+    assert_true("history #327: wildcard entry recorded", await items.count() >= 1)
+    first_label = await items.first.locator(".history-link").text_content()
+    assert_true(
+        "history #327: wildcard history label starts with 'Wildcard:'",
+        bool(first_label) and (first_label or "").startswith("Wildcard:"),
+    )
+
+
 async def test_vlsm_keyboard_delete(page: Page) -> None:
     section("VLSM — keyboard Delete on remove button")
     await navigate(page, APP_URL)
@@ -5239,6 +5332,10 @@ async def main() -> None:
             await test_history_opt_in_records_calculation(page)
             await test_history_clear_removes_entries(page)
             await test_history_h_key_opens(page)
+            # v3.1.0 #327 — data-history-source extension
+            await test_history_captures_lookup_result(page)
+            await test_history_captures_diff_result(page)
+            await test_history_captures_wildcard_result(page)
             # v3.0.0 PR3b — interactive subnet tree editor (#302)
             await test_tree_editor_split(page)
             await test_tree_editor_merge_via_drag(page)
