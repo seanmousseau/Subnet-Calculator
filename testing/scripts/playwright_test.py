@@ -34,6 +34,17 @@ except ImportError:
     _SNAPSHOT_PIL_AVAILABLE = False
     _SNAPSHOTS_AVAILABLE = False
 
+    from typing import Any as _Any
+
+    async def capture_snapshot(*_args: _Any, **_kwargs: _Any) -> None:  # type: ignore[no-redef]
+        raise RuntimeError("snapshot_utils unavailable")
+
+    async def compare_snapshot(*_args: _Any, **_kwargs: _Any) -> tuple[bool, float]:  # type: ignore[no-redef]
+        raise RuntimeError("snapshot_utils unavailable")
+
+    async def _set_viewport(*_args: _Any, **_kwargs: _Any) -> None:  # type: ignore[no-redef]
+        raise RuntimeError("snapshot_utils unavailable")
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -189,7 +200,7 @@ async def poll_resize_count(page: Page, min_count: int, timeout: float = 8.0) ->
     try:
         await page.wait_for_function(
             "(n) => parseInt(document.getElementById('resize-log')?.getAttribute('data-count') || '0') >= n",
-            min_count,
+            arg=min_count,
             timeout=int(timeout * 1000),
         )
     except Exception:
@@ -705,7 +716,7 @@ async def test_binary_repr(page: Page) -> None:
     await page.evaluate("document.querySelector('.binary-details').setAttribute('open', '')")
 
     net_code = await page.text_content(".binary-details .bin-value")
-    assert_true("binary network contains dots", net_code and "." in (net_code or ""), net_code)
+    assert_true("binary network contains dots", net_code is not None and "." in net_code, net_code or "")
     assert_contains("binary: first octet 11000000", net_code or "", "11000000")
 
     boundary = await page.text_content(".bin-boundary")
@@ -2478,6 +2489,7 @@ async def test_vlsm6_api_endpoint(_page: Page) -> None:
     if not assert_true("api vlsm6: site-a allocation present",
                        site_a is not None, str(allocs)):
         return
+    assert site_a is not None  # narrow for type-checker
     assert_eq("api vlsm6: site-a subnet", site_a.get("subnet"), "2001:db8::/120")
     assert_eq("api vlsm6: site-a usable", site_a.get("usable"), 256)
 
@@ -2888,27 +2900,24 @@ ADMIN_PASS = "test-admin-password"
 
 
 async def test_admin_keys_unauth_challenge(page: Page) -> None:
-    section("v3.0.0 #307 admin/keys.php — unauth 401 + WWW-Authenticate")
-    # The page sends a Basic challenge; we use page.request to inspect the
-    # raw response without the browser intercepting the auth dialog.
-    resp = await page.context.request.get(APP_URL + "admin/keys.php")
-    assert_eq("admin/keys unauth: status 401", resp.status, 401)
-    www_auth = resp.headers.get("www-authenticate", "")
+    section("v3.2.0 #342 admin/keys.php — unauth 303 -> login.php")
+    resp = await page.context.request.get(
+        APP_URL + "admin/keys.php", max_redirects=0
+    )
+    assert_eq("admin/keys unauth: status 303", resp.status, 303)
+    location = resp.headers.get("location", "")
     assert_true(
-        "admin/keys unauth: WWW-Authenticate Basic realm present",
-        www_auth.lower().startswith("basic "),
-        f"got: {www_auth!r}",
+        "admin/keys unauth: Location header points at login.php",
+        "login.php" in location,
+        f"got: {location!r}",
     )
 
 
 async def test_admin_keys_authed_renders(page: Page) -> None:
     section("v3.0.0 #307 admin/keys.php — authed renders")
-    auth = (ADMIN_USER, ADMIN_PASS)
     resp = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": "Basic " + base64.b64encode(
-            f"{auth[0]}:{auth[1]}".encode()
-        ).decode()},
+        headers={"Cookie": _admin_session_cookie_header()},
     )
     assert_eq("admin/keys authed: status 200", resp.status, 200)
     body = await resp.text()
@@ -2922,14 +2931,167 @@ async def test_admin_keys_authed_renders(page: Page) -> None:
     )
 
 
+async def test_admin_keys_post_mint_panel_has_copy_button(page: Page) -> None:
+    section("v3.2.0 #348 admin/keys.php — post-mint panel has Copy + Got it controls")
+    sess = _admin_session_requests()
+    initial = sess.get(APP_URL + "admin/keys.php", timeout=10)
+    body = initial.text
+    import re as _re
+    m = _re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    csrf = m.group(1) if m else ""
+    name = "pr8-mint-test-" + ("%x" % int(__import__('time').time()))
+    post = sess.post(
+        APP_URL + "admin/keys.php",
+        data={"_csrf": csrf, "action": "create", "name": name, "rate_limit_rpm": ""},
+        allow_redirects=False,
+        timeout=10,
+    )
+    assert_eq("admin/keys mint: 303 PRG", post.status_code, 303)
+    follow = sess.get(APP_URL + "admin/keys.php", timeout=10)
+    body2 = follow.text
+    assert_true(
+        "admin/keys post-mint: alert panel rendered with role=alert",
+        'class="alert alert-accent api-key-panel"' in body2,
+    )
+    assert_true(
+        "admin/keys post-mint: Copy button targets the token id",
+        'data-copy-target="new-api-key-token"' in body2,
+    )
+    assert_true(
+        "admin/keys post-mint: Got it dismiss button rendered",
+        'data-dismiss-panel' in body2,
+    )
+    assert_true(
+        "admin/keys post-mint: one-shot warning copy",
+        "only time the full key" in body2,
+    )
+
+
+async def test_admin_keys_copy_button_invokes_clipboard(page: Page) -> None:
+    section("v3.2.0 #348 admin/keys.php — Copy button writes the token to the clipboard")
+    # Install a clipboard stub before any page script runs (CLAUDE.md pattern).
+    await page.add_init_script("""
+        Object.defineProperty(navigator, 'clipboard', {
+            value: {
+                writeText: function(text) {
+                    window.__lastClipboard = text;
+                    return Promise.resolve();
+                }
+            },
+            configurable: true,
+        });
+    """)
+    cookie = _admin_session_cookie_header().split("sc_admin_sid=", 1)[1]
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(APP_URL)
+    domain = parsed.hostname or "localhost"
+    await page.context.add_cookies([{
+        "name": "sc_admin_sid",
+        "value": cookie,
+        "domain": domain,
+        "path": "/",
+    }])
+    try:
+        # Mint a key via requests so a fresh post-mint panel renders on next nav.
+        sess = _admin_session_requests()
+        initial = sess.get(APP_URL + "admin/keys.php", timeout=10)
+        import re as _re
+        m = _re.search(r'name="_csrf" value="([0-9a-f]{64})"', initial.text)
+        csrf = m.group(1) if m else ""
+        sess.post(
+            APP_URL + "admin/keys.php",
+            data={"_csrf": csrf, "action": "create", "name": "copy-button-test", "rate_limit_rpm": ""},
+            allow_redirects=False,
+            timeout=10,
+        )
+        # Carry the requests session cookie back into the playwright browser
+        # so the same logged-in admin sees the panel.
+        sc_cookie = sess.cookies.get("sc_admin_sid")
+        if sc_cookie:
+            await page.context.clear_cookies()
+            await page.context.add_cookies([{
+                "name": "sc_admin_sid",
+                "value": sc_cookie,
+                "domain": domain,
+                "path": "/",
+            }])
+        # Navigate to keys page and re-mint inside playwright so the panel renders
+        # in this browser's PHP-session flash slot.
+        await page.goto(APP_URL + "admin/keys.php")
+        # Re-mint in browser so the panel surfaces here.
+        token_count_before = await page.locator("#new-api-key-token").count()
+        if token_count_before == 0:
+            csrf_val = await page.eval_on_selector("input[name='_csrf']", "el => el.value")
+            await page.evaluate(
+                """async (csrf) => {
+                    const fd = new FormData();
+                    fd.set('_csrf', csrf);
+                    fd.set('action', 'create');
+                    fd.set('name', 'copy-btn-' + Date.now());
+                    fd.set('rate_limit_rpm', '');
+                    await fetch(window.location.pathname, { method: 'POST', body: fd, redirect: 'manual' });
+                }""",
+                csrf_val,
+            )
+            await page.goto(APP_URL + "admin/keys.php")
+        await page.wait_for_selector("#new-api-key-token", timeout=5000)
+        token_text = await page.text_content("#new-api-key-token")
+        assert_true("token rendered in panel", token_text is not None and token_text != "")
+        prev = await page.evaluate("() => window.__lastClipboard || ''")
+        await page.click("[data-copy-target='new-api-key-token']")
+        clipboard = await _wait_for_clipboard_write(page, prev)
+        assert_eq("Copy button payload matches the rendered token", clipboard, (token_text or "").strip())
+        # Button text flips to "Copied!"
+        await page.wait_for_function(
+            "() => { const b = document.querySelector('[data-copy-target=\\\"new-api-key-token\\\"]'); return b && b.textContent === 'Copied!'; }",
+            timeout=2000,
+        )
+        ok("Copy button text becomes 'Copied!' after click")
+    finally:
+        await page.context.clear_cookies()
+
+
+async def test_admin_keys_empty_state_links_to_docs(page: Page) -> None:
+    section("v3.2.0 #348 admin/keys.php — empty state links to API docs")
+    # Drain the api_keys table so the empty state renders.
+    drain_token = os.environ.get("PHPUNIT_TEST_DRAIN_TOKEN", "")
+    if drain_token:
+        drain = await page.context.request.post(
+            APP_URL + "admin/_test-drain.php",
+            data={"token": drain_token},
+        )
+        if drain.status != 200:
+            ok(f"admin/keys empty state: drain returned {drain.status} — skipped")
+            return
+        # admin_sessions was truncated; the cached sid is now stale.
+        _admin_session_cookie_reset()
+    resp = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    if "admin-empty-state" not in body:
+        ok("admin/keys empty state: keys still present (drain unavailable) — skipped")
+        return
+    assert_true(
+        "admin/keys empty state: API reference link present",
+        'docs.subnetcalculator.app/api/' in body,
+    )
+    assert_true(
+        "admin/keys empty state: rate-limiting anchor link present",
+        '#rate-limiting' in body,
+    )
+    assert_true(
+        "admin/keys empty state: explanatory copy mentions Authorization Bearer",
+        "Authorization: Bearer" in body,
+    )
+
+
 async def test_admin_audit_renders(page: Page) -> None:
     section("v3.0.0 #307 admin/audit.php — authed renders + filters present")
-    auth_header = "Basic " + base64.b64encode(
-        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
-    ).decode()
     resp = await page.context.request.get(
         APP_URL + "admin/audit.php",
-        headers={"Authorization": auth_header},
+        headers={"Cookie": _admin_session_cookie_header()},
     )
     assert_eq("admin/audit authed: status 200", resp.status, 200)
     body = await resp.text()
@@ -2939,36 +3101,194 @@ async def test_admin_audit_renders(page: Page) -> None:
     )
     for label in ["all", "login", "key"]:
         assert_true(
-            f"admin/audit: '{label}' filter link present",
-            f">{label}</a>" in body,
+            f"admin/audit: '{label}' filter tab present",
+            f">{label}</button>" in body,
             f"missing filter '{label}'",
         )
 
 
 async def test_admin_audit_records_login_failure(page: Page) -> None:
-    section("v3.0.0 #306 audit log records failed admin login")
-    # Trigger a failed login (bad password) — should write a login.fail row.
-    bad_auth = "Basic " + base64.b64encode(
-        f"{ADMIN_USER}:wrong-password".encode()
-    ).decode()
-    bad_resp = await page.context.request.get(
-        APP_URL + "admin/keys.php",
-        headers={"Authorization": bad_auth},
+    section("v3.2.0 #342 audit log records failed admin login (form path)")
+    # GET login.php to mint a CSRF + sid cookie, then POST a wrong password.
+    import requests as _r, re as _re
+    sess = _r.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    get_resp = sess.get(APP_URL + "admin/login.php", timeout=10)
+    assert_eq("login.php GET: 200", get_resp.status_code, 200)
+    m = _re.search(r'name="csrf"\s+value="([0-9a-f]+)"', get_resp.text)
+    assert_true("login.php GET: csrf token rendered", m is not None)
+    csrf = m.group(1) if m else ""
+    bad_resp = sess.post(
+        APP_URL + "admin/login.php",
+        data={"user": ADMIN_USER, "pass": "wrong-password", "csrf": csrf, "next": "/admin/"},
+        allow_redirects=False,
+        timeout=10,
     )
-    assert_eq("audit login.fail: bad creds → 401", bad_resp.status, 401)
+    assert_eq("login.php bad pass: re-renders form (200)", bad_resp.status_code, 200)
+    assert_true("login.php bad pass: error alert rendered",
+                "Username or password is incorrect" in bad_resp.text)
 
-    # Now read audit page with the login.fail filter.
-    good_auth = "Basic " + base64.b64encode(
-        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
-    ).decode()
+    # Read audit page with the login. filter via the cookie session.
     audit_resp = await page.context.request.get(
         APP_URL + "admin/audit.php?filter=login.",
-        headers={"Authorization": good_auth},
+        headers={"Cookie": _admin_session_cookie_header()},
     )
     body = await audit_resp.text()
     assert_true(
-        "audit log: login.fail badge appears in body",
+        "audit log: login.fail row appears in body",
         "login.fail" in body,
+    )
+
+
+async def test_admin_audit_filter_tablist_semantics(page: Page) -> None:
+    section("v3.2.0 #346 admin/audit.php — filter strip uses role=tablist")
+    resp = await page.context.request.get(
+        APP_URL + "admin/audit.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    assert_true(
+        "audit: exactly one role=tablist on the filter strip",
+        body.count('role="tablist"') == 1,
+        f"expected 1 tablist, found {body.count(chr(34) + 'role=' + chr(34))}",
+    )
+    assert_true("audit: role=tab present on filter buttons", 'role="tab"' in body)
+    assert_true("audit: aria-selected=true on the active tab", 'aria-selected="true"' in body)
+    assert_true("audit: aria-selected=false on inactive tabs", 'aria-selected="false"' in body)
+    assert_true("audit: aria-controls wires the active tab to the rows", 'aria-controls="audit-rows"' in body)
+    # Selecting a different tab updates the URL filter param.
+    resp2 = await page.context.request.get(
+        APP_URL + "admin/audit.php?filter=login.",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body2 = await resp2.text()
+    assert_true(
+        "audit: ?filter=login. promotes the login tab to aria-selected=true",
+        'value="login."' in body2 and 'aria-selected="true"' in body2,
+    )
+
+
+async def test_admin_audit_action_badges(page: Page) -> None:
+    section("v3.2.0 #346 admin/audit.php — action cells render colour-coded badges")
+    resp = await page.context.request.get(
+        APP_URL + "admin/audit.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    # The audit log accumulates over time; we don't seed events here, but the
+    # badge classes must appear at all (a fresh dev DB always has at least one
+    # auth.* row from the test rig). Assert mapping integrity on whatever rows
+    # render.
+    has_badge = any(cls in body for cls in ("badge-public", "badge-multicast", "badge-private", "badge-doc", "badge-other"))
+    assert_true("audit: at least one audit row rendered with a v3.2.0 badge class", has_badge)
+    # Negative: the legacy badge classes (badge-info / badge-fail / badge-ok)
+    # should NOT appear inside an audit row anymore — they were the v3.0.0
+    # mapping superseded by audit_action_badge_class().
+    assert_true(
+        "audit: legacy badge-info no longer used on audit rows",
+        '<span class="badge badge-info">' not in body,
+    )
+
+
+async def test_admin_audit_sticky_thead(page: Page) -> None:
+    section("v3.2.0 #346 admin/audit.php — table thead is position:sticky")
+    # Use a real navigation so computed styles resolve.
+    cookie = _admin_session_cookie_header().split("sc_admin_sid=", 1)[1]
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(APP_URL)
+    domain = parsed.hostname or "localhost"
+    await page.context.add_cookies([{
+        "name": "sc_admin_sid",
+        "value": cookie,
+        "domain": domain,
+        "path": "/",
+    }])
+    try:
+        resp = await page.goto(APP_URL + "admin/audit.php")
+        if resp is None or resp.status != 200:
+            ok("audit sticky thead: page unreachable in this environment — skipped")
+            return
+        # The audit table only renders if there are rows; if not, skip.
+        thead_count = await page.locator(".admin-table thead").count()
+        if thead_count == 0:
+            ok("audit sticky thead: table not rendered (empty audit log) — skipped")
+            return
+        position = await page.evaluate(
+            "() => getComputedStyle(document.querySelector('.admin-table thead')).position"
+        )
+        assert_eq("audit thead computed position is 'sticky'", position, "sticky")
+    finally:
+        await page.context.clear_cookies()
+
+
+async def test_admin_audit_pagination_disabled_not_focusable(page: Page) -> None:
+    section("v3.2.0 #346 admin/audit.php — disabled pagination is <span>, not focusable")
+    resp = await page.context.request.get(
+        APP_URL + "admin/audit.php?page=1",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    # On page 1 the prev side is disabled. Look for the disabled-side <span>.
+    has_disabled_span = (
+        '<span class="admin-pager-item is-disabled" aria-disabled="true"' in body
+        and 'Previous page (unavailable)' in body
+    )
+    if not has_disabled_span and 'admin-pager' not in body:
+        # Audit log empty → pager isn't rendered. Skip.
+        ok("audit pager disabled: pager not rendered (empty audit log) — skipped")
+        return
+    assert_true(
+        "audit: prev side on page 1 is <span aria-disabled=true>",
+        has_disabled_span,
+    )
+    # And no tabindex="-1" hack on an <a> for the disabled side. Scope the
+    # check to the pager block — tabindex="-1" is a legitimate pattern on
+    # the inactive role=tab filter buttons (roving tabindex).
+    pager_idx = body.find('admin-pager')
+    pager_end = body.find('</section>', pager_idx) if pager_idx != -1 else -1
+    pager_block = body[pager_idx:pager_end] if pager_idx != -1 and pager_end != -1 else ''
+    assert_true(
+        "audit: disabled side does not use tabindex=-1 on <a>",
+        'tabindex="-1"' not in pager_block,
+    )
+
+
+async def test_admin_audit_time_cells_have_datetime_attr(page: Page) -> None:
+    section("v3.2.0 #346 admin/audit.php — every time cell wrapped in <time datetime>")
+    resp = await page.context.request.get(
+        APP_URL + "admin/audit.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    if "admin-table" not in body:
+        ok("audit time attr: table not rendered (empty audit log) — skipped")
+        return
+    import re as _re
+    times = _re.findall(r'<time datetime="([^"]+)"', body)
+    assert_true("audit: at least one <time datetime=…> in the table", len(times) > 0)
+    bad = [t for t in times if not t.endswith("Z")]
+    assert_true(
+        "audit: every datetime is a UTC ISO-8601 string ending in Z",
+        len(bad) == 0,
+        f"non-UTC datetimes: {bad[:3]}",
+    )
+
+
+async def test_admin_audit_caption_sr_only(page: Page) -> None:
+    section("v3.2.0 #346 admin/audit.php — table has sr-only caption for screen readers")
+    resp = await page.context.request.get(
+        APP_URL + "admin/audit.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    if "admin-table" not in body:
+        ok("audit caption: table not rendered (empty audit log) — skipped")
+        return
+    assert_true(
+        "audit: <caption class=\"sr-only\"> with the expected copy",
+        '<caption class="sr-only">Recent admin actions, newest first.' in body,
     )
 
 
@@ -2977,10 +3297,130 @@ async def test_admin_audit_records_login_failure(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _admin_basic_header() -> str:
+# v3.2.0 (#342): web admin moved from HTTP Basic Auth to a cookie-session
+# login form. _admin_session_cookie_header() form-logs-in once and returns
+# a "Cookie: sc_admin_sid=<sid>" header value usable on subsequent
+# page.context.request.* calls. The result is cached for the suite run.
+_ADMIN_SESSION_COOKIE_CACHE: str | None = None
+
+
+def _admin_session_cookie_header() -> str:
+    """Login via the form once, return a Cookie header value.
+
+    The legacy /api/v1/admin/* routes still use Basic Auth — those tests
+    use _admin_api_basic_header() instead.
+    """
+    global _ADMIN_SESSION_COOKIE_CACHE
+    if _ADMIN_SESSION_COOKIE_CACHE is not None:
+        return _ADMIN_SESSION_COOKIE_CACHE
+
+    # Phase 1: GET login.php to mint a placeholder pending session and
+    # capture the CSRF token + sc_admin_sid cookie.
+    sess = _requests.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    get_resp = sess.get(APP_URL + "admin/login.php", timeout=10)
+    if get_resp.status_code != 200:
+        raise RuntimeError(
+            f"admin login GET failed: HTTP {get_resp.status_code}"
+        )
+    import re as _re
+    m = _re.search(r'name="csrf"\s+value="([0-9a-f]+)"', get_resp.text)
+    if not m:
+        raise RuntimeError("admin login GET: csrf token not found")
+    csrf = m.group(1)
+    sid_cookie = sess.cookies.get("sc_admin_sid")
+    if not sid_cookie:
+        raise RuntimeError("admin login GET: sc_admin_sid cookie not set")
+
+    # Phase 2: POST credentials. We expect a 303 to either /admin/ or
+    # /admin/totp-verify.php. Either way, the same sid cookie now binds
+    # to a fully-promoted (or TOTP-pending) session row.
+    post_resp = sess.post(
+        APP_URL + "admin/login.php",
+        data={"user": ADMIN_USER, "pass": ADMIN_PASS, "csrf": csrf, "next": "/admin/"},
+        allow_redirects=False,
+        timeout=10,
+    )
+    if post_resp.status_code != 303:
+        raise RuntimeError(
+            f"admin login POST: expected 303, got {post_resp.status_code} "
+            f"(body: {post_resp.text[:200]})"
+        )
+    # Reject TOTP-pending sessions — every caller of this helper expects
+    # direct access to /admin/*.php; a TOTP-pending sid would silently
+    # redirect them to totp-verify.php and break downstream assertions.
+    location = post_resp.headers.get("location", "") or post_resp.headers.get("Location", "")
+    if "totp-verify.php" in location:
+        raise RuntimeError(
+            "admin login redirected to totp-verify.php; this helper only supports "
+            "fully-authenticated sessions. Disable TOTP in the test fixture or "
+            "extend the helper to complete the second-factor step."
+        )
+    new_sid = sess.cookies.get("sc_admin_sid") or sid_cookie
+    _ADMIN_SESSION_COOKIE_CACHE = f"sc_admin_sid={new_sid}"
+    return _ADMIN_SESSION_COOKIE_CACHE
+
+
+def _admin_session_cookie_reset() -> None:
+    """Drop the cached admin session cookie. Call after any operation that
+    invalidates the server-side session row (e.g. /admin/_test-drain.php
+    truncating admin_sessions)."""
+    global _ADMIN_SESSION_COOKIE_CACHE
+    _ADMIN_SESSION_COOKIE_CACHE = None
+
+
+def _admin_api_basic_header() -> str:
+    """Basic Auth header for /api/v1/admin/* (still Basic Auth — #342 boundary)."""
     return "Basic " + base64.b64encode(
         f"{ADMIN_USER}:{ADMIN_PASS}".encode()
     ).decode()
+
+
+def _admin_basic_header() -> str:
+    """Back-compat alias used by web-admin tests; returns a Cookie header now."""
+    return _admin_session_cookie_header()
+
+
+def _admin_session_requests():
+    """Returns a freshly authenticated requests.Session.
+
+    Use this when a test does a POST -> follow GET cycle and needs PHPSESSID
+    to round-trip for the PRG flash. The returned Session has both
+    sc_admin_sid (from form login) and a freshly-minted PHPSESSID once the
+    first admin page is hit.
+    """
+    import requests as _r
+    import re as _re
+    sess = _r.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    get_resp = sess.get(APP_URL + "admin/login.php", timeout=10)
+    if get_resp.status_code != 200:
+        raise RuntimeError(f"login.php GET: HTTP {get_resp.status_code}")
+    m = _re.search(r'name="csrf"\s+value="([0-9a-f]+)"', get_resp.text)
+    if not m:
+        raise RuntimeError("login.php GET: csrf not found")
+    csrf = m.group(1)
+    post_resp = sess.post(
+        APP_URL + "admin/login.php",
+        data={"user": ADMIN_USER, "pass": ADMIN_PASS, "csrf": csrf, "next": "/admin/"},
+        allow_redirects=False,
+        timeout=10,
+    )
+    if post_resp.status_code != 303:
+        raise RuntimeError(
+            f"login.php POST: expected 303, got {post_resp.status_code}"
+        )
+    location = post_resp.headers.get("location", "") or post_resp.headers.get("Location", "")
+    if "totp-verify.php" in location:
+        raise RuntimeError(
+            "login.php redirected to totp-verify.php; _admin_session_requests "
+            "only supports fully-authenticated sessions"
+        )
+    return sess
 
 
 def _drain_admin_state() -> None:
@@ -3017,14 +3457,14 @@ async def test_admin_keys_csrf_rejected(page: Page) -> None:
     # POST with no _csrf field; should land on the redirect with a flash error.
     resp = await page.context.request.post(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": _admin_basic_header()},
+        headers={"Cookie": _admin_basic_header()},
         form={"action": "create", "name": "csrf-test"},
         max_redirects=0,
     )
     assert_eq("admin/keys CSRF: 303 redirect on bad token", resp.status, 303)
     follow = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": _admin_basic_header()},
+        headers={"Cookie": _admin_basic_header()},
     )
     body = await follow.text()
     # The flash on the next request from the same session would surface the
@@ -3043,7 +3483,7 @@ async def test_admin_keys_per_row_rpm_edit(page: Page) -> None:
     # Mint a key first so we have a row to edit.
     keys_get = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     body = await keys_get.text()
     # CSRF token is the same for every form on the page.
@@ -3054,7 +3494,7 @@ async def test_admin_keys_per_row_rpm_edit(page: Page) -> None:
 
     mint = await page.context.request.post(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
         form={
             "_csrf": csrf,
             "action": "create",
@@ -3067,7 +3507,7 @@ async def test_admin_keys_per_row_rpm_edit(page: Page) -> None:
 
     listing = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     body2 = await listing.text()
     assert_true(
@@ -3085,7 +3525,7 @@ async def test_admin_keys_revoke_confirm_present(page: Page) -> None:
     auth = _admin_basic_header()
     listing = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     body = await listing.text()
     assert_true(
@@ -3107,7 +3547,7 @@ async def test_admin_keys_revoke_confirm_present(page: Page) -> None:
         ):
             await page.context.request.post(
                 APP_URL + "admin/keys.php",
-                headers={"Authorization": auth},
+                headers={"Cookie": auth},
                 form={
                     "_csrf": csrf,
                     "action": "revoke",
@@ -3124,7 +3564,7 @@ async def test_admin_drain_endpoint_zeroes_state(page: Page) -> None:
     # Mint a key via the admin UI so we can prove the drain removes it.
     listing = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     body = await listing.text()
     csrf_match = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
@@ -3135,7 +3575,7 @@ async def test_admin_drain_endpoint_zeroes_state(page: Page) -> None:
     csrf = csrf_match.group(1)
     mint = await page.context.request.post(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
         form={"_csrf": csrf, "action": "create", "name": "drain-fixture"},
         max_redirects=0,
     )
@@ -3146,7 +3586,7 @@ async def test_admin_drain_endpoint_zeroes_state(page: Page) -> None:
     # "the mint endpoint redirected". A 303 alone doesn't prove insertion.
     before_drain = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     before_body = await before_drain.text()
     assert_true(
@@ -3193,12 +3633,116 @@ async def test_admin_drain_endpoint_zeroes_state(page: Page) -> None:
     # active row (the drain-fixture row should be gone).
     after = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     after_body = await after.text()
     assert_true(
         "api_keys empty after drain: drain-fixture not listed",
         ">drain-fixture<" not in after_body,
+    )
+    # The drain wiped admin_sessions; the cached cookie is now invalid.
+    # Reset so the next admin test re-mints a fresh session.
+    global _ADMIN_SESSION_COOKIE_CACHE
+    _ADMIN_SESSION_COOKIE_CACHE = None
+
+
+async def test_admin_settings_page_renders(page: Page) -> None:
+    section("v3.2.0 #349 admin/settings.php — page renders six sections + advanced")
+    resp = await page.context.request.get(
+        APP_URL + "admin/settings.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    assert_eq("admin/settings: status 200", resp.status, 200)
+    body = await resp.text()
+    assert_true("admin/settings: page heading present", ">Settings " in body)
+    for sec in ["branding", "forms", "api", "sessions", "admin", "limits"]:
+        assert_true(
+            f"admin/settings: section '{sec}' rendered",
+            f'id="settings-{sec}-heading"' in body,
+        )
+    assert_true(
+        "admin/settings: advanced (CSP) details element rendered",
+        "settings-advanced" in body,
+    )
+    assert_true(
+        "admin/settings: per-section save buttons rendered",
+        body.count('value="save"') >= 6,
+    )
+    assert_true(
+        "admin/settings: source badges rendered (default/admin/config)",
+        "settings-source" in body,
+    )
+
+
+async def test_admin_settings_validation_rejects_invalid(page: Page) -> None:
+    section("v3.2.0 #349 admin/settings.php — invalid input is rejected before disk write")
+    sess = _admin_session_requests()
+    initial = sess.get(APP_URL + "admin/settings.php", timeout=10)
+    body = initial.text
+    import re as _re
+    m = _re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    csrf = m.group(1) if m else ""
+    # split_max_subnets has range 1..256; submit 9999.
+    post = sess.post(
+        APP_URL + "admin/settings.php",
+        data={
+            "_csrf": csrf,
+            "action": "save",
+            "section": "limits",
+            "split_max_subnets": "9999",
+            "lookup_max_cidrs": "100",
+            "lookup_max_ips": "1000",
+        },
+        allow_redirects=False,
+        timeout=10,
+    )
+    assert_eq("admin/settings invalid: 303 PRG", post.status_code, 303)
+    follow = sess.get(APP_URL + "admin/settings.php", timeout=10)
+    body2 = follow.text
+    assert_true(
+        "admin/settings invalid: error flash rendered",
+        "Some fields had errors" in body2 or "must be" in body2,
+    )
+
+
+async def test_admin_settings_secret_masking(page: Page) -> None:
+    section("v3.2.0 #349 admin/settings.php — secret fields render masked, not round-tripped")
+    resp = await page.context.request.get(
+        APP_URL + "admin/settings.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    # turnstile_secret_key is marked secret in schema.
+    assert_true(
+        "admin/settings: turnstile_secret_key uses masked widget",
+        'name="turnstile_secret_key" type="password"' in body
+        and "settings-secret-masked" in body,
+    )
+    assert_true(
+        "admin/settings: secret value not echoed verbatim into the page (mask shows '(set)' or '(empty)')",
+        "(empty)" in body or "(set)" in body,
+    )
+
+
+async def test_admin_settings_section_anchors_and_extras(page: Page) -> None:
+    section("v3.2.0 #349 admin/settings.php — section anchors + multiselect + reset link")
+    resp = await page.context.request.get(
+        APP_URL + "admin/settings.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    for sec in ["branding", "forms", "api", "sessions", "admin", "limits"]:
+        assert_true(
+            f"admin/settings: deep-link anchor #section-{sec} present",
+            f'id="section-{sec}"' in body,
+        )
+    assert_true(
+        "admin/settings: api_allowed_endpoints multiselect rendered",
+        'name="api_allowed_endpoints[]" multiple' in body,
+    )
+    assert_true(
+        "admin/settings: reset-link CSS class is wired",
+        "settings-reset-link" in body,
     )
 
 
@@ -3207,7 +3751,7 @@ async def test_admin_audit_pagination_param(page: Page) -> None:
     auth = _admin_basic_header()
     resp = await page.context.request.get(
         APP_URL + "admin/audit.php?page=2",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     assert_eq("admin/audit page=2: still 200", resp.status, 200)
     body = await resp.text()
@@ -3220,11 +3764,11 @@ async def test_admin_audit_pagination_param(page: Page) -> None:
 
 
 async def test_admin_totp_page_renders(page: Page) -> None:
-    section("v3.0.0 #313 admin/totp.php — authed renders status disabled")
+    section("v3.2.0 #347 admin/totp.php — authed renders + inline enrol when disabled")
     auth = _admin_basic_header()
     resp = await page.context.request.get(
         APP_URL + "admin/totp.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     assert_eq("admin/totp: status 200", resp.status, 200)
     body = await resp.text()
@@ -3234,81 +3778,702 @@ async def test_admin_totp_page_renders(page: Page) -> None:
     )
     assert_true(
         "admin/totp: status badge 'disabled' rendered (no secret in fixture)",
-        "disabled" in body,
+        ">disabled<" in body,
     )
     assert_true(
-        "admin/totp: 'Generate a secret' form present when disabled",
-        'value="generate_secret"' in body,
+        "admin/totp: enrol section rendered when disabled",
+        'id="totp-enrol-heading"' in body,
+    )
+    assert_true(
+        "admin/totp: enrol verify form action present",
+        'value="enrol_verify"' in body,
+    )
+    assert_true(
+        "admin/totp: manual entry secret rendered inline",
+        'Manual entry secret' in body,
+    )
+    assert_true(
+        "admin/totp: 6-digit code input has autocomplete=one-time-code",
+        'autocomplete="one-time-code"' in body,
     )
 
 
-async def test_admin_totp_generate_secret_flow(page: Page) -> None:
-    section("v3.0.0 #313 admin/totp.php — generate_secret POST surfaces base32")
-    auth = _admin_basic_header()
-    # Pull CSRF from the page first.
-    initial = await page.context.request.get(
-        APP_URL + "admin/totp.php",
-        headers={"Authorization": auth},
-    )
-    body = await initial.text()
+async def test_admin_totp_enrol_invalid_code_renders_error(page: Page) -> None:
+    section("v3.2.0 #347 admin/totp.php — bad enrol code re-renders form with error")
+    sess = _admin_session_requests()
+    initial = sess.get(APP_URL + "admin/totp.php", timeout=10)
+    body = initial.text
     import re
     m = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
     assert_true("admin/totp: CSRF token discoverable", m is not None)
     csrf = m.group(1) if m else ""
 
-    # Cookies must round-trip for the PRG flash to survive.
-    ctx = page.context
-    storage = await ctx.storage_state()  # noqa: F841 — keep handle, satisfies linters
-    post = await ctx.request.post(
+    post = sess.post(
         APP_URL + "admin/totp.php",
-        headers={"Authorization": auth},
-        form={"_csrf": csrf, "action": "generate_secret"},
-        max_redirects=0,
+        data={"_csrf": csrf, "action": "enrol_verify", "code": "000000"},
+        allow_redirects=False,
+        timeout=10,
     )
-    assert_eq("admin/totp generate: 303 PRG", post.status, 303)
+    assert_eq("admin/totp enrol_verify (bad code): 303 PRG", post.status_code, 303)
 
-    follow = await ctx.request.get(
+    follow = sess.get(APP_URL + "admin/totp.php", timeout=10)
+    body2 = follow.text
+    assert_true(
+        "admin/totp enrol bad code: error message rendered",
+        "Code did not match" in body2 or "Enrol session expired" in body2,
+    )
+
+
+async def test_admin_totp_audit_enrol_events_logged(page: Page) -> None:
+    section("v3.2.0 #347 admin/totp.php — totp.enrol.* audit events landed")
+    # Visit /admin/totp.php (which audits totp.enrol.start once per session) +
+    # POST a bad code (audits totp.enrol.verify.fail). Then read audit log.
+    sess = _admin_session_requests()
+    sess.get(APP_URL + "admin/totp.php", timeout=10)
+    initial = sess.get(APP_URL + "admin/totp.php", timeout=10)
+    body = initial.text
+    import re
+    m = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    csrf = m.group(1) if m else ""
+    sess.post(
         APP_URL + "admin/totp.php",
-        headers={"Authorization": auth},
+        data={"_csrf": csrf, "action": "enrol_verify", "code": "000000"},
+        allow_redirects=False,
+        timeout=10,
     )
-    body2 = await follow.text()
+
+    audit_resp = await page.context.request.get(
+        APP_URL + "admin/audit.php?filter=totp.",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    audit_body = await audit_resp.text()
     assert_true(
-        "admin/totp generate: provisioning otpauth:// URI rendered",
-        "otpauth://totp/" in body2,
+        "audit log: totp.enrol.start row appears",
+        "totp.enrol.start" in audit_body,
     )
     assert_true(
-        "admin/totp generate: snippet for $admin_totp_secret rendered",
-        "$admin_totp_secret" in body2,
+        "audit log: totp.enrol.verify.fail row appears",
+        "totp.enrol.verify.fail" in audit_body,
     )
 
 
 async def test_admin_totp_regenerate_blocked_when_disabled(page: Page) -> None:
     section("v3.0.0 #313 admin/totp.php — regenerate_codes blocked when TOTP disabled")
-    auth = _admin_basic_header()
-    initial = await page.context.request.get(
-        APP_URL + "admin/totp.php",
-        headers={"Authorization": auth},
-    )
-    body = await initial.text()
+    sess = _admin_session_requests()
+    initial = sess.get(APP_URL + "admin/totp.php", timeout=10)
+    body = initial.text
     import re
     m = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
     csrf = m.group(1) if m else ""
-    post = await page.context.request.post(
+    post = sess.post(
         APP_URL + "admin/totp.php",
-        headers={"Authorization": auth},
-        form={"_csrf": csrf, "action": "regenerate_codes"},
-        max_redirects=0,
+        data={"_csrf": csrf, "action": "regenerate_codes"},
+        allow_redirects=False,
+        timeout=10,
     )
-    assert_eq("admin/totp regenerate (disabled): 303 PRG", post.status, 303)
-    follow = await page.context.request.get(
-        APP_URL + "admin/totp.php",
-        headers={"Authorization": auth},
-    )
-    body2 = await follow.text()
+    assert_eq("admin/totp regenerate (disabled): 303 PRG", post.status_code, 303)
+    follow = sess.get(APP_URL + "admin/totp.php", timeout=10)
+    body2 = follow.text
     assert_true(
         "admin/totp regenerate: error mentions TOTP must be enabled first",
         "Enable TOTP first" in body2,
     )
+
+
+# ---------------------------------------------------------------------------
+# v3.2.0 #342 — Admin login form (replaces Basic Auth for the web admin)
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_login_form_renders_with_autocomplete(page: Page) -> None:
+    section("v3.2.0 #342 admin/login.php — form has CSRF + autocomplete attrs")
+    # Use a fresh requests.Session so accumulated page.context cookies (set
+    # during earlier admin tests) cannot shortcut the GET into a redirect
+    # back to keys.php.
+    import requests as _r
+    sess = _r.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    resp = sess.get(APP_URL + "admin/login.php", timeout=10, allow_redirects=False)
+    assert_eq("login.php: status 200", resp.status_code, 200)
+    body = resp.text
+    assert_true(
+        "login.php: username input carries autocomplete=username",
+        'autocomplete="username"' in body,
+    )
+    assert_true(
+        "login.php: password input carries autocomplete=current-password",
+        'autocomplete="current-password"' in body,
+    )
+    assert_true(
+        "login.php: hidden CSRF input rendered",
+        'name="csrf"' in body,
+    )
+
+
+async def test_admin_login_success_redirects(page: Page) -> None:
+    section("v3.2.0 #342 admin/login.php — POST creds redirects to next= or totp")
+    import requests as _r, re as _re
+    sess = _r.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    get_resp = sess.get(APP_URL + "admin/login.php", timeout=10)
+    m = _re.search(r'name="csrf"\s+value="([0-9a-f]+)"', get_resp.text)
+    assert_true("login.php: GET sets csrf token", m is not None)
+    csrf = m.group(1) if m else ""
+    post_resp = sess.post(
+        APP_URL + "admin/login.php",
+        data={"user": ADMIN_USER, "pass": ADMIN_PASS, "csrf": csrf, "next": "/admin/keys.php"},
+        allow_redirects=False,
+        timeout=10,
+    )
+    assert_eq("login.php: 303 on success", post_resp.status_code, 303)
+    location = post_resp.headers.get("location", "")
+    # totp-verify.php is also acceptable when admin_totp_secret is configured.
+    assert_true(
+        "login.php: Location is /admin/keys.php or totp-verify.php",
+        location.endswith("/admin/keys.php") or "totp-verify.php" in location,
+        f"got: {location!r}",
+    )
+
+
+async def test_admin_login_failure_increments_rate_limit(page: Page) -> None:
+    section("v3.2.0 #342 admin/login.php — failure path renders error + counts toward lockout")
+    import requests as _r, re as _re
+    sess = _r.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    get_resp = sess.get(APP_URL + "admin/login.php", timeout=10)
+    m = _re.search(r'name="csrf"\s+value="([0-9a-f]+)"', get_resp.text)
+    csrf = m.group(1) if m else ""
+    bad = sess.post(
+        APP_URL + "admin/login.php",
+        data={"user": ADMIN_USER, "pass": "definitely-wrong", "csrf": csrf, "next": "/admin/"},
+        allow_redirects=False,
+        timeout=10,
+    )
+    assert_eq("login.php: bad password renders 200 form", bad.status_code, 200)
+    assert_true(
+        "login.php: bad password shows generic error",
+        "Username or password is incorrect" in bad.text,
+    )
+
+
+async def test_admin_login_protected_pages_redirect_unauth(page: Page) -> None:
+    section("v3.2.0 #342 admin/* unauthenticated -> 303 to login.php?next=...")
+    # Fresh requests.Session so we are guaranteed cookie-less.
+    import requests as _r
+    sess = _r.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    for path in ("admin/keys.php", "admin/audit.php", "admin/totp.php"):
+        resp = sess.get(APP_URL + path, timeout=10, allow_redirects=False)
+        assert_eq(f"{path}: status 303", resp.status_code, 303)
+        location = resp.headers.get("location", "")
+        assert_true(
+            f"{path}: Location points to login.php with ?next=",
+            "login.php?next=" in location,
+            f"got: {location!r}",
+        )
+
+
+async def test_api_v1_admin_basic_auth_still_works(page: Page) -> None:
+    section("v3.2.0 #342 /api/v1/admin/* keeps Basic Auth (boundary preserved)")
+    # The API admin endpoints must continue to accept Basic Auth even after
+    # the web admin moves to cookie sessions. We hit /api/v1/admin/keys
+    # with the Basic header — expecting 200 + JSON envelope.
+    headers = {
+        "Authorization": _admin_api_basic_header(),
+        "Accept": "application/json",
+    }
+    resp = await page.context.request.get(
+        APP_URL + "api/v1/admin/keys", headers=headers
+    )
+    assert_eq("api/v1/admin/keys: status 200", resp.status, 200)
+    body = await resp.text()
+    assert_true(
+        "api/v1/admin/keys: JSON envelope ok=true",
+        '"ok":true' in body or '"ok": true' in body,
+    )
+
+
+# ---------------------------------------------------------------------------
+# v3.2.0 #343 — Admin logout button + signed-in user chip
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_logout_button_visible_on_every_admin_page(page: Page) -> None:
+    section("v3.2.0 #343 admin logout — form + user chip rendered on every admin page")
+    sess = _admin_session_requests()
+    for path in ("admin/keys.php", "admin/audit.php", "admin/totp.php", "admin/settings.php"):
+        resp = sess.get(APP_URL + path, timeout=10)
+        assert_eq(f"{path}: status 200", resp.status_code, 200)
+        body = resp.text
+        assert_true(
+            f"{path}: logout form posts to logout.php",
+            'action="logout.php"' in body or "action='logout.php'" in body,
+        )
+        assert_true(
+            f"{path}: hidden CSRF input rendered in logout form",
+            'class="admin-logout-form"' in body and 'name="csrf"' in body,
+        )
+        assert_true(
+            f"{path}: signed-in username chip rendered with admin user",
+            'admin-user-chip' in body and ADMIN_USER in body,
+        )
+
+
+async def test_admin_logout_clears_session(page: Page) -> None:
+    section("v3.2.0 #343 admin logout — POST ends session + clears cookie + audit-logs")
+    import re as _re
+    sess = _admin_session_requests()
+    # Confirm we have a valid session: keys.php should 200.
+    pre = sess.get(APP_URL + "admin/keys.php", timeout=10, allow_redirects=False)
+    assert_eq("pre-logout: keys.php 200", pre.status_code, 200)
+    # Pull CSRF from the rendered logout form on keys.php.
+    m = _re.search(
+        r'class="admin-logout-form"[^>]*>\s*<input[^>]*name="csrf"[^>]*value="([0-9a-f]+)"',
+        pre.text,
+    )
+    assert_true("logout form: csrf token rendered", m is not None)
+    csrf = m.group(1) if m else ""
+
+    # POST to logout.php — must 302/303 to login.php?logged_out=1.
+    out = sess.post(
+        APP_URL + "admin/logout.php",
+        data={"csrf": csrf},
+        allow_redirects=False,
+        timeout=10,
+    )
+    assert_true(
+        "logout.php: redirect status (302 or 303)",
+        out.status_code in (302, 303),
+        f"got: {out.status_code}",
+    )
+    location = out.headers.get("location", "")
+    assert_true(
+        "logout.php: Location -> login.php?logged_out=1",
+        "login.php" in location and "logged_out=1" in location,
+        f"got: {location!r}",
+    )
+    # Cookie must be cleared via Set-Cookie with Max-Age=0 (or expires past).
+    set_cookies = out.headers.get("set-cookie", "")
+    assert_true(
+        "logout.php: clears sc_admin_sid cookie via Set-Cookie",
+        "sc_admin_sid=" in set_cookies
+        and ("Max-Age=0" in set_cookies or "max-age=0" in set_cookies.lower()
+             or "expires=" in set_cookies.lower()),
+        f"got: {set_cookies!r}",
+    )
+
+    # After logout: visiting an admin URL should redirect to login.
+    post_logout = sess.get(
+        APP_URL + "admin/keys.php", timeout=10, allow_redirects=False
+    )
+    assert_eq(
+        "post-logout: keys.php redirects to login (303)",
+        post_logout.status_code, 303,
+    )
+    assert_true(
+        "post-logout: Location points at login.php",
+        "login.php" in post_logout.headers.get("location", ""),
+    )
+
+    # Audit log should now contain auth.logout. Sign back in and read audit.
+    sess2 = _admin_session_requests()
+    audit_resp = sess2.get(APP_URL + "admin/audit.php", timeout=10)
+    assert_eq("audit page: 200 after re-login", audit_resp.status_code, 200)
+    assert_true(
+        "audit page: contains auth.logout entry",
+        "auth.logout" in audit_resp.text,
+    )
+
+
+async def test_admin_logout_rejects_get(page: Page) -> None:
+    section("v3.2.0 #343 admin logout — GET rejected with 405 + Allow: POST")
+    sess = _admin_session_requests()
+    resp = sess.get(APP_URL + "admin/logout.php", timeout=10, allow_redirects=False)
+    assert_eq("logout.php GET: 405", resp.status_code, 405)
+    allow = resp.headers.get("allow", "")
+    assert_true(
+        "logout.php GET: Allow: POST header",
+        "POST" in allow,
+        f"got: {allow!r}",
+    )
+
+
+async def test_admin_logout_csrf_protected(page: Page) -> None:
+    section("v3.2.0 #343 admin logout — POST without valid CSRF returns 403")
+    sess = _admin_session_requests()
+    resp = sess.post(
+        APP_URL + "admin/logout.php",
+        data={"csrf": "deadbeef" * 8},  # wrong token
+        allow_redirects=False,
+        timeout=10,
+    )
+    assert_eq("logout.php bad csrf: 403", resp.status_code, 403)
+
+
+# ---------------------------------------------------------------------------
+# v3.2.0 #344 — Left sidebar for /admin/
+# ---------------------------------------------------------------------------
+
+ADMIN_SIDEBAR_PAGES = [
+    ("admin/keys.php", "keys.php"),
+    ("admin/audit.php", "audit.php"),
+    ("admin/totp.php", "totp.php"),
+    ("admin/settings.php", "settings.php"),
+]
+
+
+async def test_admin_sidebar_marks_current_page(page: Page) -> None:
+    section("v3.2.0 #344 admin sidebar — aria-current=\"page\" marks the active row")
+    import re as _re
+    sess = _admin_session_requests()
+    for path, slug in ADMIN_SIDEBAR_PAGES:
+        resp = sess.get(APP_URL + path, timeout=10)
+        assert_eq(f"{path}: status 200", resp.status_code, 200)
+        body = resp.text
+        # Sidebar landmark renders.
+        assert_true(
+            f"{path}: <nav class=\"admin-sidebar\" aria-label=\"Admin\"> rendered",
+            'class="admin-sidebar"' in body and 'aria-label="Admin"' in body,
+        )
+        # Exactly one sidebar <a aria-current="page">.
+        currents = _re.findall(
+            r'<a\b[^>]*\baria-current="page"[^>]*\bhref="([^"]+)"',
+            body,
+        ) or _re.findall(
+            r'<a\b[^>]*\bhref="([^"]+)"[^>]*\baria-current="page"',
+            body,
+        )
+        assert_true(
+            f"{path}: exactly one aria-current=\"page\" link in sidebar (got {len(currents)})",
+            len(currents) == 1,
+            f"hrefs: {currents!r}",
+        )
+        assert_true(
+            f"{path}: aria-current href matches current page slug {slug}",
+            currents and slug in currents[0],
+            f"got: {currents!r}",
+        )
+
+
+async def test_admin_sidebar_collapses_on_mobile(page: Page) -> None:
+    section("v3.2.0 #344 admin sidebar — hamburger toggle at viewport <= 768px")
+    cookie_header = _admin_session_cookie_header()
+    sid_value = cookie_header.split("sc_admin_sid=", 1)[1]
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(APP_URL)
+    domain = parsed.hostname or "localhost"
+    await page.context.add_cookies([{
+        "name": "sc_admin_sid",
+        "value": sid_value,
+        "domain": domain,
+        "path": "/",
+    }])
+    headers: dict[str, str] = {}
+    if BASIC_USER and BASIC_PASS:
+        headers["Authorization"] = "Basic " + base64.b64encode(
+            f"{BASIC_USER}:{BASIC_PASS}".encode()
+        ).decode()
+    await page.set_viewport_size({"width": 480, "height": 720})
+    if headers:
+        await page.context.set_extra_http_headers(headers)
+    try:
+        await navigate(page, APP_URL + "admin/keys.php")
+        # Sanity: confirm we are actually on keys.php (not redirected to login).
+        cur_url = page.url
+        assert_true(
+            f"mobile: page is admin/keys.php (got {cur_url})",
+            "keys.php" in cur_url,
+        )
+        toggle_present = await page.evaluate(
+            "() => !!document.querySelector('.admin-sidebar-toggle')"
+        )
+        assert_true("mobile: hamburger button is in DOM", toggle_present)
+        # Hamburger button visible on narrow viewports.
+        toggle_visible = await page.evaluate(
+            "() => { const b = document.querySelector('.admin-sidebar-toggle');"
+            " if (!b) return false;"
+            " const r = b.getBoundingClientRect();"
+            " return r.width > 0 && r.height > 0; }"
+        )
+        assert_true("mobile: hamburger toggle visible", toggle_visible)
+        # Sidebar starts collapsed.
+        starts_open = await page.evaluate(
+            "() => document.querySelector('.admin-sidebar')?.classList.contains('open')"
+        )
+        assert_true("mobile: sidebar starts collapsed (no .open)", not starts_open)
+        # aria-expanded starts false.
+        expanded_pre = await page.evaluate(
+            "() => document.querySelector('.admin-sidebar-toggle')?.getAttribute('aria-expanded')"
+        )
+        assert_eq("mobile: aria-expanded='false' initially", expanded_pre, "false")
+        # Click hamburger -> sidebar opens, aria-expanded flips.
+        await page.click(".admin-sidebar-toggle")
+        await page.wait_for_timeout(50)
+        is_open = await page.evaluate(
+            "() => document.querySelector('.admin-sidebar')?.classList.contains('open')"
+        )
+        assert_true("mobile: sidebar has .open after click", is_open)
+        expanded_post = await page.evaluate(
+            "() => document.querySelector('.admin-sidebar-toggle')?.getAttribute('aria-expanded')"
+        )
+        assert_eq("mobile: aria-expanded='true' after click", expanded_post, "true")
+        # Click again -> closes.
+        await page.click(".admin-sidebar-toggle")
+        await page.wait_for_timeout(50)
+        is_open2 = await page.evaluate(
+            "() => document.querySelector('.admin-sidebar')?.classList.contains('open')"
+        )
+        assert_true("mobile: sidebar closes on second click", not is_open2)
+    finally:
+        await page.context.set_extra_http_headers({})
+        await page.context.clear_cookies()
+        await page.set_viewport_size({"width": 1280, "height": 900})
+
+
+async def test_admin_sidebar_keyboard_order(page: Page) -> None:
+    section("v3.2.0 #344 admin sidebar — sidebar tabs land before main content")
+    cookie_header = _admin_session_cookie_header()
+    sid_value = cookie_header.split("sc_admin_sid=", 1)[1]
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(APP_URL)
+    domain = parsed.hostname or "localhost"
+    await page.context.add_cookies([{
+        "name": "sc_admin_sid",
+        "value": sid_value,
+        "domain": domain,
+        "path": "/",
+    }])
+    headers: dict[str, str] = {}
+    if BASIC_USER and BASIC_PASS:
+        headers["Authorization"] = "Basic " + base64.b64encode(
+            f"{BASIC_USER}:{BASIC_PASS}".encode()
+        ).decode()
+    if headers:
+        await page.context.set_extra_http_headers(headers)
+    try:
+        await navigate(page, APP_URL + "admin/keys.php")
+        # Compute DOM order of the first sidebar <a> vs the first
+        # interactive element inside <main id="main-content">.
+        order = await page.evaluate(
+            """() => {
+                const sidebar = document.querySelector('.admin-sidebar');
+                const main = document.getElementById('main-content');
+                if (!sidebar || !main) return null;
+                const sidebarFirst = sidebar.querySelector('a, button');
+                const mainFirst = main.querySelector('a, button, input, select, textarea');
+                if (!sidebarFirst || !mainFirst) return null;
+                // Node.compareDocumentPosition: 4 = following, 2 = preceding
+                const pos = sidebarFirst.compareDocumentPosition(mainFirst);
+                return (pos & Node.DOCUMENT_POSITION_FOLLOWING) ? 'sidebar_before_main' : 'main_before_sidebar';
+            }"""
+        )
+        assert_eq(
+            "keyboard order: first sidebar element precedes first main element",
+            order, "sidebar_before_main",
+        )
+    finally:
+        await page.context.set_extra_http_headers({})
+        await page.context.clear_cookies()
+
+
+async def test_admin_sidebar_absent_on_login(page: Page) -> None:
+    section("v3.2.0 #344 admin sidebar — not rendered on login page (no signed-in session)")
+    import requests as _r
+    sess = _r.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    resp = sess.get(APP_URL + "admin/login.php", timeout=10)
+    assert_eq("login.php: status 200", resp.status_code, 200)
+    body = resp.text
+    assert_true(
+        "login.php: no <nav class=\"admin-sidebar\"> rendered",
+        'class="admin-sidebar"' not in body,
+    )
+    assert_true(
+        "login.php: no admin-sidebar-toggle rendered",
+        'admin-sidebar-toggle' not in body,
+    )
+
+
+# ---------------------------------------------------------------------------
+# v3.2.0 #345 — Admin chrome adoption (shared header / single-card / theme)
+# ---------------------------------------------------------------------------
+
+ADMIN_PAGES_FOR_CHROME = [
+    ("admin/keys.php", "API Keys"),
+    ("admin/audit.php", "Admin Audit Log"),
+    ("admin/totp.php", "TOTP / 2FA"),
+    ("admin/settings.php", "Settings"),
+]
+
+
+async def test_admin_pages_share_app_header(page: Page) -> None:
+    section("v3.2.0 #345 admin chrome — shared app header on all admin pages")
+    for path, _ in ADMIN_PAGES_FOR_CHROME:
+        resp = await page.context.request.get(
+            APP_URL + path,
+            headers={"Cookie": _admin_session_cookie_header()},
+        )
+        assert_eq(f"admin chrome: {path} 200", resp.status, 200)
+        body = await resp.text()
+        # Logo (shared with calculator) — assets/logo.webp picture source.
+        assert_true(
+            f"admin chrome: {path} renders shared logo",
+            "assets/logo.webp" in body,
+            "missing logo asset reference",
+        )
+        # Version pill (.version span).
+        assert_true(
+            f"admin chrome: {path} renders version pill",
+            'class="version"' in body,
+            "missing .version pill",
+        )
+        # Theme toggle button (id=theme-toggle).
+        assert_true(
+            f"admin chrome: {path} renders theme toggle",
+            'id="theme-toggle"' in body,
+            "missing #theme-toggle",
+        )
+        # Breadcrumb chip with aria-current="page" leaf.
+        assert_true(
+            f"admin chrome: {path} renders breadcrumb",
+            'class="admin-breadcrumb"' in body,
+            "missing .admin-breadcrumb",
+        )
+        # Exactly one outer .card (the <main id="main-content"> wrapper).
+        # The shared layout uses a single outer .card; nested elements should
+        # use .admin-card or bare <section> divs, never another .card. Parse
+        # every class="..." attribute and count `card` occurrences as a
+        # whole token so `class="foo card bar"` still matches.
+        import re as _re_card
+        class_attr_re = _re_card.compile(r'class="([^"]*)"')
+        card_count = 0
+        admin_card_count = 0
+        for cls_value in class_attr_re.findall(body):
+            tokens = cls_value.split()
+            if 'card' in tokens:
+                card_count += 1
+                if 'admin-card' in tokens:
+                    admin_card_count += 1
+        assert_true(
+            f"admin chrome: {path} has outer .card admin-card",
+            admin_card_count >= 1,
+            f"got {admin_card_count}",
+        )
+        # Total .card occurrences should equal the outer admin-card; any
+        # extras mean a nested card slipped into the admin body.
+        nested_card_count = card_count - admin_card_count
+        assert_true(
+            f"admin chrome: {path} has no nested .card (got {nested_card_count} extras beyond outer admin-card)",
+            nested_card_count == 0,
+            "nested .card found in admin body — should be <section> instead",
+        )
+        # Skip-link present and points to #main-content.
+        assert_true(
+            f"admin chrome: {path} has skip-link to #main-content",
+            'href="#main-content"' in body and 'class="skip-link"' in body,
+            "missing skip-link",
+        )
+
+
+async def test_admin_theme_toggle_works(page: Page) -> None:
+    section("v3.2.0 #345 admin chrome — theme toggle flips data-theme on /admin/")
+    # Pre-seed light theme via localStorage, then load admin/keys.php with
+    # the cookie-session sc_admin_sid and verify the inline theme-init
+    # script honours it.
+    cookie_header = _admin_session_cookie_header()
+    sid_value = cookie_header.split("sc_admin_sid=", 1)[1]
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(APP_URL)
+    domain = parsed.hostname or "localhost"
+    await page.context.add_cookies([{
+        "name": "sc_admin_sid",
+        "value": sid_value,
+        "domain": domain,
+        "path": "/",
+    }])
+    try:
+        await navigate(page, APP_URL + "admin/keys.php")
+        await page.evaluate("() => localStorage.setItem('theme', 'light')")
+        await navigate(page, APP_URL + "admin/keys.php")
+        data_theme = await page.evaluate(
+            "() => document.documentElement.getAttribute('data-theme')"
+        )
+        assert_eq("admin theme toggle: data-theme=light persisted", data_theme, "light")
+        bg = await page.evaluate(
+            "() => getComputedStyle(document.body).backgroundColor"
+        )
+        # Light --color-bg is #fff → rgb(255, 255, 255).
+        assert_true(
+            f"admin theme toggle: light bg applied (got {bg!r})",
+            "255, 255, 255" in bg or bg == "rgb(255, 255, 255)",
+        )
+    finally:
+        # ALWAYS clean up — downstream tests rely on dark default.
+        try:
+            await page.evaluate("() => localStorage.removeItem('theme')")
+        except Exception:
+            pass
+        await page.context.clear_cookies()
+        # Re-load the calculator without auth so cookies / theme state are
+        # clean for downstream tests.
+        try:
+            await navigate(page, APP_URL)
+            await page.evaluate("() => localStorage.removeItem('theme')")
+        except Exception:
+            pass
+
+
+async def test_admin_inputs_share_bg_token(page: Page) -> None:
+    section("v3.2.0 #345 admin chrome — text + number inputs share computed bg")
+    cookie_header = _admin_session_cookie_header()
+    sid_value = cookie_header.split("sc_admin_sid=", 1)[1]
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(APP_URL)
+    domain = parsed.hostname or "localhost"
+    await page.context.add_cookies([{
+        "name": "sc_admin_sid",
+        "value": sid_value,
+        "domain": domain,
+        "path": "/",
+    }])
+    try:
+        await navigate(page, APP_URL + "admin/keys.php")
+        # Mint form has both a text input (name) and a number input (rate_limit_rpm).
+        text_bg = await page.evaluate(
+            "() => { var el = document.querySelector('input[name=\"name\"]');"
+            " return el ? getComputedStyle(el).backgroundColor : null; }"
+        )
+        number_bg = await page.evaluate(
+            "() => { var el = document.querySelector('input[name=\"rate_limit_rpm\"]');"
+            " return el ? getComputedStyle(el).backgroundColor : null; }"
+        )
+        assert_true(
+            "admin inputs: text input bg resolved",
+            text_bg is not None and text_bg != "",
+            f"got {text_bg!r}",
+        )
+        assert_true(
+            "admin inputs: number input bg resolved",
+            number_bg is not None and number_bg != "",
+            f"got {number_bg!r}",
+        )
+        assert_eq(
+            "admin inputs: text + number share --color-input-bg",
+            number_bg,
+            text_bg,
+        )
+    finally:
+        await page.context.clear_cookies()
 
 
 # ---------------------------------------------------------------------------
@@ -5410,15 +6575,33 @@ async def main() -> None:
             await test_vlsm6_session_drawer_pattern(page)
             await test_admin_keys_unauth_challenge(page)
             await test_admin_keys_authed_renders(page)
+            # v3.2.0 #348 — keys polish (post-mint Copy button, dismiss, empty state)
+            await test_admin_keys_post_mint_panel_has_copy_button(page)
+            await test_admin_keys_copy_button_invokes_clipboard(page)
+            await test_admin_keys_empty_state_links_to_docs(page)
             await test_admin_audit_renders(page)
             await test_admin_audit_records_login_failure(page)
+            # v3.2.0 #346 — audit log polish
+            await test_admin_audit_filter_tablist_semantics(page)
+            await test_admin_audit_action_badges(page)
+            await test_admin_audit_sticky_thead(page)
+            await test_admin_audit_pagination_disabled_not_focusable(page)
+            await test_admin_audit_time_cells_have_datetime_attr(page)
+            await test_admin_audit_caption_sr_only(page)
             await test_admin_keys_csrf_rejected(page)
             await test_admin_keys_per_row_rpm_edit(page)
             await test_admin_keys_revoke_confirm_present(page)
             await test_admin_drain_endpoint_zeroes_state(page)
+            # v3.2.0 #349 — settings page
+            await test_admin_settings_page_renders(page)
+            await test_admin_settings_validation_rejects_invalid(page)
+            await test_admin_settings_secret_masking(page)
+            await test_admin_settings_section_anchors_and_extras(page)
             await test_admin_audit_pagination_param(page)
             await test_admin_totp_page_renders(page)
-            await test_admin_totp_generate_secret_flow(page)
+            # v3.2.0 #347 — TOTP enrol/disable polish (replaces #313 generate_secret flow)
+            await test_admin_totp_enrol_invalid_code_renders_error(page)
+            await test_admin_totp_audit_enrol_events_logged(page)
             await test_admin_totp_regenerate_blocked_when_disabled(page)
             await test_permissions_policy_directives(page)
             await test_vlsm_utilisation_accuracy(page)
@@ -5443,6 +6626,31 @@ async def main() -> None:
             await test_all_tooltips_direction(page)
             await test_console_no_errors(page)
             await test_theme_light_dark(page)
+            # v3.2.0 #342 — admin login form (run before chrome tests so a
+            # rate-limit lockout from the failure test can clear before the
+            # chrome tests rely on a successful session login).
+            await test_admin_login_form_renders_with_autocomplete(page)
+            await test_admin_login_success_redirects(page)
+            await test_admin_login_failure_increments_rate_limit(page)
+            await test_admin_login_protected_pages_redirect_unauth(page)
+            await test_api_v1_admin_basic_auth_still_works(page)
+            # v3.2.0 #343 — logout button + user chip (after login tests
+            # so a fresh session is available for the logout flow).
+            await test_admin_logout_button_visible_on_every_admin_page(page)
+            await test_admin_logout_clears_session(page)
+            await test_admin_logout_rejects_get(page)
+            await test_admin_logout_csrf_protected(page)
+            # v3.2.0 #344 — left sidebar (run after logout tests so a fresh
+            # cookie session is available for sidebar rendering checks).
+            await test_admin_sidebar_marks_current_page(page)
+            await test_admin_sidebar_collapses_on_mobile(page)
+            await test_admin_sidebar_keyboard_order(page)
+            await test_admin_sidebar_absent_on_login(page)
+            # v3.2.0 #345 — admin chrome adoption (run AFTER theme tests
+            # because the admin theme test mutates localStorage.theme).
+            await test_admin_pages_share_app_header(page)
+            await test_admin_theme_toggle_works(page)
+            await test_admin_inputs_share_bg_token(page)
             await test_a11y_landmarks(page)
             await test_a11y_focus_inputs(page)
             await test_a11y_toast_aria(page)

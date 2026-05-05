@@ -33,11 +33,54 @@ Navigate to `https://your-host/admin/keys.php`. The browser will prompt for
 the admin username + password (HTTP Basic Auth). Each request re-authenticates
 — there is no session cookie. After login you can:
 
+### Shared admin chrome (v3.2.0+, #345)
+
+Starting in v3.2.0 the admin pages render through the same shared layout as
+the calculator. Each admin page (`keys.php`, `audit.php`, `totp.php`,
+`totp-verify.php`, the first-run wizard) shows the calculator's logo,
+version pill, and theme toggle in the page header, plus a breadcrumb chip
+between the version pill and the theme toggle. The dark/light theme toggle
+now works on `/admin/` (it previously force-rendered dark because the
+admin pages did not load the toggle script).
+
+Each admin page has exactly one outer `.card` wrapping all sub-sections.
+Sub-sections render as `<section>` blocks separated by a 1px divider — no
+nested cards. Inputs share the calculator's `--color-input-bg` token, and
+form layouts reuse the calculator's `.form-group` / `.splitter-btn`
+components. Destructive actions use a token-driven `.btn-danger` class.
+
+An interim footer link cluster (API Keys · TOTP / 2FA · Audit Log) appears
+at the bottom of every admin page with the active page rendered as a
+non-link `aria-current="page"` text node. The cluster will be replaced by
+a left sidebar in v3.3.0 (#344).
+
+### Available actions
+
+
 - **Mint a key:** enter a human-readable name and submit. The token is shown
   once on the next page; copy it immediately. After page reload it is gone.
 - **List keys:** see name, public prefix (first 8 hex chars), creation time,
   last-used time, and active/revoked status.
 - **Revoke a key:** click *Revoke*. Revocation is immediate and permanent.
+
+### Post-mint UX (v3.2.0+, #348)
+
+After a successful mint, the new-token panel renders an inline `<code>`
+block with two buttons:
+
+- **Copy** — writes the token to the system clipboard via
+  `navigator.clipboard.writeText()` (with a `document.execCommand('copy')`
+  fallback for legacy browsers / cross-origin iframes). Flips to "Copied!"
+  for 1.5 seconds on success, then reverts.
+- **Got it** — removes the panel from the DOM. The panel is one-shot per
+  mint anyway (the next page load clears the PRG flash), so the dismiss
+  button is purely an explicit "I've copied it" affordance.
+
+The empty state (no keys minted yet) now shows a one-paragraph nudge
+explaining what keys authenticate against, with links to the
+[API reference](https://docs.subnetcalculator.app/api/) and
+[rate-limit headers](https://docs.subnetcalculator.app/api/#rate-limiting)
+docs so an operator can find the next step without leaving the admin UI.
 
 ## Using the JSON API
 
@@ -163,6 +206,220 @@ curl -u admin:pass -X PATCH -H 'Content-Type: application/json' \
   https://host/api/v1/admin/keys/42/rate-limit
 ```
 
+## TOTP / 2FA management (v3.2.0+, #347)
+
+`/admin/totp.php` is the operator's TOTP configuration surface. The
+*login-time* verification flow (when `totp_pending = 1` on a session row)
+is covered separately in [admin-login.md](admin-login.md). This section
+covers the configuration page itself.
+
+The page renders three sub-sections under one outer card:
+
+- **Status** — always shown.
+- **Enrol** — only when `$admin_totp_secret` is empty.
+- **Recovery codes** + **Disable TOTP** — only when TOTP is enabled.
+
+### Status card
+
+Shows:
+
+- Enabled/disabled badge.
+- **Last TOTP login** — UTC timestamp, wrapped in `<time datetime="…Z">`
+  so screen readers and locale-aware browsers can reformat it. Reads from
+  `admin_state['last_totp_at']`, set by `admin/totp-verify.php` on every
+  successful step-up. Displays "never" before the first verify.
+- **Recovery codes: N unused / total** — counts derived from
+  `admin_recovery_codes`. Includes used rows in the total so the operator
+  can see how many codes have been spent.
+
+### Enrol flow
+
+When `$admin_totp_secret` is empty, the page renders an inline enrol
+sub-card:
+
+- A fresh secret is generated and cached in the operator's PHP session
+  (`$_SESSION['totp_enrol_secret']`). The secret is never written to disk
+  before verification — abandoning the flow has no on-disk side-effect.
+- The base32 secret is shown in a copyable inline `<code>` block.
+- A `<details>` expander reveals the `otpauth://` URI for authenticator
+  apps that accept URI paste rather than manual base32 entry.
+- A verify form (`<input type="text" inputmode="numeric" pattern="[0-9]{6}"
+  autocomplete="one-time-code">`) accepts the 6-digit code from the
+  authenticator. On match, `admin_totp_enrol_persist()` writes
+  `$admin_totp_secret = '…'` into `config-admin.php` via the merge helper;
+  the page reloads with TOTP enabled.
+
+Audit events:
+
+| Event | When | Notes |
+| --- | --- | --- |
+| `totp.enrol.start` | First GET of the page when TOTP is disabled (once per session, not per refresh). | Session flag `$_SESSION['totp_enrol_started']` debounces. |
+| `totp.enrol.verify.ok` | Verify form accepted; secret written. | Cached enrol session keys cleared. |
+| `totp.enrol.verify.fail` | Verify form code didn't match. | Page re-renders with the same cached secret. |
+
+### Recovery codes
+
+Same one-shot mint flow as v3.0.0 — codes are shown exactly once at
+generation and stored as bcrypt hashes. v3.2.0 adds usage tracking:
+
+```sql
+ALTER TABLE admin_recovery_codes ADD COLUMN used_via_ip TEXT NULL;
+```
+
+The migration is idempotent — `admin_recovery_db_init()` probes
+`PRAGMA table_info` before running the ALTER, so existing installs
+upgrade on the first admin request after deploy.
+
+A `<details>` expander on the page lists every recovery code row:
+
+- Row id + status (`used` / `unused`).
+- For used rows: `used_at` (UTC, in a `<time datetime>` element) and
+  `used_via_ip` (the direct client IP at consumption, or the `X-Forwarded-For`
+  first hop if `$admin_audit_trust_xff` is set).
+
+Plaintext codes are unrecoverable by design — the operator gets
+forensic information ("a recovery code was used at *T* from *IP*") without
+the page ever displaying or storing the original code string.
+
+Helper copy on the page reminds the operator: codes are shown once at
+generation, cannot be retrieved later, and Regenerate invalidates all
+previous codes (used or unused).
+
+### Disable TOTP
+
+Bottom-of-page sub-card. Disabling requires the operator to re-prove
+control of the second factor:
+
+1. Operator types a current TOTP code or unused recovery code into the
+   confirmation input.
+2. The handler tries `admin_totp_verify($admin_totp_secret, $code)` first;
+   on mismatch, falls back to `admin_recovery_verify_and_consume($db,
+   $code)` (which marks the code used).
+3. Either path success → `admin_totp_disable($db)` clears
+   `$admin_totp_secret` from `config-admin.php` AND `DELETE FROM
+   admin_recovery_codes`. Cached enrol session state is also cleared so a
+   subsequent re-enrol mints a fresh secret.
+
+| Event | When |
+| --- | --- |
+| `totp.disable` | Valid second-factor accepted; secret + codes cleared. |
+| `totp.disable.fail` | Empty / invalid / rate-limited submission. |
+
+### `admin_state` k/v table
+
+A new table introduced for `last_totp_at` and any future single-row
+state values (created idempotently by `admin_recovery_db_init()`):
+
+```sql
+CREATE TABLE admin_state (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+```
+
+Helpers `admin_state_get()` / `admin_state_set()` are the only callers.
+
+### Operator notes
+
+- Disable wipes recovery codes. After re-enrolling, click **Mint recovery
+  codes** to generate a fresh set — without them, losing your authenticator
+  again means no fallback.
+- Hand-edits to `$admin_totp_secret` in `config.php` always win over
+  whatever the wizard wrote to `config-admin.php` (the v3.0.0 convention).
+  Disable cannot reach into `config.php`; if the secret is set there, the
+  page surfaces the disable form but the merge helper writes a no-op clear
+  to `config-admin.php` and the operator's hand-set value still applies.
+- The enrol session secret never touches disk before verification. If the
+  operator closes the tab mid-enrol, the cached secret expires with the
+  PHP session — no cleanup required.
+
+## Settings page (v3.2.0+, #349)
+
+`/admin/settings.php` surfaces ~23 of the ~35 operator-tunable knobs in
+`config.php` across six visible sections plus a collapsed *Advanced (CSP)*
+`<details>`. Schema-driven validators reject bad input before any disk write;
+saves only modify `config-admin.php` (the wizard tier introduced in v3.0.0).
+
+### What it surfaces
+
+| Section | Knobs |
+|---|---|
+| Branding | `page_title`, `page_description`, `canonical_url`, `default_tab`, `locale`, `fixed_bg_color`, `show_share_bar`, `frame_ancestors` |
+| Forms / Captcha | `form_protection`, `turnstile_*`, `recaptcha_score_threshold` |
+| API limits | `api_rate_limit_rpm`, `api_cors_origins` |
+| Sessions | `session_enabled`, `session_ttl_days` |
+| Admin & audit | `admin_audit_retention_days`, `admin_audit_trust_xff`, `admin_audit_purge_strategy`, `admin_audit_purge_sample_rate` |
+| Limits | `split_max_subnets`, `lookup_max_cidrs`, `lookup_max_ips` |
+| Advanced (CSP) | `csp_connect_extra`, `csp_script_extra`, `csp_img_extra` |
+
+**Not surfaced**: admin auth (`admin_user` / `admin_pass_hash` /
+`admin_totp_secret` — purpose-built pages exist at `/admin/login.php` and
+`/admin/totp.php`), filesystem path knobs (operator-only), the legacy
+`api_tokens` array (replaced by `/admin/keys.php`).
+
+### Source-of-truth indication
+
+Each row carries a small source badge:
+
+- `default` — neither tier sets the key; the schema default applies.
+- `admin` — written by the Settings UI to `config-admin.php`.
+- `config` — hand-edited in `config.php`. Always wins over the wizard tier.
+
+When a key is set in BOTH files, the row also carries a red **shadowed**
+tag. Saving a shadowed value still writes to `config-admin.php` — the UI
+value takes effect the moment the operator removes the hand-edit from
+`config.php`.
+
+### Secret handling
+
+Schema entries marked `secret: true` (currently the captcha secret keys)
+render as `••••••• (set)` or `(empty)` with an `aria-label` for screen
+readers. The existing value is never echoed back into the page, so the
+DOM has no source for the original token. The form input is
+`<input type="password" autocomplete="new-password">`; an empty submission
+means "no change". The audit log row redacts secret values to `(set)` or
+`(empty)` in the `meta` JSON.
+
+### Atomic write
+
+Saves are validated per-key against the schema. Any validation failure
+blocks the entire section's save and pins inline error messages under the
+bad fields. On success, `config-admin.php` is rewritten via the merge
+helper introduced in v3.2.0 (#347) — single-line `$key = …;` lines are
+replaced in place; new keys are appended. After write, the file is
+re-included to confirm round-trip parsability and `opcache_invalidate()`
+is called so the next request sees the new values.
+
+A pre-flight writability check disables every Save button (and renders a
+banner) when `config-admin.php` (or its parent directory) is not
+writable by the web user.
+
+### Audit events
+
+| Event | Trigger |
+|---|---|
+| `config.update` | One row per actual key change. `meta` carries `key`, `before`, `after`. |
+| `config.reset` | When a key is restored to its schema default. |
+
+Both events render with the `badge-private` (amber, mutation) treatment
+in the audit-log viewer via the v3.2.0 (#346) action-to-badge mapping.
+Secrets are redacted to `(set)` / `(empty)` in the `meta` JSON.
+
+### Operator notes
+
+- The schema in `Subnet-Calculator/includes/functions-admin-settings.php`
+  is the authoritative knob list. Adding a new knob requires a schema
+  entry; novel validation rules (e.g. CIDR list) require extending
+  `settings_validate()`.
+- The Settings page never touches `config.php`. Operators who want to
+  override the wizard tier should hand-edit `config.php`; the Settings UI
+  will then display that key with the red `config` badge plus the
+  `shadowed` tag and explain the override.
+- Saves are per-section. Changing knobs across multiple sections requires
+  one Save click per section — by design, so a validation failure in one
+  section can't roll back another.
+
 ## Audit log (v3.0.0+, #306)
 
 Every admin auth attempt and every key.mint / key.revoke / key.rate_limit
@@ -190,6 +447,40 @@ Retention is bounded by `$admin_audit_retention_days` (default `90`; set to
 
 The audit module fails open: a write failure logs to `error_log` but never
 masks the underlying admin action.
+
+### Viewer polish (v3.2.0+, #346)
+
+The `/admin/audit.php` viewer was refreshed in v3.2.0. Schema, retention,
+and purge behaviour are unchanged — only the rendered page differs:
+
+- **Filter strip** is a real `<div role="tablist">` with `<button role="tab"
+  aria-selected="true|false" aria-controls="audit-rows">` per filter
+  (`all`, `login`, `key`, `wizard`, `totp`). Behaviour is identical to the
+  v3.0.0 link-based strip; screen readers now announce the active filter.
+- **Action cells** render as colour-coded badges via the shared helper
+  `audit_action_badge_class($action)` in `functions-audit.php`. Suffix
+  matching wins over prefix matching, so `auth.login.fail` is red, not blue:
+
+  | Action pattern | Badge | Colour |
+  |---|---|---|
+  | `*.ok`, `*.success` | `badge-public` | green |
+  | `*.fail`, `*.deny`, `*.error` | `badge-multicast` | red |
+  | `*.create`, `*.delete`, `*.write`, `*.update`, `*.revoke` | `badge-private` | amber |
+  | `wizard.*`, `totp.*`, `config.*`, `auth.*` | `badge-doc` | blue |
+  | _(default)_ | `badge-other` | slate |
+
+- **Sticky `<thead>`** keeps column headers visible while scrolling long logs.
+- **Timestamps** are wrapped in `<time datetime="2026-05-05T01:44:32Z">…</time>`
+  so screen readers and locale-aware browsers can reformat the value.
+- **Pagination** disabled side is a non-focusable `<span aria-disabled="true">`
+  with `aria-label="Previous page (unavailable)"` rather than a faded
+  `<a tabindex="-1">` — keyboard users can no longer focus a "next" link
+  that does nothing.
+- **`<caption class="sr-only">`** describes the table to screen readers.
+
+The mapping helper is reusable from any future page that renders audit
+rows — keep new audit consumers consistent by calling
+`audit_action_badge_class()` rather than re-implementing the suffix table.
 
 ### Purge strategy (v3.1.0+, #325)
 

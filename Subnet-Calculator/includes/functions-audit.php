@@ -259,6 +259,50 @@ function audit_purge(\SQLite3 $db): void
  * audit_log(). Centralised so a future header change (e.g. trusting an
  * X-Real-IP from a known-good reverse proxy) only happens here.
  */
+/**
+ * Map an audit action string to a CSS badge class.
+ *
+ * Suffix matching wins over prefix matching: `auth.login.fail` is red
+ * (`badge-multicast`) because the outcome (`.fail`) dominates the actor
+ * (`auth.`). Used by /admin/audit.php (#346) and any future page that
+ * renders audit rows so the colour mapping stays consistent.
+ *
+ * - `*.ok` / `*.success`                                   → badge-public   (green)
+ * - `*.fail` / `*.deny` / `*.error`                        → badge-multicast (red)
+ * - `*.create` / `*.delete` / `*.write` / `*.update` / `*.revoke` → badge-private (amber)
+ * - `wizard.*` / `totp.*` / `config.*` / `auth.*`          → badge-doc      (blue)
+ * - default                                                → badge-other    (slate)
+ */
+function audit_action_badge_class(string $action): string
+{
+    static $suffixOk     = ['.ok', '.success'];
+    static $suffixFail   = ['.fail', '.deny', '.error'];
+    static $suffixWrite  = ['.create', '.delete', '.write', '.update', '.revoke'];
+    static $prefixDoc    = ['wizard.', 'totp.', 'config.', 'auth.'];
+
+    foreach ($suffixOk as $s) {
+        if (str_ends_with($action, $s)) {
+            return 'badge-public';
+        }
+    }
+    foreach ($suffixFail as $s) {
+        if (str_ends_with($action, $s)) {
+            return 'badge-multicast';
+        }
+    }
+    foreach ($suffixWrite as $s) {
+        if (str_ends_with($action, $s)) {
+            return 'badge-private';
+        }
+    }
+    foreach ($prefixDoc as $p) {
+        if (str_starts_with($action, $p)) {
+            return 'badge-doc';
+        }
+    }
+    return 'badge-other';
+}
+
 function audit_actor_from_request(): ?string
 {
     $u = $_SERVER['PHP_AUTH_USER'] ?? null;

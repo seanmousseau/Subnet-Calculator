@@ -26,6 +26,9 @@ if (!function_exists('audit_log')) {
 if (!function_exists('admin_apikey_db_path')) {
     require __DIR__ . '/../includes/functions-admin-auth.php';
 }
+if (!function_exists('help_bubble')) {
+    require __DIR__ . '/../includes/functions-util.php';
+}
 
 header('Cache-Control: no-store, no-cache, must-revalidate, private, max-age=0');
 header('Pragma: no-cache');
@@ -113,108 +116,87 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     }
 }
 
-?><!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Set up Admin — Subnet Calculator</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<style>
-  :root { color-scheme: dark; }
-  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:#0a1a12; color:#e5e7eb; margin:0; padding:2rem; }
-  main { max-width: 720px; margin:0 auto; }
-  h1 { font-size:1.6rem; margin:0 0 0.5rem; }
-  p.lede { color:#9ca3af; margin:0 0 1.5rem; }
-  .card { background:#0f2419; border:1px solid #1e3a2a; border-radius:8px; padding:1.5rem; margin-bottom:1.25rem; }
-  .alert { padding:0.75rem 1rem; border-radius:6px; margin-bottom:1rem; }
-  .alert-ok    { background:#063b25; border:1px solid #06d6a0; color:#a7f3d0; }
-  .alert-err   { background:#3b0606; border:1px solid #ef4444; color:#fecaca; }
-  label { display:block; margin-bottom:0.75rem; }
-  label .lbl { display:block; font-weight:600; margin-bottom:0.25rem; color:#a7f3d0; }
-  input[type=text], input[type=password] { width:100%; box-sizing:border-box; background:#000; border:1px solid #1e3a2a; color:#e5e7eb; padding:0.6rem; border-radius:4px; font-size:1rem; }
-  .btn { background:#06d6a0; color:#0a1a12; border:none; padding:0.6rem 1.2rem; border-radius:4px; font-weight:600; cursor:pointer; font-size:1rem; }
-  .btn:hover { background:#34e2b5; }
-  pre.snippet { background:#000; color:#06d6a0; padding:1rem; border-radius:4px; overflow-x:auto; font-family: ui-monospace, monospace; font-size:0.9rem; }
-  ul.errors { margin:0; padding-left:1.25rem; }
-  code { background:#000; padding:0.05rem 0.3rem; border-radius:3px; font-family: ui-monospace, monospace; }
-</style>
-</head>
-<body>
-<main>
-<h1>Set up the admin account</h1>
-<p class="lede">
-  Admin UI is enabled but no password is configured. Choose a username and
-  password below — the wizard will write
-  <code>Subnet-Calculator/config-admin.php</code> alongside your existing
-  <code>config.php</code>. The wizard self-locks on completion.
-</p>
+ob_start();
+?>
+<section class="admin-section" aria-labelledby="wizard-heading">
+    <h1 id="wizard-heading">Set up the admin account</h1>
+    <p class="admin-lede">
+        Admin UI is enabled but no password is configured. Choose a username and
+        password below — the wizard will write
+        <code>Subnet-Calculator/config-admin.php</code> alongside your existing
+        <code>config.php</code>. The wizard self-locks on completion.
+    </p>
+</section>
 
 <?php if ($success_path !== null) : ?>
-  <div class="card">
-    <div class="alert alert-ok">
-      <strong>Done.</strong> Wrote <code><?= $h($success_path) ?></code>.
-      Refresh this page to log in.
-    </div>
-    <p>
-      <a href="keys.php" class="btn" style="text-decoration:none;display:inline-block">Continue to API keys →</a>
-    </p>
-  </div>
+    <section class="admin-section" aria-labelledby="wizard-done-heading">
+        <h2 id="wizard-done-heading" class="sr-only">Setup complete</h2>
+        <div class="alert alert-success" role="status">
+            <strong>Done.</strong> Wrote <code><?= $h($success_path) ?></code>.
+            Refresh this page to log in.
+        </div>
+        <p>
+            <a href="keys.php" class="splitter-btn admin-btn-link">Continue to API keys →</a>
+        </p>
+    </section>
 <?php else : ?>
+    <?php if ($errors !== []) : ?>
+        <section class="admin-section" aria-labelledby="wizard-errors-heading">
+            <h2 id="wizard-errors-heading" class="sr-only">Errors</h2>
+            <div class="alert alert-error" role="alert">
+                <strong>We could not save your configuration:</strong>
+                <ul class="admin-error-list">
+                    <?php foreach ($errors as $err) : ?>
+                        <li><?= $h($err) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        </section>
+    <?php endif; ?>
 
-<?php if ($errors !== []) : ?>
-  <div class="alert alert-err">
-    <strong>We could not save your configuration:</strong>
-    <ul class="errors">
-      <?php foreach ($errors as $err) : ?>
-        <li><?= $h($err) ?></li>
-      <?php endforeach; ?>
-    </ul>
-  </div>
+    <?php if ($fallback_hash !== '') : ?>
+        <section class="admin-section" aria-labelledby="wizard-fallback-heading">
+            <h2 id="wizard-fallback-heading">Manual fallback</h2>
+            <p>
+                Paste the snippet below into <code>Subnet-Calculator/config.php</code>,
+                then refresh this page. (This is the same one-line approach as the
+                <code>php -r "echo password_hash(...)"</code> setup we used before the
+                wizard existed.)
+            </p>
+            <pre class="api-key-display"><?= $h(admin_wizard_snippet($fallback_user, $fallback_hash)) ?></pre>
+        </section>
+    <?php endif; ?>
+
+    <section class="admin-section" aria-labelledby="wizard-form-heading">
+        <h2 id="wizard-form-heading" class="sr-only">Setup form</h2>
+        <form method="post" action="" autocomplete="off" class="admin-form">
+            <input type="hidden" name="_csrf" value="<?= $h($csrf_token) ?>">
+            <div class="form-group">
+                <label for="wizard-user">Username</label>
+                <input id="wizard-user" type="text" name="admin_user" required maxlength="<?= ADMIN_WIZARD_USER_MAX ?>"
+                       autocomplete="username" value="<?= $h($user_input) ?>">
+            </div>
+            <div class="form-group">
+                <label for="wizard-pass">Password (min <?= ADMIN_WIZARD_PASSWORD_MIN ?> characters)</label>
+                <input id="wizard-pass" type="password" name="admin_password" required
+                       minlength="<?= ADMIN_WIZARD_PASSWORD_MIN ?>" maxlength="<?= ADMIN_WIZARD_PASSWORD_MAX ?>"
+                       autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label for="wizard-pass2">Confirm password</label>
+                <input id="wizard-pass2" type="password" name="admin_password_confirm" required
+                       minlength="<?= ADMIN_WIZARD_PASSWORD_MIN ?>" maxlength="<?= ADMIN_WIZARD_PASSWORD_MAX ?>"
+                       autocomplete="new-password">
+            </div>
+            <div class="form-group form-group-action">
+                <button type="submit" class="splitter-btn">Save and continue</button>
+            </div>
+        </form>
+        <p class="admin-meta-note">After this completes you can enable TOTP/2FA from the admin pages.</p>
+    </section>
 <?php endif; ?>
-
-<?php if ($fallback_hash !== '') : ?>
-  <div class="card">
-    <strong>Manual fallback</strong>
-    <p>
-      Paste the snippet below into <code>Subnet-Calculator/config.php</code>,
-      then refresh this page. (This is the same one-line approach as the
-      <code>php -r "echo password_hash(...)"</code> setup we used before the
-      wizard existed.)
-    </p>
-    <pre class="snippet"><?= $h(admin_wizard_snippet($fallback_user, $fallback_hash)) ?></pre>
-  </div>
-<?php endif; ?>
-
-<div class="card">
-  <form method="post" action="" autocomplete="off">
-    <input type="hidden" name="_csrf" value="<?= $h($csrf_token) ?>">
-    <label>
-      <span class="lbl">Username</span>
-      <input type="text" name="admin_user" required maxlength="<?= ADMIN_WIZARD_USER_MAX ?>"
-             autocomplete="username" value="<?= $h($user_input) ?>">
-    </label>
-    <label>
-      <span class="lbl">Password (min <?= ADMIN_WIZARD_PASSWORD_MIN ?> characters)</span>
-      <input type="password" name="admin_password" required
-             minlength="<?= ADMIN_WIZARD_PASSWORD_MIN ?>" maxlength="<?= ADMIN_WIZARD_PASSWORD_MAX ?>"
-             autocomplete="new-password">
-    </label>
-    <label>
-      <span class="lbl">Confirm password</span>
-      <input type="password" name="admin_password_confirm" required
-             minlength="<?= ADMIN_WIZARD_PASSWORD_MIN ?>" maxlength="<?= ADMIN_WIZARD_PASSWORD_MAX ?>"
-             autocomplete="new-password">
-    </label>
-    <button type="submit" class="btn">Save and continue</button>
-  </form>
-</div>
-
-<p style="color:#6b7280;font-size:0.85rem">
-  After this completes you can enable TOTP/2FA from the admin pages.
-</p>
-
-<?php endif; ?>
-</main>
-</body>
-</html>
+<?php
+$admin_card_body  = ob_get_clean();
+$page_title       = 'Set up Admin';
+$admin_breadcrumb = 'Setup';
+require __DIR__ . '/../templates/_admin_layout.php';

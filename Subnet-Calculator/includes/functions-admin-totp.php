@@ -178,7 +178,8 @@ function admin_totp_base32_decode(string $encoded): ?string
 // ─── Recovery codes ──────────────────────────────────────────────────────────
 
 /**
- * Schema migration for the admin_recovery_codes table. Idempotent.
+ * Schema migration for the admin_recovery_codes + admin_state tables.
+ * Idempotent. v3.2.0 (#347) added used_via_ip column + admin_state k/v.
  */
 function admin_recovery_db_init(\SQLite3 $db): void
 {
@@ -189,8 +190,62 @@ function admin_recovery_db_init(\SQLite3 $db): void
             created_at INTEGER NOT NULL,
             used_at   INTEGER NULL
         );
-        CREATE INDEX IF NOT EXISTS idx_admin_recovery_used ON admin_recovery_codes(used_at);'
+        CREATE INDEX IF NOT EXISTS idx_admin_recovery_used ON admin_recovery_codes(used_at);
+        CREATE TABLE IF NOT EXISTS admin_state (
+            key        TEXT PRIMARY KEY,
+            value      TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );'
     );
+
+    $hasUsedViaIp = false;
+    $res = $db->query('PRAGMA table_info(admin_recovery_codes)');
+    if ($res !== false) {
+        while (($r = $res->fetchArray(SQLITE3_ASSOC)) !== false) {
+            if (($r['name'] ?? null) === 'used_via_ip') {
+                $hasUsedViaIp = true;
+                break;
+            }
+        }
+    }
+    if (!$hasUsedViaIp) {
+        $db->exec('ALTER TABLE admin_recovery_codes ADD COLUMN used_via_ip TEXT NULL');
+    }
+}
+
+function admin_state_get(\SQLite3 $db, string $key): ?string
+{
+    admin_recovery_db_init($db);
+    $stmt = $db->prepare('SELECT value FROM admin_state WHERE key = :k');
+    if ($stmt === false) {
+        return null;
+    }
+    $stmt->bindValue(':k', $key, SQLITE3_TEXT);
+    $res = $stmt->execute();
+    if ($res === false) {
+        return null;
+    }
+    $row = $res->fetchArray(SQLITE3_ASSOC);
+    if (!is_array($row) || !isset($row['value'])) {
+        return null;
+    }
+    return (string)$row['value'];
+}
+
+function admin_state_set(\SQLite3 $db, string $key, string $value): void
+{
+    admin_recovery_db_init($db);
+    $stmt = $db->prepare(
+        'INSERT INTO admin_state (key, value, updated_at) VALUES (:k, :v, :t)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
+    );
+    if ($stmt === false) {
+        return;
+    }
+    $stmt->bindValue(':k', $key, SQLITE3_TEXT);
+    $stmt->bindValue(':v', $value, SQLITE3_TEXT);
+    $stmt->bindValue(':t', time(), SQLITE3_INTEGER);
+    $stmt->execute();
 }
 
 /**
@@ -273,12 +328,14 @@ function admin_recovery_verify_and_consume(\SQLite3 $db, string $submitted): ?in
     while (($r = $res->fetchArray(SQLITE3_ASSOC)) !== false) {
         if (password_verify($canonical, (string)$r['code_hash'])) {
             $upd = $db->prepare(
-                'UPDATE admin_recovery_codes SET used_at = :t WHERE id = :id AND used_at IS NULL'
+                'UPDATE admin_recovery_codes SET used_at = :t, used_via_ip = :ip WHERE id = :id AND used_at IS NULL'
             );
             if ($upd === false) {
                 return null;
             }
+            $ip = function_exists('audit_ip_from_request') ? audit_ip_from_request() : null;
             $upd->bindValue(':t', time(), SQLITE3_INTEGER);
+            $upd->bindValue(':ip', $ip, $ip === null ? SQLITE3_NULL : SQLITE3_TEXT);
             $upd->bindValue(':id', (int)$r['id'], SQLITE3_INTEGER);
             $upd->execute();
             // Confirm the guarded UPDATE actually changed a row — concurrent
@@ -286,6 +343,32 @@ function admin_recovery_verify_and_consume(\SQLite3 $db, string $submitted): ?in
             if ($db->changes() > 0) {
                 return (int)$r['id'];
             }
+        }
+    }
+    return null;
+}
+
+/**
+ * Non-destructive recovery code check (v3.2.0+, #347 disable flow). Returns
+ * the matching row id if the submitted code matches an unused row, without
+ * marking it used. Lets callers verify-then-act without burning a code if
+ * the subsequent action fails.
+ */
+function admin_recovery_match(\SQLite3 $db, string $submitted): ?int
+{
+    admin_recovery_db_init($db);
+    $submitted = strtoupper(preg_replace('/\\s|-/', '', $submitted) ?? '');
+    if ($submitted === '' || !preg_match('/^[A-Z2-7]{8}$/', $submitted)) {
+        return null;
+    }
+    $canonical = substr($submitted, 0, 4) . '-' . substr($submitted, 4, 4);
+    $res = $db->query('SELECT id, code_hash FROM admin_recovery_codes WHERE used_at IS NULL');
+    if ($res === false) {
+        return null;
+    }
+    while (($r = $res->fetchArray(SQLITE3_ASSOC)) !== false) {
+        if (password_verify($canonical, (string)$r['code_hash'])) {
+            return (int)$r['id'];
         }
     }
     return null;
@@ -304,4 +387,83 @@ function admin_recovery_unused_count(\SQLite3 $db): int
     }
     $row = $res->fetchArray(SQLITE3_NUM);
     return is_array($row) ? (int)$row[0] : 0;
+}
+
+/**
+ * List all recovery code rows for the v3.2.0 (#347) usage expander. Codes
+ * are stored hashed only — the list returns row id + used state + when/where
+ * used. Plaintext is unrecoverable by design.
+ *
+ * @return array<int, array{id:int, created_at:int, used_at:?int, used_via_ip:?string}>
+ */
+function admin_recovery_list(\SQLite3 $db): array
+{
+    admin_recovery_db_init($db);
+    $rows = [];
+    $res = $db->query(
+        'SELECT id, created_at, used_at, used_via_ip FROM admin_recovery_codes ORDER BY id'
+    );
+    if ($res === false) {
+        return $rows;
+    }
+    while (($r = $res->fetchArray(SQLITE3_ASSOC)) !== false) {
+        $rows[] = [
+            'id'          => (int)$r['id'],
+            'created_at'  => (int)$r['created_at'],
+            'used_at'     => $r['used_at'] !== null ? (int)$r['used_at'] : null,
+            'used_via_ip' => $r['used_via_ip'] !== null ? (string)$r['used_via_ip'] : null,
+        ];
+    }
+    return $rows;
+}
+
+/**
+ * Persist a new TOTP secret to config-admin.php (v3.2.0+, #347). Used by
+ * the inline enrol flow on /admin/totp.php after a successful verify. The
+ * caller MUST have validated a 6-digit code against this exact secret.
+ */
+function admin_totp_enrol_persist(string $secret): bool
+{
+    if ($secret === '' || admin_totp_base32_decode($secret) === null) {
+        return false;
+    }
+    if (!function_exists('admin_config_admin_set_keys')) {
+        return false;
+    }
+    return admin_config_admin_set_keys(['admin_totp_secret' => $secret]);
+}
+
+/**
+ * Disable TOTP entirely (v3.2.0+, #347). Clears `$admin_totp_secret` from
+ * config-admin.php AND wipes all rows from admin_recovery_codes. The caller
+ * MUST have already verified a current second factor (TOTP or recovery
+ * code) — this function does NOT re-check.
+ */
+function admin_totp_disable(\SQLite3 $db): bool
+{
+    admin_recovery_db_init($db);
+    if (!function_exists('admin_config_admin_set_keys')) {
+        return false;
+    }
+
+    // Atomic: BEGIN, DELETE recovery rows, write config; COMMIT only if
+    // both the DELETE and the config write succeed. A failure on either
+    // side rolls the DELETE back so we never leave a "secret cleared but
+    // recovery rows still present" state on disk.
+    $db->exec('BEGIN IMMEDIATE');
+    try {
+        $db->exec('DELETE FROM admin_recovery_codes');
+    } catch (\Throwable $e) {
+        $db->exec('ROLLBACK');
+        error_log('sc admin_totp_disable: DELETE failed: ' . $e->getMessage());
+        return false;
+    }
+
+    if (!admin_config_admin_set_keys(['admin_totp_secret' => ''])) {
+        $db->exec('ROLLBACK');
+        return false;
+    }
+
+    $db->exec('COMMIT');
+    return true;
 }
