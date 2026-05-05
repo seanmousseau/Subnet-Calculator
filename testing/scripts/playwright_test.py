@@ -3392,34 +3392,37 @@ async def test_admin_theme_toggle_works(page: Page) -> None:
     auth = "Basic " + base64.b64encode(
         f"{ADMIN_USER}:{ADMIN_PASS}".encode()
     ).decode()
-    # Use a URL with embedded creds so the navigation does not pop a
-    # browser-native auth dialog (matches the pattern used elsewhere in
-    # the suite).
-    creds_url = APP_URL.replace(
-        "://", f"://{ADMIN_USER}:{ADMIN_PASS}@"
-    ) + "admin/keys.php"
-    # First navigate to seed origin, then set localStorage, then reload.
     await page.context.set_extra_http_headers({"Authorization": auth})
-    await navigate(page, APP_URL + "admin/keys.php")
-    await page.evaluate("() => localStorage.setItem('theme', 'light')")
-    await navigate(page, APP_URL + "admin/keys.php")
-    data_theme = await page.evaluate(
-        "() => document.documentElement.getAttribute('data-theme')"
-    )
-    assert_eq("admin theme toggle: data-theme=light persisted", data_theme, "light")
-    # Background should resolve to the light --color-bg, not the dark default.
-    bg = await page.evaluate(
-        "() => getComputedStyle(document.body).backgroundColor"
-    )
-    # Light --color-bg is #fff → rgb(255, 255, 255). Dark default is #0d1117.
-    # Accept either rgb(255, 255, 255) form.
-    assert_true(
-        f"admin theme toggle: light bg applied (got {bg!r})",
-        "255, 255, 255" in bg or bg == "rgb(255, 255, 255)",
-    )
-    # Reset for downstream tests.
-    await page.evaluate("() => localStorage.removeItem('theme')")
-    await page.context.set_extra_http_headers({})
+    try:
+        await navigate(page, APP_URL + "admin/keys.php")
+        await page.evaluate("() => localStorage.setItem('theme', 'light')")
+        await navigate(page, APP_URL + "admin/keys.php")
+        data_theme = await page.evaluate(
+            "() => document.documentElement.getAttribute('data-theme')"
+        )
+        assert_eq("admin theme toggle: data-theme=light persisted", data_theme, "light")
+        bg = await page.evaluate(
+            "() => getComputedStyle(document.body).backgroundColor"
+        )
+        # Light --color-bg is #fff → rgb(255, 255, 255).
+        assert_true(
+            f"admin theme toggle: light bg applied (got {bg!r})",
+            "255, 255, 255" in bg or bg == "rgb(255, 255, 255)",
+        )
+    finally:
+        # ALWAYS clean up — downstream tests rely on dark default.
+        try:
+            await page.evaluate("() => localStorage.removeItem('theme')")
+        except Exception:
+            pass
+        await page.context.set_extra_http_headers({})
+        # Re-load the calculator without auth so cookies / theme state are
+        # clean for downstream tests.
+        try:
+            await navigate(page, APP_URL)
+            await page.evaluate("() => localStorage.removeItem('theme')")
+        except Exception:
+            pass
 
 
 async def test_admin_inputs_share_bg_token(page: Page) -> None:
@@ -3428,32 +3431,34 @@ async def test_admin_inputs_share_bg_token(page: Page) -> None:
         f"{ADMIN_USER}:{ADMIN_PASS}".encode()
     ).decode()
     await page.context.set_extra_http_headers({"Authorization": auth})
-    await navigate(page, APP_URL + "admin/keys.php")
-    # Mint form has both a text input (name) and a number input (rate_limit_rpm).
-    text_bg = await page.evaluate(
-        "() => { var el = document.querySelector('input[name=\"name\"]');"
-        " return el ? getComputedStyle(el).backgroundColor : null; }"
-    )
-    number_bg = await page.evaluate(
-        "() => { var el = document.querySelector('input[name=\"rate_limit_rpm\"]');"
-        " return el ? getComputedStyle(el).backgroundColor : null; }"
-    )
-    assert_true(
-        "admin inputs: text input bg resolved",
-        text_bg is not None and text_bg != "",
-        f"got {text_bg!r}",
-    )
-    assert_true(
-        "admin inputs: number input bg resolved",
-        number_bg is not None and number_bg != "",
-        f"got {number_bg!r}",
-    )
-    assert_eq(
-        "admin inputs: text + number share --color-input-bg",
-        number_bg,
-        text_bg,
-    )
-    await page.context.set_extra_http_headers({})
+    try:
+        await navigate(page, APP_URL + "admin/keys.php")
+        # Mint form has both a text input (name) and a number input (rate_limit_rpm).
+        text_bg = await page.evaluate(
+            "() => { var el = document.querySelector('input[name=\"name\"]');"
+            " return el ? getComputedStyle(el).backgroundColor : null; }"
+        )
+        number_bg = await page.evaluate(
+            "() => { var el = document.querySelector('input[name=\"rate_limit_rpm\"]');"
+            " return el ? getComputedStyle(el).backgroundColor : null; }"
+        )
+        assert_true(
+            "admin inputs: text input bg resolved",
+            text_bg is not None and text_bg != "",
+            f"got {text_bg!r}",
+        )
+        assert_true(
+            "admin inputs: number input bg resolved",
+            number_bg is not None and number_bg != "",
+            f"got {number_bg!r}",
+        )
+        assert_eq(
+            "admin inputs: text + number share --color-input-bg",
+            number_bg,
+            text_bg,
+        )
+    finally:
+        await page.context.set_extra_http_headers({})
 
 
 # ---------------------------------------------------------------------------
@@ -5565,10 +5570,6 @@ async def main() -> None:
             await test_admin_totp_page_renders(page)
             await test_admin_totp_generate_secret_flow(page)
             await test_admin_totp_regenerate_blocked_when_disabled(page)
-            # v3.2.0 #345 — admin chrome adoption
-            await test_admin_pages_share_app_header(page)
-            await test_admin_theme_toggle_works(page)
-            await test_admin_inputs_share_bg_token(page)
             await test_permissions_policy_directives(page)
             await test_vlsm_utilisation_accuracy(page)
             await test_ipv4_binary_hex_decimal(page)
@@ -5592,6 +5593,11 @@ async def main() -> None:
             await test_all_tooltips_direction(page)
             await test_console_no_errors(page)
             await test_theme_light_dark(page)
+            # v3.2.0 #345 — admin chrome adoption (run AFTER theme tests
+            # because the admin theme test mutates localStorage.theme).
+            await test_admin_pages_share_app_header(page)
+            await test_admin_theme_toggle_works(page)
+            await test_admin_inputs_share_bg_token(page)
             await test_a11y_landmarks(page)
             await test_a11y_focus_inputs(page)
             await test_a11y_toast_aria(page)
