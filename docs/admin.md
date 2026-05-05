@@ -247,7 +247,7 @@ The token is generated per-run by `make test-docker` and passed to both
 the `webapp` and `playwright-tests` containers via docker-compose env. It
 is never baked into the image and never committed to source.
 
-The release-tarball build step in [CLAUDE.md](../CLAUDE.md) excludes
+The release-tarball build step (see `CLAUDE.md` in the [repository root](https://github.com/seanmousseau/Subnet-Calculator/blob/main/CLAUDE.md)) excludes
 `admin/_test-drain.php` so the file never ships to operators. If you copy
 the file to a production host by accident, it stays inert because the
 production environment does not set `PHPUNIT_TEST_DRAIN_TOKEN`.
