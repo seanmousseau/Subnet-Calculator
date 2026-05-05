@@ -18,6 +18,12 @@ Tiny follow-up to v3.1.2.
   Save-Session URL or entering a session ID into the *Load saved session*
   form returned `Load failed: Not found.` and never hydrated the tree.
   Switched the fetch to the path-segment route.
+- **`config.php.example` was missing several admin knobs** — added
+  `$admin_totp_secret` (v3.0.0 / #313), `$admin_audit_retention_days`,
+  `$admin_audit_trust_xff`, `$admin_audit_purge_strategy`,
+  `$admin_audit_purge_sample_rate` (v3.0.0 / #306), and
+  `$tree_presets_dir` (v3.1.0 / #323). All were already documented in
+  `includes/config.php` but absent from the operator-facing example.
 
 ## [3.1.2] - 2026-05-04
 
