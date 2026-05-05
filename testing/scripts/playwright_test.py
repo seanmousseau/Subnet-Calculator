@@ -3484,7 +3484,7 @@ async def test_admin_audit_pagination_param(page: Page) -> None:
 
 
 async def test_admin_totp_page_renders(page: Page) -> None:
-    section("v3.0.0 #313 admin/totp.php — authed renders status disabled")
+    section("v3.2.0 #347 admin/totp.php — authed renders + inline enrol when disabled")
     auth = _admin_basic_header()
     resp = await page.context.request.get(
         APP_URL + "admin/totp.php",
@@ -3498,19 +3498,28 @@ async def test_admin_totp_page_renders(page: Page) -> None:
     )
     assert_true(
         "admin/totp: status badge 'disabled' rendered (no secret in fixture)",
-        "disabled" in body,
+        ">disabled<" in body,
     )
     assert_true(
-        "admin/totp: 'Generate a secret' form present when disabled",
-        'value="generate_secret"' in body,
+        "admin/totp: enrol section rendered when disabled",
+        'id="totp-enrol-heading"' in body,
+    )
+    assert_true(
+        "admin/totp: enrol verify form action present",
+        'value="enrol_verify"' in body,
+    )
+    assert_true(
+        "admin/totp: manual entry secret rendered inline",
+        'Manual entry secret' in body,
+    )
+    assert_true(
+        "admin/totp: 6-digit code input has autocomplete=one-time-code",
+        'autocomplete="one-time-code"' in body,
     )
 
 
-async def test_admin_totp_generate_secret_flow(page: Page) -> None:
-    section("v3.0.0 #313 admin/totp.php — generate_secret POST surfaces base32")
-    # Use a single requests.Session for the POST -> follow GET so PHPSESSID
-    # round-trips and the PRG flash survives. (Cookie-session admin auth
-    # via the form login is also performed on this same session.)
+async def test_admin_totp_enrol_invalid_code_renders_error(page: Page) -> None:
+    section("v3.2.0 #347 admin/totp.php — bad enrol code re-renders form with error")
     sess = _admin_session_requests()
     initial = sess.get(APP_URL + "admin/totp.php", timeout=10)
     body = initial.text
@@ -3521,21 +3530,50 @@ async def test_admin_totp_generate_secret_flow(page: Page) -> None:
 
     post = sess.post(
         APP_URL + "admin/totp.php",
-        data={"_csrf": csrf, "action": "generate_secret"},
+        data={"_csrf": csrf, "action": "enrol_verify", "code": "000000"},
         allow_redirects=False,
         timeout=10,
     )
-    assert_eq("admin/totp generate: 303 PRG", post.status_code, 303)
+    assert_eq("admin/totp enrol_verify (bad code): 303 PRG", post.status_code, 303)
 
     follow = sess.get(APP_URL + "admin/totp.php", timeout=10)
     body2 = follow.text
     assert_true(
-        "admin/totp generate: provisioning otpauth:// URI rendered",
-        "otpauth://totp/" in body2,
+        "admin/totp enrol bad code: error message rendered",
+        "Code did not match" in body2 or "Enrol session expired" in body2,
+    )
+
+
+async def test_admin_totp_audit_enrol_events_logged(page: Page) -> None:
+    section("v3.2.0 #347 admin/totp.php — totp.enrol.* audit events landed")
+    # Visit /admin/totp.php (which audits totp.enrol.start once per session) +
+    # POST a bad code (audits totp.enrol.verify.fail). Then read audit log.
+    sess = _admin_session_requests()
+    sess.get(APP_URL + "admin/totp.php", timeout=10)
+    initial = sess.get(APP_URL + "admin/totp.php", timeout=10)
+    body = initial.text
+    import re
+    m = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    csrf = m.group(1) if m else ""
+    sess.post(
+        APP_URL + "admin/totp.php",
+        data={"_csrf": csrf, "action": "enrol_verify", "code": "000000"},
+        allow_redirects=False,
+        timeout=10,
+    )
+
+    audit_resp = await page.context.request.get(
+        APP_URL + "admin/audit.php?filter=totp.",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    audit_body = await audit_resp.text()
+    assert_true(
+        "audit log: totp.enrol.start row appears",
+        "totp.enrol.start" in audit_body,
     )
     assert_true(
-        "admin/totp generate: snippet for $admin_totp_secret rendered",
-        "$admin_totp_secret" in body2,
+        "audit log: totp.enrol.verify.fail row appears",
+        "totp.enrol.verify.fail" in audit_body,
     )
 
 
@@ -6249,7 +6287,9 @@ async def main() -> None:
             await test_admin_drain_endpoint_zeroes_state(page)
             await test_admin_audit_pagination_param(page)
             await test_admin_totp_page_renders(page)
-            await test_admin_totp_generate_secret_flow(page)
+            # v3.2.0 #347 — TOTP enrol/disable polish (replaces #313 generate_secret flow)
+            await test_admin_totp_enrol_invalid_code_renders_error(page)
+            await test_admin_totp_audit_enrol_events_logged(page)
             await test_admin_totp_regenerate_blocked_when_disabled(page)
             await test_permissions_policy_directives(page)
             await test_vlsm_utilisation_accuracy(page)

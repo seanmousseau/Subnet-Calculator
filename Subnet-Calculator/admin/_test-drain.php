@@ -49,7 +49,7 @@ try {
     $db = new \SQLite3(admin_apikey_db_path());
     $db->enableExceptions(true);
 
-    foreach (['api_keys', 'admin_audit', 'admin_recovery_codes', 'admin_sessions', 'auth_rate_limit'] as $table) {
+    foreach (['api_keys', 'admin_audit', 'admin_recovery_codes', 'admin_sessions', 'admin_state', 'auth_rate_limit'] as $table) {
         // Each table is created lazily by its owning module's open() helper.
         // The drain endpoint runs at the start of a test suite — before any
         // admin page is hit — so the tables may not exist yet. DELETE on a

@@ -187,6 +187,134 @@ curl -u admin:pass -X PATCH -H 'Content-Type: application/json' \
   https://host/api/v1/admin/keys/42/rate-limit
 ```
 
+## TOTP / 2FA management (v3.2.0+, #347)
+
+`/admin/totp.php` is the operator's TOTP configuration surface. The
+*login-time* verification flow (when `totp_pending = 1` on a session row)
+is covered separately in [admin-login.md](admin-login.md). This section
+covers the configuration page itself.
+
+The page renders three sub-sections under one outer card:
+
+- **Status** — always shown.
+- **Enrol** — only when `$admin_totp_secret` is empty.
+- **Recovery codes** + **Disable TOTP** — only when TOTP is enabled.
+
+### Status card
+
+Shows:
+
+- Enabled/disabled badge.
+- **Last TOTP login** — UTC timestamp, wrapped in `<time datetime="…Z">`
+  so screen readers and locale-aware browsers can reformat it. Reads from
+  `admin_state['last_totp_at']`, set by `admin/totp-verify.php` on every
+  successful step-up. Displays "never" before the first verify.
+- **Recovery codes: N unused / total** — counts derived from
+  `admin_recovery_codes`. Includes used rows in the total so the operator
+  can see how many codes have been spent.
+
+### Enrol flow
+
+When `$admin_totp_secret` is empty, the page renders an inline enrol
+sub-card:
+
+- A fresh secret is generated and cached in the operator's PHP session
+  (`$_SESSION['totp_enrol_secret']`). The secret is never written to disk
+  before verification — abandoning the flow has no on-disk side-effect.
+- The base32 secret is shown in a copyable inline `<code>` block.
+- A `<details>` expander reveals the `otpauth://` URI for authenticator
+  apps that accept URI paste rather than manual base32 entry.
+- A verify form (`<input type="text" inputmode="numeric" pattern="[0-9]{6}"
+  autocomplete="one-time-code">`) accepts the 6-digit code from the
+  authenticator. On match, `admin_totp_enrol_persist()` writes
+  `$admin_totp_secret = '…'` into `config-admin.php` via the merge helper;
+  the page reloads with TOTP enabled.
+
+Audit events:
+
+| Event | When | Notes |
+| --- | --- | --- |
+| `totp.enrol.start` | First GET of the page when TOTP is disabled (once per session, not per refresh). | Session flag `$_SESSION['totp_enrol_started']` debounces. |
+| `totp.enrol.verify.ok` | Verify form accepted; secret written. | Cached enrol session keys cleared. |
+| `totp.enrol.verify.fail` | Verify form code didn't match. | Page re-renders with the same cached secret. |
+
+### Recovery codes
+
+Same one-shot mint flow as v3.0.0 — codes are shown exactly once at
+generation and stored as bcrypt hashes. v3.2.0 adds usage tracking:
+
+```sql
+ALTER TABLE admin_recovery_codes ADD COLUMN used_via_ip TEXT NULL;
+```
+
+The migration is idempotent — `admin_recovery_db_init()` probes
+`PRAGMA table_info` before running the ALTER, so existing installs
+upgrade on the first admin request after deploy.
+
+A `<details>` expander on the page lists every recovery code row:
+
+- Row id + status (`used` / `unused`).
+- For used rows: `used_at` (UTC, in a `<time datetime>` element) and
+  `used_via_ip` (the direct client IP at consumption, or the `X-Forwarded-For`
+  first hop if `$admin_audit_trust_xff` is set).
+
+Plaintext codes are unrecoverable by design — the operator gets
+forensic information ("a recovery code was used at *T* from *IP*") without
+the page ever displaying or storing the original code string.
+
+Helper copy on the page reminds the operator: codes are shown once at
+generation, cannot be retrieved later, and Regenerate invalidates all
+previous codes (used or unused).
+
+### Disable TOTP
+
+Bottom-of-page sub-card. Disabling requires the operator to re-prove
+control of the second factor:
+
+1. Operator types a current TOTP code or unused recovery code into the
+   confirmation input.
+2. The handler tries `admin_totp_verify($admin_totp_secret, $code)` first;
+   on mismatch, falls back to `admin_recovery_verify_and_consume($db,
+   $code)` (which marks the code used).
+3. Either path success → `admin_totp_disable($db)` clears
+   `$admin_totp_secret` from `config-admin.php` AND `DELETE FROM
+   admin_recovery_codes`. Cached enrol session state is also cleared so a
+   subsequent re-enrol mints a fresh secret.
+
+| Event | When |
+| --- | --- |
+| `totp.disable` | Valid second-factor accepted; secret + codes cleared. |
+| `totp.disable.fail` | Empty / invalid / rate-limited submission. |
+
+### `admin_state` k/v table
+
+A new table introduced for `last_totp_at` and any future single-row
+state values (created idempotently by `admin_recovery_db_init()`):
+
+```sql
+CREATE TABLE admin_state (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+```
+
+Helpers `admin_state_get()` / `admin_state_set()` are the only callers.
+
+### Operator notes
+
+- Disable wipes recovery codes. After re-enrolling, click **Mint recovery
+  codes** to generate a fresh set — without them, losing your authenticator
+  again means no fallback.
+- Hand-edits to `$admin_totp_secret` in `config.php` always win over
+  whatever the wizard wrote to `config-admin.php` (the v3.0.0 convention).
+  Disable cannot reach into `config.php`; if the secret is set there, the
+  page surfaces the disable form but the merge helper writes a no-op clear
+  to `config-admin.php` and the operator's hand-set value still applies.
+- The enrol session secret never touches disk before verification. If the
+  operator closes the tab mid-enrol, the cached secret expires with the
+  PHP session — no cleanup required.
+
 ## Audit log (v3.0.0+, #306)
 
 Every admin auth attempt and every key.mint / key.revoke / key.rate_limit

@@ -89,6 +89,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     } elseif ($submittedCode !== '' && admin_totp_consume_attempt($user, $submittedCode)) {
         admin_session_promote($db, $ctx['session_id']);
         admin_auth_rate_limit_clear($db, $ip, $user);
+        admin_state_set($db, 'last_totp_at', (string)time());
         admin_audit_event('login.totp.success', $user, ['via' => 'form']);
         $db->close();
         header('Location: ' . $nextPath, true, 303);
