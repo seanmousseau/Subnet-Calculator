@@ -2301,7 +2301,7 @@ html[data-theme="light"] .btn-danger:hover { filter: brightness(0.95); }
 }
 .admin-user-chip-icon {
     flex: 0 0 auto;
-    opacity: 0.85;
+    opacity: 85%;
 }
 .admin-user-chip-name {
     font-variant-numeric: tabular-nums;

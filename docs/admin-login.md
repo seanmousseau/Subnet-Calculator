@@ -133,3 +133,49 @@ php -r "echo password_hash('mysecret', PASSWORD_BCRYPT) . PHP_EOL;"
 Paste the resulting hash into `$admin_pass_hash`. Existing TOTP secrets
 (`$admin_totp_secret`) and recovery codes are reused without
 modification.
+
+## Logout (v3.2.0, #343)
+
+Every admin page renders a signed-in **user chip** + **Sign out** button
+in the top-right of the header (between the breadcrumb and the theme
+toggle). The chip carries `aria-label="Signed in as <user>"` so screen
+readers always identify the active account; on viewports `<= 640px` the
+username text collapses to a silhouette icon while the button stays full
+size.
+
+The button submits a CSRF-protected `POST` to `admin/logout.php`:
+
+1. **Method gate.** Anything other than `POST` is rejected with
+   `405 Method Not Allowed` and an `Allow: POST` header — opening the URL
+   directly in the browser cannot end a session.
+2. **CSRF check.** The form posts the active session row's token in a
+   hidden `csrf` input. The handler looks up the row keyed by the
+   `sc_admin_sid` cookie and compares with `hash_equals()`. A mismatch or
+   missing cookie returns `403 Forbidden`. This blocks login-CSRF — a
+   third-party page cannot force a logout via a cross-site form.
+3. **Session teardown.** On a valid POST, `admin_session_end()` deletes
+   the row from `admin_sessions`.
+4. **Cookie clear.** A fresh `Set-Cookie: sc_admin_sid=; Max-Age=0;
+   Path=/; HttpOnly; Secure; SameSite=Lax` header invalidates the client
+   cookie. (The `Secure` attribute is omitted when the request was not
+   served over HTTPS so local-dev browsers honour the deletion.)
+5. **Audit.** `auth.logout` is written to `admin_audit` with the user as
+   actor and the session-id prefix in the meta column.
+6. **Redirect.** `302` to `admin/login.php?logged_out=1`. The login page
+   renders a `You have been signed out.` status banner.
+
+After a successful logout, every other admin URL (`admin/keys.php`,
+`admin/audit.php`, `admin/totp.php`) resolves through
+`admin_session_require()` which now sees no cookie row and `303`-redirects
+back to the login form with a `?next=` target.
+
+The legacy Basic-Auth path used by `/api/v1/admin/*` is untouched — there
+is no server-side session to end on the API surface, so clients simply
+stop sending the `Authorization` header.
+
+### Test rig drain
+
+`admin/_test-drain.php` already truncates `admin_sessions` and
+`auth_rate_limit`; no change was required for the logout flow. The audit
+table is also drained on each test-suite start, so `auth.logout` rows
+written during a Playwright run do not bleed into subsequent runs.
