@@ -44,12 +44,25 @@ if ($turnstile_active) {
     $csp_extra_script = ' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/';
     $csp_extra_frame  = ' https://www.google.com/recaptcha/ https://recaptchaenterprise.googleapis.com';
 }
+// Sanitise operator-supplied CSP extension values: strip ; \r \n that could
+// inject or terminate directives, then collapse whitespace. Defence-in-depth
+// against a misconfigured config.php — operators are still expected to supply
+// origin tokens only (the comment in config.php.example spells this out).
+$_csp_sanitise = static function (mixed $v): string {
+    if (!is_string($v)) { return ''; }
+    return trim(preg_replace('/\s+/', ' ', preg_replace('/[;\r\n]/', ' ', $v)));
+};
+$csp_connect_extra = $_csp_sanitise($csp_connect_extra ?? '');
+$csp_script_extra  = $_csp_sanitise($csp_script_extra  ?? '');
+$csp_img_extra     = $_csp_sanitise($csp_img_extra     ?? '');
+unset($_csp_sanitise);
+
 $csp_script  = "'self' 'nonce-{$csp_nonce}'" . $csp_extra_script
-    . (!empty($csp_script_extra) ? ' ' . $csp_script_extra : '');
+    . ($csp_script_extra !== '' ? ' ' . $csp_script_extra : '');
 $csp_style   = "'self' 'nonce-{$csp_nonce}'";
 $csp_frame   = "'self'" . $csp_extra_frame;
-$csp_img     = "'self' data:" . (!empty($csp_img_extra) ? ' ' . $csp_img_extra : '');
-$csp_connect = "'self'" . (!empty($csp_connect_extra) ? ' ' . $csp_connect_extra : '');
+$csp_img     = "'self' data:" . ($csp_img_extra !== '' ? ' ' . $csp_img_extra : '');
+$csp_connect = "'self'" . ($csp_connect_extra !== '' ? ' ' . $csp_connect_extra : '');
 header("Content-Security-Policy: default-src 'self'; base-uri 'self'; style-src {$csp_style}; script-src {$csp_script}; img-src {$csp_img}; connect-src {$csp_connect}; frame-src {$csp_frame}; frame-ancestors {$frame_ancestors}");
 $turnstile_curl_missing = $turnstile_active  && !function_exists('curl_init');
 $hcaptcha_curl_missing  = $hcaptcha_active   && !function_exists('curl_init');

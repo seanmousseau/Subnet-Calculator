@@ -1249,6 +1249,7 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
     if (!root) { return; }
 
     const initForm = root.querySelector('#tree-editor-init');
+    const initForms = root.querySelectorAll('.tree-editor-init');
     const initInput = root.querySelector('#tree_editor_cidr');
     const editorEl = root.querySelector('.tree-editor');
     const canvas = root.querySelector('[data-role="canvas"]');
@@ -1791,7 +1792,7 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
             }
         }
 
-        initForm.hidden = true;
+        initForms.forEach(function (f) { f.hidden = true; });
         editorEl.hidden = false;
         undoStack = [];
         redoStack = [];
