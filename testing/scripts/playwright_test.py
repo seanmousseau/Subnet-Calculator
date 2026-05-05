@@ -3696,35 +3696,38 @@ async def test_admin_sidebar_marks_current_page(page: Page) -> None:
 
 async def test_admin_sidebar_collapses_on_mobile(page: Page) -> None:
     section("v3.2.0 #344 admin sidebar — hamburger toggle at viewport <= 768px")
-    auth = "Basic " + base64.b64encode(
-        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
-    ).decode()
-    # Form-login via context.request first to seed sc_admin_sid for the page.
-    import re as _re
-    get_resp = await page.context.request.get(
-        APP_URL + "admin/login.php",
-        headers={"Cookie": auth},
-    )
-    body = await get_resp.text()
-    m = _re.search(r'name="csrf"\s+value="([0-9a-f]+)"', body)
-    assert_true("login csrf token present", m is not None)
-    csrf = m.group(1) if m else ""
-    post_resp = await page.context.request.post(
-        APP_URL + "admin/login.php",
-        headers={"Cookie": auth},
-        form={"user": ADMIN_USER, "pass": ADMIN_PASS, "csrf": csrf, "next": "/admin/"},
-        max_redirects=0,
-    )
-    assert_true(
-        "form-login redirected (303)",
-        post_resp.status in (302, 303),
-        f"got: {post_resp.status}",
-    )
-
+    cookie_header = _admin_session_cookie_header()
+    sid_value = cookie_header.split("sc_admin_sid=", 1)[1]
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(APP_URL)
+    domain = parsed.hostname or "localhost"
+    cookies_to_add = [{
+        "name": "sc_admin_sid",
+        "value": sid_value,
+        "domain": domain,
+        "path": "/",
+    }]
+    await page.context.add_cookies(cookies_to_add)
+    headers: dict[str, str] = {}
+    if BASIC_USER and BASIC_PASS:
+        headers["Authorization"] = "Basic " + base64.b64encode(
+            f"{BASIC_USER}:{BASIC_PASS}".encode()
+        ).decode()
     await page.set_viewport_size({"width": 480, "height": 720})
-    await page.context.set_extra_http_headers({"Cookie": auth})
+    if headers:
+        await page.context.set_extra_http_headers(headers)
     try:
         await navigate(page, APP_URL + "admin/keys.php")
+        # Sanity: confirm we are actually on keys.php (not redirected to login).
+        cur_url = page.url
+        assert_true(
+            f"mobile: page is admin/keys.php (got {cur_url})",
+            "keys.php" in cur_url,
+        )
+        toggle_present = await page.evaluate(
+            "() => !!document.querySelector('.admin-sidebar-toggle')"
+        )
+        assert_true("mobile: hamburger button is in DOM", toggle_present)
         # Hamburger button visible on narrow viewports.
         toggle_visible = await page.evaluate(
             "() => { const b = document.querySelector('.admin-sidebar-toggle');"
@@ -3763,30 +3766,30 @@ async def test_admin_sidebar_collapses_on_mobile(page: Page) -> None:
         assert_true("mobile: sidebar closes on second click", not is_open2)
     finally:
         await page.context.set_extra_http_headers({})
+        await page.context.clear_cookies()
         await page.set_viewport_size({"width": 1280, "height": 900})
 
 
 async def test_admin_sidebar_keyboard_order(page: Page) -> None:
     section("v3.2.0 #344 admin sidebar — sidebar tabs land before main content")
-    auth = "Basic " + base64.b64encode(
-        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
-    ).decode()
-    # Seed cookie session via form login.
-    import re as _re
-    get_resp = await page.context.request.get(
-        APP_URL + "admin/login.php",
-        headers={"Cookie": auth},
-    )
-    body = await get_resp.text()
-    m = _re.search(r'name="csrf"\s+value="([0-9a-f]+)"', body)
-    csrf = m.group(1) if m else ""
-    await page.context.request.post(
-        APP_URL + "admin/login.php",
-        headers={"Cookie": auth},
-        form={"user": ADMIN_USER, "pass": ADMIN_PASS, "csrf": csrf, "next": "/admin/"},
-        max_redirects=0,
-    )
-    await page.context.set_extra_http_headers({"Cookie": auth})
+    cookie_header = _admin_session_cookie_header()
+    sid_value = cookie_header.split("sc_admin_sid=", 1)[1]
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(APP_URL)
+    domain = parsed.hostname or "localhost"
+    await page.context.add_cookies([{
+        "name": "sc_admin_sid",
+        "value": sid_value,
+        "domain": domain,
+        "path": "/",
+    }])
+    headers: dict[str, str] = {}
+    if BASIC_USER and BASIC_PASS:
+        headers["Authorization"] = "Basic " + base64.b64encode(
+            f"{BASIC_USER}:{BASIC_PASS}".encode()
+        ).decode()
+    if headers:
+        await page.context.set_extra_http_headers(headers)
     try:
         await navigate(page, APP_URL + "admin/keys.php")
         # Compute DOM order of the first sidebar <a> vs the first
@@ -3810,6 +3813,7 @@ async def test_admin_sidebar_keyboard_order(page: Page) -> None:
         )
     finally:
         await page.context.set_extra_http_headers({})
+        await page.context.clear_cookies()
 
 
 async def test_admin_sidebar_absent_on_login(page: Page) -> None:

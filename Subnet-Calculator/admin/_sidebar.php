@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 /**
  * Persistent left sidebar for /admin/* pages — introduced in v3.2.0
  * (#344). Replaces the interim `.admin-footer-links` cluster that
@@ -22,6 +20,8 @@ declare(strict_types=1);
  * button. The toggle is only visible at viewports <= 768px (CSS-driven);
  * `app.js` flips `.open` on the nav and `aria-expanded` on the button.
  */
+
+declare(strict_types=1);
 
 $_h = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 

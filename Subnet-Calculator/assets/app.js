@@ -2660,3 +2660,40 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
         }
     });
 })();
+
+// ── Admin sidebar hamburger toggle (#344 v3.2.0) ─────────────────────────────
+// Mobile (<= 768px) flips `.open` on the sidebar nav and `aria-expanded` on
+// the toggle button. Closes on Escape or click outside the sidebar.
+(function () {
+    var toggle = document.querySelector('.admin-sidebar-toggle');
+    var sidebar = document.getElementById('admin-sidebar');
+    if (!toggle || !sidebar) { return; }
+
+    function setOpen(open) {
+        if (open) {
+            sidebar.classList.add('open');
+            toggle.setAttribute('aria-expanded', 'true');
+        } else {
+            sidebar.classList.remove('open');
+            toggle.setAttribute('aria-expanded', 'false');
+        }
+    }
+
+    toggle.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setOpen(!sidebar.classList.contains('open'));
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && sidebar.classList.contains('open')) {
+            setOpen(false);
+            toggle.focus();
+        }
+    });
+
+    document.addEventListener('click', function (e) {
+        if (!sidebar.classList.contains('open')) { return; }
+        if (sidebar.contains(e.target) || toggle.contains(e.target)) { return; }
+        setOpen(false);
+    });
+})();

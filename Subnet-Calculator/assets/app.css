@@ -2261,6 +2261,7 @@
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
 }
+
 @media (width <= 768px) {
     .admin-shell-grid {
         display: block;
