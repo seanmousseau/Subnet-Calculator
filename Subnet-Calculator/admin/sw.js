@@ -1,3 +1,4 @@
+/* eslint-env serviceworker */
 // /admin/sw.js — Tombstone (v3.2.3, hotfix).
 //
 // Earlier releases shipped assets/app.js with an unconditional
@@ -25,12 +26,12 @@ self.addEventListener('activate', event => {
                 if (typeof client.navigate === 'function') {
                     try {
                         await client.navigate(client.url);
-                    } catch (_) {
+                    } catch {
                         // Top-level documents may refuse navigation; ignore.
                     }
                 }
             }
-        } catch (_) {
+        } catch {
             // Swallow — there is no recovery path beyond logging, and
             // the worker is about to be torn down anyway.
         }
