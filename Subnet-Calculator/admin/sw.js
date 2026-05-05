@@ -20,15 +20,22 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
     event.waitUntil((async () => {
         try {
+            const adminScopePath = new URL(self.registration.scope).pathname;
             await self.registration.unregister();
             const clients = await self.clients.matchAll({ includeUncontrolled: true });
             for (const client of clients) {
-                if (typeof client.navigate === 'function') {
-                    try {
-                        await client.navigate(client.url);
-                    } catch {
-                        // Top-level documents may refuse navigation; ignore.
-                    }
+                if (typeof client.navigate !== 'function') continue;
+                let clientPath;
+                try { clientPath = new URL(client.url).pathname; } catch { continue; }
+                // Only refresh tabs under this worker's admin scope —
+                // we registered there, we own the cleanup, and we must
+                // not yank unrelated same-origin tabs (e.g. an open
+                // calculator tab) out from under the user.
+                if (!clientPath.startsWith(adminScopePath)) continue;
+                try {
+                    await client.navigate(client.url);
+                } catch {
+                    // Top-level documents may refuse navigation; ignore.
                 }
             }
         } catch {
