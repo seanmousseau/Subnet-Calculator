@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1] - 2026-05-05
+
+**Admin polish.** Five fixes addressing visual + behavioural rough edges
+on the v3.2.0 admin surface.
+
+### Fixed
+
+- **Login / TOTP card layout.** The signed-out admin shell (sign-in form
+  and two-factor verification page) now renders a narrow centred card
+  (~480 px) with vertically-stacked fields, replacing the stretched
+  full-width layout that left the username/password row floating.
+- **Sidebar leak on TOTP step.** `admin/totp-verify.php` no longer
+  renders the admin nav sidebar while a session is `totp_pending` — the
+  user sees only the verification card with an inline Sign-out fallback.
+  Prevents a visual implication that the user is signed in before the
+  second factor is verified.
+- **Stale config reads after save.** `settings_parse_config_file()` now
+  calls `clearstatcache()` + `opcache_invalidate()` before each
+  `@include`, so the layered settings loader always sees the freshly
+  written `config-admin.php`. Eliminates the "settings revert after
+  logout / log back in" symptom caused by opcache holding a stale
+  snapshot of the file.
+
+### Changed
+
+- **Settings page locks `config.php`-pinned rows.** Operator hand-edits
+  in `config.php` continue to win over UI saves, but the Settings page
+  now disables those inputs and shows a clearer "locked" badge + per-row
+  banner ("Set in `config.php` and cannot be changed from the UI"). A
+  new help card at the top of the page documents the precedence chain
+  (`config.php` → `config-admin.php` → defaults). Server-side guards
+  ignore submitted values for locked keys (so a disabled boolean
+  checkbox cannot be coerced to `false` on POST) and reject reset
+  attempts for locked keys with a flash error.
+
+### Security
+
+- **Block direct web access to `config-admin.php`.** Added matching
+  `<Files>` deny + OpenLiteSpeed `RewriteRule [F,L]` entries in
+  `Subnet-Calculator/.htaccess`. The admin-tier override file (which
+  can hold writable secrets such as `$turnstile_secret_key`) is no
+  longer publicly readable when the `<Files>` directive is honoured.
+
 ## [3.2.0] - 2026-05-05
 
 **Admin UX overhaul.** Eight PRs (`#342`–`#349`) bring the entire `/admin/`

@@ -75,11 +75,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 if ($writability !== null) {
                     $flash['error'] = 'Cannot save: ' . $writability;
                 } else {
+                    // Resolve layered state once so we can skip keys that
+                    // are pinned in config.php (the UI renders them as
+                    // disabled, but a bool checkbox absence would otherwise
+                    // be coerced to false here).
+                    $layeredForSave = settings_load_layered();
                     $sectionKeys = [];
                     foreach ($schema as $k => $entry) {
-                        if (($entry['section'] ?? null) === $section) {
-                            $sectionKeys[] = $k;
+                        if (($entry['section'] ?? null) !== $section) {
+                            continue;
                         }
+                        if (($layeredForSave[$k]['source'] ?? '') === 'config') {
+                            continue;
+                        }
+                        $sectionKeys[] = $k;
                     }
                     $valid = [];
                     $errors = [];
@@ -144,7 +153,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 }
             } elseif ($action === 'reset') {
                 $key = (string)($_POST['key'] ?? '');
-                if (isset($schema[$key])) {
+                $layeredForReset = settings_load_layered();
+                if (isset($schema[$key]) && (($layeredForReset[$key]['source'] ?? '') === 'config')) {
+                    $flash['error'] = "Cannot reset {$key}: it is locked in config.php.";
+                } elseif (isset($schema[$key])) {
                     $existing = settings_parse_config_file(admin_wizard_config_path(), [$key]);
                     if (array_key_exists($key, $existing)) {
                         // Remove the admin-tier override so the row sources
@@ -210,22 +222,23 @@ $sections = [
     'limits'   => 'Limits',
 ];
 
-$render_input = function (string $key, array $entry, mixed $value) use ($h): string {
+$render_input = function (string $key, array $entry, mixed $value, bool $locked = false) use ($h): string {
     $type     = $entry['type'] ?? 'string';
     $isSecret = !empty($entry['secret']);
     $id       = 'set-' . $key;
+    $disAttr  = $locked ? ' disabled aria-disabled="true"' : '';
 
     if ($isSecret) {
         $hasValue = is_string($value) && $value !== '';
         $masked = $hasValue ? '••••••• (set)' : '(empty)';
         return '<div class="settings-secret-row">'
             . '<span class="settings-secret-masked" aria-label="' . ($hasValue ? 'value is set' : 'value is empty') . '">' . $h($masked) . '</span>'
-            . '<input id="' . $h($id) . '" name="' . $h($key) . '" type="password" autocomplete="new-password" placeholder="Enter new value to change">'
+            . '<input id="' . $h($id) . '" name="' . $h($key) . '" type="password" autocomplete="new-password" placeholder="' . ($locked ? 'Locked by config.php' : 'Enter new value to change') . '"' . $disAttr . '>'
             . '</div>';
     }
     if ($type === 'bool') {
         $checked = ((bool)$value) ? ' checked' : '';
-        return '<input id="' . $h($id) . '" name="' . $h($key) . '" type="checkbox" value="1"' . $checked . '>';
+        return '<input id="' . $h($id) . '" name="' . $h($key) . '" type="checkbox" value="1"' . $checked . $disAttr . '>';
     }
     if ($type === 'enum') {
         $opts = '';
@@ -233,7 +246,7 @@ $render_input = function (string $key, array $entry, mixed $value) use ($h): str
             $sel = ((string)$value === (string)$v) ? ' selected' : '';
             $opts .= '<option value="' . $h((string)$v) . '"' . $sel . '>' . $h((string)$v) . '</option>';
         }
-        return '<select id="' . $h($id) . '" name="' . $h($key) . '">' . $opts . '</select>';
+        return '<select id="' . $h($id) . '" name="' . $h($key) . '"' . $disAttr . '>' . $opts . '</select>';
     }
     if ($type === 'multiselect') {
         $current = is_array($value) ? array_map('strval', $value) : [];
@@ -242,24 +255,24 @@ $render_input = function (string $key, array $entry, mixed $value) use ($h): str
             $sel = in_array((string)$v, $current, true) ? ' selected' : '';
             $opts .= '<option value="' . $h((string)$v) . '"' . $sel . '>' . $h((string)$v) . '</option>';
         }
-        return '<select id="' . $h($id) . '" name="' . $h($key) . '[]" multiple size="6" class="settings-multiselect">' . $opts . '</select>';
+        return '<select id="' . $h($id) . '" name="' . $h($key) . '[]" multiple size="6" class="settings-multiselect"' . $disAttr . '>' . $opts . '</select>';
     }
     if ($type === 'int') {
         return '<input id="' . $h($id) . '" name="' . $h($key) . '" type="number" step="1" '
             . (isset($entry['min']) ? 'min="' . (int)$entry['min'] . '" ' : '')
             . (isset($entry['max']) ? 'max="' . (int)$entry['max'] . '" ' : '')
-            . 'value="' . $h((string)(int)$value) . '">';
+            . 'value="' . $h((string)(int)$value) . '"' . $disAttr . '>';
     }
     if ($type === 'float') {
         return '<input id="' . $h($id) . '" name="' . $h($key) . '" type="number" step="any" '
             . (isset($entry['min']) ? 'min="' . (float)$entry['min'] . '" ' : '')
             . (isset($entry['max']) ? 'max="' . (float)$entry['max'] . '" ' : '')
-            . 'value="' . $h((string)(float)$value) . '">';
+            . 'value="' . $h((string)(float)$value) . '"' . $disAttr . '>';
     }
     if (!empty($entry['multiline'])) {
-        return '<textarea id="' . $h($id) . '" name="' . $h($key) . '" rows="2" maxlength="' . (int)($entry['maxlen'] ?? 500) . '">' . $h((string)$value) . '</textarea>';
+        return '<textarea id="' . $h($id) . '" name="' . $h($key) . '" rows="2" maxlength="' . (int)($entry['maxlen'] ?? 500) . '"' . $disAttr . '>' . $h((string)$value) . '</textarea>';
     }
-    return '<input id="' . $h($id) . '" name="' . $h($key) . '" type="text" maxlength="' . (int)($entry['maxlen'] ?? 200) . '" value="' . $h((string)$value) . '">';
+    return '<input id="' . $h($id) . '" name="' . $h($key) . '" type="text" maxlength="' . (int)($entry['maxlen'] ?? 200) . '" value="' . $h((string)$value) . '"' . $disAttr . '>';
 };
 
 $render_section = function (string $sectionKey, string $title) use ($schema, $layered, $flash, $csrf_expect, $writability, $h, $render_input): string {
@@ -279,16 +292,17 @@ $render_section = function (string $sectionKey, string $title) use ($schema, $la
                 $value  = $row['effective'];
                 $source = $row['source'];
                 $shadow = $row['shadowed'];
+                $locked = $source === 'config';
                 $err    = $flash['errors'][$key] ?? null;
-                $canReset = $source !== 'default' && !$shadow;
+                $canReset = $source === 'admin';
                 ?>
-                <div class="settings-row<?= $err !== null ? ' has-error' : '' ?><?= $shadow ? ' is-shadowed' : '' ?>">
+                <div class="settings-row<?= $err !== null ? ' has-error' : '' ?><?= $shadow ? ' is-shadowed' : '' ?><?= $locked ? ' is-locked' : '' ?>">
                     <label for="set-<?= $h($key) ?>"><?= $h((string)($entry['label'] ?? $key)) ?></label>
-                    <div class="settings-input"><?= $render_input($key, $entry, $value) ?></div>
+                    <div class="settings-input"><?= $render_input($key, $entry, $value, $locked) ?></div>
                     <div class="settings-meta">
                         <span class="settings-source source-<?= $h($source) ?>" title="<?= $h('Source: ' . $source) ?>"><?= $h($source) ?></span>
-                        <?php if ($shadow) : ?>
-                            <span class="settings-shadow-tag" title="config.php hand-edit overrides UI saves">shadowed</span>
+                        <?php if ($locked) : ?>
+                            <span class="settings-lock-tag" title="Set in config.php — edit the file to change this">locked</span>
                         <?php endif; ?>
                         <?php if ($canReset) : ?>
                             <button type="submit"
@@ -299,12 +313,12 @@ $render_section = function (string $sectionKey, string $title) use ($schema, $la
                                     formnovalidate
                                     onclick="return confirm('Reset <?= $h($key) ?> to its default value?');"
                             >reset</button>
-                        <?php elseif ($shadow) : ?>
-                            <span class="settings-reset-link is-disabled" title="Shadowed by config.php; remove the hand-edit there to restore the default" aria-disabled="true">reset</span>
+                        <?php elseif ($locked) : ?>
+                            <span class="settings-reset-link is-disabled" title="Locked by config.php; remove the hand-edit there to restore the default" aria-disabled="true">reset</span>
                         <?php endif; ?>
                     </div>
-                    <?php if ($shadow) : ?>
-                        <small class="settings-shadow-banner" role="note">A hand-edit in <code>config.php</code> overrides this UI value. Saving still writes to <code>config-admin.php</code>; the UI value will take effect once the hand-edit is removed.</small>
+                    <?php if ($locked) : ?>
+                        <small class="settings-shadow-banner" role="note">This value is set in <code>config.php</code> and cannot be changed from the UI. Edit the file (or remove the line) to change or unlock it.<?php if ($shadow) : ?> A previous UI save in <code>config-admin.php</code> will take effect once the <code>config.php</code> entry is removed.<?php endif; ?></small>
                     <?php endif; ?>
                     <?php if (!empty($entry['help'])) : ?>
                         <small class="settings-help"><?= $h((string)$entry['help']) ?></small>
@@ -327,6 +341,15 @@ ob_start();
 ?>
 <section class="admin-section" aria-labelledby="settings-heading">
     <h1 id="settings-heading">Settings <?= help_bubble('admin-settings', 'Edit operator-tunable config knobs. Saves write to config-admin.php; hand-edits in config.php always win.') ?></h1>
+    <div class="alert alert-info settings-precedence-card" role="note">
+        <strong>How settings are layered</strong>
+        <p>Each row resolves from the highest-priority source that has a value:</p>
+        <ol class="settings-precedence-list">
+            <li><code>config.php</code> — operator hand-edits. <span class="settings-source source-config">config</span> rows are <strong>locked</strong> here; edit the file to change them.</li>
+            <li><code>config-admin.php</code> — what this page writes. Shown as <span class="settings-source source-admin">admin</span>.</li>
+            <li>Built-in defaults. Shown as <span class="settings-source source-default">default</span>.</li>
+        </ol>
+    </div>
     <?php if ($writability !== null) : ?>
         <div class="alert alert-error" role="alert">
             <strong>Cannot save settings.</strong>

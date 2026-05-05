@@ -16,6 +16,10 @@
     Require all denied
 </Files>
 
+<Files "config-admin.php">
+    Require all denied
+</Files>
+
 <Files "config.php.example">
     Require all denied
 </Files>
@@ -42,6 +46,7 @@
 
     # Sensitive config files
     RewriteRule ^config\.php$         - [F,L]
+    RewriteRule ^config-admin\.php$   - [F,L]
     RewriteRule ^config\.php\.example$ - [F,L]
     RewriteRule ^CHANGELOG\.md$       - [F,L]
 

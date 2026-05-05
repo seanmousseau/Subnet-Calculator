@@ -127,14 +127,18 @@ ob_start();
         </div>
     </form>
     <p class="admin-meta-note">Lost your authenticator? Enter a recovery code instead — each one is single-use.</p>
+    <form method="post" action="logout.php" class="admin-form admin-form-secondary">
+        <input type="hidden" name="csrf" value="<?= $h((string)($ctx['csrf'] ?? '')) ?>">
+        <button type="submit" class="admin-link-btn">Sign out</button>
+    </form>
 </section>
 <?php
 $admin_card_body       = ob_get_clean();
 $page_title            = 'Two-factor verification';
 $admin_breadcrumb      = 'Verify';
-// Pre-promote the session row carries the placeholder user ('') and the
-// pending CSRF; we surface them here so a stuck operator can hit Sign out
-// from the verify page without first having to complete TOTP.
-$admin_user_signed_in  = (string)($ctx['user'] ?? '');
-$admin_csrf_token      = (string)($ctx['csrf'] ?? '');
+// TOTP step is pre-promotion — sidebar (admin nav) is suppressed by
+// leaving these empty so the layout renders the no-sidebar shell. The
+// inline Sign out form above keeps the escape hatch reachable.
+$admin_user_signed_in  = '';
+$admin_csrf_token      = '';
 require __DIR__ . '/../templates/_admin_layout.php';
