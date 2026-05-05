@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.2] - 2026-05-04
+
+Tiny follow-up to v3.1.1.
+
+### Fixed
+
+- **Tree Editor init forms remained visible after the editor opened** —
+  the `.tree-editor-init` rule sets `display: flex`, which won out over
+  the browser's default `[hidden] { display: none }`. So even though
+  v3.1.1's `startEditor()` correctly set `hidden=true` on every init
+  form, they kept rendering on top of the canvas. Added an explicit
+  `.tree-editor-init[hidden] { display: none; }` rule.
+
 ## [3.1.1] - 2026-05-04
 
 Hotfix on top of v3.1.0. Restores tree-editor sharing, lets operators
