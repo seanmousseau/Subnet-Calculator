@@ -278,6 +278,118 @@ function admin_audit_login_outcome(bool $ok, string $attemptedUser): void
 }
 
 /**
+ * Web admin guard (v3.2.0, #342): cookie-session check that replaces
+ * Basic Auth on /admin/*.php. The legacy admin_authenticate() helper
+ * above is retained ONLY for /api/v1/admin/* JSON callers — it must not
+ * be called from web admin pages once #342 ships.
+ *
+ * Behaviour:
+ *
+ *   - $admin_ui_enabled false               → 404, exit.
+ *   - $admin_user / $admin_pass_hash unset  → 503 (operator misconfig).
+ *   - sc_admin_sid cookie missing/invalid   → 303 redirect to
+ *                                              admin/login.php?next=…
+ *   - session totp_pending = 1              → 303 redirect to
+ *                                              admin/totp-verify.php?next=…
+ *   - else                                  → return [user, csrf, sid]
+ *
+ * Callers can pass the returned tuple straight into _admin_layout.php
+ * for the future logout chip + CSRF-bound forms.
+ *
+ * @return array{session_id:string, user:string, csrf:string}
+ */
+function admin_session_require(): array
+{
+    global $admin_ui_enabled, $admin_user, $admin_pass_hash;
+
+    if (!$admin_ui_enabled) {
+        http_response_code(404);
+        echo '<!doctype html><meta charset="utf-8"><title>Admin</title><p>Admin UI is disabled.</p>';
+        exit;
+    }
+    if (
+        !is_string($admin_user) || $admin_user === ''
+        || !is_string($admin_pass_hash) || $admin_pass_hash === ''
+    ) {
+        http_response_code(503);
+        echo '<!doctype html><meta charset="utf-8"><title>Admin</title>'
+            . '<p>Admin UI enabled but $admin_user / $admin_pass_hash not configured.</p>';
+        exit;
+    }
+
+    require_once __DIR__ . '/functions-admin-session.php';
+    require_once __DIR__ . '/functions-apikeys.php';
+
+    $sidRaw = $_COOKIE[ADMIN_SESSION_COOKIE] ?? '';
+    $sid    = is_string($sidRaw) ? $sidRaw : '';
+
+    // Build the next= target so login redirects send the user back where
+    // they were heading. Whitelist to /admin/* paths to prevent open
+    // redirects through this parameter.
+    $selfRaw = $_SERVER['REQUEST_URI'] ?? '/admin/';
+    $self    = is_string($selfRaw) ? $selfRaw : '/admin/';
+    $pathOnly = (string)(parse_url($self, PHP_URL_PATH) ?: '/admin/');
+    if (
+        $pathOnly === ''
+        || !preg_match('#^/admin/[A-Za-z0-9_./\\-]*$#', $pathOnly)
+        || str_contains($pathOnly, 'login.php')
+        || str_contains($pathOnly, 'totp-verify.php')
+        || str_contains($pathOnly, '_test-drain.php')
+    ) {
+        $self = '/admin/';
+    }
+    $nextEnc = rawurlencode($self);
+
+    if ($sid === '') {
+        header('Location: login.php?next=' . $nextEnc, true, 303);
+        exit;
+    }
+
+    try {
+        $db = new \SQLite3(admin_apikey_db_path());
+        $db->enableExceptions(true);
+        $db->busyTimeout(1500);
+        $row = admin_session_check($db, $sid);
+        $db->close();
+    } catch (\Throwable $e) {
+        error_log('sc admin_session_require check error: ' . $e->getMessage());
+        header('Location: login.php?next=' . $nextEnc, true, 303);
+        exit;
+    }
+
+    if ($row === null) {
+        // Drop the dead cookie so the browser stops sending it.
+        $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+        setcookie(ADMIN_SESSION_COOKIE, '', [
+            'expires'  => 1,
+            'path'     => '/',
+            'secure'   => $is_https,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+        header('Location: login.php?next=' . $nextEnc, true, 303);
+        exit;
+    }
+
+    if ((int)$row['totp_pending'] === 1) {
+        // Allow the verify page itself through so it can run.
+        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+        $script = basename(is_string($scriptName) ? $scriptName : '');
+        if ($script !== 'totp-verify.php' && $script !== 'logout.php') {
+            header('Location: totp-verify.php?next=' . $nextEnc, true, 303);
+            exit;
+        }
+    }
+
+    return [
+        'session_id' => $row['session_id'],
+        'user'       => $row['user'],
+        'csrf'       => $row['csrf'],
+    ];
+}
+
+/**
  * Resolve the SQLite path used for the api_keys table.
  *
  * Reuses $apikey_db_path when set, then $session_db_path, then defaults

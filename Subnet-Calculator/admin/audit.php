@@ -20,7 +20,7 @@ if (admin_wizard_needed()) {
     exit;
 }
 
-admin_authenticate();
+admin_session_require();
 
 header('Cache-Control: no-store, no-cache, must-revalidate, private, max-age=0');
 header('Pragma: no-cache');

@@ -20,6 +20,7 @@ parameters:
         - Subnet-Calculator/includes/functions-tree-diff.php
         - Subnet-Calculator/includes/functions-tree-presets.php
         - Subnet-Calculator/includes/functions-apikeys.php
+        - Subnet-Calculator/includes/functions-admin-session.php
         - Subnet-Calculator/includes/functions-admin-auth.php
         - Subnet-Calculator/includes/functions-admin-totp.php
         - Subnet-Calculator/includes/functions-admin-wizard.php
