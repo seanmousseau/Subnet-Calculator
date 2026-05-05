@@ -5,6 +5,118 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-05-04
+
+Polish + deferred-from-v3.0.0. Closes 8 issues across 9 PRs landing into
+`release/v3.1.0`. Headlined by the multi-tree diff and the preset library
+for the v3.0.0 tree editor; rounded out by IPv6 drawer parity, test-rig
+hygiene, audit purge strategy, PHPCS admin coverage, history capture
+parity, and keyboard ergonomics.
+
+### Added
+
+- **Multi-tree diff** (#322) — new "Diff" entry in the Tree Editor toolbar
+  opens a modal accepting two source pickers (paste JSON, share URL,
+  current draft). Computes added / removed / prefix-changed / rename /
+  notes-only categories via canonical-CIDR keying; renders annotated
+  tree with `data-diff` colour coding; "Copy diff as Markdown" export.
+  Server-side `tree_diff()` in `includes/functions-tree-diff.php`
+  available for tests + future API; current modal computes client-side.
+  PHPUnit: +8 cases (`TreeDiffTest`); Playwright: new
+  `test_tree_editor_diff_two_sessions` group.
+- **Tree preset library** (#323) — new "Apply Template" toolbar entry
+  with picker modal listing 6 starter presets:
+  - LAN/DMZ/Mgmt split of a /24
+  - HQ + 4×/20 branches of a /16
+  - Three-tier (Production/Staging/Dev) /24
+  - Equal split (parameterised 2/4/8/16-way)
+  - IPv6 site /48 (8×/51)
+  - IPv6 three-tier /48
+  Operator-extensible: drop a JSON validating against
+  `api/schemas/tree-preset.schema.json` into `data/tree-presets/` and it
+  appears in the picker. Apply path replays each preset operation
+  through the existing reducer so undo/redo works per-operation. New
+  `GET /api/v1/tree-presets` (manifest) + `GET /api/v1/tree-presets/{id}`
+  (full preset). PHPUnit: +6 cases (`TreePresetsTest`); Playwright:
+  `test_tree_editor_apply_preset_then_undo`.
+- **IPv6 VLSM save-session drawer parity** (#321) — IPv6 save-session UI
+  moved from inline card into `tool-drawer[data-tool="session6"]`,
+  matching the IPv4 pattern. New `Save Session` toolbar trigger; auto-
+  open hint after `?session_id=` GET. Playwright:
+  `test_vlsm6_session_drawer_pattern`.
+- **Audit purge strategy** (#325) — new `$admin_audit_purge_strategy`
+  config (`'inline' | 'sampled' | 'cron'`, default `'sampled'` at 0.1%);
+  new `$admin_audit_purge_sample_rate` (`0.0`–`1.0`). `audit_log()`
+  dispatches via switch; sanitiser fails closed (unknown strategies
+  collapse to `'sampled'`, non-numeric rates collapse to `0.0`). New
+  CLI `bin/sc-audit-purge.php` for the `'cron'` path; `bin/.htaccess`
+  denies all web access. PHPUnit: +5 cases (`AuditPurgeStrategyTest`).
+- **Test-rig admin-state drain** (#324) — new `admin/_test-drain.php`
+  endpoint gated by `PHPUNIT_TEST_DRAIN_TOKEN` (404 when unset, 403 on
+  mismatch via timing-safe `hash_equals()`). Truncates `api_keys`,
+  `admin_audit`, `admin_recovery_codes`; clears `sess_*` files in the
+  resolved session save directory with realpath confinement + symlink
+  rejection. `Makefile` generates a fresh per-run token; `docker-compose
+  .yml` forwards to both webapp + playwright-tests. CI `playwright.yml`
+  switched to `make test-docker` so the token reaches the rig. Excluded
+  from release tarballs via `tar --exclude=admin/_test-drain.php`.
+  Playwright: `test_admin_drain_endpoint_zeroes_state`.
+- **PHPCS admin scope** (#326) — new `.phpcs-admin.xml` template-aware
+  ruleset extending PSR-12 with 7 wholesale exclusions (LineLength,
+  SideEffects, ControlSignature, ScopeIndent, ScopeClosingBrace,
+  ControlStructureSpacing, FirstExpressionLine — each justified inline
+  in the XML). `.github/workflows/php.yml` runs both PHPCS gates per PR.
+  Zero source-code changes to `admin/*.php` — ruleset absorbs every
+  offender.
+- **History pane capture extension** (#327) — `data-history-source` /
+  `data-history-active` / `data-history-label` attribute trio on every
+  tool result block (Lookup v4+v6, Diff v4+v6, Tree, Wildcard, Range,
+  Supernet, Summarise, ULA). `captureCurrentPage()` prefers attributes;
+  falls back to legacy four-container selectors for back-compat. Per-
+  tool labels follow consistent voice (`Tool: <detail>`). Playwright: 3
+  new groups (`test_history_captures_lookup_result`,
+  `_diff_result`, `_wildcard_result`).
+- **Keyboard tab-switch focus ergonomics** (#328) — pressing `1`–`4`
+  switches tabs **and** focuses the first text input on the destination
+  panel via `requestAnimationFrame`. Drops the previous "follow up with
+  `/`" advice from the keyboard overlay help text. Playwright:
+  `test_kbd_tab_switch_focuses_input` across 4 tabs.
+
+### Changed
+
+- **CSS token addition.** New `--color-warning-fg` token (amber, `#f59e0b`
+  dark / `#b45309` light) — added because the warning/in-progress slot
+  was missing from the v2.9.0 style guide. `--color-success-fg` and
+  `--color-error-fg` are aliases pointing at existing tokens, not new
+  primitives. All other tokens unchanged.
+- **CI Playwright workflow** uses `make test-docker` as the canonical
+  entry point (was bare `docker compose run`). Ensures the
+  `PHPUNIT_TEST_DRAIN_TOKEN` env is generated and forwarded.
+
+### Tests
+
+- PHPUnit: 325 → 344 cases (+19); 669 → 794 assertions (+125). New test
+  files: `AuditPurgeStrategyTest`, `TreeDiffTest`, `TreePresetsTest`.
+- Playwright: 840 → 903 assertions across the suite (+63). New groups
+  cover every PR's acceptance criteria; legacy groups updated where
+  drawer markup changed (e.g. `test_session_forms_spacing` re-scoped to
+  `#panel-vlsm` after IPv6 moved into a drawer).
+- All gates green on fresh containers: PHPUnit, PHPStan L9, PHPCS PSR-12
+  + admin ruleset, Spectral OpenAPI, Semgrep (php + owasp + sql-injection),
+  ESLint + Stylelint.
+
+### Pull requests
+
+- PR1 (#330) — #324 test rig drains admin state
+- PR2 (#331) — #326 PHPCS admin scope
+- PR3 (#332) — #325 audit purge strategy
+- PR4 (#333) — #321 IPv6 VLSM drawer parity
+- PR5 (#334) — #328 tab-switch focus ergonomics
+- PR6 (#335) — #327 history `data-history-source` extension
+- PR7 (#336) — #322 multi-tree diff
+- PR8 (#337) — #323 tree presets / template library
+- PR9 — Release cut (this release)
+
 ## [3.0.0] - 2026-05-04
 
 Major release. Headlined by an interactive subnet tree editor; rounded out by a
