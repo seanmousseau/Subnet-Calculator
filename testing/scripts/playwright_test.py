@@ -2888,27 +2888,24 @@ ADMIN_PASS = "test-admin-password"
 
 
 async def test_admin_keys_unauth_challenge(page: Page) -> None:
-    section("v3.0.0 #307 admin/keys.php — unauth 401 + WWW-Authenticate")
-    # The page sends a Basic challenge; we use page.request to inspect the
-    # raw response without the browser intercepting the auth dialog.
-    resp = await page.context.request.get(APP_URL + "admin/keys.php")
-    assert_eq("admin/keys unauth: status 401", resp.status, 401)
-    www_auth = resp.headers.get("www-authenticate", "")
+    section("v3.2.0 #342 admin/keys.php — unauth 303 -> login.php")
+    resp = await page.context.request.get(
+        APP_URL + "admin/keys.php", max_redirects=0
+    )
+    assert_eq("admin/keys unauth: status 303", resp.status, 303)
+    location = resp.headers.get("location", "")
     assert_true(
-        "admin/keys unauth: WWW-Authenticate Basic realm present",
-        www_auth.lower().startswith("basic "),
-        f"got: {www_auth!r}",
+        "admin/keys unauth: Location header points at login.php",
+        "login.php" in location,
+        f"got: {location!r}",
     )
 
 
 async def test_admin_keys_authed_renders(page: Page) -> None:
     section("v3.0.0 #307 admin/keys.php — authed renders")
-    auth = (ADMIN_USER, ADMIN_PASS)
     resp = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": "Basic " + base64.b64encode(
-            f"{auth[0]}:{auth[1]}".encode()
-        ).decode()},
+        headers={"Cookie": _admin_session_cookie_header()},
     )
     assert_eq("admin/keys authed: status 200", resp.status, 200)
     body = await resp.text()
@@ -2924,12 +2921,9 @@ async def test_admin_keys_authed_renders(page: Page) -> None:
 
 async def test_admin_audit_renders(page: Page) -> None:
     section("v3.0.0 #307 admin/audit.php — authed renders + filters present")
-    auth_header = "Basic " + base64.b64encode(
-        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
-    ).decode()
     resp = await page.context.request.get(
         APP_URL + "admin/audit.php",
-        headers={"Authorization": auth_header},
+        headers={"Cookie": _admin_session_cookie_header()},
     )
     assert_eq("admin/audit authed: status 200", resp.status, 200)
     body = await resp.text()
@@ -2946,28 +2940,36 @@ async def test_admin_audit_renders(page: Page) -> None:
 
 
 async def test_admin_audit_records_login_failure(page: Page) -> None:
-    section("v3.0.0 #306 audit log records failed admin login")
-    # Trigger a failed login (bad password) — should write a login.fail row.
-    bad_auth = "Basic " + base64.b64encode(
-        f"{ADMIN_USER}:wrong-password".encode()
-    ).decode()
-    bad_resp = await page.context.request.get(
-        APP_URL + "admin/keys.php",
-        headers={"Authorization": bad_auth},
+    section("v3.2.0 #342 audit log records failed admin login (form path)")
+    # GET login.php to mint a CSRF + sid cookie, then POST a wrong password.
+    import requests as _r, re as _re
+    sess = _r.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    get_resp = sess.get(APP_URL + "admin/login.php", timeout=10)
+    assert_eq("login.php GET: 200", get_resp.status_code, 200)
+    m = _re.search(r'name="csrf"\s+value="([0-9a-f]+)"', get_resp.text)
+    assert_true("login.php GET: csrf token rendered", m is not None)
+    csrf = m.group(1) if m else ""
+    bad_resp = sess.post(
+        APP_URL + "admin/login.php",
+        data={"user": ADMIN_USER, "pass": "wrong-password", "csrf": csrf, "next": "/admin/"},
+        allow_redirects=False,
+        timeout=10,
     )
-    assert_eq("audit login.fail: bad creds → 401", bad_resp.status, 401)
+    assert_eq("login.php bad pass: re-renders form (200)", bad_resp.status_code, 200)
+    assert_true("login.php bad pass: error alert rendered",
+                "Username or password is incorrect" in bad_resp.text)
 
-    # Now read audit page with the login.fail filter.
-    good_auth = "Basic " + base64.b64encode(
-        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
-    ).decode()
+    # Read audit page with the login. filter via the cookie session.
     audit_resp = await page.context.request.get(
         APP_URL + "admin/audit.php?filter=login.",
-        headers={"Authorization": good_auth},
+        headers={"Cookie": _admin_session_cookie_header()},
     )
     body = await audit_resp.text()
     assert_true(
-        "audit log: login.fail badge appears in body",
+        "audit log: login.fail row appears in body",
         "login.fail" in body,
     )
 
@@ -2977,10 +2979,72 @@ async def test_admin_audit_records_login_failure(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _admin_basic_header() -> str:
+# v3.2.0 (#342): web admin moved from HTTP Basic Auth to a cookie-session
+# login form. _admin_session_cookie_header() form-logs-in once and returns
+# a "Cookie: sc_admin_sid=<sid>" header value usable on subsequent
+# page.context.request.* calls. The result is cached for the suite run.
+_ADMIN_SESSION_COOKIE_CACHE: str | None = None
+
+
+def _admin_session_cookie_header() -> str:
+    """Login via the form once, return a Cookie header value.
+
+    The legacy /api/v1/admin/* routes still use Basic Auth — those tests
+    use _admin_api_basic_header() instead.
+    """
+    global _ADMIN_SESSION_COOKIE_CACHE
+    if _ADMIN_SESSION_COOKIE_CACHE is not None:
+        return _ADMIN_SESSION_COOKIE_CACHE
+
+    # Phase 1: GET login.php to mint a placeholder pending session and
+    # capture the CSRF token + sc_admin_sid cookie.
+    sess = _requests.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    get_resp = sess.get(APP_URL + "admin/login.php", timeout=10)
+    if get_resp.status_code != 200:
+        raise RuntimeError(
+            f"admin login GET failed: HTTP {get_resp.status_code}"
+        )
+    import re as _re
+    m = _re.search(r'name="csrf"\s+value="([0-9a-f]+)"', get_resp.text)
+    if not m:
+        raise RuntimeError("admin login GET: csrf token not found")
+    csrf = m.group(1)
+    sid_cookie = sess.cookies.get("sc_admin_sid")
+    if not sid_cookie:
+        raise RuntimeError("admin login GET: sc_admin_sid cookie not set")
+
+    # Phase 2: POST credentials. We expect a 303 to either /admin/ or
+    # /admin/totp-verify.php. Either way, the same sid cookie now binds
+    # to a fully-promoted (or TOTP-pending) session row.
+    post_resp = sess.post(
+        APP_URL + "admin/login.php",
+        data={"user": ADMIN_USER, "pass": ADMIN_PASS, "csrf": csrf, "next": "/admin/"},
+        allow_redirects=False,
+        timeout=10,
+    )
+    if post_resp.status_code != 303:
+        raise RuntimeError(
+            f"admin login POST: expected 303, got {post_resp.status_code} "
+            f"(body: {post_resp.text[:200]})"
+        )
+    new_sid = sess.cookies.get("sc_admin_sid") or sid_cookie
+    _ADMIN_SESSION_COOKIE_CACHE = f"sc_admin_sid={new_sid}"
+    return _ADMIN_SESSION_COOKIE_CACHE
+
+
+def _admin_api_basic_header() -> str:
+    """Basic Auth header for /api/v1/admin/* (still Basic Auth — #342 boundary)."""
     return "Basic " + base64.b64encode(
         f"{ADMIN_USER}:{ADMIN_PASS}".encode()
     ).decode()
+
+
+def _admin_basic_header() -> str:
+    """Back-compat alias used by web-admin tests; returns a Cookie header now."""
+    return _admin_session_cookie_header()
 
 
 def _drain_admin_state() -> None:
@@ -3017,14 +3081,14 @@ async def test_admin_keys_csrf_rejected(page: Page) -> None:
     # POST with no _csrf field; should land on the redirect with a flash error.
     resp = await page.context.request.post(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": _admin_basic_header()},
+        headers={"Cookie": _admin_basic_header()},
         form={"action": "create", "name": "csrf-test"},
         max_redirects=0,
     )
     assert_eq("admin/keys CSRF: 303 redirect on bad token", resp.status, 303)
     follow = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": _admin_basic_header()},
+        headers={"Cookie": _admin_basic_header()},
     )
     body = await follow.text()
     # The flash on the next request from the same session would surface the
@@ -3312,6 +3376,113 @@ async def test_admin_totp_regenerate_blocked_when_disabled(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# v3.2.0 #342 — Admin login form (replaces Basic Auth for the web admin)
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_login_form_renders_with_autocomplete(page: Page) -> None:
+    section("v3.2.0 #342 admin/login.php — form has CSRF + autocomplete attrs")
+    resp = await page.context.request.get(APP_URL + "admin/login.php")
+    assert_eq("login.php: status 200", resp.status, 200)
+    body = await resp.text()
+    assert_true(
+        "login.php: username input carries autocomplete=username",
+        'autocomplete="username"' in body,
+    )
+    assert_true(
+        "login.php: password input carries autocomplete=current-password",
+        'autocomplete="current-password"' in body,
+    )
+    assert_true(
+        "login.php: hidden CSRF input rendered",
+        'name="csrf"' in body,
+    )
+
+
+async def test_admin_login_success_redirects(page: Page) -> None:
+    section("v3.2.0 #342 admin/login.php — POST creds redirects to next= or totp")
+    import requests as _r, re as _re
+    sess = _r.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    get_resp = sess.get(APP_URL + "admin/login.php", timeout=10)
+    m = _re.search(r'name="csrf"\s+value="([0-9a-f]+)"', get_resp.text)
+    assert_true("login.php: GET sets csrf token", m is not None)
+    csrf = m.group(1) if m else ""
+    post_resp = sess.post(
+        APP_URL + "admin/login.php",
+        data={"user": ADMIN_USER, "pass": ADMIN_PASS, "csrf": csrf, "next": "/admin/keys.php"},
+        allow_redirects=False,
+        timeout=10,
+    )
+    assert_eq("login.php: 303 on success", post_resp.status_code, 303)
+    location = post_resp.headers.get("location", "")
+    # totp-verify.php is also acceptable when admin_totp_secret is configured.
+    assert_true(
+        "login.php: Location is /admin/keys.php or totp-verify.php",
+        location.endswith("/admin/keys.php") or "totp-verify.php" in location,
+        f"got: {location!r}",
+    )
+
+
+async def test_admin_login_failure_increments_rate_limit(page: Page) -> None:
+    section("v3.2.0 #342 admin/login.php — failure path renders error + counts toward lockout")
+    import requests as _r, re as _re
+    sess = _r.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    get_resp = sess.get(APP_URL + "admin/login.php", timeout=10)
+    m = _re.search(r'name="csrf"\s+value="([0-9a-f]+)"', get_resp.text)
+    csrf = m.group(1) if m else ""
+    bad = sess.post(
+        APP_URL + "admin/login.php",
+        data={"user": ADMIN_USER, "pass": "definitely-wrong", "csrf": csrf, "next": "/admin/"},
+        allow_redirects=False,
+        timeout=10,
+    )
+    assert_eq("login.php: bad password renders 200 form", bad.status_code, 200)
+    assert_true(
+        "login.php: bad password shows generic error",
+        "Username or password is incorrect" in bad.text,
+    )
+
+
+async def test_admin_login_protected_pages_redirect_unauth(page: Page) -> None:
+    section("v3.2.0 #342 admin/* unauthenticated -> 303 to login.php?next=...")
+    for path in ("admin/keys.php", "admin/audit.php", "admin/totp.php"):
+        resp = await page.context.request.get(APP_URL + path, max_redirects=0)
+        assert_eq(f"{path}: status 303", resp.status, 303)
+        location = resp.headers.get("location", "")
+        assert_true(
+            f"{path}: Location points to login.php with ?next=",
+            "login.php?next=" in location,
+            f"got: {location!r}",
+        )
+
+
+async def test_api_v1_admin_basic_auth_still_works(page: Page) -> None:
+    section("v3.2.0 #342 /api/v1/admin/* keeps Basic Auth (boundary preserved)")
+    # The API admin endpoints must continue to accept Basic Auth even after
+    # the web admin moves to cookie sessions. We hit /api/v1/admin/keys
+    # with the Basic header — expecting 200 + JSON envelope.
+    headers = {
+        "Authorization": _admin_api_basic_header(),
+        "Accept": "application/json",
+    }
+    resp = await page.context.request.get(
+        APP_URL + "api/v1/admin/keys", headers=headers
+    )
+    assert_eq("api/v1/admin/keys: status 200", resp.status, 200)
+    body = await resp.text()
+    assert_true(
+        "api/v1/admin/keys: JSON envelope ok=true",
+        '"ok":true' in body or '"ok": true' in body,
+    )
+
+
+# ---------------------------------------------------------------------------
 # v3.2.0 #345 — Admin chrome adoption (shared header / single-card / theme)
 # ---------------------------------------------------------------------------
 
@@ -3392,7 +3563,7 @@ async def test_admin_theme_toggle_works(page: Page) -> None:
     auth = "Basic " + base64.b64encode(
         f"{ADMIN_USER}:{ADMIN_PASS}".encode()
     ).decode()
-    await page.context.set_extra_http_headers({"Authorization": auth})
+    await page.context.set_extra_http_headers({"Cookie": auth})
     try:
         await navigate(page, APP_URL + "admin/keys.php")
         await page.evaluate("() => localStorage.setItem('theme', 'light')")
@@ -3430,7 +3601,7 @@ async def test_admin_inputs_share_bg_token(page: Page) -> None:
     auth = "Basic " + base64.b64encode(
         f"{ADMIN_USER}:{ADMIN_PASS}".encode()
     ).decode()
-    await page.context.set_extra_http_headers({"Authorization": auth})
+    await page.context.set_extra_http_headers({"Cookie": auth})
     try:
         await navigate(page, APP_URL + "admin/keys.php")
         # Mint form has both a text input (name) and a number input (rate_limit_rpm).
@@ -5593,6 +5764,14 @@ async def main() -> None:
             await test_all_tooltips_direction(page)
             await test_console_no_errors(page)
             await test_theme_light_dark(page)
+            # v3.2.0 #342 — admin login form (run before chrome tests so a
+            # rate-limit lockout from the failure test can clear before the
+            # chrome tests rely on a successful session login).
+            await test_admin_login_form_renders_with_autocomplete(page)
+            await test_admin_login_success_redirects(page)
+            await test_admin_login_failure_increments_rate_limit(page)
+            await test_admin_login_protected_pages_redirect_unauth(page)
+            await test_api_v1_admin_basic_auth_still_works(page)
             # v3.2.0 #345 — admin chrome adoption (run AFTER theme tests
             # because the admin theme test mutates localStorage.theme).
             await test_admin_pages_share_app_header(page)
