@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 /**
  * Admin cookie-session store + auth rate limiter (v3.2.0, #342).
  *
@@ -22,6 +20,8 @@ declare(strict_types=1);
  *
  * The Basic Auth path used by /api/v1/admin/* is unchanged.
  */
+
+declare(strict_types=1);
 
 const ADMIN_SESSION_TTL          = 60 * 60 * 8;   // 8 hours, sliding via last_seen
 const ADMIN_SESSION_COOKIE       = 'sc_admin_sid';
@@ -81,14 +81,14 @@ function admin_session_start(
     if ($stmt === false) {
         throw new \RuntimeException('Failed to prepare admin_sessions insert.');
     }
-    $stmt->bindValue(':sid',  $sessionId, SQLITE3_TEXT);
-    $stmt->bindValue(':u',    $user,      SQLITE3_TEXT);
-    $stmt->bindValue(':c',    $now,       SQLITE3_INTEGER);
-    $stmt->bindValue(':e',    $expires,   SQLITE3_INTEGER);
-    $stmt->bindValue(':tp',   $pending,   SQLITE3_INTEGER);
-    $stmt->bindValue(':csrf', $csrf,      SQLITE3_TEXT);
-    $stmt->bindValue(':ip',   substr($ip, 0, 64),         SQLITE3_TEXT);
-    $stmt->bindValue(':ua',   substr($userAgent, 0, 255), SQLITE3_TEXT);
+    $stmt->bindValue(':sid', $sessionId, SQLITE3_TEXT);
+    $stmt->bindValue(':u', $user, SQLITE3_TEXT);
+    $stmt->bindValue(':c', $now, SQLITE3_INTEGER);
+    $stmt->bindValue(':e', $expires, SQLITE3_INTEGER);
+    $stmt->bindValue(':tp', $pending, SQLITE3_INTEGER);
+    $stmt->bindValue(':csrf', $csrf, SQLITE3_TEXT);
+    $stmt->bindValue(':ip', substr($ip, 0, 64), SQLITE3_TEXT);
+    $stmt->bindValue(':ua', substr($userAgent, 0, 255), SQLITE3_TEXT);
     $stmt->execute();
 
     return [
@@ -125,11 +125,12 @@ function admin_session_check(\SQLite3 $db, string $sessionId): ?array
         return null;
     }
     $row = $res->fetchArray(SQLITE3_ASSOC);
-    if ($row === false || !is_array($row)) {
+    if ($row === false) {
         return null;
     }
+    $expiresAt = is_numeric($row['expires_at'] ?? null) ? (int)$row['expires_at'] : 0;
     $now = time();
-    if ((int)$row['expires_at'] < $now) {
+    if ($expiresAt < $now) {
         return null;
     }
 
@@ -139,17 +140,22 @@ function admin_session_check(\SQLite3 $db, string $sessionId): ?array
           WHERE session_id = :sid'
     );
     if ($bump !== false) {
-        $bump->bindValue(':ls',  $now,                     SQLITE3_INTEGER);
-        $bump->bindValue(':e',   $now + ADMIN_SESSION_TTL, SQLITE3_INTEGER);
-        $bump->bindValue(':sid', $sessionId,               SQLITE3_TEXT);
+        $bump->bindValue(':ls', $now, SQLITE3_INTEGER);
+        $bump->bindValue(':e', $now + ADMIN_SESSION_TTL, SQLITE3_INTEGER);
+        $bump->bindValue(':sid', $sessionId, SQLITE3_TEXT);
         $bump->execute();
     }
 
+    $sidOut = is_string($row['session_id']   ?? null) ? (string)$row['session_id']  : '';
+    $userOut = is_string($row['user']        ?? null) ? (string)$row['user']        : '';
+    $csrfOut = is_string($row['csrf']        ?? null) ? (string)$row['csrf']        : '';
+    $tpOut   = is_numeric($row['totp_pending'] ?? null) ? (int)$row['totp_pending'] : 0;
+
     return [
-        'session_id'   => (string)$row['session_id'],
-        'user'         => (string)$row['user'],
-        'csrf'         => (string)$row['csrf'],
-        'totp_pending' => (int)$row['totp_pending'],
+        'session_id'   => $sidOut,
+        'user'         => $userOut,
+        'csrf'         => $csrfOut,
+        'totp_pending' => $tpOut,
         'expires_at'   => $now + ADMIN_SESSION_TTL,
     ];
 }
@@ -166,8 +172,8 @@ function admin_session_promote(\SQLite3 $db, string $sessionId): void
     if ($stmt === false) {
         throw new \RuntimeException('Failed to prepare admin_sessions promote.');
     }
-    $stmt->bindValue(':csrf', $newCsrf,   SQLITE3_TEXT);
-    $stmt->bindValue(':sid',  $sessionId, SQLITE3_TEXT);
+    $stmt->bindValue(':csrf', $newCsrf, SQLITE3_TEXT);
+    $stmt->bindValue(':sid', $sessionId, SQLITE3_TEXT);
     $stmt->execute();
 }
 
@@ -205,23 +211,24 @@ function admin_auth_rate_limit_check(\SQLite3 $db, string $ip, string $user): in
     if ($stmt === false) {
         return 0;
     }
-    $stmt->bindValue(':ip', $ip,   SQLITE3_TEXT);
-    $stmt->bindValue(':u',  $user, SQLITE3_TEXT);
+    $stmt->bindValue(':ip', $ip, SQLITE3_TEXT);
+    $stmt->bindValue(':u', $user, SQLITE3_TEXT);
     $res = $stmt->execute();
     if ($res === false) {
         return 0;
     }
     $row = $res->fetchArray(SQLITE3_ASSOC);
-    if ($row === false || !is_array($row)) {
+    if ($row === false) {
         return 0;
     }
-    $failures = (int)$row['failures'];
+    $failures = is_numeric($row['failures'] ?? null) ? (int)$row['failures'] : 0;
     if ($failures < ADMIN_RATE_LIMIT_THRESHOLD) {
         return 0;
     }
     $idx = min($failures - ADMIN_RATE_LIMIT_THRESHOLD, count(ADMIN_RATE_LIMIT_BACKOFFS) - 1);
     $backoff = ADMIN_RATE_LIMIT_BACKOFFS[$idx];
-    $waited  = time() - (int)$row['last_at'];
+    $lastAt  = is_numeric($row['last_at'] ?? null) ? (int)$row['last_at'] : 0;
+    $waited  = time() - $lastAt;
     $remain  = $backoff - $waited;
     return $remain > 0 ? $remain : 0;
 }
@@ -240,9 +247,9 @@ function admin_auth_rate_limit_register_failure(\SQLite3 $db, string $ip, string
     if ($stmt === false) {
         return;
     }
-    $stmt->bindValue(':ip', $ip,   SQLITE3_TEXT);
-    $stmt->bindValue(':u',  $user, SQLITE3_TEXT);
-    $stmt->bindValue(':n',  $now,  SQLITE3_INTEGER);
+    $stmt->bindValue(':ip', $ip, SQLITE3_TEXT);
+    $stmt->bindValue(':u', $user, SQLITE3_TEXT);
+    $stmt->bindValue(':n', $now, SQLITE3_INTEGER);
     $stmt->execute();
 }
 
@@ -253,7 +260,7 @@ function admin_auth_rate_limit_clear(\SQLite3 $db, string $ip, string $user): vo
     if ($stmt === false) {
         return;
     }
-    $stmt->bindValue(':ip', $ip,   SQLITE3_TEXT);
-    $stmt->bindValue(':u',  $user, SQLITE3_TEXT);
+    $stmt->bindValue(':ip', $ip, SQLITE3_TEXT);
+    $stmt->bindValue(':u', $user, SQLITE3_TEXT);
     $stmt->execute();
 }

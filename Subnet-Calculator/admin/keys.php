@@ -25,7 +25,7 @@ if (admin_wizard_needed()) {
     exit;
 }
 
-admin_authenticate();
+admin_session_require();
 
 // Never cache admin output — the one-time minted token must not survive
 // in browser/disk/back-forward caches.
