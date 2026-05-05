@@ -50,7 +50,9 @@ if ($turnstile_active) {
 // origin tokens only (the comment in config.php.example spells this out).
 $_csp_sanitise = static function (mixed $v): string {
     if (!is_string($v)) { return ''; }
-    return trim(preg_replace('/\s+/', ' ', preg_replace('/[;\r\n]/', ' ', $v)));
+    $v = str_replace([';', "\r", "\n"], ' ', $v);
+    // preg_replace can return null on PCRE error; coalesce + cast keeps PHPStan L9 happy.
+    return trim((string) (preg_replace('/\s+/', ' ', $v) ?? $v));
 };
 $csp_connect_extra = $_csp_sanitise($csp_connect_extra ?? '');
 $csp_script_extra  = $_csp_sanitise($csp_script_extra  ?? '');

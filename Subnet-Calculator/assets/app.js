@@ -1825,8 +1825,11 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
             try {
                 const decoded = JSON.parse(base64UrlDecode(treeParam));
                 if (decoded && typeof decoded.cidr === 'string') {
-                    if (!initInput.value) { initInput.value = decoded.cidr; }
-                    startEditor(initInput.value);
+                    // The decoded blob is the source of truth — overwrite any
+                    // stale autofill in initInput so startEditor()'s
+                    // decoded.cidr === rootCidr guard hydrates state.root.
+                    initInput.value = decoded.cidr;
+                    startEditor(decoded.cidr);
                     return;
                 }
             } catch (e) { setStatus('Ignored malformed share-URL tree.'); }
