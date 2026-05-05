@@ -34,6 +34,17 @@ except ImportError:
     _SNAPSHOT_PIL_AVAILABLE = False
     _SNAPSHOTS_AVAILABLE = False
 
+    from typing import Any as _Any
+
+    async def capture_snapshot(*_args: _Any, **_kwargs: _Any) -> None:  # type: ignore[no-redef]
+        raise RuntimeError("snapshot_utils unavailable")
+
+    async def compare_snapshot(*_args: _Any, **_kwargs: _Any) -> tuple[bool, float]:  # type: ignore[no-redef]
+        raise RuntimeError("snapshot_utils unavailable")
+
+    async def _set_viewport(*_args: _Any, **_kwargs: _Any) -> None:  # type: ignore[no-redef]
+        raise RuntimeError("snapshot_utils unavailable")
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -189,7 +200,7 @@ async def poll_resize_count(page: Page, min_count: int, timeout: float = 8.0) ->
     try:
         await page.wait_for_function(
             "(n) => parseInt(document.getElementById('resize-log')?.getAttribute('data-count') || '0') >= n",
-            min_count,
+            arg=min_count,
             timeout=int(timeout * 1000),
         )
     except Exception:
@@ -705,7 +716,7 @@ async def test_binary_repr(page: Page) -> None:
     await page.evaluate("document.querySelector('.binary-details').setAttribute('open', '')")
 
     net_code = await page.text_content(".binary-details .bin-value")
-    assert_true("binary network contains dots", net_code and "." in (net_code or ""), net_code)
+    assert_true("binary network contains dots", net_code is not None and "." in net_code, net_code or "")
     assert_contains("binary: first octet 11000000", net_code or "", "11000000")
 
     boundary = await page.text_content(".bin-boundary")
@@ -2478,6 +2489,7 @@ async def test_vlsm6_api_endpoint(_page: Page) -> None:
     if not assert_true("api vlsm6: site-a allocation present",
                        site_a is not None, str(allocs)):
         return
+    assert site_a is not None  # narrow for type-checker
     assert_eq("api vlsm6: site-a subnet", site_a.get("subnet"), "2001:db8::/120")
     assert_eq("api vlsm6: site-a usable", site_a.get("usable"), 256)
 

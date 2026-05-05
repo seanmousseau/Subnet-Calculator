@@ -109,5 +109,5 @@ header(
     false
 );
 
-header('Location: login.php?logged_out=1', true, 302);
+header('Location: login.php?logged_out=1', true, 303);
 exit;
