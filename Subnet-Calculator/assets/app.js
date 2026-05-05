@@ -1841,7 +1841,7 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
     }
 
     function loadSession(sid) {
-        fetch('api/v1/sessions?session_id=' + encodeURIComponent(sid))
+        fetch('api/v1/sessions/' + encodeURIComponent(sid))
             .then(function (r) { return r.json(); })
             .then(function (json) {
                 if (!json || !json.ok || !json.data || !json.data.payload) {

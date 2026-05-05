@@ -135,3 +135,44 @@ $admin_pass_hash = '';
 // When empty, the api_keys table is created in $session_db_path (when set)
 // otherwise <docroot>/../data/sessions.sqlite, alongside the rate_limit table.
 $apikey_db_path = '';
+
+// ── Admin TOTP / 2FA (v3.0.0, #313) ───────────────────────────────────────
+// Base32-encoded RFC 6238 TOTP secret used as the second factor for /admin/
+// login. Leave empty (default) to disable TOTP and authenticate with Basic
+// Auth alone. Generate via the first-run admin wizard at /admin/setup.php,
+// or from the docroot:
+//   php -r 'require "includes/functions-admin-totp.php"; echo admin_totp_generate_secret(), PHP_EOL;'
+// (PHP core has no built-in base32 helper — admin_totp_generate_secret()
+// in functions-admin-totp.php wraps random_bytes(20) with the project's
+// RFC 4648 base32 encoder.) Pair the resulting otpauth:// URI with Google
+// Authenticator / 1Password / Authy. Treat this value like a password —
+// never commit, rotate if leaked.
+$admin_totp_secret = '';
+
+// ── Audit log retention (v3.0.0, #306) ────────────────────────────────────
+// Days of /admin/ audit-log rows to retain. 0 = never purge. Older rows are
+// removed lazily on each audit write according to $admin_audit_purge_strategy.
+$admin_audit_retention_days = 90;
+
+// Trust the X-Forwarded-For header when recording the requester IP in audit
+// rows. Only enable behind a trusted reverse proxy that strips/replaces XFF —
+// otherwise clients can spoof their logged IP.
+$admin_audit_trust_xff = false;
+
+// How aggressively audit_log() purges old rows.
+//   'inline'  — every write also runs a DELETE for expired rows. Predictable
+//               but adds a few ms to each admin action.
+//   'sampled' — each write has $admin_audit_purge_sample_rate probability
+//               of running the DELETE. Default 0.1% (1 in 1000 writes pays
+//               the cost). Cheapest in steady state.
+//   'cron'    — never purge inline; expects an external cron job to run
+//               `php bin/sc-audit-purge.php` on a schedule.
+$admin_audit_purge_strategy    = 'sampled';
+$admin_audit_purge_sample_rate = 0.001;
+
+// ── Tree-editor preset library (v3.1.0, #323) ─────────────────────────────
+// Absolute path to a directory of `*.json` preset files for the tree-editor
+// "Apply Template" button. Empty = use the bundled
+// Subnet-Calculator/data/tree-presets/ directory. A non-existent override
+// falls back to the bundled location (with a single error_log warning).
+$tree_presets_dir = '';
