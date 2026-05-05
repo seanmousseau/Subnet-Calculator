@@ -2485,41 +2485,25 @@ html[data-theme="light"] .btn-danger:hover { filter: brightness(0.95); }
     margin: 0.5rem 0 0;
 }
 
-/* Filter strip (audit log "all / login / key / wizard / totp"). */
+/* Filter strip — audit log uses the calculator's tab-btn visual via
+ * role="tablist" + role="tab" (#346 v3.2.0). The .audit-filter-tab class
+ * is a namespacing hook for any future audit-specific tweaks. */
 .admin-filters {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem;
-    align-items: center;
+    gap: 0;
+    align-items: flex-end;
     margin-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
 }
-.admin-filters-label {
-    color: var(--color-text-muted);
-    font-size: 0.9rem;
-}
-.admin-filter {
-    display: inline-block;
-    padding: 0.25rem 0.6rem;
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    color: var(--color-text-muted);
-    text-decoration: none;
-    font-size: 0.9rem;
-}
-.admin-filter:hover,
-.admin-filter:focus-visible {
-    color: var(--color-accent);
-    border-color: var(--color-accent);
-}
-.admin-filter.is-active {
-    color: var(--color-accent);
-    border-color: var(--color-accent);
-    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+.audit-filter-tab {
+    /* inherits .tab-btn typography + underline treatment */
 }
 .admin-filters-count {
     color: var(--color-text-faint);
     font-size: 0.85rem;
-    margin-left: 0.25rem;
+    margin-left: auto;
+    padding-bottom: 0.5rem;
 }
 
 /* Tables — admin-table is a calmer variant of the calculator's table
@@ -2547,6 +2531,12 @@ html[data-theme="light"] .btn-danger:hover { filter: brightness(0.95); }
     font-weight: 600;
     background: var(--color-surface-alt);
 }
+.admin-table thead {
+    position: sticky;
+    top: 0;
+    background: var(--color-surface-alt);
+    z-index: 2;
+}
 .admin-table td.mono,
 .admin-table td.meta {
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -2572,16 +2562,17 @@ html[data-theme="light"] .btn-danger:hover { filter: brightness(0.95); }
     color: var(--color-text-muted);
     font-size: 0.9rem;
 }
-.admin-pager a {
+.admin-pager .admin-pager-item {
+    display: inline-block;
     color: var(--color-accent);
     text-decoration: none;
     padding: 0 0.4rem;
+    font-size: 0.9rem;
 }
-.admin-pager a:hover,
-.admin-pager a:focus-visible { text-decoration: underline; }
-.admin-pager a.is-disabled {
+.admin-pager a.admin-pager-item:hover,
+.admin-pager a.admin-pager-item:focus-visible { text-decoration: underline; }
+.admin-pager .admin-pager-item.is-disabled {
     color: var(--color-text-faint);
-    pointer-events: none;
     cursor: default;
 }
 
