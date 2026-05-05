@@ -179,3 +179,63 @@ stop sending the `Authorization` header.
 `auth_rate_limit`; no change was required for the logout flow. The audit
 table is also drained on each test-suite start, so `auth.logout` rows
 written during a Playwright run do not bleed into subsequent runs.
+
+## Admin navigation sidebar (v3.2.0 #344)
+
+Signed-in admin pages render a persistent left sidebar that hosts the
+admin destination list, the active-user chip, and the Sign out form.
+The sidebar replaces the interim `.admin-footer-links` cluster (#345)
+and the header-resident user chip that briefly shipped in v3.2.0 #343.
+Markup lives in `Subnet-Calculator/admin/_sidebar.php`; the surrounding
+shell is `Subnet-Calculator/templates/_admin_layout.php`.
+
+### Destinations
+
+| Label | Slug | Notes |
+| -- | -- | -- |
+| API Keys | `keys.php` | |
+| Audit Log | `audit.php` | |
+| TOTP / 2FA | `totp.php` | |
+| Settings | `settings.php` | Live link; landing page arrives in #349, until then it 404s. |
+
+### Active-page marker
+
+The active page is marked twice so the cue is unambiguous to both
+sighted users and assistive tech:
+
+- The matching link carries `aria-current="page"`.
+- `.admin-sidebar-link.is-active` paints a teal left border plus a
+  tinted background, both resolved through `var(--color-accent)` so
+  light and dark themes share one source of truth.
+
+### Mobile collapse
+
+At viewports `<= 768px` the two-column grid collapses to a single
+column and the sidebar moves offscreen via
+`transform: translateX(-100%)`. A fixed-position hamburger button
+(`.admin-sidebar-toggle`) appears in the top-left; clicking it adds
+`.open` to the sidebar and flips `aria-expanded` on the button. The
+drawer closes on:
+
+- a second click on the hamburger,
+- the `Escape` key (focus returns to the toggle), and
+- a click anywhere outside the sidebar.
+
+The toggle is a real `<button>`, so `Enter` and `Space` activate it
+natively with no JS keyboard handling.
+
+### Keyboard order
+
+The skip-link (`Skip to main content`) is emitted first in the DOM and
+still targets `#main-content`, giving keyboard users a one-press bypass.
+After the skip-link, the sidebar `<nav>` precedes
+`<main id="main-content">`, so `Tab` lands on the first sidebar link
+before any control inside the page card.
+
+### Login page
+
+`admin/login.php` does not set `$admin_user_signed_in` or
+`$admin_csrf_token`, which suppresses the entire sidebar + hamburger
+in `_admin_layout.php`. The body element falls back to
+`<body class="admin-shell no-sidebar">` and renders a single-column
+shell.

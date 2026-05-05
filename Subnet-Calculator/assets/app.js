@@ -2660,3 +2660,61 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
         }
     });
 })();
+
+// ── Admin sidebar hamburger toggle (#344 v3.2.0) ─────────────────────────────
+// Mobile (<= 768px) flips `.open` on the sidebar nav and `aria-expanded` on
+// the toggle button. Closes on Escape or click outside the sidebar. While
+// open, Tab is trapped between the toggle and the sidebar's focusable items
+// so keyboard users can't tab into the (visually hidden) main content.
+(function () {
+    var toggle = document.querySelector('.admin-sidebar-toggle');
+    var sidebar = document.getElementById('admin-sidebar');
+    if (!toggle || !sidebar) { return; }
+
+    var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    function setOpen(open) {
+        if (open) {
+            sidebar.classList.add('open');
+            toggle.setAttribute('aria-expanded', 'true');
+        } else {
+            sidebar.classList.remove('open');
+            toggle.setAttribute('aria-expanded', 'false');
+        }
+    }
+
+    toggle.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setOpen(!sidebar.classList.contains('open'));
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (!sidebar.classList.contains('open')) { return; }
+        if (e.key === 'Escape') {
+            setOpen(false);
+            toggle.focus();
+            return;
+        }
+        if (e.key !== 'Tab') { return; }
+        var nodes = sidebar.querySelectorAll(FOCUSABLE);
+        if (!nodes.length) { return; }
+        var first = nodes[0];
+        var last = nodes[nodes.length - 1];
+        var active = document.activeElement;
+        if (e.shiftKey) {
+            if (active === toggle || active === first) {
+                e.preventDefault();
+                last.focus();
+            }
+        } else if (active === last) {
+            e.preventDefault();
+            toggle.focus();
+        }
+    });
+
+    document.addEventListener('click', function (e) {
+        if (!sidebar.classList.contains('open')) { return; }
+        if (sidebar.contains(e.target) || toggle.contains(e.target)) { return; }
+        setOpen(false);
+    });
+})();

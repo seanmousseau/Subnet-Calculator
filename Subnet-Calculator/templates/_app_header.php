@@ -29,8 +29,14 @@ $_show_app_actions    = $show_app_actions ?? true;
 $_breadcrumb_html     = $breadcrumb_html ?? null;
 $_header_session_html = (isset($header_session_html) && is_string($header_session_html))
     ? $header_session_html : null;
+// v3.2.0 #344 — admin layout pre-emits the skip-link before the sidebar
+// so keyboard users can jump straight to #main-content. When the caller
+// has already emitted the skip-link, suppress the duplicate here.
+$_suppress_skip_link  = !empty($skip_link_emitted);
 ?>
+<?php if (!$_suppress_skip_link) : ?>
 <a href="#main-content" class="skip-link">Skip to main content</a>
+<?php endif; ?>
 <main class="card<?= isset($admin_card_extra_class) ? ' ' . htmlspecialchars((string)$admin_card_extra_class) : '' ?>" id="main-content">
     <div class="title-row">
         <?php $logo_v = htmlspecialchars($app_version) . '-2'; ?>
