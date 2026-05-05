@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.2] - 2026-05-05
+
+**Service-worker hotfix.** The service worker's `CACHE_NAME` constant
+had not been bumped since v2.7.0, so any browser that ever visited the
+site was still serving the cached app shell from that release —
+bypassing the origin entirely and masking every release in between
+(including v3.2.0's admin UX overhaul and v3.2.1's polish). New
+clients and freshly-cleared sessions were fine; long-lived sessions
+in browsers like Vivaldi were stuck on a six-month-old shell.
+
+### Fixed
+
+- **Bump `sw.js` `CACHE_NAME` to `sc-v3.2.2`.** The activate handler
+  now actually purges the old `sc-v2.7.0` cache and pre-fetches the
+  current shell on first navigation. `sw.js` itself is served with
+  `no-cache` (existing `.htaccess` rule), so the new worker file is
+  picked up on the next visit.
+
+### Changed
+
+- **`CLAUDE.md` release checklist now reminds operators to bump
+  `CACHE_NAME` in `sw.js` on every release.** Process gap that caused
+  the staleness in the first place.
+
 ## [3.2.1] - 2026-05-05
 
 **Admin polish.** Five fixes addressing visual + behavioural rough edges

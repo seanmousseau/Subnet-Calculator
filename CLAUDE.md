@@ -64,12 +64,18 @@ rm Subnet-Calculator/CHANGELOG.md
 
 **Release checklist:**
 1. Bump `$app_version` in `Subnet-Calculator/includes/config.php`
-2. Update `CHANGELOG.md` with new release section
-3. Add row to `README.md` downloads table
-4. Update docs: bump `extra.version` in `mkdocs.yml`; update tarball filename in `docs/index.md`
-5. Build tarball (see Development block above)
-6. Commit, push, verify on GitHub
-7. Create PR `dev → main`
+2. **Bump `CACHE_NAME` in `Subnet-Calculator/sw.js`** to `sc-vX.Y.Z`. The
+   service worker's activate handler only purges old caches when this
+   constant changes — skip this and existing browsers keep serving the
+   previously-cached app shell, masking the release entirely. (v3.2.2
+   shipped specifically to recover from this gap accumulating across
+   v2.7.0 → v3.2.1.)
+3. Update `CHANGELOG.md` with new release section
+4. Add row to `README.md` downloads table
+5. Update docs: bump `extra.version` in `mkdocs.yml`; update tarball filename in `docs/index.md`
+6. Build tarball (see Development block above)
+7. Commit, push, verify on GitHub
+8. Create PR `dev → main`
 
 (Or run `/release` to automate steps 1–7.)
 
