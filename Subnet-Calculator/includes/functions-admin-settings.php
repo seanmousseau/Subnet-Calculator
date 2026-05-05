@@ -17,9 +17,6 @@ declare(strict_types=1);
 // `config.update` row per actual change with before/after values (secrets
 // redacted to '(set)' / '(empty)').
 
-require_once __DIR__ . '/functions-admin-wizard.php';
-require_once __DIR__ . '/functions-audit.php';
-
 const ADMIN_SETTINGS_SECTIONS = ['branding', 'forms', 'api', 'sessions', 'admin', 'limits', 'csp'];
 
 /**
@@ -346,7 +343,14 @@ function settings_parse_config_file(string $path, array $schemaKeys): array
  * Layered settings view: per-key, the default + admin-tier value (if any) +
  * config.php value (if any) + effective resolved value + source label.
  *
- * @return array<string, array{default:mixed, admin:mixed|null, config:mixed|null, effective:mixed, source:string, shadowed:bool}>
+ * @return array<string, array{
+ *     default:mixed,
+ *     admin:mixed|null,
+ *     config:mixed|null,
+ *     effective:mixed,
+ *     source:string,
+ *     shadowed:bool
+ * }>
  */
 function settings_load_layered(): array
 {
