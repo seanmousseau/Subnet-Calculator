@@ -2280,6 +2280,72 @@ html[data-theme="light"] .btn-danger:hover { filter: brightness(0.95); }
     text-decoration: none;
 }
 
+/* Signed-in user chip + Logout form — interim header placement (v3.2.0
+ * #343); will be lifted into the left sidebar by #344. The cluster sits
+ * between the breadcrumb and the theme toggle in the title-row. Pinned
+ * to the right via margin-left: auto on the chip so the breadcrumb can
+ * grow to fill the middle. */
+.admin-user-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: auto;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-text-muted) 8%, transparent);
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    line-height: 1;
+    white-space: nowrap;
+}
+.admin-user-chip-icon {
+    flex: 0 0 auto;
+    opacity: 85%;
+}
+.admin-user-chip-name {
+    font-variant-numeric: tabular-nums;
+}
+.admin-logout-form {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+}
+.admin-logout-btn {
+    appearance: none;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--color-text-muted);
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition: color 200ms ease, border-color 200ms ease, background 200ms ease;
+}
+.admin-logout-btn:hover {
+    color: var(--color-accent);
+    border-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+.admin-logout-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    color: var(--color-accent);
+}
+
+@media (width <= 640px) {
+    /* Collapse the user-chip text — keep the silhouette icon (still
+     * carries the username via the chip's aria-label) so admins can scan
+     * which account is signed in even on narrow screens. */
+    .admin-user-chip-name {
+        display: none;
+    }
+    .admin-logout-btn {
+        padding: 0.25rem 0.5rem;
+    }
+}
+
 /* Alert variants — token-driven, replace the legacy bespoke palettes. */
 .admin-card .alert {
     padding: 0.75rem 1rem;

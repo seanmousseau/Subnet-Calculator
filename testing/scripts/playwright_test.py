@@ -34,6 +34,17 @@ except ImportError:
     _SNAPSHOT_PIL_AVAILABLE = False
     _SNAPSHOTS_AVAILABLE = False
 
+    from typing import Any as _Any
+
+    async def capture_snapshot(*_args: _Any, **_kwargs: _Any) -> None:  # type: ignore[no-redef]
+        raise RuntimeError("snapshot_utils unavailable")
+
+    async def compare_snapshot(*_args: _Any, **_kwargs: _Any) -> tuple[bool, float]:  # type: ignore[no-redef]
+        raise RuntimeError("snapshot_utils unavailable")
+
+    async def _set_viewport(*_args: _Any, **_kwargs: _Any) -> None:  # type: ignore[no-redef]
+        raise RuntimeError("snapshot_utils unavailable")
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -189,7 +200,7 @@ async def poll_resize_count(page: Page, min_count: int, timeout: float = 8.0) ->
     try:
         await page.wait_for_function(
             "(n) => parseInt(document.getElementById('resize-log')?.getAttribute('data-count') || '0') >= n",
-            min_count,
+            arg=min_count,
             timeout=int(timeout * 1000),
         )
     except Exception:
@@ -705,7 +716,7 @@ async def test_binary_repr(page: Page) -> None:
     await page.evaluate("document.querySelector('.binary-details').setAttribute('open', '')")
 
     net_code = await page.text_content(".binary-details .bin-value")
-    assert_true("binary network contains dots", net_code and "." in (net_code or ""), net_code)
+    assert_true("binary network contains dots", net_code is not None and "." in net_code, net_code or "")
     assert_contains("binary: first octet 11000000", net_code or "", "11000000")
 
     boundary = await page.text_content(".bin-boundary")
@@ -2478,6 +2489,7 @@ async def test_vlsm6_api_endpoint(_page: Page) -> None:
     if not assert_true("api vlsm6: site-a allocation present",
                        site_a is not None, str(allocs)):
         return
+    assert site_a is not None  # narrow for type-checker
     assert_eq("api vlsm6: site-a subnet", site_a.get("subnet"), "2001:db8::/120")
     assert_eq("api vlsm6: site-a usable", site_a.get("usable"), 256)
 
@@ -3519,6 +3531,123 @@ async def test_api_v1_admin_basic_auth_still_works(page: Page) -> None:
         "api/v1/admin/keys: JSON envelope ok=true",
         '"ok":true' in body or '"ok": true' in body,
     )
+
+
+# ---------------------------------------------------------------------------
+# v3.2.0 #343 — Admin logout button + signed-in user chip
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_logout_button_visible_on_every_admin_page(page: Page) -> None:
+    section("v3.2.0 #343 admin logout — form + user chip rendered on every admin page")
+    sess = _admin_session_requests()
+    for path in ("admin/keys.php", "admin/audit.php", "admin/totp.php"):
+        resp = sess.get(APP_URL + path, timeout=10)
+        assert_eq(f"{path}: status 200", resp.status_code, 200)
+        body = resp.text
+        assert_true(
+            f"{path}: logout form posts to logout.php",
+            'action="logout.php"' in body or "action='logout.php'" in body,
+        )
+        assert_true(
+            f"{path}: hidden CSRF input rendered in logout form",
+            'class="admin-logout-form"' in body and 'name="csrf"' in body,
+        )
+        assert_true(
+            f"{path}: signed-in username chip rendered with admin user",
+            'admin-user-chip' in body and ADMIN_USER in body,
+        )
+
+
+async def test_admin_logout_clears_session(page: Page) -> None:
+    section("v3.2.0 #343 admin logout — POST ends session + clears cookie + audit-logs")
+    import re as _re
+    sess = _admin_session_requests()
+    # Confirm we have a valid session: keys.php should 200.
+    pre = sess.get(APP_URL + "admin/keys.php", timeout=10, allow_redirects=False)
+    assert_eq("pre-logout: keys.php 200", pre.status_code, 200)
+    # Pull CSRF from the rendered logout form on keys.php.
+    m = _re.search(
+        r'class="admin-logout-form"[^>]*>\s*<input[^>]*name="csrf"[^>]*value="([0-9a-f]+)"',
+        pre.text,
+    )
+    assert_true("logout form: csrf token rendered", m is not None)
+    csrf = m.group(1) if m else ""
+
+    # POST to logout.php — must 302/303 to login.php?logged_out=1.
+    out = sess.post(
+        APP_URL + "admin/logout.php",
+        data={"csrf": csrf},
+        allow_redirects=False,
+        timeout=10,
+    )
+    assert_true(
+        "logout.php: redirect status (302 or 303)",
+        out.status_code in (302, 303),
+        f"got: {out.status_code}",
+    )
+    location = out.headers.get("location", "")
+    assert_true(
+        "logout.php: Location -> login.php?logged_out=1",
+        "login.php" in location and "logged_out=1" in location,
+        f"got: {location!r}",
+    )
+    # Cookie must be cleared via Set-Cookie with Max-Age=0 (or expires past).
+    set_cookies = out.headers.get("set-cookie", "")
+    assert_true(
+        "logout.php: clears sc_admin_sid cookie via Set-Cookie",
+        "sc_admin_sid=" in set_cookies
+        and ("Max-Age=0" in set_cookies or "max-age=0" in set_cookies.lower()
+             or "expires=" in set_cookies.lower()),
+        f"got: {set_cookies!r}",
+    )
+
+    # After logout: visiting an admin URL should redirect to login.
+    post_logout = sess.get(
+        APP_URL + "admin/keys.php", timeout=10, allow_redirects=False
+    )
+    assert_eq(
+        "post-logout: keys.php redirects to login (303)",
+        post_logout.status_code, 303,
+    )
+    assert_true(
+        "post-logout: Location points at login.php",
+        "login.php" in post_logout.headers.get("location", ""),
+    )
+
+    # Audit log should now contain auth.logout. Sign back in and read audit.
+    sess2 = _admin_session_requests()
+    audit_resp = sess2.get(APP_URL + "admin/audit.php", timeout=10)
+    assert_eq("audit page: 200 after re-login", audit_resp.status_code, 200)
+    assert_true(
+        "audit page: contains auth.logout entry",
+        "auth.logout" in audit_resp.text,
+    )
+
+
+async def test_admin_logout_rejects_get(page: Page) -> None:
+    section("v3.2.0 #343 admin logout — GET rejected with 405 + Allow: POST")
+    sess = _admin_session_requests()
+    resp = sess.get(APP_URL + "admin/logout.php", timeout=10, allow_redirects=False)
+    assert_eq("logout.php GET: 405", resp.status_code, 405)
+    allow = resp.headers.get("allow", "")
+    assert_true(
+        "logout.php GET: Allow: POST header",
+        "POST" in allow,
+        f"got: {allow!r}",
+    )
+
+
+async def test_admin_logout_csrf_protected(page: Page) -> None:
+    section("v3.2.0 #343 admin logout — POST without valid CSRF returns 403")
+    sess = _admin_session_requests()
+    resp = sess.post(
+        APP_URL + "admin/logout.php",
+        data={"csrf": "deadbeef" * 8},  # wrong token
+        allow_redirects=False,
+        timeout=10,
+    )
+    assert_eq("logout.php bad csrf: 403", resp.status_code, 403)
 
 
 # ---------------------------------------------------------------------------
@@ -5811,6 +5940,12 @@ async def main() -> None:
             await test_admin_login_failure_increments_rate_limit(page)
             await test_admin_login_protected_pages_redirect_unauth(page)
             await test_api_v1_admin_basic_auth_still_works(page)
+            # v3.2.0 #343 — logout button + user chip (after login tests
+            # so a fresh session is available for the logout flow).
+            await test_admin_logout_button_visible_on_every_admin_page(page)
+            await test_admin_logout_clears_session(page)
+            await test_admin_logout_rejects_get(page)
+            await test_admin_logout_csrf_protected(page)
             # v3.2.0 #345 — admin chrome adoption (run AFTER theme tests
             # because the admin theme test mutates localStorage.theme).
             await test_admin_pages_share_app_header(page)
