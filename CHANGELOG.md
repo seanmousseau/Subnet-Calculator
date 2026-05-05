@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.3] - 2026-05-05
+
+**Admin service-worker hotfix.** Earlier releases shipped
+`assets/app.js` with an unconditional
+`navigator.serviceWorker.register('sw.js')` call that fired on every
+page — including `/admin/*`. On admin pages the URL resolved to
+`/admin/sw.js`, which did not exist, parking the registration in a
+permanent "trying to install" state that DevTools could not
+unregister (no installed worker to unregister yet). It also meant
+the calculator's root-scope SW was sometimes intercepting admin
+navigations and caching no-store admin HTML in the shell slot —
+contributing to the v3.2.2 stale-shell symptoms.
+
+### Fixed
+
+- **Skip SW registration on `/admin/*`.** `assets/app.js` now
+  detects admin paths and instead actively unregisters any
+  registration whose scope falls under `/admin/`, breaking out of
+  the stuck "trying to install" loop on next visit.
+- **Tombstone `Subnet-Calculator/admin/sw.js`.** Deploys a real file
+  at the previously-404ing URL whose only job is to call
+  `self.registration.unregister()` on activate and force its
+  controlled clients to navigate fresh, so existing stuck
+  installations finally complete and clear themselves.
+- **Root SW bypasses `/admin/*` in fetch handler.** Even where the
+  calculator SW (scope `/`) was indirectly intercepting admin
+  navigations, it now early-returns on those paths and lets the
+  network handle them directly.
+- **Bump `CACHE_NAME` to `sc-v3.2.3`** so the activate handler
+  purges the v3.2.2 cache on rollout.
+
 ## [3.2.2] - 2026-05-05
 
 **Service-worker hotfix.** The service worker's `CACHE_NAME` constant

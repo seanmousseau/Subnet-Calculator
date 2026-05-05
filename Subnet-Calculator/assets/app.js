@@ -990,8 +990,31 @@ document.addEventListener('click', function (e) {
 });
 
 // ── Service Worker registration ───────────────────────────────────────────
+// Admin pages MUST NOT register a SW — admin is dynamic + no-store, the
+// extra cache layer just causes stale-shell bugs (v3.2.2) and earlier
+// versions shipped a register call that 404'd on /admin/sw.js, parking
+// the browser in a permanent "trying to install" state (v3.2.3 hotfix).
 if (window.self === window.top && 'serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    const isAdminPath = /\/admin(?:\/|$)/.test(window.location.pathname);
+    if (isAdminPath) {
+        // Active cleanup: unregister any stuck or in-flight registrations
+        // whose scope falls under /admin/, and request a fresh script
+        // fetch on the freshly-shipped /admin/sw.js tombstone so that any
+        // permanently-stuck "trying to install" entry from older
+        // releases finally completes its install handshake and tears
+        // itself down.
+        navigator.serviceWorker.getRegistrations().then(regs => {
+            for (const reg of regs) {
+                const scope = reg.scope || '';
+                if (/\/admin(?:\/|$)/.test(new URL(scope).pathname)) {
+                    reg.update().catch(() => {});
+                    reg.unregister().catch(() => {});
+                }
+            }
+        }).catch(() => {});
+    } else {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
 }
 
 // ── v3.0.0 (#300) keyboard shortcut overlay + (#301) history pane ─────────
