@@ -2472,6 +2472,7 @@ html[data-theme="light"] .btn-danger:hover { filter: brightness(0.95); }
     padding: 1rem 1.25rem;
 }
 .api-key-display {
+    display: block;
     background: var(--color-surface-alt);
     color: var(--color-accent);
     border: 1px solid var(--color-border);
@@ -2483,6 +2484,41 @@ html[data-theme="light"] .btn-danger:hover { filter: brightness(0.95); }
     word-break: break-all;
     user-select: all;
     margin: 0.5rem 0 0;
+}
+
+/* Post-mint key panel actions row (#348 v3.2.0). */
+.api-key-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    flex-wrap: wrap;
+}
+.splitter-btn-ghost {
+    background: transparent;
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 0.4rem 0.9rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+.splitter-btn-ghost:hover,
+.splitter-btn-ghost:focus-visible {
+    color: var(--color-text);
+    border-color: var(--color-accent);
+}
+
+/* Empty-state nudge for the API keys table (#348 v3.2.0). */
+.admin-empty-state {
+    color: var(--color-text-muted);
+    margin: 0.5rem 0;
+    line-height: 1.55;
+}
+.admin-empty-state p {
+    margin: 0 0 0.5rem;
+}
+.admin-empty-state a {
+    color: var(--color-accent);
 }
 
 /* Filter strip — audit log uses the calculator's tab-btn visual via

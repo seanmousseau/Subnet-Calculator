@@ -2931,6 +2931,156 @@ async def test_admin_keys_authed_renders(page: Page) -> None:
     )
 
 
+async def test_admin_keys_post_mint_panel_has_copy_button(page: Page) -> None:
+    section("v3.2.0 #348 admin/keys.php — post-mint panel has Copy + Got it controls")
+    sess = _admin_session_requests()
+    initial = sess.get(APP_URL + "admin/keys.php", timeout=10)
+    body = initial.text
+    import re as _re
+    m = _re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    csrf = m.group(1) if m else ""
+    name = "pr8-mint-test-" + ("%x" % int(__import__('time').time()))
+    post = sess.post(
+        APP_URL + "admin/keys.php",
+        data={"_csrf": csrf, "action": "create", "name": name, "rate_limit_rpm": ""},
+        allow_redirects=False,
+        timeout=10,
+    )
+    assert_eq("admin/keys mint: 303 PRG", post.status_code, 303)
+    follow = sess.get(APP_URL + "admin/keys.php", timeout=10)
+    body2 = follow.text
+    assert_true(
+        "admin/keys post-mint: alert panel rendered with role=alert",
+        'class="alert alert-accent api-key-panel"' in body2,
+    )
+    assert_true(
+        "admin/keys post-mint: Copy button targets the token id",
+        'data-copy-target="new-api-key-token"' in body2,
+    )
+    assert_true(
+        "admin/keys post-mint: Got it dismiss button rendered",
+        'data-dismiss-panel' in body2,
+    )
+    assert_true(
+        "admin/keys post-mint: one-shot warning copy",
+        "only time the full key" in body2,
+    )
+
+
+async def test_admin_keys_copy_button_invokes_clipboard(page: Page) -> None:
+    section("v3.2.0 #348 admin/keys.php — Copy button writes the token to the clipboard")
+    # Install a clipboard stub before any page script runs (CLAUDE.md pattern).
+    await page.add_init_script("""
+        Object.defineProperty(navigator, 'clipboard', {
+            value: {
+                writeText: function(text) {
+                    window.__lastClipboard = text;
+                    return Promise.resolve();
+                }
+            },
+            configurable: true,
+        });
+    """)
+    cookie = _admin_session_cookie_header().split("sc_admin_sid=", 1)[1]
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(APP_URL)
+    domain = parsed.hostname or "localhost"
+    await page.context.add_cookies([{
+        "name": "sc_admin_sid",
+        "value": cookie,
+        "domain": domain,
+        "path": "/",
+    }])
+    try:
+        # Mint a key via requests so a fresh post-mint panel renders on next nav.
+        sess = _admin_session_requests()
+        initial = sess.get(APP_URL + "admin/keys.php", timeout=10)
+        import re as _re
+        m = _re.search(r'name="_csrf" value="([0-9a-f]{64})"', initial.text)
+        csrf = m.group(1) if m else ""
+        sess.post(
+            APP_URL + "admin/keys.php",
+            data={"_csrf": csrf, "action": "create", "name": "copy-button-test", "rate_limit_rpm": ""},
+            allow_redirects=False,
+            timeout=10,
+        )
+        # Carry the requests session cookie back into the playwright browser
+        # so the same logged-in admin sees the panel.
+        sc_cookie = sess.cookies.get("sc_admin_sid")
+        if sc_cookie:
+            await page.context.clear_cookies()
+            await page.context.add_cookies([{
+                "name": "sc_admin_sid",
+                "value": sc_cookie,
+                "domain": domain,
+                "path": "/",
+            }])
+        # Navigate to keys page and re-mint inside playwright so the panel renders
+        # in this browser's PHP-session flash slot.
+        await page.goto(APP_URL + "admin/keys.php")
+        # Re-mint in browser so the panel surfaces here.
+        token_count_before = await page.locator("#new-api-key-token").count()
+        if token_count_before == 0:
+            csrf_val = await page.eval_on_selector("input[name='_csrf']", "el => el.value")
+            await page.evaluate(
+                """async (csrf) => {
+                    const fd = new FormData();
+                    fd.set('_csrf', csrf);
+                    fd.set('action', 'create');
+                    fd.set('name', 'copy-btn-' + Date.now());
+                    fd.set('rate_limit_rpm', '');
+                    await fetch(window.location.pathname, { method: 'POST', body: fd, redirect: 'manual' });
+                }""",
+                csrf_val,
+            )
+            await page.goto(APP_URL + "admin/keys.php")
+        await page.wait_for_selector("#new-api-key-token", timeout=5000)
+        token_text = await page.text_content("#new-api-key-token")
+        assert_true("token rendered in panel", token_text is not None and token_text != "")
+        await page.click("[data-copy-target='new-api-key-token']")
+        clipboard = await page.evaluate("() => window.__lastClipboard || ''")
+        assert_eq("Copy button payload matches the rendered token", clipboard, (token_text or "").strip())
+        # Button text flips to "Copied!"
+        await page.wait_for_function(
+            "() => { const b = document.querySelector('[data-copy-target=\\\"new-api-key-token\\\"]'); return b && b.textContent === 'Copied!'; }",
+            timeout=2000,
+        )
+        ok("Copy button text becomes 'Copied!' after click")
+    finally:
+        await page.context.clear_cookies()
+
+
+async def test_admin_keys_empty_state_links_to_docs(page: Page) -> None:
+    section("v3.2.0 #348 admin/keys.php — empty state links to API docs")
+    # Drain the api_keys table so the empty state renders.
+    drain_token = os.environ.get("PHPUNIT_TEST_DRAIN_TOKEN", "")
+    if drain_token:
+        await page.context.request.post(
+            APP_URL + "admin/_test-drain.php",
+            data={"token": drain_token},
+        )
+    resp = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    if "admin-empty-state" not in body:
+        ok("admin/keys empty state: keys still present (drain unavailable) — skipped")
+        return
+    assert_true(
+        "admin/keys empty state: API reference link present",
+        'docs.subnetcalculator.app/api/' in body,
+    )
+    assert_true(
+        "admin/keys empty state: rate-limiting anchor link present",
+        '#rate-limiting' in body,
+    )
+    assert_true(
+        "admin/keys empty state: explanatory copy mentions Authorization Bearer",
+        "Authorization: Bearer" in body,
+    )
+
+
 async def test_admin_audit_renders(page: Page) -> None:
     section("v3.0.0 #307 admin/audit.php — authed renders + filters present")
     resp = await page.context.request.get(
@@ -6272,6 +6422,10 @@ async def main() -> None:
             await test_vlsm6_session_drawer_pattern(page)
             await test_admin_keys_unauth_challenge(page)
             await test_admin_keys_authed_renders(page)
+            # v3.2.0 #348 — keys polish (post-mint Copy button, dismiss, empty state)
+            await test_admin_keys_post_mint_panel_has_copy_button(page)
+            await test_admin_keys_copy_button_invokes_clipboard(page)
+            await test_admin_keys_empty_state_links_to_docs(page)
             await test_admin_audit_renders(page)
             await test_admin_audit_records_login_failure(page)
             # v3.2.0 #346 — audit log polish

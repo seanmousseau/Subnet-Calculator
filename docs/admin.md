@@ -63,6 +63,25 @@ a left sidebar in v3.3.0 (#344).
   last-used time, and active/revoked status.
 - **Revoke a key:** click *Revoke*. Revocation is immediate and permanent.
 
+### Post-mint UX (v3.2.0+, #348)
+
+After a successful mint, the new-token panel renders an inline `<code>`
+block with two buttons:
+
+- **Copy** — writes the token to the system clipboard via
+  `navigator.clipboard.writeText()` (with a `document.execCommand('copy')`
+  fallback for legacy browsers / cross-origin iframes). Flips to "Copied!"
+  for 1.5 seconds on success, then reverts.
+- **Got it** — removes the panel from the DOM. The panel is one-shot per
+  mint anyway (the next page load clears the PRG flash), so the dismiss
+  button is purely an explicit "I've copied it" affordance.
+
+The empty state (no keys minted yet) now shows a one-paragraph nudge
+explaining what keys authenticate against, with links to the
+[API reference](https://docs.subnetcalculator.app/api/) and
+[rate-limit headers](https://docs.subnetcalculator.app/api/#rate-limiting)
+docs so an operator can find the next step without leaving the admin UI.
+
 ## Using the JSON API
 
 Mirror endpoints under `/api/v1/admin/keys` accept the same Basic Auth and

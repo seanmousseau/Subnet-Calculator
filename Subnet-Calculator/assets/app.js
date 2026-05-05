@@ -2718,3 +2718,47 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
         setOpen(false);
     });
 })();
+
+// ── Copy-to-clipboard + dismiss for admin post-mint panel (#348 v3.2.0) ──────
+(function () {
+    document.addEventListener('click', function (e) {
+        var btn = e.target && e.target.closest && e.target.closest('[data-copy-target]');
+        if (btn) {
+            var targetId = btn.getAttribute('data-copy-target');
+            var target = targetId ? document.getElementById(targetId) : null;
+            if (!target) { return; }
+            var text = target.textContent || '';
+            var original = btn.textContent;
+            var done = function () {
+                btn.textContent = 'Copied!';
+                setTimeout(function () { btn.textContent = original; }, 1500);
+            };
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(done, done);
+                } else {
+                    var ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.setAttribute('readonly', '');
+                    ta.style.position = 'absolute';
+                    ta.style.left = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    done();
+                }
+            } catch (err) {
+                done();
+            }
+            return;
+        }
+        var dismiss = e.target && e.target.closest && e.target.closest('[data-dismiss-panel]');
+        if (dismiss) {
+            var panel = dismiss.closest('.api-key-panel') || dismiss.closest('[role="alert"]');
+            if (panel && panel.parentNode) {
+                panel.parentNode.removeChild(panel);
+            }
+        }
+    });
+})();

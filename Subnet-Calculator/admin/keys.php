@@ -207,10 +207,14 @@ $keys_help = 'Keys authenticate against POST/GET /api/v1/* via Authorization: Be
         <div class="alert alert-error" role="alert"><?= $h($error) ?></div>
     <?php endif; ?>
     <?php if ($created_token !== null) : ?>
-        <div class="alert alert-accent" role="alert">
+        <div class="alert alert-accent api-key-panel" role="alert">
             <strong>New token (shown once)</strong>
-            <p>Copy this token now. It cannot be retrieved again — only revoked.</p>
-            <div class="api-key-display"><?= $h($created_token) ?></div>
+            <p>This is the only time the full key will be shown. Store it in a password manager or secret store now. After this page reloads, only the prefix and metadata are recoverable.</p>
+            <code class="api-key-display" id="new-api-key-token"><?= $h($created_token) ?></code>
+            <div class="api-key-actions">
+                <button type="button" class="splitter-btn" data-copy-target="new-api-key-token">Copy</button>
+                <button type="button" class="splitter-btn-ghost" data-dismiss-panel>Got it</button>
+            </div>
         </div>
     <?php endif; ?>
 </section>
@@ -240,7 +244,15 @@ $keys_help = 'Keys authenticate against POST/GET /api/v1/* via Authorization: Be
 <section class="admin-section" aria-labelledby="keys-existing-heading">
     <h2 id="keys-existing-heading">Existing keys</h2>
     <?php if ($keys === []) : ?>
-        <p>No keys yet.</p>
+        <div class="admin-empty-state">
+            <p><strong>No keys yet.</strong></p>
+            <p>Mint a key above to authenticate <code>Authorization: Bearer …</code> requests against <code>POST/GET /api/v1/*</code>. The string-literal entries in <code>$api_tokens</code> (config-tier auth) continue to work alongside any keys created here.</p>
+            <p>
+                <a href="https://docs.subnetcalculator.app/api/" target="_blank" rel="noopener">API reference →</a>
+                &nbsp;·&nbsp;
+                <a href="https://docs.subnetcalculator.app/api/#rate-limiting" target="_blank" rel="noopener">Rate-limit headers →</a>
+            </p>
+        </div>
     <?php else : ?>
         <div class="admin-table-wrap">
             <table class="admin-table">
