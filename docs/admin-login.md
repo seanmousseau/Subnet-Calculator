@@ -179,3 +179,59 @@ stop sending the `Authorization` header.
 `auth_rate_limit`; no change was required for the logout flow. The audit
 table is also drained on each test-suite start, so `auth.logout` rows
 written during a Playwright run do not bleed into subsequent runs.
+
+## Admin navigation sidebar (v3.2.0 #344)
+
+Every signed-in admin page renders a persistent left sidebar at desktop
+widths and a slide-in drawer behind a hamburger button at viewports
+`<=` 768 px. The sidebar replaces the interim `.admin-footer-links`
+cluster that shipped in #345 and absorbs the user-chip + Logout form
+that briefly lived in the page header (#343).
+
+### Destinations
+
+The sidebar lists the canonical admin destinations in render order:
+
+1. **API Keys** → `keys.php`
+2. **Audit Log** → `audit.php`
+3. **TOTP / 2FA** → `totp.php`
+4. **Settings** → `settings.php` *(landing page arrives in #349; the
+   link is live but currently 404s)*
+
+The active page is marked **two ways** so it is unambiguous to both
+sighted users and assistive tech:
+
+- The link carries `aria-current="page"`.
+- A teal left border + tinted background (`var(--color-accent)`) is
+  applied via `.admin-sidebar-link.is-active` — light + dark themes
+  both resolve through the v2.9.0 token palette.
+
+### Mobile collapse
+
+Below 768 px the grid collapses to a single column and the sidebar is
+hidden offscreen with `transform: translateX(-100%)`. A fixed-position
+hamburger button (`.admin-sidebar-toggle`) appears at the top-left.
+Clicking it adds `.open` to the sidebar and flips `aria-expanded` on
+the button. The drawer also closes on:
+
+- a second click on the hamburger,
+- the **Escape** key (focus returns to the toggle button), and
+- a click anywhere outside the sidebar.
+
+The toggle is a real `<button>`, so Enter and Space activate it
+natively without any JS keyboard handling.
+
+### Keyboard order
+
+The sidebar `<nav>` is emitted before `<main id="main-content">` in the
+DOM, so `Tab` lands on the first sidebar link before any control inside
+the page card. The skip-link (`Skip to main content`) is rendered first
+of all and still targets `#main-content`, giving keyboard users a
+single-press bypass when they want it.
+
+### Login page
+
+`admin/login.php` does not set the `$admin_user_signed_in` /
+`$admin_csrf_token` locals, which suppresses the entire sidebar +
+hamburger via `_admin_layout.php`. The login shell uses the no-sidebar
+grid (`<body class="admin-shell no-sidebar">`).
