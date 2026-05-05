@@ -6,7 +6,7 @@ declare(strict_types=1);
 // These are the built-in defaults. To override, copy config.php.example to
 // config.php alongside this file — config.php is never overwritten by upgrades.
 
-$app_version          = '3.1.0';
+$app_version          = '3.1.1';
 $locale               = 'en'; // BCP 47 locale tag for number formatting (e.g. 'de', 'fr')
 $fixed_bg_color       = 'null';
 $default_tab          = 'ipv4'; // 'ipv4', 'ipv6', or 'vlsm'
@@ -28,6 +28,16 @@ $page_description     = 'Free online subnet calculator for IPv4 and IPv6. '
 $show_share_bar       = true;
 $frame_ancestors      = '*';
 $canonical_url        = '';
+
+// CSP extension hooks (v3.1.1).  Operators can append space-separated origins
+// to specific CSP directives without forking index.php.  Each value is
+// concatenated as-is, so callers MUST pre-validate (origins only, no quotes,
+// no commas, no newlines).  Production deploy at subnetcalculator.app uses
+// these to allowlist the Cloudflare Zaraz / GA beacons that Cloudflare
+// injects at the CDN edge.  Self-hosted operators can leave them empty.
+$csp_connect_extra    = '';   // appended to connect-src
+$csp_script_extra     = '';   // appended to script-src
+$csp_img_extra        = '';   // appended to img-src
 
 // REST API (v2.0.0)
 $api_tokens              = [];   // [] = open; ['token1'] = auth required

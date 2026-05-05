@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 2026-05-04
+
+Hotfix on top of v3.1.0. Restores tree-editor sharing, lets operators
+extend CSP without forking, and fixes the mobile heading layout.
+
+### Fixed
+
+- **Tree Editor share URL** — visiting a `?tree=…` link no longer stops
+  at the "Start Editing" form. The encoded blob is now decoded on page
+  load, used to populate the Root CIDR input, and the editor auto-starts
+  with state hydrated from the URL.
+- **Tree Editor session loading** — `Save Session` URLs with
+  `?session_id=…` now actually load the saved tree. Added a "Load saved
+  session" form to the editor init screen so a session ID can be entered
+  manually without crafting a URL.
+- **Mobile header truncation** — at viewports ≤ 480px the version pill
+  hides so the "Subnet Calculator" heading no longer truncates to "Su…"
+  next to the icon-button cluster.
+
+### Added
+
+- **CSP extension hooks** — three new config knobs
+  (`$csp_connect_extra`, `$csp_script_extra`, `$csp_img_extra`) let
+  operators allowlist additional origins on `connect-src`, `script-src`,
+  and `img-src` without editing `index.php`. Default is empty (strict).
+  The production deploy at subnetcalculator.app uses these to allowlist
+  the Cloudflare Zaraz / GA4 beacons that Cloudflare injects at the CDN
+  edge — previously those were blocked by `default-src 'self'`.
+- **`connect-src` directive** — the CSP header now emits an explicit
+  `connect-src` (default `'self'`, extensible via the config knob above)
+  instead of relying on the `default-src` fallback.
+
 ## [3.1.0] - 2026-05-04
 
 Polish + deferred-from-v3.0.0. Closes 8 issues across 9 PRs landing into

@@ -1249,6 +1249,7 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
     if (!root) { return; }
 
     const initForm = root.querySelector('#tree-editor-init');
+    const initForms = root.querySelectorAll('.tree-editor-init');
     const initInput = root.querySelector('#tree_editor_cidr');
     const editorEl = root.querySelector('.tree-editor');
     const canvas = root.querySelector('[data-role="canvas"]');
@@ -1791,7 +1792,7 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
             }
         }
 
-        initForm.hidden = true;
+        initForms.forEach(function (f) { f.hidden = true; });
         editorEl.hidden = false;
         undoStack = [];
         redoStack = [];
@@ -1812,14 +1813,75 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
         });
     }
 
-    // Auto-start if ?tree=… and a session already running on the page,
-    // or if a session_id with type=tree was loaded by the server.
-    document.addEventListener('DOMContentLoaded', function () {
+    // Auto-load on first paint:
+    //   ?tree=…        → decode the inline blob and start editor at its root.
+    //   ?session_id=…  → GET /api/v1/sessions, and if the payload is a tree,
+    //                    populate initInput, hydrate state.root, start editor.
+    function loadFromShareUrl() {
+        if (!initInput) { return; }
         const params = new URLSearchParams(window.location.search);
-        if (params.get('tree') && initInput && initInput.value) {
-            startEditor(initInput.value);
+        const treeParam = params.get('tree');
+        if (treeParam) {
+            try {
+                const decoded = JSON.parse(base64UrlDecode(treeParam));
+                if (decoded && typeof decoded.cidr === 'string') {
+                    // The decoded blob is the source of truth — overwrite any
+                    // stale autofill in initInput so startEditor()'s
+                    // decoded.cidr === rootCidr guard hydrates state.root.
+                    initInput.value = decoded.cidr;
+                    startEditor(decoded.cidr);
+                    return;
+                }
+            } catch (e) { setStatus('Ignored malformed share-URL tree.'); }
         }
-    });
+        const sid = params.get('session_id');
+        if (sid && /^[0-9a-f]{8}$/.test(sid)) {
+            loadSession(sid);
+        }
+    }
+
+    function loadSession(sid) {
+        fetch('api/v1/sessions?session_id=' + encodeURIComponent(sid))
+            .then(function (r) { return r.json(); })
+            .then(function (json) {
+                if (!json || !json.ok || !json.data || !json.data.payload) {
+                    setStatus('Load failed: ' + ((json && json.error) || 'session not found'));
+                    return;
+                }
+                const p = json.data.payload;
+                if (p.type !== 'tree' || !p.root || typeof p.root.cidr !== 'string') {
+                    setStatus('Session ' + sid + ' is not a tree session.');
+                    return;
+                }
+                if (initInput && !initInput.value) { initInput.value = p.root.cidr; }
+                startEditor(p.root.cidr);
+                try {
+                    tree_validate_client(p.root);
+                    state.root = p.root;
+                    undoStack = []; redoStack = []; updateUndoButtons();
+                    render();
+                    setStatus('Loaded session ' + sid + '.');
+                } catch (e) {
+                    setStatus('Session payload rejected: ' + e.message);
+                }
+            })
+            .catch(function (e) { setStatus('Load failed: ' + e.message); });
+    }
+
+    document.addEventListener('DOMContentLoaded', loadFromShareUrl);
+
+    const loadForm = root.querySelector('[data-role="tree-load-form"]');
+    if (loadForm) {
+        loadForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            const sid = (loadForm.querySelector('[data-role="tree-load-id"]').value || '').trim();
+            if (!/^[0-9a-f]{8}$/.test(sid)) {
+                setStatus('Session ID must be 8 hex characters.');
+                return;
+            }
+            loadSession(sid);
+        });
+    }
 
     // Click on a node card → split picker (desktop) or sheet (touch).
     canvas.addEventListener('click', function (e) {

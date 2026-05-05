@@ -1080,6 +1080,10 @@
             .logo { width: 36px; height: 36px; }
             .result-value { overflow-wrap: anywhere; }
             .theme-toggle { flex-shrink: 0; }
+            /* v3.1.1 (#330): hide the version pill on narrow viewports so the
+               app title has room to render in full alongside the icon-button
+               cluster. Version is still visible in the docs/footer + meta. */
+            .version { display: none; }
         }
 
         @media (481px <= width <= 767px) {
