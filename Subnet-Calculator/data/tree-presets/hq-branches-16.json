@@ -1,0 +1,15 @@
+{
+  "id": "hq-branches-16",
+  "name": "HQ + 3 Branches (/16)",
+  "description": "Split a /16 into four /18 segments — one HQ and three remote branches (16,384 addresses each).",
+  "family": "ipv4",
+  "rootPrefix": 16,
+  "rootCidr": "10.0.0.0/16",
+  "operations": [
+    { "op": "split", "cidr": "10.0.0.0/16", "into": 4 },
+    { "op": "rename", "cidr": "10.0.0.0/18", "name": "HQ" },
+    { "op": "rename", "cidr": "10.0.64.0/18", "name": "Branch-A" },
+    { "op": "rename", "cidr": "10.0.128.0/18", "name": "Branch-B" },
+    { "op": "rename", "cidr": "10.0.192.0/18", "name": "Branch-C" }
+  ]
+}

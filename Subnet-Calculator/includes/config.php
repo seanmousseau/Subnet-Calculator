@@ -71,6 +71,12 @@ $admin_audit_purge_sample_rate = 0.001;
 // Admin TOTP / 2FA (v3.0.0, #313)
 $admin_totp_secret = '';  // base32 RFC 6238 secret; empty = TOTP disabled
 
+// Tree-editor preset library (v3.1.0, #323). Empty = use the bundled
+// `Subnet-Calculator/data/tree-presets/` directory; set to an absolute path to
+// load presets from elsewhere. A non-existent override falls back to the
+// bundled location (with a single error_log warning).
+$tree_presets_dir = '';
+
 // Wizard-written config first (lowest tier); hand-edited config.php overrides.
 // Order matters: PHP resolves the *last* assignment to a variable, so config.php
 // runs second so an operator edit always wins over auto-written values.
@@ -173,3 +179,4 @@ if (!is_numeric($admin_audit_purge_sample_rate ?? null)) {
     $admin_audit_purge_sample_rate = max(0.0, min(1.0, (float)$admin_audit_purge_sample_rate));
 }
 $admin_totp_secret = is_string($admin_totp_secret ?? null) ? trim((string)$admin_totp_secret) : '';
+$tree_presets_dir  = is_string($tree_presets_dir ?? null) ? trim((string)$tree_presets_dir) : '';

@@ -18,6 +18,7 @@ parameters:
         - Subnet-Calculator/includes/functions-range.php
         - Subnet-Calculator/includes/functions-tree.php
         - Subnet-Calculator/includes/functions-tree-diff.php
+        - Subnet-Calculator/includes/functions-tree-presets.php
         - Subnet-Calculator/includes/functions-apikeys.php
         - Subnet-Calculator/includes/functions-admin-auth.php
         - Subnet-Calculator/includes/functions-admin-totp.php
@@ -41,6 +42,7 @@ parameters:
         - Subnet-Calculator/api/v1/handlers/sessions.php
         - Subnet-Calculator/api/v1/handlers/range.php
         - Subnet-Calculator/api/v1/handlers/tree.php
+        - Subnet-Calculator/api/v1/handlers/tree-presets.php
         - Subnet-Calculator/api/v1/handlers/changelog.php
         - Subnet-Calculator/api/v1/handlers/schemas.php
         - Subnet-Calculator/api/v1/handlers/admin_keys.php

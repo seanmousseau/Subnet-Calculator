@@ -27,6 +27,7 @@ require_once $base . 'functions-resolve.php';
 require $base . 'functions-range.php';
 require $base . 'functions-tree.php';
 require $base . 'functions-tree-diff.php';
+require $base . 'functions-tree-presets.php';
 require $base . 'functions-lookup.php';
 require $base . 'functions-diff.php';
 require $base . 'functions-apikeys.php';
@@ -103,6 +104,8 @@ if ($uri === '/' && $method === 'GET') {
             'GET  /api/v1/sessions/{id}',
             'POST /api/v1/range/ipv4',
             'POST /api/v1/tree',
+            'GET  /api/v1/tree-presets',
+            'GET  /api/v1/tree-presets/{id}',
             'POST /api/v1/wildcard',
             'POST /api/v1/lookup',
             'POST /api/v1/diff',
@@ -134,6 +137,8 @@ if (!empty($api_allowed_endpoints) && $uri !== '/') {
         $ep = 'schemas';
     } elseif (str_starts_with($ep, 'admin/keys')) {
         $ep = 'admin';
+    } elseif (str_starts_with($ep, 'tree-presets')) {
+        $ep = 'tree-presets';
     }
     if (!in_array($ep, $api_allowed_endpoints, true)) {
         json_err('Not found.', 404);
@@ -151,6 +156,11 @@ if ($method === 'GET' && preg_match('#^/sessions/([0-9a-f]{8})$#', $uri, $m)) {
 // Schema export: /schemas/{name}
 if ($method === 'GET' && preg_match('#^/schemas/[a-z0-9\-]+$#', $uri)) {
     require __DIR__ . '/handlers/schemas.php';
+}
+
+// Tree presets (#323): /tree-presets and /tree-presets/{id}
+if ($method === 'GET' && ($uri === '/tree-presets' || preg_match('#^/tree-presets/[a-z0-9\-]+$#', $uri))) {
+    require __DIR__ . '/handlers/tree-presets.php';
 }
 
 // Admin: /admin/keys (POST, GET), /admin/keys/{id} (DELETE),

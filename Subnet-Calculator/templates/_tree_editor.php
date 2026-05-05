@@ -36,6 +36,7 @@
             <button type="button" class="tree-editor-btn" data-action="download-json">JSON</button>
             <button type="button" class="tree-editor-btn" data-action="share-url">Share URL</button>
             <button type="button" class="tree-editor-btn" data-action="diff">Diff</button>
+            <button type="button" class="tree-editor-btn" data-action="apply-template">Apply Template</button>
             <span class="tree-editor-spacer"></span>
             <button type="button" class="tree-editor-btn tree-editor-btn-danger" data-action="reset">Reset</button>
         </div>
@@ -124,6 +125,41 @@
                     <span class="tree-diff-legend-item" data-diff="removed">removed</span>
                     <span class="tree-diff-legend-item" data-diff="changed">changed</span>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Apply Template picker modal (#323, v3.1.0) -->
+    <div class="tree-modal" data-role="preset-modal" role="dialog" aria-modal="true" aria-labelledby="tree-preset-title" hidden>
+        <div class="tree-modal-backdrop" data-role="preset-cancel"></div>
+        <div class="tree-modal-card tree-preset-card">
+            <h3 id="tree-preset-title">Apply Template</h3>
+            <p class="tree-modal-help">Pick a preset, then confirm or customise the root CIDR before it's applied to the editor.</p>
+            <div class="tree-preset-error" data-role="preset-error" role="alert" hidden></div>
+
+            <!-- Step 1: list of presets (role=listbox) -->
+            <div class="tree-preset-list" data-role="preset-list" role="listbox" aria-label="Subnet templates"></div>
+
+            <!-- Step 2: confirm root CIDR -->
+            <div class="tree-preset-confirm" data-role="preset-confirm" hidden>
+                <div class="tree-preset-confirm-meta" data-role="preset-confirm-meta"></div>
+                <label class="tree-modal-label">
+                    Root CIDR
+                    <input type="text" data-role="preset-root-cidr" autocomplete="off" spellcheck="false">
+                </label>
+                <div class="tree-modal-actions">
+                    <button type="button" class="splitter-btn" data-role="preset-apply">Apply</button>
+                    <button type="button" class="tree-editor-btn" data-role="preset-back">&larr; Back</button>
+                    <button type="button" class="tree-modal-cancel" data-role="preset-cancel">Cancel</button>
+                </div>
+            </div>
+
+            <p class="tree-modal-help tree-preset-extend" data-role="preset-list-footer">
+                Drop a JSON file into <code>data/tree-presets/</code> to add your own.
+                <a href="https://docs.subnetcalculator.app/tree/#templates" target="_blank" rel="noopener">Schema reference</a>.
+            </p>
+            <div class="tree-modal-actions" data-role="preset-list-actions">
+                <button type="button" class="tree-modal-cancel" data-role="preset-cancel">Cancel</button>
             </div>
         </div>
     </div>

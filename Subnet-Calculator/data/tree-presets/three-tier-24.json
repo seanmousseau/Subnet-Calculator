@@ -1,0 +1,15 @@
+{
+  "id": "three-tier-24",
+  "name": "Production / Staging / Dev (/24)",
+  "description": "Three-tier environment split of a /24 with a reserve block (4 × /26).",
+  "family": "ipv4",
+  "rootPrefix": 24,
+  "rootCidr": "10.0.0.0/24",
+  "operations": [
+    { "op": "split", "cidr": "10.0.0.0/24", "into": 4 },
+    { "op": "rename", "cidr": "10.0.0.0/26", "name": "Production" },
+    { "op": "rename", "cidr": "10.0.0.64/26", "name": "Staging" },
+    { "op": "rename", "cidr": "10.0.0.128/26", "name": "Dev" },
+    { "op": "rename", "cidr": "10.0.0.192/26", "name": "Reserve" }
+  ]
+}
