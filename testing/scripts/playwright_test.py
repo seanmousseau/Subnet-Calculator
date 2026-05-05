@@ -4286,13 +4286,10 @@ ADMIN_PAGES_FOR_CHROME = [
 
 async def test_admin_pages_share_app_header(page: Page) -> None:
     section("v3.2.0 #345 admin chrome — shared app header on all admin pages")
-    auth = "Basic " + base64.b64encode(
-        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
-    ).decode()
     for path, _ in ADMIN_PAGES_FOR_CHROME:
         resp = await page.context.request.get(
             APP_URL + path,
-            headers={"Cookie": auth},
+            headers={"Cookie": _admin_session_cookie_header()},
         )
         assert_eq(f"admin chrome: {path} 200", resp.status, 200)
         body = await resp.text()
@@ -4350,11 +4347,19 @@ async def test_admin_pages_share_app_header(page: Page) -> None:
 async def test_admin_theme_toggle_works(page: Page) -> None:
     section("v3.2.0 #345 admin chrome — theme toggle flips data-theme on /admin/")
     # Pre-seed light theme via localStorage, then load admin/keys.php with
-    # Basic Auth and verify the inline theme-init script honours it.
-    auth = "Basic " + base64.b64encode(
-        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
-    ).decode()
-    await page.context.set_extra_http_headers({"Cookie": auth})
+    # the cookie-session sc_admin_sid and verify the inline theme-init
+    # script honours it.
+    cookie_header = _admin_session_cookie_header()
+    sid_value = cookie_header.split("sc_admin_sid=", 1)[1]
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(APP_URL)
+    domain = parsed.hostname or "localhost"
+    await page.context.add_cookies([{
+        "name": "sc_admin_sid",
+        "value": sid_value,
+        "domain": domain,
+        "path": "/",
+    }])
     try:
         await navigate(page, APP_URL + "admin/keys.php")
         await page.evaluate("() => localStorage.setItem('theme', 'light')")
@@ -4377,7 +4382,7 @@ async def test_admin_theme_toggle_works(page: Page) -> None:
             await page.evaluate("() => localStorage.removeItem('theme')")
         except Exception:
             pass
-        await page.context.set_extra_http_headers({})
+        await page.context.clear_cookies()
         # Re-load the calculator without auth so cookies / theme state are
         # clean for downstream tests.
         try:
@@ -4389,10 +4394,17 @@ async def test_admin_theme_toggle_works(page: Page) -> None:
 
 async def test_admin_inputs_share_bg_token(page: Page) -> None:
     section("v3.2.0 #345 admin chrome — text + number inputs share computed bg")
-    auth = "Basic " + base64.b64encode(
-        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
-    ).decode()
-    await page.context.set_extra_http_headers({"Cookie": auth})
+    cookie_header = _admin_session_cookie_header()
+    sid_value = cookie_header.split("sc_admin_sid=", 1)[1]
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(APP_URL)
+    domain = parsed.hostname or "localhost"
+    await page.context.add_cookies([{
+        "name": "sc_admin_sid",
+        "value": sid_value,
+        "domain": domain,
+        "path": "/",
+    }])
     try:
         await navigate(page, APP_URL + "admin/keys.php")
         # Mint form has both a text input (name) and a number input (rate_limit_rpm).
@@ -4420,7 +4432,7 @@ async def test_admin_inputs_share_bg_token(page: Page) -> None:
             text_bg,
         )
     finally:
-        await page.context.set_extra_http_headers({})
+        await page.context.clear_cookies()
 
 
 # ---------------------------------------------------------------------------
