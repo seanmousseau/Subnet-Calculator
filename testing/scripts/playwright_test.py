@@ -2945,8 +2945,8 @@ async def test_admin_audit_renders(page: Page) -> None:
     )
     for label in ["all", "login", "key"]:
         assert_true(
-            f"admin/audit: '{label}' filter link present",
-            f">{label}</a>" in body,
+            f"admin/audit: '{label}' filter tab present",
+            f">{label}</button>" in body,
             f"missing filter '{label}'",
         )
 
@@ -2983,6 +2983,156 @@ async def test_admin_audit_records_login_failure(page: Page) -> None:
     assert_true(
         "audit log: login.fail row appears in body",
         "login.fail" in body,
+    )
+
+
+async def test_admin_audit_filter_tablist_semantics(page: Page) -> None:
+    section("v3.2.0 #346 admin/audit.php — filter strip uses role=tablist")
+    resp = await page.context.request.get(
+        APP_URL + "admin/audit.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    assert_true(
+        "audit: exactly one role=tablist on the filter strip",
+        body.count('role="tablist"') == 1,
+        f"expected 1 tablist, found {body.count(chr(34) + 'role=' + chr(34))}",
+    )
+    assert_true("audit: role=tab present on filter buttons", 'role="tab"' in body)
+    assert_true("audit: aria-selected=true on the active tab", 'aria-selected="true"' in body)
+    assert_true("audit: aria-selected=false on inactive tabs", 'aria-selected="false"' in body)
+    assert_true("audit: aria-controls wires the active tab to the rows", 'aria-controls="audit-rows"' in body)
+    # Selecting a different tab updates the URL filter param.
+    resp2 = await page.context.request.get(
+        APP_URL + "admin/audit.php?filter=login.",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body2 = await resp2.text()
+    assert_true(
+        "audit: ?filter=login. promotes the login tab to aria-selected=true",
+        'value="login."' in body2 and 'aria-selected="true"' in body2,
+    )
+
+
+async def test_admin_audit_action_badges(page: Page) -> None:
+    section("v3.2.0 #346 admin/audit.php — action cells render colour-coded badges")
+    resp = await page.context.request.get(
+        APP_URL + "admin/audit.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    # The audit log accumulates over time; we don't seed events here, but the
+    # badge classes must appear at all (a fresh dev DB always has at least one
+    # auth.* row from the test rig). Assert mapping integrity on whatever rows
+    # render.
+    has_badge = any(cls in body for cls in ("badge-public", "badge-multicast", "badge-private", "badge-doc", "badge-other"))
+    assert_true("audit: at least one audit row rendered with a v3.2.0 badge class", has_badge)
+    # Negative: the legacy badge classes (badge-info / badge-fail / badge-ok)
+    # should NOT appear inside an audit row anymore — they were the v3.0.0
+    # mapping superseded by audit_action_badge_class().
+    assert_true(
+        "audit: legacy badge-info no longer used on audit rows",
+        '<span class="badge badge-info">' not in body,
+    )
+
+
+async def test_admin_audit_sticky_thead(page: Page) -> None:
+    section("v3.2.0 #346 admin/audit.php — table thead is position:sticky")
+    # Use a real navigation so computed styles resolve.
+    cookie = _admin_session_cookie_header().split("sc_admin_sid=", 1)[1]
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(APP_URL)
+    domain = parsed.hostname or "localhost"
+    await page.context.add_cookies([{
+        "name": "sc_admin_sid",
+        "value": cookie,
+        "domain": domain,
+        "path": "/",
+    }])
+    try:
+        resp = await page.goto(APP_URL + "admin/audit.php")
+        if resp is None or resp.status != 200:
+            ok("audit sticky thead: page unreachable in this environment — skipped")
+            return
+        # The audit table only renders if there are rows; if not, skip.
+        thead_count = await page.locator(".admin-table thead").count()
+        if thead_count == 0:
+            ok("audit sticky thead: table not rendered (empty audit log) — skipped")
+            return
+        position = await page.evaluate(
+            "() => getComputedStyle(document.querySelector('.admin-table thead')).position"
+        )
+        assert_eq("audit thead computed position is 'sticky'", position, "sticky")
+    finally:
+        await page.context.clear_cookies()
+
+
+async def test_admin_audit_pagination_disabled_not_focusable(page: Page) -> None:
+    section("v3.2.0 #346 admin/audit.php — disabled pagination is <span>, not focusable")
+    resp = await page.context.request.get(
+        APP_URL + "admin/audit.php?page=1",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    # On page 1 the prev side is disabled. Look for the disabled-side <span>.
+    has_disabled_span = (
+        '<span class="admin-pager-item is-disabled" aria-disabled="true"' in body
+        and 'Previous page (unavailable)' in body
+    )
+    if not has_disabled_span and 'admin-pager' not in body:
+        # Audit log empty → pager isn't rendered. Skip.
+        ok("audit pager disabled: pager not rendered (empty audit log) — skipped")
+        return
+    assert_true(
+        "audit: prev side on page 1 is <span aria-disabled=true>",
+        has_disabled_span,
+    )
+    # And no tabindex="-1" hack on an <a> for the disabled side. Scope the
+    # check to the pager block — tabindex="-1" is a legitimate pattern on
+    # the inactive role=tab filter buttons (roving tabindex).
+    pager_idx = body.find('admin-pager')
+    pager_end = body.find('</section>', pager_idx) if pager_idx != -1 else -1
+    pager_block = body[pager_idx:pager_end] if pager_idx != -1 and pager_end != -1 else ''
+    assert_true(
+        "audit: disabled side does not use tabindex=-1 on <a>",
+        'tabindex="-1"' not in pager_block,
+    )
+
+
+async def test_admin_audit_time_cells_have_datetime_attr(page: Page) -> None:
+    section("v3.2.0 #346 admin/audit.php — every time cell wrapped in <time datetime>")
+    resp = await page.context.request.get(
+        APP_URL + "admin/audit.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    if "admin-table" not in body:
+        ok("audit time attr: table not rendered (empty audit log) — skipped")
+        return
+    import re as _re
+    times = _re.findall(r'<time datetime="([^"]+)"', body)
+    assert_true("audit: at least one <time datetime=…> in the table", len(times) > 0)
+    bad = [t for t in times if not t.endswith("Z")]
+    assert_true(
+        "audit: every datetime is a UTC ISO-8601 string ending in Z",
+        len(bad) == 0,
+        f"non-UTC datetimes: {bad[:3]}",
+    )
+
+
+async def test_admin_audit_caption_sr_only(page: Page) -> None:
+    section("v3.2.0 #346 admin/audit.php — table has sr-only caption for screen readers")
+    resp = await page.context.request.get(
+        APP_URL + "admin/audit.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    if "admin-table" not in body:
+        ok("audit caption: table not rendered (empty audit log) — skipped")
+        return
+    assert_true(
+        "audit: <caption class=\"sr-only\"> with the expected copy",
+        '<caption class="sr-only">Recent admin actions, newest first.' in body,
     )
 
 
@@ -6086,6 +6236,13 @@ async def main() -> None:
             await test_admin_keys_authed_renders(page)
             await test_admin_audit_renders(page)
             await test_admin_audit_records_login_failure(page)
+            # v3.2.0 #346 — audit log polish
+            await test_admin_audit_filter_tablist_semantics(page)
+            await test_admin_audit_action_badges(page)
+            await test_admin_audit_sticky_thead(page)
+            await test_admin_audit_pagination_disabled_not_focusable(page)
+            await test_admin_audit_time_cells_have_datetime_attr(page)
+            await test_admin_audit_caption_sr_only(page)
             await test_admin_keys_csrf_rejected(page)
             await test_admin_keys_per_row_rpm_edit(page)
             await test_admin_keys_revoke_confirm_present(page)

@@ -215,6 +215,40 @@ Retention is bounded by `$admin_audit_retention_days` (default `90`; set to
 The audit module fails open: a write failure logs to `error_log` but never
 masks the underlying admin action.
 
+### Viewer polish (v3.2.0+, #346)
+
+The `/admin/audit.php` viewer was refreshed in v3.2.0. Schema, retention,
+and purge behaviour are unchanged — only the rendered page differs:
+
+- **Filter strip** is a real `<div role="tablist">` with `<button role="tab"
+  aria-selected="true|false" aria-controls="audit-rows">` per filter
+  (`all`, `login`, `key`, `wizard`, `totp`). Behaviour is identical to the
+  v3.0.0 link-based strip; screen readers now announce the active filter.
+- **Action cells** render as colour-coded badges via the shared helper
+  `audit_action_badge_class($action)` in `functions-audit.php`. Suffix
+  matching wins over prefix matching, so `auth.login.fail` is red, not blue:
+
+  | Action pattern | Badge | Colour |
+  |---|---|---|
+  | `*.ok`, `*.success` | `badge-public` | green |
+  | `*.fail`, `*.deny`, `*.error` | `badge-multicast` | red |
+  | `*.create`, `*.delete`, `*.write`, `*.update`, `*.revoke` | `badge-private` | amber |
+  | `wizard.*`, `totp.*`, `config.*`, `auth.*` | `badge-doc` | blue |
+  | _(default)_ | `badge-other` | slate |
+
+- **Sticky `<thead>`** keeps column headers visible while scrolling long logs.
+- **Timestamps** are wrapped in `<time datetime="2026-05-05T01:44:32Z">…</time>`
+  so screen readers and locale-aware browsers can reformat the value.
+- **Pagination** disabled side is a non-focusable `<span aria-disabled="true">`
+  with `aria-label="Previous page (unavailable)"` rather than a faded
+  `<a tabindex="-1">` — keyboard users can no longer focus a "next" link
+  that does nothing.
+- **`<caption class="sr-only">`** describes the table to screen readers.
+
+The mapping helper is reusable from any future page that renders audit
+rows — keep new audit consumers consistent by calling
+`audit_action_badge_class()` rather than re-implementing the suffix table.
+
 ### Purge strategy (v3.1.0+, #325)
 
 Two settings control **when** old rows are deleted:

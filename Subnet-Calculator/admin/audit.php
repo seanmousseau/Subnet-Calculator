@@ -57,12 +57,20 @@ try {
 $totalPages = max(1, (int)ceil($total / AUDIT_PAGE_SIZE));
 
 $h = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
-$fmt = static function (?int $ts): string {
+$fmtIso = static function (?int $ts): string {
+    if ($ts === null) {
+        return '';
+    }
+    return gmdate('Y-m-d\TH:i:s\Z', $ts);
+};
+$fmtHuman = static function (?int $ts): string {
     if ($ts === null) {
         return '—';
     }
     return gmdate('Y-m-d H:i:s', $ts) . ' UTC';
 };
+
+$filterLabels = ['' => 'all', 'login.' => 'login', 'key.' => 'key', 'wizard.' => 'wizard', 'totp.' => 'totp'];
 
 ob_start();
 ?>
@@ -71,15 +79,21 @@ ob_start();
     <?php if ($error !== null) : ?>
         <div class="alert alert-error" role="alert"><?= $h($error) ?></div>
     <?php endif; ?>
-    <div class="admin-filters" role="group" aria-label="Filter by action">
-        <span class="admin-filters-label">Filter:</span>
-        <?php foreach (['' => 'all', 'login.' => 'login', 'key.' => 'key', 'wizard.' => 'wizard', 'totp.' => 'totp'] as $val => $label) : ?>
-            <a href="?<?= $val === '' ? '' : 'filter=' . urlencode($val) ?>"
-               class="admin-filter<?= $filter === $val ? ' is-active' : '' ?>"
-               <?= $filter === $val ? 'aria-current="true"' : '' ?>><?= $h($label) ?></a>
+    <form method="get" class="admin-filters" role="tablist" aria-label="Filter audit entries by action">
+        <?php foreach ($filterLabels as $val => $label) :
+            $selected = $filter === $val;
+            ?>
+            <button type="submit"
+                    name="filter"
+                    value="<?= $h($val) ?>"
+                    role="tab"
+                    class="tab-btn audit-filter-tab<?= $selected ? ' active' : '' ?>"
+                    aria-selected="<?= $selected ? 'true' : 'false' ?>"
+                    aria-controls="audit-rows"
+                    tabindex="<?= $selected ? '0' : '-1' ?>"><?= $h($label) ?></button>
         <?php endforeach; ?>
         <span class="admin-filters-count">(<?= $total ?> total)</span>
-    </div>
+    </form>
 </section>
 
 <section class="admin-section" aria-labelledby="audit-table-heading">
@@ -89,22 +103,19 @@ ob_start();
     <?php else : ?>
         <div class="admin-table-wrap">
             <table class="admin-table">
+                <caption class="sr-only">Recent admin actions, newest first. Use the filter tabs to narrow by category.</caption>
                 <thead>
-                    <tr><th>Time (UTC)</th><th>Action</th><th>Actor</th><th>IP</th><th>Target</th><th>Meta</th></tr>
+                    <tr><th scope="col">Time (UTC)</th><th scope="col">Action</th><th scope="col">Actor</th><th scope="col">IP</th><th scope="col">Target</th><th scope="col">Meta</th></tr>
                 </thead>
-                <tbody>
+                <tbody id="audit-rows">
                 <?php foreach ($rows as $r) :
                     $action = $r['action'];
-                    $badge  = 'badge-info';
-                    if (str_ends_with($action, '.fail')) {
-                        $badge = 'badge-fail';
-                    } elseif (str_ends_with($action, '.ok')) {
-                        $badge = 'badge-ok';
-                    }
+                    $badge  = audit_action_badge_class($action);
+                    $iso    = $fmtIso($r['ts']);
                     ?>
                     <tr>
-                        <td class="mono"><?= $h($fmt($r['ts'])) ?></td>
-                        <td><span class="badge <?= $badge ?>"><?= $h($action) ?></span></td>
+                        <td class="mono"><?php if ($iso !== '') : ?><time datetime="<?= $h($iso) ?>"><?= $h($fmtHuman($r['ts'])) ?></time><?php else : ?>—<?php endif; ?></td>
+                        <td><span class="badge <?= $h($badge) ?>"><?= $h($action) ?></span></td>
                         <td class="mono"><?= $h($r['actor'] ?? '—') ?></td>
                         <td class="mono"><?= $h($r['ip']    ?? '—') ?></td>
                         <td class="mono"><?= $r['target_id'] !== null ? (int)$r['target_id'] : '—' ?></td>
@@ -128,15 +139,21 @@ ob_start();
             }
             return '?' . implode('&', $parts);
         };
+        $prevDisabled = $page <= 1;
+        $nextDisabled = $page >= $totalPages;
         ?>
         <div class="admin-pager">
             <span>Page <?= (int)$page ?> of <?= (int)$totalPages ?></span>
-            <a href="<?= $h($qs(max(1, $page - 1))) ?>"
-               class="<?= $page <= 1 ? 'is-disabled' : '' ?>"
-               <?= $page <= 1 ? 'aria-disabled="true" tabindex="-1"' : 'aria-label="Previous page"' ?>>← prev</a>
-            <a href="<?= $h($qs(min($totalPages, $page + 1))) ?>"
-               class="<?= $page >= $totalPages ? 'is-disabled' : '' ?>"
-               <?= $page >= $totalPages ? 'aria-disabled="true" tabindex="-1"' : 'aria-label="Next page"' ?>>next →</a>
+            <?php if ($prevDisabled) : ?>
+                <span class="admin-pager-item is-disabled" aria-disabled="true" aria-label="Previous page (unavailable)">← prev</span>
+            <?php else : ?>
+                <a href="<?= $h($qs($page - 1)) ?>" class="admin-pager-item" aria-label="Previous page">← prev</a>
+            <?php endif; ?>
+            <?php if ($nextDisabled) : ?>
+                <span class="admin-pager-item is-disabled" aria-disabled="true" aria-label="Next page (unavailable)">next →</span>
+            <?php else : ?>
+                <a href="<?= $h($qs($page + 1)) ?>" class="admin-pager-item" aria-label="Next page">next →</a>
+            <?php endif; ?>
         </div>
         <p class="admin-meta-note">
             Retention: rows older than <code><?= (int)($admin_audit_retention_days ?? 90) ?></code> days
