@@ -3047,6 +3047,40 @@ def _admin_basic_header() -> str:
     return _admin_session_cookie_header()
 
 
+def _admin_session_requests():
+    """Returns a freshly authenticated requests.Session.
+
+    Use this when a test does a POST -> follow GET cycle and needs PHPSESSID
+    to round-trip for the PRG flash. The returned Session has both
+    sc_admin_sid (from form login) and a freshly-minted PHPSESSID once the
+    first admin page is hit.
+    """
+    import requests as _r
+    import re as _re
+    sess = _r.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    get_resp = sess.get(APP_URL + "admin/login.php", timeout=10)
+    if get_resp.status_code != 200:
+        raise RuntimeError(f"login.php GET: HTTP {get_resp.status_code}")
+    m = _re.search(r'name="csrf"\s+value="([0-9a-f]+)"', get_resp.text)
+    if not m:
+        raise RuntimeError("login.php GET: csrf not found")
+    csrf = m.group(1)
+    post_resp = sess.post(
+        APP_URL + "admin/login.php",
+        data={"user": ADMIN_USER, "pass": ADMIN_PASS, "csrf": csrf, "next": "/admin/"},
+        allow_redirects=False,
+        timeout=10,
+    )
+    if post_resp.status_code != 303:
+        raise RuntimeError(
+            f"login.php POST: expected 303, got {post_resp.status_code}"
+        )
+    return sess
+
+
 def _drain_admin_state() -> None:
     """Zero api_keys + admin_audit + admin_recovery_codes + sc_admin sessions.
 
@@ -3107,7 +3141,7 @@ async def test_admin_keys_per_row_rpm_edit(page: Page) -> None:
     # Mint a key first so we have a row to edit.
     keys_get = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     body = await keys_get.text()
     # CSRF token is the same for every form on the page.
@@ -3118,7 +3152,7 @@ async def test_admin_keys_per_row_rpm_edit(page: Page) -> None:
 
     mint = await page.context.request.post(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
         form={
             "_csrf": csrf,
             "action": "create",
@@ -3131,7 +3165,7 @@ async def test_admin_keys_per_row_rpm_edit(page: Page) -> None:
 
     listing = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     body2 = await listing.text()
     assert_true(
@@ -3149,7 +3183,7 @@ async def test_admin_keys_revoke_confirm_present(page: Page) -> None:
     auth = _admin_basic_header()
     listing = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     body = await listing.text()
     assert_true(
@@ -3171,7 +3205,7 @@ async def test_admin_keys_revoke_confirm_present(page: Page) -> None:
         ):
             await page.context.request.post(
                 APP_URL + "admin/keys.php",
-                headers={"Authorization": auth},
+                headers={"Cookie": auth},
                 form={
                     "_csrf": csrf,
                     "action": "revoke",
@@ -3188,7 +3222,7 @@ async def test_admin_drain_endpoint_zeroes_state(page: Page) -> None:
     # Mint a key via the admin UI so we can prove the drain removes it.
     listing = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     body = await listing.text()
     csrf_match = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
@@ -3199,7 +3233,7 @@ async def test_admin_drain_endpoint_zeroes_state(page: Page) -> None:
     csrf = csrf_match.group(1)
     mint = await page.context.request.post(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
         form={"_csrf": csrf, "action": "create", "name": "drain-fixture"},
         max_redirects=0,
     )
@@ -3210,7 +3244,7 @@ async def test_admin_drain_endpoint_zeroes_state(page: Page) -> None:
     # "the mint endpoint redirected". A 303 alone doesn't prove insertion.
     before_drain = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     before_body = await before_drain.text()
     assert_true(
@@ -3257,13 +3291,17 @@ async def test_admin_drain_endpoint_zeroes_state(page: Page) -> None:
     # active row (the drain-fixture row should be gone).
     after = await page.context.request.get(
         APP_URL + "admin/keys.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     after_body = await after.text()
     assert_true(
         "api_keys empty after drain: drain-fixture not listed",
         ">drain-fixture<" not in after_body,
     )
+    # The drain wiped admin_sessions; the cached cookie is now invalid.
+    # Reset so the next admin test re-mints a fresh session.
+    global _ADMIN_SESSION_COOKIE_CACHE
+    _ADMIN_SESSION_COOKIE_CACHE = None
 
 
 async def test_admin_audit_pagination_param(page: Page) -> None:
@@ -3271,7 +3309,7 @@ async def test_admin_audit_pagination_param(page: Page) -> None:
     auth = _admin_basic_header()
     resp = await page.context.request.get(
         APP_URL + "admin/audit.php?page=2",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     assert_eq("admin/audit page=2: still 200", resp.status, 200)
     body = await resp.text()
@@ -3288,7 +3326,7 @@ async def test_admin_totp_page_renders(page: Page) -> None:
     auth = _admin_basic_header()
     resp = await page.context.request.get(
         APP_URL + "admin/totp.php",
-        headers={"Authorization": auth},
+        headers={"Cookie": auth},
     )
     assert_eq("admin/totp: status 200", resp.status, 200)
     body = await resp.text()
@@ -3308,34 +3346,27 @@ async def test_admin_totp_page_renders(page: Page) -> None:
 
 async def test_admin_totp_generate_secret_flow(page: Page) -> None:
     section("v3.0.0 #313 admin/totp.php — generate_secret POST surfaces base32")
-    auth = _admin_basic_header()
-    # Pull CSRF from the page first.
-    initial = await page.context.request.get(
-        APP_URL + "admin/totp.php",
-        headers={"Authorization": auth},
-    )
-    body = await initial.text()
+    # Use a single requests.Session for the POST -> follow GET so PHPSESSID
+    # round-trips and the PRG flash survives. (Cookie-session admin auth
+    # via the form login is also performed on this same session.)
+    sess = _admin_session_requests()
+    initial = sess.get(APP_URL + "admin/totp.php", timeout=10)
+    body = initial.text
     import re
     m = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
     assert_true("admin/totp: CSRF token discoverable", m is not None)
     csrf = m.group(1) if m else ""
 
-    # Cookies must round-trip for the PRG flash to survive.
-    ctx = page.context
-    storage = await ctx.storage_state()  # noqa: F841 — keep handle, satisfies linters
-    post = await ctx.request.post(
+    post = sess.post(
         APP_URL + "admin/totp.php",
-        headers={"Authorization": auth},
-        form={"_csrf": csrf, "action": "generate_secret"},
-        max_redirects=0,
+        data={"_csrf": csrf, "action": "generate_secret"},
+        allow_redirects=False,
+        timeout=10,
     )
-    assert_eq("admin/totp generate: 303 PRG", post.status, 303)
+    assert_eq("admin/totp generate: 303 PRG", post.status_code, 303)
 
-    follow = await ctx.request.get(
-        APP_URL + "admin/totp.php",
-        headers={"Authorization": auth},
-    )
-    body2 = await follow.text()
+    follow = sess.get(APP_URL + "admin/totp.php", timeout=10)
+    body2 = follow.text
     assert_true(
         "admin/totp generate: provisioning otpauth:// URI rendered",
         "otpauth://totp/" in body2,
@@ -3348,27 +3379,21 @@ async def test_admin_totp_generate_secret_flow(page: Page) -> None:
 
 async def test_admin_totp_regenerate_blocked_when_disabled(page: Page) -> None:
     section("v3.0.0 #313 admin/totp.php — regenerate_codes blocked when TOTP disabled")
-    auth = _admin_basic_header()
-    initial = await page.context.request.get(
-        APP_URL + "admin/totp.php",
-        headers={"Authorization": auth},
-    )
-    body = await initial.text()
+    sess = _admin_session_requests()
+    initial = sess.get(APP_URL + "admin/totp.php", timeout=10)
+    body = initial.text
     import re
     m = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
     csrf = m.group(1) if m else ""
-    post = await page.context.request.post(
+    post = sess.post(
         APP_URL + "admin/totp.php",
-        headers={"Authorization": auth},
-        form={"_csrf": csrf, "action": "regenerate_codes"},
-        max_redirects=0,
+        data={"_csrf": csrf, "action": "regenerate_codes"},
+        allow_redirects=False,
+        timeout=10,
     )
-    assert_eq("admin/totp regenerate (disabled): 303 PRG", post.status, 303)
-    follow = await page.context.request.get(
-        APP_URL + "admin/totp.php",
-        headers={"Authorization": auth},
-    )
-    body2 = await follow.text()
+    assert_eq("admin/totp regenerate (disabled): 303 PRG", post.status_code, 303)
+    follow = sess.get(APP_URL + "admin/totp.php", timeout=10)
+    body2 = follow.text
     assert_true(
         "admin/totp regenerate: error mentions TOTP must be enabled first",
         "Enable TOTP first" in body2,
@@ -3382,9 +3407,17 @@ async def test_admin_totp_regenerate_blocked_when_disabled(page: Page) -> None:
 
 async def test_admin_login_form_renders_with_autocomplete(page: Page) -> None:
     section("v3.2.0 #342 admin/login.php — form has CSRF + autocomplete attrs")
-    resp = await page.context.request.get(APP_URL + "admin/login.php")
-    assert_eq("login.php: status 200", resp.status, 200)
-    body = await resp.text()
+    # Use a fresh requests.Session so accumulated page.context cookies (set
+    # during earlier admin tests) cannot shortcut the GET into a redirect
+    # back to keys.php.
+    import requests as _r
+    sess = _r.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    resp = sess.get(APP_URL + "admin/login.php", timeout=10, allow_redirects=False)
+    assert_eq("login.php: status 200", resp.status_code, 200)
+    body = resp.text
     assert_true(
         "login.php: username input carries autocomplete=username",
         'autocomplete="username"' in body,
@@ -3451,9 +3484,15 @@ async def test_admin_login_failure_increments_rate_limit(page: Page) -> None:
 
 async def test_admin_login_protected_pages_redirect_unauth(page: Page) -> None:
     section("v3.2.0 #342 admin/* unauthenticated -> 303 to login.php?next=...")
+    # Fresh requests.Session so we are guaranteed cookie-less.
+    import requests as _r
+    sess = _r.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
     for path in ("admin/keys.php", "admin/audit.php", "admin/totp.php"):
-        resp = await page.context.request.get(APP_URL + path, max_redirects=0)
-        assert_eq(f"{path}: status 303", resp.status, 303)
+        resp = sess.get(APP_URL + path, timeout=10, allow_redirects=False)
+        assert_eq(f"{path}: status 303", resp.status_code, 303)
         location = resp.headers.get("location", "")
         assert_true(
             f"{path}: Location points to login.php with ?next=",
@@ -3501,7 +3540,7 @@ async def test_admin_pages_share_app_header(page: Page) -> None:
     for path, _ in ADMIN_PAGES_FOR_CHROME:
         resp = await page.context.request.get(
             APP_URL + path,
-            headers={"Authorization": auth},
+            headers={"Cookie": auth},
         )
         assert_eq(f"admin chrome: {path} 200", resp.status, 200)
         body = await resp.text()

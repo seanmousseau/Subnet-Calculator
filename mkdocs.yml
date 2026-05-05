@@ -66,6 +66,7 @@ nav:
     - PHP Client Library: client.md
     - JSON-Schemas: schemas.md
     - Admin UI & API Keys: admin.md
+    - Admin Login: admin-login.md
     - Operator Config: config.md
 
 extra:
