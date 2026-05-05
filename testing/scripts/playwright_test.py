@@ -4350,21 +4350,30 @@ async def test_admin_pages_share_app_header(page: Page) -> None:
             "missing .admin-breadcrumb",
         )
         # Exactly one outer .card (the <main id="main-content"> wrapper).
-        # Counting class="card" occurrences — the shared layout uses a
-        # single outer .card; nested elements should use .admin-card or
-        # bare <section> divs, never another .card.
-        outer_card_count = body.count('class="card admin-card"') + body.count('class="admin-card card"')
-        # At least one — outer card is class="card admin-card".
+        # The shared layout uses a single outer .card; nested elements should
+        # use .admin-card or bare <section> divs, never another .card. Parse
+        # every class="..." attribute and count `card` occurrences as a
+        # whole token so `class="foo card bar"` still matches.
+        import re as _re_card
+        class_attr_re = _re_card.compile(r'class="([^"]*)"')
+        card_count = 0
+        admin_card_count = 0
+        for cls_value in class_attr_re.findall(body):
+            tokens = cls_value.split()
+            if 'card' in tokens:
+                card_count += 1
+                if 'admin-card' in tokens:
+                    admin_card_count += 1
         assert_true(
             f"admin chrome: {path} has outer .card admin-card",
-            outer_card_count >= 1,
-            f"got {outer_card_count}",
+            admin_card_count >= 1,
+            f"got {admin_card_count}",
         )
-        # No nested ".card" class beyond the outer one (no nested cards
-        # inside the admin layout body).
-        nested_card_count = body.count('class="card"')
+        # Total .card occurrences should equal the outer admin-card; any
+        # extras mean a nested card slipped into the admin body.
+        nested_card_count = card_count - admin_card_count
         assert_true(
-            f"admin chrome: {path} has no nested .card (got {nested_card_count})",
+            f"admin chrome: {path} has no nested .card (got {nested_card_count} extras beyond outer admin-card)",
             nested_card_count == 0,
             "nested .card found in admin body — should be <section> instead",
         )
