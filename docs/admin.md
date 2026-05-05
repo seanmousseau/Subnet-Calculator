@@ -33,6 +33,30 @@ Navigate to `https://your-host/admin/keys.php`. The browser will prompt for
 the admin username + password (HTTP Basic Auth). Each request re-authenticates
 — there is no session cookie. After login you can:
 
+### Shared admin chrome (v3.2.0+, #345)
+
+Starting in v3.2.0 the admin pages render through the same shared layout as
+the calculator. Each admin page (`keys.php`, `audit.php`, `totp.php`,
+`totp-verify.php`, the first-run wizard) shows the calculator's logo,
+version pill, and theme toggle in the page header, plus a breadcrumb chip
+between the version pill and the theme toggle. The dark/light theme toggle
+now works on `/admin/` (it previously force-rendered dark because the
+admin pages did not load the toggle script).
+
+Each admin page has exactly one outer `.card` wrapping all sub-sections.
+Sub-sections render as `<section>` blocks separated by a 1px divider — no
+nested cards. Inputs share the calculator's `--color-input-bg` token, and
+form layouts reuse the calculator's `.form-group` / `.splitter-btn`
+components. Destructive actions use a token-driven `.btn-danger` class.
+
+An interim footer link cluster (API Keys · TOTP / 2FA · Audit Log) appears
+at the bottom of every admin page with the active page rendered as a
+non-link `aria-current="page"` text node. The cluster will be replaced by
+a left sidebar in v3.3.0 (#344).
+
+### Available actions
+
+
 - **Mint a key:** enter a human-readable name and submit. The token is shown
   once on the next page; copy it immediately. After page reload it is gone.
 - **List keys:** see name, public prefix (first 8 hex chars), creation time,
