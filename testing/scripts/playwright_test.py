@@ -3312,6 +3312,151 @@ async def test_admin_totp_regenerate_blocked_when_disabled(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# v3.2.0 #345 — Admin chrome adoption (shared header / single-card / theme)
+# ---------------------------------------------------------------------------
+
+ADMIN_PAGES_FOR_CHROME = [
+    ("admin/keys.php", "API Keys"),
+    ("admin/audit.php", "Admin Audit Log"),
+    ("admin/totp.php", "TOTP / 2FA"),
+]
+
+
+async def test_admin_pages_share_app_header(page: Page) -> None:
+    section("v3.2.0 #345 admin chrome — shared app header on all admin pages")
+    auth = "Basic " + base64.b64encode(
+        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
+    ).decode()
+    for path, _ in ADMIN_PAGES_FOR_CHROME:
+        resp = await page.context.request.get(
+            APP_URL + path,
+            headers={"Authorization": auth},
+        )
+        assert_eq(f"admin chrome: {path} 200", resp.status, 200)
+        body = await resp.text()
+        # Logo (shared with calculator) — assets/logo.webp picture source.
+        assert_true(
+            f"admin chrome: {path} renders shared logo",
+            "assets/logo.webp" in body,
+            "missing logo asset reference",
+        )
+        # Version pill (.version span).
+        assert_true(
+            f"admin chrome: {path} renders version pill",
+            'class="version"' in body,
+            "missing .version pill",
+        )
+        # Theme toggle button (id=theme-toggle).
+        assert_true(
+            f"admin chrome: {path} renders theme toggle",
+            'id="theme-toggle"' in body,
+            "missing #theme-toggle",
+        )
+        # Breadcrumb chip with aria-current="page" leaf.
+        assert_true(
+            f"admin chrome: {path} renders breadcrumb",
+            'class="admin-breadcrumb"' in body,
+            "missing .admin-breadcrumb",
+        )
+        # Exactly one outer .card (the <main id="main-content"> wrapper).
+        # Counting class="card" occurrences — the shared layout uses a
+        # single outer .card; nested elements should use .admin-card or
+        # bare <section> divs, never another .card.
+        outer_card_count = body.count('class="card admin-card"') + body.count('class="admin-card card"')
+        # At least one — outer card is class="card admin-card".
+        assert_true(
+            f"admin chrome: {path} has outer .card admin-card",
+            outer_card_count >= 1,
+            f"got {outer_card_count}",
+        )
+        # No nested ".card" class beyond the outer one (no nested cards
+        # inside the admin layout body).
+        nested_card_count = body.count('class="card"')
+        assert_true(
+            f"admin chrome: {path} has no nested .card (got {nested_card_count})",
+            nested_card_count == 0,
+            "nested .card found in admin body — should be <section> instead",
+        )
+        # Skip-link present and points to #main-content.
+        assert_true(
+            f"admin chrome: {path} has skip-link to #main-content",
+            'href="#main-content"' in body and 'class="skip-link"' in body,
+            "missing skip-link",
+        )
+
+
+async def test_admin_theme_toggle_works(page: Page) -> None:
+    section("v3.2.0 #345 admin chrome — theme toggle flips data-theme on /admin/")
+    # Pre-seed light theme via localStorage, then load admin/keys.php with
+    # Basic Auth and verify the inline theme-init script honours it.
+    auth = "Basic " + base64.b64encode(
+        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
+    ).decode()
+    # Use a URL with embedded creds so the navigation does not pop a
+    # browser-native auth dialog (matches the pattern used elsewhere in
+    # the suite).
+    creds_url = APP_URL.replace(
+        "://", f"://{ADMIN_USER}:{ADMIN_PASS}@"
+    ) + "admin/keys.php"
+    # First navigate to seed origin, then set localStorage, then reload.
+    await page.context.set_extra_http_headers({"Authorization": auth})
+    await navigate(page, APP_URL + "admin/keys.php")
+    await page.evaluate("() => localStorage.setItem('theme', 'light')")
+    await navigate(page, APP_URL + "admin/keys.php")
+    data_theme = await page.evaluate(
+        "() => document.documentElement.getAttribute('data-theme')"
+    )
+    assert_eq("admin theme toggle: data-theme=light persisted", data_theme, "light")
+    # Background should resolve to the light --color-bg, not the dark default.
+    bg = await page.evaluate(
+        "() => getComputedStyle(document.body).backgroundColor"
+    )
+    # Light --color-bg is #fff → rgb(255, 255, 255). Dark default is #0d1117.
+    # Accept either rgb(255, 255, 255) form.
+    assert_true(
+        f"admin theme toggle: light bg applied (got {bg!r})",
+        "255, 255, 255" in bg or bg == "rgb(255, 255, 255)",
+    )
+    # Reset for downstream tests.
+    await page.evaluate("() => localStorage.removeItem('theme')")
+    await page.context.set_extra_http_headers({})
+
+
+async def test_admin_inputs_share_bg_token(page: Page) -> None:
+    section("v3.2.0 #345 admin chrome — text + number inputs share computed bg")
+    auth = "Basic " + base64.b64encode(
+        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
+    ).decode()
+    await page.context.set_extra_http_headers({"Authorization": auth})
+    await navigate(page, APP_URL + "admin/keys.php")
+    # Mint form has both a text input (name) and a number input (rate_limit_rpm).
+    text_bg = await page.evaluate(
+        "() => { var el = document.querySelector('input[name=\"name\"]');"
+        " return el ? getComputedStyle(el).backgroundColor : null; }"
+    )
+    number_bg = await page.evaluate(
+        "() => { var el = document.querySelector('input[name=\"rate_limit_rpm\"]');"
+        " return el ? getComputedStyle(el).backgroundColor : null; }"
+    )
+    assert_true(
+        "admin inputs: text input bg resolved",
+        text_bg is not None and text_bg != "",
+        f"got {text_bg!r}",
+    )
+    assert_true(
+        "admin inputs: number input bg resolved",
+        number_bg is not None and number_bg != "",
+        f"got {number_bg!r}",
+    )
+    assert_eq(
+        "admin inputs: text + number share --color-input-bg",
+        number_bg,
+        text_bg,
+    )
+    await page.context.set_extra_http_headers({})
+
+
+# ---------------------------------------------------------------------------
 # Permissions-Policy header directives (coverage gap)
 # ---------------------------------------------------------------------------
 
@@ -5420,6 +5565,10 @@ async def main() -> None:
             await test_admin_totp_page_renders(page)
             await test_admin_totp_generate_secret_flow(page)
             await test_admin_totp_regenerate_blocked_when_disabled(page)
+            # v3.2.0 #345 — admin chrome adoption
+            await test_admin_pages_share_app_header(page)
+            await test_admin_theme_toggle_works(page)
+            await test_admin_inputs_share_bg_token(page)
             await test_permissions_policy_directives(page)
             await test_vlsm_utilisation_accuracy(page)
             await test_ipv4_binary_hex_decimal(page)
