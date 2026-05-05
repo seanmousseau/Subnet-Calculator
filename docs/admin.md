@@ -334,6 +334,92 @@ Helpers `admin_state_get()` / `admin_state_set()` are the only callers.
   operator closes the tab mid-enrol, the cached secret expires with the
   PHP session — no cleanup required.
 
+## Settings page (v3.2.0+, #349)
+
+`/admin/settings.php` surfaces ~23 of the ~35 operator-tunable knobs in
+`config.php` across six visible sections plus a collapsed *Advanced (CSP)*
+`<details>`. Schema-driven validators reject bad input before any disk write;
+saves only modify `config-admin.php` (the wizard tier introduced in v3.0.0).
+
+### What it surfaces
+
+| Section | Knobs |
+|---|---|
+| Branding | `page_title`, `page_description`, `canonical_url`, `default_tab`, `locale`, `fixed_bg_color`, `show_share_bar`, `frame_ancestors` |
+| Forms / Captcha | `form_protection`, `turnstile_*`, `recaptcha_score_threshold` |
+| API limits | `api_rate_limit_rpm`, `api_cors_origins` |
+| Sessions | `session_enabled`, `session_ttl_days` |
+| Admin & audit | `admin_audit_retention_days`, `admin_audit_trust_xff`, `admin_audit_purge_strategy`, `admin_audit_purge_sample_rate` |
+| Limits | `split_max_subnets`, `lookup_max_cidrs`, `lookup_max_ips` |
+| Advanced (CSP) | `csp_connect_extra`, `csp_script_extra`, `csp_img_extra` |
+
+**Not surfaced**: admin auth (`admin_user` / `admin_pass_hash` /
+`admin_totp_secret` — purpose-built pages exist at `/admin/login.php` and
+`/admin/totp.php`), filesystem path knobs (operator-only), the legacy
+`api_tokens` array (replaced by `/admin/keys.php`).
+
+### Source-of-truth indication
+
+Each row carries a small source badge:
+
+- `default` — neither tier sets the key; the schema default applies.
+- `admin` — written by the Settings UI to `config-admin.php`.
+- `config` — hand-edited in `config.php`. Always wins over the wizard tier.
+
+When a key is set in BOTH files, the row also carries a red **shadowed**
+tag. Saving a shadowed value still writes to `config-admin.php` — the UI
+value takes effect the moment the operator removes the hand-edit from
+`config.php`.
+
+### Secret handling
+
+Schema entries marked `secret: true` (currently the captcha secret keys)
+render as `••••••• (set)` or `(empty)` with an `aria-label` for screen
+readers. The existing value is never echoed back into the page, so the
+DOM has no source for the original token. The form input is
+`<input type="password" autocomplete="new-password">`; an empty submission
+means "no change". The audit log row redacts secret values to `(set)` or
+`(empty)` in the `meta` JSON.
+
+### Atomic write
+
+Saves are validated per-key against the schema. Any validation failure
+blocks the entire section's save and pins inline error messages under the
+bad fields. On success, `config-admin.php` is rewritten via the merge
+helper introduced in v3.2.0 (#347) — single-line `$key = …;` lines are
+replaced in place; new keys are appended. After write, the file is
+re-included to confirm round-trip parsability and `opcache_invalidate()`
+is called so the next request sees the new values.
+
+A pre-flight writability check disables every Save button (and renders a
+banner) when `config-admin.php` (or its parent directory) is not
+writable by the web user.
+
+### Audit events
+
+| Event | Trigger |
+|---|---|
+| `config.update` | One row per actual key change. `meta` carries `key`, `before`, `after`. |
+| `config.reset` | When a key is restored to its schema default. |
+
+Both events render with the `badge-private` (amber, mutation) treatment
+in the audit-log viewer via the v3.2.0 (#346) action-to-badge mapping.
+Secrets are redacted to `(set)` / `(empty)` in the `meta` JSON.
+
+### Operator notes
+
+- The schema in `Subnet-Calculator/includes/functions-admin-settings.php`
+  is the authoritative knob list. Adding a new knob requires a schema
+  entry; novel validation rules (e.g. CIDR list) require extending
+  `settings_validate()`.
+- The Settings page never touches `config.php`. Operators who want to
+  override the wizard tier should hand-edit `config.php`; the Settings UI
+  will then display that key with the red `config` badge plus the
+  `shadowed` tag and explain the override.
+- Saves are per-section. Changing knobs across multiple sections requires
+  one Save click per section — by design, so a validation failure in one
+  section can't roll back another.
+
 ## Audit log (v3.0.0+, #306)
 
 Every admin auth attempt and every key.mint / key.revoke / key.rate_limit

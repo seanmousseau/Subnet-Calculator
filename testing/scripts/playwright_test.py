@@ -3616,6 +3616,106 @@ async def test_admin_drain_endpoint_zeroes_state(page: Page) -> None:
     _ADMIN_SESSION_COOKIE_CACHE = None
 
 
+async def test_admin_settings_page_renders(page: Page) -> None:
+    section("v3.2.0 #349 admin/settings.php — page renders six sections + advanced")
+    resp = await page.context.request.get(
+        APP_URL + "admin/settings.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    assert_eq("admin/settings: status 200", resp.status, 200)
+    body = await resp.text()
+    assert_true("admin/settings: page heading present", ">Settings " in body)
+    for sec in ["branding", "forms", "api", "sessions", "admin", "limits"]:
+        assert_true(
+            f"admin/settings: section '{sec}' rendered",
+            f'id="settings-{sec}-heading"' in body,
+        )
+    assert_true(
+        "admin/settings: advanced (CSP) details element rendered",
+        "settings-advanced" in body,
+    )
+    assert_true(
+        "admin/settings: per-section save buttons rendered",
+        body.count('value="save"') >= 6,
+    )
+    assert_true(
+        "admin/settings: source badges rendered (default/admin/config)",
+        "settings-source" in body,
+    )
+
+
+async def test_admin_settings_validation_rejects_invalid(page: Page) -> None:
+    section("v3.2.0 #349 admin/settings.php — invalid input is rejected before disk write")
+    sess = _admin_session_requests()
+    initial = sess.get(APP_URL + "admin/settings.php", timeout=10)
+    body = initial.text
+    import re as _re
+    m = _re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    csrf = m.group(1) if m else ""
+    # split_max_subnets has range 1..256; submit 9999.
+    post = sess.post(
+        APP_URL + "admin/settings.php",
+        data={
+            "_csrf": csrf,
+            "action": "save",
+            "section": "limits",
+            "split_max_subnets": "9999",
+            "lookup_max_cidrs": "100",
+            "lookup_max_ips": "1000",
+        },
+        allow_redirects=False,
+        timeout=10,
+    )
+    assert_eq("admin/settings invalid: 303 PRG", post.status_code, 303)
+    follow = sess.get(APP_URL + "admin/settings.php", timeout=10)
+    body2 = follow.text
+    assert_true(
+        "admin/settings invalid: error flash rendered",
+        "Some fields had errors" in body2 or "must be" in body2,
+    )
+
+
+async def test_admin_settings_secret_masking(page: Page) -> None:
+    section("v3.2.0 #349 admin/settings.php — secret fields render masked, not round-tripped")
+    resp = await page.context.request.get(
+        APP_URL + "admin/settings.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    # turnstile_secret_key is marked secret in schema.
+    assert_true(
+        "admin/settings: turnstile_secret_key uses masked widget",
+        'name="turnstile_secret_key" type="password"' in body
+        and "settings-secret-masked" in body,
+    )
+    assert_true(
+        "admin/settings: secret value not echoed verbatim into the page (mask shows '(set)' or '(empty)')",
+        "(empty)" in body or "(set)" in body,
+    )
+
+
+async def test_admin_settings_section_anchors_and_extras(page: Page) -> None:
+    section("v3.2.0 #349 admin/settings.php — section anchors + multiselect + reset link")
+    resp = await page.context.request.get(
+        APP_URL + "admin/settings.php",
+        headers={"Cookie": _admin_session_cookie_header()},
+    )
+    body = await resp.text()
+    for sec in ["branding", "forms", "api", "sessions", "admin", "limits"]:
+        assert_true(
+            f"admin/settings: deep-link anchor #section-{sec} present",
+            f'id="section-{sec}"' in body,
+        )
+    assert_true(
+        "admin/settings: api_allowed_endpoints multiselect rendered",
+        'name="api_allowed_endpoints[]" multiple' in body,
+    )
+    assert_true(
+        "admin/settings: reset-link CSS class is wired",
+        "settings-reset-link" in body,
+    )
+
+
 async def test_admin_audit_pagination_param(page: Page) -> None:
     section("v3.0.0 #306 admin/audit.php — page=2 query param accepted")
     auth = _admin_basic_header()
@@ -6439,6 +6539,11 @@ async def main() -> None:
             await test_admin_keys_per_row_rpm_edit(page)
             await test_admin_keys_revoke_confirm_present(page)
             await test_admin_drain_endpoint_zeroes_state(page)
+            # v3.2.0 #349 — settings page
+            await test_admin_settings_page_renders(page)
+            await test_admin_settings_validation_rejects_invalid(page)
+            await test_admin_settings_secret_masking(page)
+            await test_admin_settings_section_anchors_and_extras(page)
             await test_admin_audit_pagination_param(page)
             await test_admin_totp_page_renders(page)
             # v3.2.0 #347 — TOTP enrol/disable polish (replaces #313 generate_secret flow)

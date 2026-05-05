@@ -2508,6 +2508,130 @@ html[data-theme="light"] .btn-danger:hover { filter: brightness(0.95); }
     border-color: var(--color-accent);
 }
 
+/* Settings page (v3.2.0+, #349). */
+.settings-section + .settings-section {
+    margin-top: 1.5rem;
+}
+.settings-row {
+    display: grid;
+    grid-template-columns: 14rem 1fr auto;
+    grid-template-areas:
+        "label  input  meta"
+        ".      shadow shadow"
+        ".      help   help"
+        ".      err    err";
+    gap: 0.25rem 1rem;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--color-border);
+}
+.settings-row > label { grid-area: label; font-weight: 600; }
+.settings-row .settings-input { grid-area: input; }
+.settings-row .settings-meta {
+    grid-area: meta;
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    justify-self: end;
+}
+.settings-help { grid-area: help; color: var(--color-text-muted); font-size: 0.85rem; }
+.settings-error { grid-area: err; color: var(--color-error-text); font-size: 0.85rem; }
+.settings-shadow-banner {
+    grid-area: shadow;
+    color: var(--color-error-text);
+    background: var(--color-error-bg);
+    border: 1px solid var(--color-error-border);
+    border-radius: 4px;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+}
+.settings-row.has-error { border-bottom-color: var(--color-error-border); }
+.settings-row.is-shadowed { border-bottom-color: var(--color-error-border); }
+.settings-reset-link {
+    background: none;
+    border: 0;
+    padding: 0 0.25rem;
+    color: var(--color-text-muted);
+    text-decoration: underline;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+.settings-reset-link:hover,
+.settings-reset-link:focus-visible {
+    color: var(--color-accent);
+}
+.settings-reset-link.is-disabled {
+    color: var(--color-text-faint);
+    cursor: not-allowed;
+    text-decoration: line-through;
+}
+.settings-multiselect {
+    min-height: 6rem;
+}
+.settings-row .settings-input input[type="text"],
+.settings-row .settings-input input[type="number"],
+.settings-row .settings-input input[type="password"],
+.settings-row .settings-input select,
+.settings-row .settings-input textarea {
+    width: 100%;
+    box-sizing: border-box;
+}
+.settings-secret-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.settings-secret-masked {
+    color: var(--color-text-muted);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+}
+.settings-source {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    background: transparent;
+}
+.settings-source.source-default {
+    color: var(--color-text-faint);
+    border-color: var(--color-border);
+}
+.settings-source.source-admin {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.settings-source.source-config {
+    color: var(--color-error-text);
+    border-color: var(--color-error-border);
+    background: var(--color-error-bg);
+}
+.settings-shadow-tag {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    color: var(--color-error-text);
+    border: 1px solid var(--color-error-border);
+    background: var(--color-error-bg);
+}
+.settings-actions {
+    margin-top: 0.75rem;
+}
+.settings-advanced {
+    margin-top: 1.5rem;
+}
+.settings-advanced > summary {
+    cursor: pointer;
+    color: var(--color-text-muted);
+    margin-bottom: 0.5rem;
+}
+
 /* Empty-state nudge for the API keys table (#348 v3.2.0). */
 .admin-empty-state {
     color: var(--color-text-muted);
