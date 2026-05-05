@@ -3701,13 +3701,12 @@ async def test_admin_sidebar_collapses_on_mobile(page: Page) -> None:
     from urllib.parse import urlparse as _urlparse
     parsed = _urlparse(APP_URL)
     domain = parsed.hostname or "localhost"
-    cookies_to_add = [{
+    await page.context.add_cookies([{
         "name": "sc_admin_sid",
         "value": sid_value,
         "domain": domain,
         "path": "/",
-    }]
-    await page.context.add_cookies(cookies_to_add)
+    }])
     headers: dict[str, str] = {}
     if BASIC_USER and BASIC_PASS:
         headers["Authorization"] = "Basic " + base64.b64encode(
