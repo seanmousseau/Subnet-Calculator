@@ -3037,8 +3037,9 @@ async def test_admin_keys_copy_button_invokes_clipboard(page: Page) -> None:
         await page.wait_for_selector("#new-api-key-token", timeout=5000)
         token_text = await page.text_content("#new-api-key-token")
         assert_true("token rendered in panel", token_text is not None and token_text != "")
+        prev = await page.evaluate("() => window.__lastClipboard || ''")
         await page.click("[data-copy-target='new-api-key-token']")
-        clipboard = await page.evaluate("() => window.__lastClipboard || ''")
+        clipboard = await _wait_for_clipboard_write(page, prev)
         assert_eq("Copy button payload matches the rendered token", clipboard, (token_text or "").strip())
         # Button text flips to "Copied!"
         await page.wait_for_function(
