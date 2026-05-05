@@ -136,12 +136,17 @@ modification.
 
 ## Logout (v3.2.0, #343)
 
-Every admin page renders a signed-in **user chip** + **Sign out** button
-in the top-right of the header (between the breadcrumb and the theme
-toggle). The chip carries `aria-label="Signed in as <user>"` so screen
-readers always identify the active account; on viewports `<= 640px` the
-username text collapses to a silhouette icon while the button stays full
-size.
+Every signed-in admin page renders a **user chip** + **Sign out** button
+inside the persistent left sidebar (see *Admin navigation sidebar* below).
+The chip carries `aria-label="Signed in as <user>"` so screen readers
+always identify the active account. The sidebar collapses to a hamburger
+drawer on viewports `<= 768px`; the chip + button remain reachable inside
+the open drawer.
+
+> The `v3.2.0 #343` interim layout placed the chip + Sign out in the
+> top-right of the header, between the breadcrumb and the theme toggle.
+> `v3.2.0 #344` moved both into the sidebar; the header no longer hosts
+> them.
 
 The button submits a CSRF-protected `POST` to `admin/logout.php`:
 

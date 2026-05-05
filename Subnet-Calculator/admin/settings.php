@@ -30,19 +30,30 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'secure'   => $is_https,
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ]);
     session_name('sc_admin');
     session_start();
 }
 
-$csrf_seed   = ($admin_pass_hash ?? '') . '|' . ($_SERVER['REMOTE_ADDR'] ?? '');
-$csrf_expect = hash('sha256', $csrf_seed);
+// Use the session-row CSRF token (rotated on login + step-up) rather
+// than an IP-bound hash. CSRF lives on $admin_ctx['csrf'] from
+// admin_session_require().
+$csrf_expect = (string)($admin_ctx['csrf'] ?? '');
 $h = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 
 $schema = settings_schema();
 $flash  = ['success' => null, 'error' => null, 'errors' => []];
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-    if (!hash_equals($csrf_expect, (string)($_POST['_csrf'] ?? ''))) {
+    if ($csrf_expect === '' || !hash_equals($csrf_expect, (string)($_POST['_csrf'] ?? ''))) {
         $flash['error'] = 'Invalid CSRF token. Reload the page and retry.';
     } else {
         $action = (string)($_POST['action'] ?? '');
@@ -136,15 +147,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 if (isset($schema[$key])) {
                     $existing = settings_parse_config_file(admin_wizard_config_path(), [$key]);
                     if (array_key_exists($key, $existing)) {
-                        // Re-write config-admin.php without this key by setting it
-                        // back to default. (Removing a line entirely is more invasive;
-                        // resetting to default value is functionally equivalent
-                        // and keeps the merge helper's behaviour predictable.)
+                        // Remove the admin-tier override so the row sources
+                        // from the schema default again. (Writing the default
+                        // value back would leave the row sourcing from `admin`
+                        // and the source badge would lie.)
                         $entry = $schema[$key];
                         $isSecret = !empty($entry['secret']);
                         $defaultValue = $entry['default'] ?? '';
-                        $result = settings_save([$key => $defaultValue]);
-                        if ($result['ok'] && $result['written']) {
+                        if (admin_config_admin_unset_keys([$key])) {
+                            if (function_exists('opcache_invalidate')) {
+                                @opcache_invalidate(admin_wizard_config_path(), true);
+                            }
                             audit_log(
                                 $db,
                                 'config.reset',
@@ -159,7 +172,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                             );
                             $flash['success'] = "Reset {$key} to default.";
                         } else {
-                            $flash['error'] = 'Failed to reset: ' . ($result['error'] ?? 'unknown');
+                            $flash['error'] = 'Failed to reset: write to config-admin.php failed.';
                         }
                     } else {
                         $flash['success'] = "{$key} already at default.";

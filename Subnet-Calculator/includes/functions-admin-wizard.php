@@ -265,10 +265,16 @@ function admin_config_admin_set_keys(array $kv): bool
         return admin_config_admin_atomic_write($path, $body);
     }
 
-    $existing = (string)file_get_contents($path);
+    $existing = file_get_contents($path);
+    if ($existing === false) {
+        // Refuse to merge against an unreadable file — casting to '' would
+        // silently rewrite config-admin.php with only the new keys, dropping
+        // any existing admin credentials/settings.
+        return false;
+    }
     foreach ($kv as $k => $v) {
         $line = '$' . $k . ' = ' . var_export($v, true) . ';';
-        $pattern = '/^\s*\$' . preg_quote($k, '/') . '\s*=\s*[^;]*;\s*$/m';
+        $pattern = '/^\s*\$' . preg_quote($k, '/') . '\s*=\s*.*;\s*$/m';
         if (preg_match($pattern, $existing)) {
             $replaced = preg_replace($pattern, $line, $existing, 1);
             if ($replaced !== null) {
@@ -277,6 +283,40 @@ function admin_config_admin_set_keys(array $kv): bool
         } else {
             $existing = rtrim($existing, " \t\n\r") . "\n" . $line . "\n";
         }
+    }
+    return admin_config_admin_atomic_write($path, $existing);
+}
+
+/**
+ * Remove a set of keys from config-admin.php (v3.2.0+, #349 reset flow).
+ * No-op if the file doesn't exist or none of the keys are present.
+ *
+ * Used by the Settings page's "reset to default" action so the row
+ * sources from the schema default again rather than from the admin tier.
+ *
+ * @param array<int, string> $keys variable names (without `$`) to remove
+ */
+function admin_config_admin_unset_keys(array $keys): bool
+{
+    $path = admin_wizard_config_path();
+    if (!file_exists($path)) {
+        return true;
+    }
+    $existing = file_get_contents($path);
+    if ($existing === false) {
+        return false;
+    }
+    $changed = false;
+    foreach ($keys as $k) {
+        $pattern = '/^\s*\$' . preg_quote($k, '/') . '\s*=\s*.*;\s*\n?/m';
+        $replaced = preg_replace($pattern, '', $existing, 1, $count);
+        if ($replaced !== null && $count > 0) {
+            $existing = $replaced;
+            $changed = true;
+        }
+    }
+    if (!$changed) {
+        return true;
     }
     return admin_config_admin_atomic_write($path, $existing);
 }

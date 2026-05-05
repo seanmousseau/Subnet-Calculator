@@ -59,6 +59,7 @@ $nextPath = (string)(parse_url($nextRaw, PHP_URL_PATH) ?: '/admin/');
 if (
     $nextPath === ''
     || !preg_match('#^/admin/[A-Za-z0-9_./\\-]*$#', $nextPath)
+    || preg_match('#(?:^|/)\.\.(?:/|$)#', $nextPath)
     || str_contains($nextPath, 'login.php')
     || str_contains($nextPath, 'totp-verify.php')
     || str_contains($nextPath, '_test-drain.php')

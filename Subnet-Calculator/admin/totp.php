@@ -128,9 +128,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 } else {
                     $code = (string)($_POST['code'] ?? '');
                     $secret = (string)($admin_totp_secret ?? '');
+                    // Non-destructive check: don't consume the recovery code
+                    // before the disable write succeeds. admin_totp_disable()
+                    // wipes admin_recovery_codes wholesale on success anyway,
+                    // so consuming here is wasteful and strands the operator
+                    // if the config-admin.php write fails.
                     $valid = $code !== ''
                         && (admin_totp_verify($secret, $code)
-                            || admin_recovery_verify_and_consume($db, $code) !== null);
+                            || admin_recovery_match($db, $code) !== null);
                     if (!$valid) {
                         audit_log(
                             $db,

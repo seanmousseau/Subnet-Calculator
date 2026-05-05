@@ -349,6 +349,32 @@ function admin_recovery_verify_and_consume(\SQLite3 $db, string $submitted): ?in
 }
 
 /**
+ * Non-destructive recovery code check (v3.2.0+, #347 disable flow). Returns
+ * the matching row id if the submitted code matches an unused row, without
+ * marking it used. Lets callers verify-then-act without burning a code if
+ * the subsequent action fails.
+ */
+function admin_recovery_match(\SQLite3 $db, string $submitted): ?int
+{
+    admin_recovery_db_init($db);
+    $submitted = strtoupper(preg_replace('/\\s|-/', '', $submitted) ?? '');
+    if ($submitted === '' || !preg_match('/^[A-Z2-7]{8}$/', $submitted)) {
+        return null;
+    }
+    $canonical = substr($submitted, 0, 4) . '-' . substr($submitted, 4, 4);
+    $res = $db->query('SELECT id, code_hash FROM admin_recovery_codes WHERE used_at IS NULL');
+    if ($res === false) {
+        return null;
+    }
+    while (($r = $res->fetchArray(SQLITE3_ASSOC)) !== false) {
+        if (password_verify($canonical, (string)$r['code_hash'])) {
+            return (int)$r['id'];
+        }
+    }
+    return null;
+}
+
+/**
  * Count unused recovery codes — used by the admin TOTP page banner so the
  * operator knows when to regenerate.
  */
