@@ -1139,11 +1139,22 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
 
     function captureCurrentPage() {
         if (!historyEnabled()) return;
-        const hasResult = document.querySelector('.results, .vlsm-results, .overlap-result, .split-list');
-        if (!hasResult) return;
+        // v3.1.0 (#327): prefer the new attribute pattern when present — it
+        // covers tool-drawer-only outcomes (Lookup, Diff, Tree, Wildcard,
+        // Range, Supernet/Summarise, ULA) and carries a per-tool label.
+        // Fall back to the v3.0.0 four-container selectors for back-compat.
         const url = window.location.pathname + window.location.search;
         const tabId = activeTabId();
         const tab = tabId ? tabId.replace(/^tab-/, '') : '';
+        const sourceEl = document.querySelector('[data-history-source][data-history-active="1"]');
+        if (sourceEl) {
+            const attrLabel = sourceEl.getAttribute('data-history-label');
+            const label = (attrLabel && attrLabel.trim()) || url;
+            pushHistory({ url, tab, label, ts: Date.now() });
+            return;
+        }
+        const hasResult = document.querySelector('.results, .vlsm-results, .overlap-result, .split-list');
+        if (!hasResult) return;
         const labelInput = document.querySelector('.panel.active input[type="text"], .panel.active textarea');
         const label = (labelInput && labelInput.value.trim()) || url;
         pushHistory({ url, tab, label, ts: Date.now() });
@@ -1200,6 +1211,16 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
             if (btn) {
                 btn.click();
                 btn.focus();
+                // v3.1.0 (#328): after the tab switch settles, move focus to the
+                // first text input on the newly active panel so the user can
+                // start typing immediately. rAF fences against any deferred
+                // .panel.active toggling inside the tab click handler.
+                requestAnimationFrame(() => {
+                    const firstInput = document.querySelector(
+                        '.panel.active input[type="text"], .panel.active input:not([type]), .panel.active textarea'
+                    );
+                    if (firstInput) firstInput.focus();
+                });
                 e.preventDefault();
             }
             return;
@@ -1913,6 +1934,657 @@ if (window.self === window.top && 'serviceWorker' in navigator) {
             if (u) { copyText(u.textContent || ''); setStatus('Share URL copied.'); }
         });
     }
+
+    // ── Tree diff (#322, v3.1.0) ────────────────────────────────────────────
+    //
+    // Two source pickers (paste JSON / share URL / current draft) feed
+    // treeDiff() (a client-side mirror of PHP tree_diff()).  Annotations
+    // ride on data-diff attributes that the existing renderNode() can also
+    // expose when called in diff-mode below.
+
+    const diffModal = root.querySelector('[data-role="diff-modal"]');
+
+    function diffCanonicalNode(node, family) {
+        if (!node || typeof node !== 'object' || typeof node.cidr !== 'string') { return node; }
+        const out = {};
+        try { out.cidr = canonicalCidr(node.cidr, family); }
+        catch (e) { out.cidr = node.cidr; }
+        if (typeof node.name === 'string' && node.name) { out.name = node.name; }
+        if (typeof node.notes === 'string' && node.notes) { out.notes = node.notes; }
+        if (Array.isArray(node.children)) {
+            out.children = node.children.map(function (c) { return diffCanonicalNode(c, family); });
+        }
+        return out;
+    }
+
+    function diffIndex(rootNode) {
+        const map = {};
+        (function walk(n) {
+            if (!n || typeof n !== 'object' || typeof n.cidr !== 'string') { return; }
+            const slash = n.cidr.indexOf('/');
+            if (slash === -1) { return; }
+            const network = n.cidr.slice(0, slash);
+            const prefix = parseInt(n.cidr.slice(slash + 1), 10);
+            map[n.cidr] = {
+                cidr: n.cidr,
+                network: network,
+                prefix: prefix,
+                name: n.name || '',
+                notes: n.notes || ''
+            };
+            if (Array.isArray(n.children)) { n.children.forEach(walk); }
+        })(rootNode);
+        return map;
+    }
+
+    function treeDiff(payloadA, payloadB) {
+        const a = (payloadA && typeof payloadA === 'object' && payloadA.root) ? payloadA.root : payloadA;
+        const b = (payloadB && typeof payloadB === 'object' && payloadB.root) ? payloadB.root : payloadB;
+        if (!a || !b) { throw new Error('Both trees are required.'); }
+        const fa = cidrFamily(a.cidr || '');
+        const fb = cidrFamily(b.cidr || '');
+        const aCanon = diffCanonicalNode(a, fa);
+        const bCanon = diffCanonicalNode(b, fb);
+        const aMap = diffIndex(aCanon);
+        const bMap = diffIndex(bCanon);
+
+        const added = [];
+        const removed = [];
+        const changed = [];
+        const aUnmatched = {};
+        const bUnmatched = {};
+
+        Object.keys(aMap).forEach(function (cidr) {
+            if (bMap[cidr]) {
+                const an = aMap[cidr];
+                const bn = bMap[cidr];
+                if (an.name !== bn.name) {
+                    changed.push({ cidr: cidr, kind: 'rename', before: an.name, after: bn.name });
+                }
+                if (an.notes !== bn.notes) {
+                    changed.push({ cidr: cidr, kind: 'notes', before: an.notes, after: bn.notes });
+                }
+            } else {
+                aUnmatched[cidr] = aMap[cidr];
+            }
+        });
+        Object.keys(bMap).forEach(function (cidr) {
+            if (!aMap[cidr]) { bUnmatched[cidr] = bMap[cidr]; }
+        });
+
+        Object.keys(aUnmatched).forEach(function (aCidr) {
+            const an = aUnmatched[aCidr];
+            const matchKey = Object.keys(bUnmatched).find(function (k) {
+                return bUnmatched[k].network === an.network;
+            });
+            if (matchKey) {
+                const bn = bUnmatched[matchKey];
+                changed.push({ cidr: bn.cidr, kind: 'prefix', before: aCidr, after: bn.cidr });
+                if (an.name !== bn.name) {
+                    changed.push({ cidr: bn.cidr, kind: 'rename', before: an.name, after: bn.name });
+                }
+                if (an.notes !== bn.notes) {
+                    changed.push({ cidr: bn.cidr, kind: 'notes', before: an.notes, after: bn.notes });
+                }
+                delete bUnmatched[matchKey];
+            } else {
+                removed.push(diffStripEmpty(an));
+            }
+        });
+        Object.keys(bUnmatched).forEach(function (k) {
+            added.push(diffStripEmpty(bUnmatched[k]));
+        });
+
+        return { added: added, removed: removed, changed: changed };
+    }
+
+    function diffStripEmpty(entry) {
+        const out = { cidr: entry.cidr };
+        if (entry.name)  { out.name  = entry.name; }
+        if (entry.notes) { out.notes = entry.notes; }
+        return out;
+    }
+
+    function diffMarkdown(diff) {
+        const lines = ['# Subnet diff'];
+        diff.added.forEach(function (n) {
+            lines.push('- + ' + n.cidr + (n.name ? ' (' + n.name + ')' : ''));
+        });
+        diff.removed.forEach(function (n) {
+            lines.push('- − ' + n.cidr + (n.name ? ' (' + n.name + ')' : ''));
+        });
+        diff.changed.forEach(function (c) {
+            if (c.kind === 'prefix') {
+                lines.push('- Δ ' + c.before + ' → ' + c.after + ' (prefix)');
+            } else if (c.kind === 'rename') {
+                lines.push('- ~ ' + c.cidr + ': name "' + (c.before || '') + '" → "' + (c.after || '') + '"');
+            } else if (c.kind === 'notes') {
+                lines.push('- ~ ' + c.cidr + ': notes changed');
+            }
+        });
+        return lines.join('\n');
+    }
+
+    function diffRender(diff, treeB) {
+        const annotations = {};
+        diff.added.forEach(function (n)   { annotations[n.cidr] = { kind: 'added', reasons: [] }; });
+        diff.changed.forEach(function (c) {
+            if (!annotations[c.cidr]) { annotations[c.cidr] = { kind: 'changed', reasons: [] }; }
+            else if (annotations[c.cidr].kind !== 'added') { annotations[c.cidr].kind = 'changed'; }
+            const reason = c.kind === 'prefix'
+                ? 'prefix changed ' + c.before + ' → ' + c.after
+                : c.kind === 'rename'
+                    ? 'name "' + (c.before || '') + '" → "' + (c.after || '') + '"'
+                    : 'notes changed';
+            annotations[c.cidr].reasons.push(reason);
+        });
+
+        const canvas = diffModal.querySelector('[data-role="diff-canvas"]');
+        canvas.replaceChildren();
+        canvas.setAttribute('data-mode', 'diff');
+
+        function renderDiffNode(node, depth, isRoot) {
+            const wrap = document.createElement('div');
+            wrap.className = 'tree-editor-node' + (isRoot ? ' tree-editor-node-root' : '');
+            wrap.setAttribute('data-cidr', node.cidr);
+            const ann = annotations[node.cidr];
+            if (ann) { wrap.setAttribute('data-diff', ann.kind); }
+            const card = document.createElement('div');
+            card.className = 'tree-editor-card';
+            const cidr = document.createElement('code');
+            cidr.className = 'tree-editor-cidr';
+            cidr.textContent = node.cidr;
+            card.appendChild(cidr);
+            if (node.name) {
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'tree-editor-name';
+                nameSpan.textContent = node.name;
+                card.appendChild(nameSpan);
+            }
+            if (node.notes) {
+                const notesSpan = document.createElement('span');
+                notesSpan.className = 'tree-editor-notes';
+                notesSpan.textContent = node.notes;
+                card.appendChild(notesSpan);
+            }
+            if (ann && ann.reasons.length) {
+                const r = document.createElement('span');
+                r.className = 'tree-diff-reason';
+                r.textContent = ann.reasons.join('; ');
+                card.appendChild(r);
+            }
+            wrap.appendChild(card);
+            if (node.children && node.children.length) {
+                const kids = document.createElement('div');
+                kids.className = 'tree-editor-children';
+                node.children.forEach(function (c) { kids.appendChild(renderDiffNode(c, depth + 1, false)); });
+                wrap.appendChild(kids);
+            }
+            return wrap;
+        }
+        canvas.appendChild(renderDiffNode(treeB, 0, true));
+
+        diff.removed.forEach(function (n) {
+            const ghost = document.createElement('div');
+            ghost.className = 'tree-editor-node';
+            ghost.setAttribute('data-cidr', n.cidr);
+            ghost.setAttribute('data-diff', 'removed');
+            const card = document.createElement('div');
+            card.className = 'tree-editor-card';
+            const cidr = document.createElement('code');
+            cidr.className = 'tree-editor-cidr';
+            cidr.textContent = n.cidr;
+            card.appendChild(cidr);
+            if (n.name) {
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'tree-editor-name';
+                nameSpan.textContent = n.name;
+                card.appendChild(nameSpan);
+            }
+            ghost.appendChild(card);
+            canvas.appendChild(ghost);
+        });
+
+        const summary = diffModal.querySelector('[data-role="diff-summary"]');
+        if (summary) {
+            summary.textContent = '+' + diff.added.length + '  −' + diff.removed.length + '  Δ' + diff.changed.length;
+        }
+    }
+
+    function diffActiveTab(fieldset) {
+        const tab = fieldset.querySelector('[role="tab"][aria-selected="true"]');
+        return tab ? tab.getAttribute('data-source-tab') : 'paste';
+    }
+    function diffSwitchTab(fieldset, name) {
+        fieldset.querySelectorAll('[role="tab"]').forEach(function (t) {
+            t.setAttribute('aria-selected', t.getAttribute('data-source-tab') === name ? 'true' : 'false');
+        });
+        fieldset.querySelectorAll('[data-source-pane]').forEach(function (p) {
+            p.hidden = p.getAttribute('data-source-pane') !== name;
+        });
+    }
+
+    function diffParseSourceUrl(value) {
+        if (!value) { return null; }
+        let q = value.trim();
+        const idx = q.indexOf('?');
+        if (idx !== -1) { q = q.slice(idx + 1); }
+        const params = new URLSearchParams(q);
+        const treeParam = params.get('tree');
+        if (treeParam) {
+            try { return JSON.parse(base64UrlDecode(treeParam)); } catch (e) { /* fall through */ }
+        }
+        try { return JSON.parse(base64UrlDecode(q)); } catch (e) { /* fall through */ }
+        try { return JSON.parse(value); } catch (e) { return null; }
+    }
+
+    function diffReadSide(fieldset) {
+        const tab = diffActiveTab(fieldset);
+        if (tab === 'paste') {
+            const ta = fieldset.querySelector('[data-source-pane="paste"]');
+            const txt = (ta.value || '').trim();
+            if (!txt) { throw new Error('Paste a tree JSON.'); }
+            let parsed;
+            try { parsed = JSON.parse(txt); }
+            catch (e) { throw new Error('Invalid JSON: ' + e.message); }
+            return (parsed && parsed.root) ? parsed.root : parsed;
+        }
+        if (tab === 'url') {
+            const inp = fieldset.querySelector('[data-source-pane="url"]');
+            const parsed = diffParseSourceUrl(inp.value);
+            if (!parsed) { throw new Error('Could not extract a tree from the URL.'); }
+            return (parsed && parsed.root) ? parsed.root : parsed;
+        }
+        if (!state || !state.root) { throw new Error('No current draft. Open a tree first.'); }
+        const draft = loadAutosave(state.root.cidr);
+        if (!draft) { throw new Error('No autosaved draft found for ' + state.root.cidr); }
+        return draft;
+    }
+
+    function diffShowError(msg) {
+        const err = diffModal.querySelector('[data-role="diff-error"]');
+        if (!err) { return; }
+        if (!msg) { err.hidden = true; err.textContent = ''; return; }
+        err.hidden = false;
+        err.textContent = msg;
+    }
+
+    function diffOpen() {
+        diffShowError('');
+        const result = diffModal.querySelector('[data-role="diff-result"]');
+        const inputs = diffModal.querySelector('[data-role="diff-inputs"]');
+        const actions = diffModal.querySelector('[data-role="diff-actions"]');
+        if (result) { result.hidden = true; }
+        if (inputs) { inputs.hidden = false; }
+        if (actions) { actions.hidden = false; }
+        openModal(diffModal);
+        const firstTab = diffModal.querySelector('[role="tab"]');
+        if (firstTab) { firstTab.focus(); }
+    }
+    function diffClose() { closeModal(diffModal); }
+
+    function diffCompare() {
+        diffShowError('');
+        const sides = diffModal.querySelectorAll('[data-side]');
+        let a, b;
+        try { a = diffReadSide(sides[0]); }
+        catch (e) { diffShowError('Tree A: ' + e.message); return; }
+        try { b = diffReadSide(sides[1]); }
+        catch (e) { diffShowError('Tree B: ' + e.message); return; }
+        try { tree_validate_client(a); }
+        catch (e) { diffShowError('Tree A invalid: ' + e.message); return; }
+        try { tree_validate_client(b); }
+        catch (e) { diffShowError('Tree B invalid: ' + e.message); return; }
+
+        let diff;
+        try { diff = treeDiff({ root: a }, { root: b }); }
+        catch (e) { diffShowError(e.message); return; }
+
+        const inputs = diffModal.querySelector('[data-role="diff-inputs"]');
+        const actions = diffModal.querySelector('[data-role="diff-actions"]');
+        const result = diffModal.querySelector('[data-role="diff-result"]');
+        if (inputs) { inputs.hidden = true; }
+        if (actions) { actions.hidden = true; }
+        if (result) { result.hidden = false; }
+        diffRender(diff, diffCanonicalNode(b, cidrFamily(b.cidr || '')));
+        diffModal.__lastDiff = diff;
+    }
+
+    if (diffModal) {
+        diffModal.addEventListener('click', function (e) {
+            const tab = e.target.closest('[role="tab"]');
+            if (tab) {
+                const fs = tab.closest('[data-side]');
+                if (fs) { diffSwitchTab(fs, tab.getAttribute('data-source-tab')); }
+                return;
+            }
+            if (e.target.matches('[data-role="diff-cancel"]')) { diffClose(); return; }
+            if (e.target.matches('[data-role="diff-compare"]')) { diffCompare(); return; }
+            if (e.target.matches('[data-role="diff-back"]')) {
+                const inputs = diffModal.querySelector('[data-role="diff-inputs"]');
+                const actions = diffModal.querySelector('[data-role="diff-actions"]');
+                const result = diffModal.querySelector('[data-role="diff-result"]');
+                if (inputs) { inputs.hidden = false; }
+                if (actions) { actions.hidden = false; }
+                if (result) { result.hidden = true; }
+                return;
+            }
+            if (e.target.matches('[data-role="diff-copy-md"]')) {
+                if (diffModal.__lastDiff) {
+                    copyText(diffMarkdown(diffModal.__lastDiff));
+                    setStatus('Copied diff as Markdown.');
+                }
+                return;
+            }
+        });
+    }
+
+    const diffBtn = root.querySelector('.tree-editor-toolbar [data-action="diff"]');
+    if (diffBtn) { diffBtn.addEventListener('click', diffOpen); }
+
+    document.addEventListener('keydown', function (e) {
+        if (diffModal && !diffModal.hidden && e.key === 'Escape') {
+            diffClose();
+            e.preventDefault();
+        }
+    });
+
+    // ── Apply Template / preset picker (#323, v3.1.0) ──────────────────────
+    //
+    // Fetches the manifest from GET /api/v1/tree-presets on first open
+    // (cached per-page-load).  Selecting a preset reveals a confirm pane
+    // with an editable Root CIDR.  Apply replays the preset's operations
+    // through dispatch() so undo/redo works normally.
+
+    const presetModal = root.querySelector('[data-role="preset-modal"]');
+    let presetManifest = null;
+    let presetSelectedFull = null; // full preset (with operations)
+    let presetLastFocused = null;  // focus return target on close
+
+    function presetApiBase() {
+        // Match the convention used by saveSession() — relative path so the
+        // app works regardless of install sub-path.
+        return 'api/v1/tree-presets';
+    }
+
+    function presetShowError(msg) {
+        const err = presetModal && presetModal.querySelector('[data-role="preset-error"]');
+        if (!err) { return; }
+        if (!msg) { err.hidden = true; err.textContent = ''; return; }
+        err.hidden = false;
+        err.textContent = msg;
+    }
+
+    function presetSwitchToList() {
+        const list = presetModal.querySelector('[data-role="preset-list"]');
+        const confirm = presetModal.querySelector('[data-role="preset-confirm"]');
+        const footer = presetModal.querySelector('[data-role="preset-list-footer"]');
+        const listActions = presetModal.querySelector('[data-role="preset-list-actions"]');
+        if (list) { list.hidden = false; }
+        if (confirm) { confirm.hidden = true; }
+        if (footer) { footer.hidden = false; }
+        if (listActions) { listActions.hidden = false; }
+        presetShowError('');
+    }
+
+    function presetSwitchToConfirm() {
+        const list = presetModal.querySelector('[data-role="preset-list"]');
+        const confirm = presetModal.querySelector('[data-role="preset-confirm"]');
+        const footer = presetModal.querySelector('[data-role="preset-list-footer"]');
+        const listActions = presetModal.querySelector('[data-role="preset-list-actions"]');
+        if (list) { list.hidden = true; }
+        if (confirm) { confirm.hidden = false; }
+        if (footer) { footer.hidden = true; }
+        if (listActions) { listActions.hidden = true; }
+        presetShowError('');
+    }
+
+    function presetRenderList(manifest) {
+        const list = presetModal.querySelector('[data-role="preset-list"]');
+        if (!list) { return; }
+        list.replaceChildren();
+        if (!manifest || !manifest.length) {
+            const empty = document.createElement('p');
+            empty.className = 'tree-modal-help';
+            empty.textContent = 'No presets available on this server.';
+            list.appendChild(empty);
+            return;
+        }
+        manifest.forEach(function (p, idx) {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'tree-preset-item';
+            item.setAttribute('role', 'option');
+            item.setAttribute('data-preset-id', p.id);
+            item.setAttribute('aria-selected', idx === 0 ? 'true' : 'false');
+
+            const head = document.createElement('div');
+            head.className = 'tree-preset-item-head';
+            const name = document.createElement('span');
+            name.className = 'tree-preset-item-name';
+            name.textContent = p.name;
+            head.appendChild(name);
+            const fam = document.createElement('span');
+            fam.className = 'tree-preset-item-family';
+            fam.textContent = p.family === 'ipv6' ? 'v6' : 'v4';
+            head.appendChild(fam);
+            item.appendChild(head);
+
+            if (p.description) {
+                const desc = document.createElement('div');
+                desc.className = 'tree-preset-item-desc';
+                desc.textContent = p.description;
+                item.appendChild(desc);
+            }
+            const meta = document.createElement('div');
+            meta.className = 'tree-preset-item-meta';
+            meta.textContent = 'Root /' + p.rootPrefix + ' · ' + p.operationCount + ' operation' + (p.operationCount === 1 ? '' : 's');
+            item.appendChild(meta);
+
+            list.appendChild(item);
+        });
+    }
+
+    function presetFetchManifest() {
+        if (presetManifest) { return Promise.resolve(presetManifest); }
+        return fetch(presetApiBase(), { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (json) {
+                if (!json || !json.ok || !json.data || !Array.isArray(json.data.presets)) {
+                    throw new Error((json && json.error) || 'Bad manifest response');
+                }
+                presetManifest = json.data.presets;
+                return presetManifest;
+            });
+    }
+
+    function presetFetchOne(id) {
+        return fetch(presetApiBase() + '/' + encodeURIComponent(id), {
+            headers: { 'Accept': 'application/json' }
+        }).then(function (r) { return r.json(); }).then(function (json) {
+            if (!json || !json.ok || !json.data || !json.data.preset) {
+                throw new Error((json && json.error) || 'Preset not found.');
+            }
+            return json.data.preset;
+        });
+    }
+
+    function presetOpen() {
+        presetLastFocused = document.activeElement;
+        openModal(presetModal);
+        presetSwitchToList();
+        const list = presetModal.querySelector('[data-role="preset-list"]');
+        if (list) {
+            list.replaceChildren();
+            const loading = document.createElement('p');
+            loading.className = 'tree-modal-help';
+            loading.textContent = 'Loading templates…';
+            list.appendChild(loading);
+        }
+        presetFetchManifest().then(function (manifest) {
+            presetRenderList(manifest);
+            const first = presetModal.querySelector('.tree-preset-item');
+            if (first) { first.focus(); }
+        }).catch(function (e) {
+            presetShowError('Could not load templates: ' + e.message);
+        });
+    }
+
+    function presetClose() {
+        closeModal(presetModal);
+        presetSelectedFull = null;
+        if (presetLastFocused && typeof presetLastFocused.focus === 'function') {
+            presetLastFocused.focus();
+        }
+    }
+
+    function presetSelectById(id) {
+        if (!presetManifest) { return; }
+        const row = presetManifest.find(function (p) { return p.id === id; });
+        if (!row) { return; }
+        // mark aria-selected
+        presetModal.querySelectorAll('.tree-preset-item').forEach(function (el) {
+            el.setAttribute('aria-selected', el.getAttribute('data-preset-id') === id ? 'true' : 'false');
+        });
+        presetShowError('');
+        presetFetchOne(id).then(function (full) {
+            presetSelectedFull = full;
+            const meta = presetModal.querySelector('[data-role="preset-confirm-meta"]');
+            if (meta) {
+                meta.textContent = full.name
+                    + (full.description ? ' — ' + full.description : '')
+                    + ' (family ' + (full.family === 'ipv6' ? 'IPv6' : 'IPv4')
+                    + ', root /' + full.rootPrefix + ', '
+                    + (full.operations ? full.operations.length : 0) + ' op'
+                    + ((full.operations && full.operations.length === 1) ? '' : 's') + ')';
+            }
+            const inp = presetModal.querySelector('[data-role="preset-root-cidr"]');
+            if (inp) {
+                inp.value = full.rootCidr || '';
+            }
+            presetSwitchToConfirm();
+            if (inp) { inp.focus(); inp.select(); }
+        }).catch(function (e) {
+            presetShowError('Could not load preset: ' + e.message);
+        });
+    }
+
+    function presetRebaseCidr(cidr, family, fromRootCidr) {
+        // Rewrite each operation cidr from the preset's baked-in root to the
+        // user-chosen root.  Both must be the same family + same prefix len.
+        // The operation's prefix delta from the original root is applied to
+        // the new root by adding the same offset.
+        const fromRoot = cidrParts(fromRootCidr);
+        const toRoot = cidrParts(cidr);
+        // Compute offset of the op's network from the *original* root, then
+        // translate by the same offset relative to the *user's* root.
+        return function (opCidr) {
+            const o = cidrParts(opCidr);
+            const fromBase = ipToBig(fromRoot.ip, family);
+            const opNet = ipToBig(o.ip, family);
+            const delta = opNet - fromBase;
+            const newBase = ipToBig(toRoot.ip, family);
+            return bigToIp(newBase + delta, family) + '/' + o.prefix;
+        };
+    }
+
+    function presetApply() {
+        presetShowError('');
+        if (!presetSelectedFull) { presetShowError('No preset selected.'); return; }
+        const inp = presetModal.querySelector('[data-role="preset-root-cidr"]');
+        const raw = inp ? inp.value.trim() : '';
+        if (!raw || raw.indexOf('/') === -1) {
+            presetShowError('CIDR must include a prefix, e.g. 10.0.0.0/24.');
+            return;
+        }
+        const fam = cidrFamily(raw);
+        if (fam !== presetSelectedFull.family) {
+            presetShowError('This preset is ' + (presetSelectedFull.family === 'ipv6' ? 'IPv6' : 'IPv4')
+                + '. Enter a matching root CIDR.');
+            return;
+        }
+        const parts = cidrParts(raw);
+        if (parts.prefix !== presetSelectedFull.rootPrefix) {
+            presetShowError('Root CIDR must use prefix /' + presetSelectedFull.rootPrefix
+                + ' (got /' + parts.prefix + ').');
+            return;
+        }
+        let canon;
+        try { canon = canonicalCidr(raw, fam); }
+        catch (e) { presetShowError('Invalid CIDR: ' + e.message); return; }
+
+        // If the editor isn't started yet, start it on the chosen root first.
+        if (!state) {
+            startEditor(canon);
+            if (!state) { presetShowError('Could not start editor on ' + canon + '.'); return; }
+        } else if (state.root.cidr !== canon) {
+            // Replace the current root with the chosen one (RESET equivalent
+            // to a fresh root). This also clears children — desirable for a
+            // preset apply.
+            state.root = { cidr: canon };
+            state.family = fam;
+            undoStack = [];
+            redoStack = [];
+        }
+
+        const fromRoot = presetSelectedFull.rootCidr || (
+            // Best-effort: derive from first split op's cidr if not set.
+            (presetSelectedFull.operations[0] && presetSelectedFull.operations[0].cidr) || canon
+        );
+        const rebase = presetRebaseCidr(canon, fam, fromRoot);
+
+        // Replay each op via dispatch() so undo lands on a single coherent
+        // pre-apply snapshot — push the snapshot ourselves, then run ops with
+        // history-disabled inserts via direct state edits *only* if dispatch
+        // produces one entry per op.  Simpler: just call dispatch() per op;
+        // each dispatch pushes its own undo frame, which gives operators
+        // step-by-step undo through the preset.  Documented behaviour.
+        try {
+            (presetSelectedFull.operations || []).forEach(function (op) {
+                if (op.op === 'split') {
+                    dispatch({ type: 'SPLIT', cidr: rebase(op.cidr), count: op.into });
+                } else if (op.op === 'rename') {
+                    dispatch({ type: 'RENAME', cidr: rebase(op.cidr), name: op.name, notes: op.notes || '' });
+                }
+            });
+        } catch (e) {
+            presetShowError('Apply failed: ' + e.message);
+            return;
+        }
+
+        setStatus('Applied template "' + presetSelectedFull.name + '". Press Ctrl+Z to undo.');
+        presetClose();
+    }
+
+    if (presetModal) {
+        presetModal.addEventListener('click', function (e) {
+            const item = e.target.closest('.tree-preset-item');
+            if (item) { presetSelectById(item.getAttribute('data-preset-id')); return; }
+            if (e.target.matches('[data-role="preset-cancel"]')) { presetClose(); return; }
+            if (e.target.matches('[data-role="preset-back"]')) { presetSwitchToList(); return; }
+            if (e.target.matches('[data-role="preset-apply"]')) { presetApply(); return; }
+        });
+        // Arrow-key navigation across the listbox.
+        presetModal.addEventListener('keydown', function (e) {
+            const list = presetModal.querySelector('[data-role="preset-list"]');
+            if (list && list.hidden === false && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                const items = Array.prototype.slice.call(list.querySelectorAll('.tree-preset-item'));
+                if (!items.length) { return; }
+                const cur = document.activeElement;
+                let idx = items.indexOf(cur);
+                if (idx === -1) { idx = 0; }
+                else { idx += (e.key === 'ArrowDown' ? 1 : -1); }
+                if (idx < 0) { idx = items.length - 1; }
+                if (idx >= items.length) { idx = 0; }
+                items[idx].focus();
+                e.preventDefault();
+            }
+            if (e.key === 'Escape') { presetClose(); e.preventDefault(); }
+        });
+    }
+
+    const applyBtn = root.querySelector('.tree-editor-toolbar [data-action="apply-template"]');
+    if (applyBtn) { applyBtn.addEventListener('click', presetOpen); }
 
     // Keyboard: Ctrl/Cmd+Z = undo, +Shift = redo (only when editor is open
     // and focus is inside it, to avoid clobbering page-level shortcuts).

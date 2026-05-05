@@ -17,3 +17,5 @@ require $base . 'functions-session.php';
 require $base . 'functions-resolve.php';
 require $base . 'functions-range.php';
 require $base . 'functions-tree.php';
+require $base . 'functions-tree-diff.php';
+require $base . 'functions-tree-presets.php';

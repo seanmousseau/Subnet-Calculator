@@ -1,0 +1,15 @@
+{
+  "id": "lan-dmz-mgmt-24",
+  "name": "LAN / DMZ / Mgmt (/24)",
+  "description": "Classic small-site /24 split: LAN, DMZ, management, and a reserve segment (4 × /26).",
+  "family": "ipv4",
+  "rootPrefix": 24,
+  "rootCidr": "10.0.0.0/24",
+  "operations": [
+    { "op": "split", "cidr": "10.0.0.0/24", "into": 4 },
+    { "op": "rename", "cidr": "10.0.0.0/26", "name": "LAN" },
+    { "op": "rename", "cidr": "10.0.0.64/26", "name": "DMZ" },
+    { "op": "rename", "cidr": "10.0.0.128/26", "name": "Mgmt" },
+    { "op": "rename", "cidr": "10.0.0.192/26", "name": "Reserve" }
+  ]
+}

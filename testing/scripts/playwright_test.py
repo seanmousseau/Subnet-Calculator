@@ -2680,11 +2680,13 @@ async def test_session_forms_spacing(page: Page) -> None:
     section("VLSM session forms spacing")
     await navigate(page, APP_URL)
     await page.click("#tab-vlsm")
-    panel = await page.query_selector(".session-ttl-notice")
+    panel = await page.query_selector("#panel-vlsm .session-ttl-notice")
     if panel is None:
         ok("session forms spacing: sessions not enabled on this server (skipped)")
         return
-    forms = page.locator(".session-forms")
+    # v3.1.0 #321 — vlsm6 also renders .session-forms now; scope to the
+    # IPv4 VLSM panel so the locator resolves uniquely.
+    forms = page.locator("#panel-vlsm .session-forms")
     if await forms.count() == 0:
         ok("session forms spacing: .session-forms not found (skipped)")
         return
@@ -2704,19 +2706,35 @@ async def test_session_forms_spacing(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 async def test_vlsm6_session_save_load(page: Page) -> None:
-    section("v3.0.0 #315 IPv6 VLSM session save/load")
+    section("v3.0.0 #315 / v3.1.0 #321 IPv6 VLSM session save/load (drawer pattern)")
     # Calculate first so the Save Session form is populated.
     url = (APP_URL + "?tab=vlsm6&vlsm6_network=2001:db8::&vlsm6_cidr=32"
            + "&vlsm6_name%5B%5D=Site-A&vlsm6_hosts%5B%5D=256")
     await navigate(page, url)
-    panel = await page.query_selector("#vlsm6-session-controls")
+    # v3.1.0 #321 — session UI now lives inside the vlsm6 tool-drawer.
+    panel = await page.query_selector(
+        '#panel-vlsm6 .tool-panel[data-tool="session6"]'
+    )
     if panel is None:
         ok("vlsm6 session save/load: sessions not enabled on this server (skipped)")
         return
 
-    # Click "Save Session" inside the IPv6 VLSM panel.
+    # v3.1.0 #321 — open the session6 drawer first; the save button lives
+    # inside a tool-panel that is hidden until the drawer is opened.
+    trigger = page.locator(
+        '#panel-vlsm6 .tool-toolbar .tool-trigger[data-tool="session6"]'
+    )
+    if await trigger.count() > 0:
+        await trigger.first.click()
+        await page.wait_for_function(
+            "() => document.querySelector('#panel-vlsm6 .tool-drawer.open') !== null",
+            timeout=2000,
+        )
+
+    # Click "Save Session" inside the IPv6 VLSM session6 tool panel.
     save_btn = page.locator(
-        '#vlsm6-session-controls button[name="session_action"][value="save"]'
+        '#panel-vlsm6 .tool-panel[data-tool="session6"] '
+        'button[name="session_action"][value="save"]'
     )
     if await save_btn.count() == 0:
         ok("vlsm6 session save/load: save button not present (skipped)")
@@ -2725,7 +2743,10 @@ async def test_vlsm6_session_save_load(page: Page) -> None:
     await page.wait_for_load_state("networkidle")
 
     # Saved session URL appears in the saved-bar; capture the 8-char id.
-    saved_bar = page.locator("#vlsm6-session-controls .session-saved-bar code.share-url")
+    saved_bar = page.locator(
+        '#panel-vlsm6 .tool-panel[data-tool="session6"] '
+        '.session-saved-bar code.share-url'
+    )
     assert_true(
         "vlsm6 save: saved-bar appears after save",
         await saved_bar.count() > 0,
@@ -2755,6 +2776,107 @@ async def test_vlsm6_session_save_load(page: Page) -> None:
     # Result table from auto-calc on load.
     result_count = await page.locator(".vlsm6-table tbody tr").count()
     assert_true("vlsm6 load: results auto-render", result_count >= 1, f"rows={result_count}")
+
+
+# ---------------------------------------------------------------------------
+# v3.1.0 #321 — IPv6 VLSM Save Session lives in the tool-drawer pattern
+# ---------------------------------------------------------------------------
+
+async def test_vlsm6_session_drawer_pattern(page: Page) -> None:
+    section("v3.1.0 #321 IPv6 VLSM Save Session drawer parity with IPv4")
+    # Calculate first so the panel is populated and the trigger is meaningful.
+    url = (APP_URL + "?tab=vlsm6&vlsm6_network=2001:db8::&vlsm6_cidr=32"
+           + "&vlsm6_name%5B%5D=Site-A&vlsm6_hosts%5B%5D=256")
+    await navigate(page, url)
+
+    # 1. The Save Session toolbar trigger exists on the vlsm6 panel.
+    trigger = page.locator(
+        '#panel-vlsm6 .tool-toolbar .tool-trigger[data-tool="session6"]'
+    )
+    trig_count = await trigger.count()
+    if trig_count == 0:
+        ok("vlsm6 session drawer: sessions disabled on this server (skipped)")
+        return
+    assert_eq("vlsm6 drawer: Save Session trigger present", trig_count, 1)
+    trig_text = (await trigger.first.text_content()) or ""
+    assert_true(
+        "vlsm6 drawer: trigger labelled 'Save Session'",
+        trig_text.strip() == "Save Session",
+        f"got: {trig_text!r}",
+    )
+
+    # 2. Clicking the trigger opens the drawer (matches `.tool-drawer.open`).
+    drawer = page.locator('#panel-vlsm6 .tool-drawer')
+    assert_eq("vlsm6 drawer: drawer element present", await drawer.count(), 1)
+    await trigger.first.click()
+    # JS adds .open after click; wait briefly for the class to land.
+    await page.wait_for_function(
+        "() => document.querySelector('#panel-vlsm6 .tool-drawer.open') !== null",
+        timeout=2000,
+    )
+    open_count = await page.locator('#panel-vlsm6 .tool-drawer.open').count()
+    assert_eq("vlsm6 drawer: opens on trigger click", open_count, 1)
+
+    # 3. The save form (POST + session_action=save) is rendered inside the panel.
+    save_form_btn = page.locator(
+        '#panel-vlsm6 .tool-panel[data-tool="session6"] '
+        'button[name="session_action"][value="save"]'
+    )
+    assert_eq(
+        "vlsm6 drawer: save-form button rendered inside panel",
+        await save_form_btn.count(),
+        1,
+    )
+
+    # 4. After a ?tab=vlsm6&s=<id> GET (the session-load URL — equivalent of
+    #    the task's `?session_id=` description), the drawer auto-opens because
+    #    request.php sets $session_error / $session_save_id which the template
+    #    promotes to data-open-tool="session6".
+    #    We mint a save first by clicking, then capture the id from the URL.
+    await save_form_btn.first.click()
+    await page.wait_for_load_state("networkidle")
+    saved_url_node = page.locator(
+        '#panel-vlsm6 .tool-panel[data-tool="session6"] '
+        '.session-saved-bar code.share-url'
+    )
+    saved_text = (await saved_url_node.first.text_content()) or ""
+    m = re.search(r"\?tab=vlsm6&s=([0-9a-f]{8})", saved_text)
+    assert_true(
+        "vlsm6 drawer: post-save share URL has 8-char id",
+        m is not None,
+        f"got: {saved_text!r}",
+    )
+    if m is None:
+        return
+    sid = m.group(1)
+
+    # Now navigate to the load URL — the toolbar should carry data-open-tool.
+    await navigate(page, APP_URL + f"?tab=vlsm6&s={sid}")
+    open_attr = await page.locator('#panel-vlsm6 .tool-toolbar').first.get_attribute(
+        "data-open-tool"
+    )
+    # On a successful load with no error and no fresh save_id, the drawer
+    # does NOT auto-open (mirrors IPv4 behaviour — load is silent). We still
+    # assert the trigger remained available so the user can re-open manually.
+    re_trigger = await page.locator(
+        '#panel-vlsm6 .tool-toolbar .tool-trigger[data-tool="session6"]'
+    ).count()
+    assert_eq(
+        "vlsm6 drawer: trigger still available after session-load GET",
+        re_trigger,
+        1,
+    )
+    # Exercise the auto-open path by visiting an INVALID id — request.php
+    # sets $session_error, which the template promotes to data-open-tool.
+    await navigate(page, APP_URL + "?tab=vlsm6&s=deadbeef")
+    open_attr_err = await page.locator('#panel-vlsm6 .tool-toolbar').first.get_attribute(
+        "data-open-tool"
+    )
+    assert_eq(
+        "vlsm6 drawer: data-open-tool=session6 on session error GET",
+        open_attr_err,
+        "session6",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2861,6 +2983,35 @@ def _admin_basic_header() -> str:
     ).decode()
 
 
+def _drain_admin_state() -> None:
+    """Zero api_keys + admin_audit + admin_recovery_codes + sc_admin sessions.
+
+    Called once at the top of main() before any admin-touching test. Lets
+    `make test-docker` run repeatedly against a non-fresh container without
+    leftover rows tripping later tests (#324).
+
+    Idempotent: 200 on first call, still 200 on subsequent calls (truncates
+    already-empty tables). No-op when PHPUNIT_TEST_DRAIN_TOKEN is unset
+    (e.g. running against a non-test deployment).
+    """
+    token = os.environ.get("PHPUNIT_TEST_DRAIN_TOKEN", "")
+    if not token:
+        return
+    try:
+        resp = _SESSION.post(
+            APP_URL + "admin/_test-drain.php",
+            data={"token": token},
+            timeout=10,
+            allow_redirects=False,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"admin drain failed (network): {exc}") from exc
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"admin drain failed: HTTP {resp.status_code} {resp.text[:200]}"
+        )
+
+
 async def test_admin_keys_csrf_rejected(page: Page) -> None:
     section("v3.0.0 #307 admin/keys.php — POST without CSRF token rejected")
     # POST with no _csrf field; should land on the redirect with a flash error.
@@ -2964,6 +3115,91 @@ async def test_admin_keys_revoke_confirm_present(page: Page) -> None:
                 },
                 max_redirects=0,
             )
+
+
+async def test_admin_drain_endpoint_zeroes_state(page: Page) -> None:
+    section("v3.1.0 #324 — drain endpoint zeroes api_keys + admin_audit + sessions")
+    auth = _admin_basic_header()
+
+    # Mint a key via the admin UI so we can prove the drain removes it.
+    listing = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+    )
+    body = await listing.text()
+    csrf_match = re.search(r'name="_csrf" value="([0-9a-f]{64})"', body)
+    assert_true("admin/keys: CSRF token discoverable for drain fixture",
+                csrf_match is not None)
+    if csrf_match is None:
+        return
+    csrf = csrf_match.group(1)
+    mint = await page.context.request.post(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+        form={"_csrf": csrf, "action": "create", "name": "drain-fixture"},
+        max_redirects=0,
+    )
+    assert_eq("drain fixture mint: 303 PRG", mint.status, 303)
+
+    # Pre-drain state proof: the row must be visible before we drain so the
+    # post-drain absence assertion is a real before-vs-after delta, not just
+    # "the mint endpoint redirected". A 303 alone doesn't prove insertion.
+    before_drain = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+    )
+    before_body = await before_drain.text()
+    assert_true(
+        "drain-fixture present BEFORE drain (mint actually inserted the row)",
+        ">drain-fixture<" in before_body,
+    )
+
+    # Hit the drain endpoint with the token from the docker fixture env.
+    token = os.environ.get("PHPUNIT_TEST_DRAIN_TOKEN", "")
+    assert_true(
+        "PHPUNIT_TEST_DRAIN_TOKEN present in test container env",
+        token != "",
+    )
+
+    # Without the token: must 403 (and 404 if env not set on server).
+    bad = await page.context.request.post(
+        APP_URL + "admin/_test-drain.php",
+        form={"token": "wrong"},
+        max_redirects=0,
+    )
+    assert_true(
+        "drain rejects bad token: 403 (or 404 if env unset on server)",
+        bad.status in (403, 404),
+    )
+
+    drain = await page.context.request.post(
+        APP_URL + "admin/_test-drain.php",
+        form={"token": token},
+        max_redirects=0,
+    )
+    assert_eq("drain returns 200", drain.status, 200)
+    drain_body = await drain.text()
+    try:
+        drain_json = json.loads(drain_body)
+    except (ValueError, TypeError):
+        drain_json = {}
+    assert_eq("drain JSON reports ok=true", drain_json.get("ok"), True)
+    assert_true(
+        "drain JSON reports api_keys was zeroed",
+        "api_keys" in (drain_json.get("drained") or []),
+    )
+
+    # api_keys must be empty after drain — the keys page must not list any
+    # active row (the drain-fixture row should be gone).
+    after = await page.context.request.get(
+        APP_URL + "admin/keys.php",
+        headers={"Authorization": auth},
+    )
+    after_body = await after.text()
+    assert_true(
+        "api_keys empty after drain: drain-fixture not listed",
+        ">drain-fixture<" not in after_body,
+    )
 
 
 async def test_admin_audit_pagination_param(page: Page) -> None:
@@ -4359,6 +4595,11 @@ async def test_kbd_tab_switching_digits(page: Page) -> None:
         await page.get_attribute("#tab-vlsm", "aria-selected"),
         "true",
     )
+    # v3.1.0 (#328): digit presses now also focus the first input on the
+    # destination panel, so we must blur before the next digit press —
+    # otherwise the inEditable gate (correctly) swallows it.
+    await page.evaluate("() => document.activeElement && document.activeElement.blur()")
+    await page.locator("body").click()
     await page.keyboard.press("1")
     assert_eq(
         "kbd: '1' selects ipv4 tab",
@@ -4374,6 +4615,34 @@ async def test_kbd_slash_focuses_input(page: Page) -> None:
     await page.keyboard.press("/")
     focused_id = await page.evaluate("() => document.activeElement?.id")
     assert_eq("kbd: '/' focuses #ip on IPv4 tab", focused_id, "ip")
+
+
+async def test_kbd_tab_switch_focuses_input(page: Page) -> None:
+    section("v3.1.0 #328 — tab-switch digits focus the first input on the destination panel")
+    await navigate(page, APP_URL)
+    await page.locator("body").click()
+    expectations = [
+        ("1", "ip"),
+        ("2", "ipv6"),
+        ("3", "vlsm_network"),
+        ("4", "vlsm6_network"),
+    ]
+    for key, expected_id in expectations:
+        # Reload between iterations: each digit press lands on an input, and a
+        # follow-up digit press would otherwise be (correctly) swallowed by the
+        # inEditable gate.
+        await navigate(page, APP_URL)
+        await page.locator("body").click()
+        await page.evaluate("() => document.activeElement && document.activeElement.blur()")
+        await page.keyboard.press(key)
+        await page.wait_for_function(
+            "id => document.activeElement && document.activeElement.id === id",
+            arg=expected_id,
+        )
+        active_tag = await page.evaluate("() => document.activeElement?.tagName")
+        active_id = await page.evaluate("() => document.activeElement?.id")
+        assert_eq(f"kbd: '{key}' focuses INPUT after tab switch", active_tag, "INPUT")
+        assert_eq(f"kbd: '{key}' focuses #{expected_id}", active_id, expected_id)
 
 
 async def test_kbd_help_button_hidden_on_touch(page: Page) -> None:
@@ -4473,6 +4742,99 @@ async def test_history_h_key_opens(page: Page) -> None:
     )
 
 
+async def _enable_history(page: Page) -> None:
+    """Helper: enable the history opt-in via the overlay UI."""
+    await page.evaluate("() => localStorage.clear()")
+    await page.click("#history-toggle")
+    await page.locator("#history-enabled-toggle").check()
+    await page.locator("#history-overlay .modal-close").click()
+
+
+# v3.1.0 #327 — data-history-source extension
+async def test_history_captures_lookup_result(page: Page) -> None:
+    section("v3.1.0 #327 history — IP Lookup result captured via data-history-source")
+    await navigate(page, APP_URL)
+    await _enable_history(page)
+    # Run a lookup via shareable GET URL — history-capture fires on next page load.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv4&lookup_cidrs=10.0.0.0%2F8%0A192.168.0.0%2F16&lookup_ips=10.1.2.3%0A192.168.5.5%0A8.8.8.8",
+    )
+    # Verify the result block carries the new trio of attributes.
+    block = page.locator('[data-history-source="lookup"][data-history-active="1"]').first
+    assert_true("history #327: lookup result has data-history-source", await block.count() >= 1)
+    label = await block.get_attribute("data-history-label")
+    assert_true(
+        "history #327: lookup label uses 'Lookup:' prefix with counts",
+        bool(label) and label.startswith("Lookup:") and "IP" in (label or "") and "CIDR" in (label or ""),
+    )
+    # Close the auto-opened tool drawer so the history toggle is clickable.
+    await page.locator(".panel.active .tool-drawer.open .tool-drawer-close").first.click()
+    await page.click("#history-toggle")
+    items = page.locator("#history-list .history-item")
+    assert_true("history #327: lookup entry recorded", await items.count() >= 1)
+    first_label = await items.first.locator(".history-link").text_content()
+    assert_true(
+        "history #327: lookup history label starts with 'Lookup:'",
+        bool(first_label) and (first_label or "").startswith("Lookup:"),
+    )
+
+
+async def test_history_captures_diff_result(page: Page) -> None:
+    section("v3.1.0 #327 history — Subnet Diff result captured via data-history-source")
+    await navigate(page, APP_URL)
+    await _enable_history(page)
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv4&diff_before=10.0.0.0%2F24%0A10.0.1.0%2F24&diff_after=10.0.0.0%2F23%0A10.0.2.0%2F24",
+    )
+    block = page.locator('[data-history-source="diff"][data-history-active="1"]').first
+    assert_true("history #327: diff result has data-history-source", await block.count() >= 1)
+    label = await block.get_attribute("data-history-label")
+    assert_true(
+        "history #327: diff label uses 'Diff:' prefix",
+        bool(label) and (label or "").startswith("Diff:"),
+    )
+    await page.locator(".panel.active .tool-drawer.open .tool-drawer-close").first.click()
+    await page.click("#history-toggle")
+    items = page.locator("#history-list .history-item")
+    assert_true("history #327: diff entry recorded", await items.count() >= 1)
+    first_label = await items.first.locator(".history-link").text_content()
+    assert_true(
+        "history #327: diff history label starts with 'Diff:'",
+        bool(first_label) and (first_label or "").startswith("Diff:"),
+    )
+
+
+async def test_history_captures_wildcard_result(page: Page) -> None:
+    section("v3.1.0 #327 history — Wildcard result captured via data-history-source")
+    await navigate(page, APP_URL)
+    await _enable_history(page)
+    # Wildcard is POST-only; submit via the tool drawer form.
+    await navigate(page, APP_URL + "?tab=ipv4")
+    # Open the wildcard tool drawer.
+    await page.locator('.tool-trigger[data-tool="wildcard"]').first.click()
+    await page.locator("#wildcard_input").fill("/24")
+    await page.locator('.tool-panel[data-tool="wildcard"] form button[type="submit"]').click()
+    # After POST submit, the page reloads with the result rendered.
+    block = page.locator('[data-history-source="wildcard"][data-history-active="1"]').first
+    assert_true("history #327: wildcard result has data-history-source", await block.count() >= 1)
+    label = await block.get_attribute("data-history-label")
+    assert_true(
+        "history #327: wildcard label uses 'Wildcard:' prefix with input",
+        bool(label) and (label or "").startswith("Wildcard:") and "/24" in (label or ""),
+    )
+    await page.locator(".panel.active .tool-drawer.open .tool-drawer-close").first.click()
+    await page.click("#history-toggle")
+    items = page.locator("#history-list .history-item")
+    assert_true("history #327: wildcard entry recorded", await items.count() >= 1)
+    first_label = await items.first.locator(".history-link").text_content()
+    assert_true(
+        "history #327: wildcard history label starts with 'Wildcard:'",
+        bool(first_label) and (first_label or "").startswith("Wildcard:"),
+    )
+
+
 async def test_vlsm_keyboard_delete(page: Page) -> None:
     section("VLSM — keyboard Delete on remove button")
     await navigate(page, APP_URL)
@@ -4544,6 +4906,11 @@ async def test_tree_editor_merge_via_drag(page: Page) -> None:
     assert_true("split occurred before merge", initial == 3)
     # Drag first child onto second.
     children = page.locator(".tree-editor-children .tree-editor-card")
+    # Scroll children into view so HTML5 drag-and-drop's drop event fires —
+    # Chromium silently drops when source/destination are below the painted
+    # viewport region (#323 added a toolbar button that pushed the canvas
+    # low enough to expose this latent fragility).
+    await children.nth(1).scroll_into_view_if_needed()
     src = await children.nth(0).bounding_box()
     dst = await children.nth(1).bounding_box()
     if src and dst:
@@ -4705,6 +5072,130 @@ async def test_tree_editor_share_too_large_fallback(page: Page) -> None:
     )
 
 
+# v3.1.0 #322 — multi-tree diff
+async def test_tree_editor_diff_two_sessions(page: Page) -> None:
+    section("v3.1.0 #322 tree editor — diff modal renders four categories")
+    # Stub clipboard *before* navigating so the production navigator.clipboard
+    # path is overridden when the diff "Copy Markdown" button fires.
+    await page.add_init_script(
+        "Object.defineProperty(navigator, 'clipboard', {"
+        " configurable: true, value: {"
+        "  writeText: function (t) { window.__lastClipboard = t;"
+        "  return Promise.resolve(); }"
+        " }});"
+    )
+    await _open_tree_editor(page, "10.0.0.0/24")
+
+    tree_a = (
+        '{"type":"tree","root":{"cidr":"10.0.0.0/24","name":"DMZ",'
+        '"children":[{"cidr":"10.0.0.0/25"},{"cidr":"10.0.0.128/25"}]}}'
+    )
+    # Tree B: rename root, change /25 → /26 prefix on first child,
+    # remove second child, add a fresh /26 sibling.
+    tree_b = (
+        '{"type":"tree","root":{"cidr":"10.0.0.0/24","name":"Edge",'
+        '"children":[{"cidr":"10.0.0.0/26"},{"cidr":"10.0.0.64/26"}]}}'
+    )
+
+    await page.click(".tree-editor-toolbar [data-action='diff']")
+    await page.wait_for_selector("[data-role='diff-modal']:not([hidden])")
+
+    # Tab "Paste JSON" is active by default. Fill both textareas.
+    fields = page.locator("[data-role='diff-modal'] .tree-diff-source-paste")
+    await fields.nth(0).fill(tree_a)
+    await fields.nth(1).fill(tree_b)
+    await page.click("[data-role='diff-compare']")
+    await page.wait_for_selector("[data-role='diff-result']:not([hidden])")
+
+    # Inspect the rendered annotations.
+    diffs = await page.evaluate(
+        "() => Array.from(document.querySelectorAll("
+        "'[data-role=\"diff-canvas\"] .tree-editor-node[data-diff]'"
+        ")).map(n => ({cidr: n.getAttribute('data-cidr'),"
+        " kind: n.getAttribute('data-diff')}))"
+    )
+    by_cidr = {d["cidr"]: d["kind"] for d in diffs}
+    assert_true("added 10.0.0.64/26 marked added", by_cidr.get("10.0.0.64/26") == "added")
+    assert_true("removed 10.0.0.128/25 marked removed", by_cidr.get("10.0.0.128/25") == "removed")
+    # The first child changes prefix from /25 to /26 — stored under the new CIDR.
+    assert_true(
+        "prefix-changed node marked changed",
+        by_cidr.get("10.0.0.0/26") in ("changed", "added"),
+    )
+    # Root rename → changed annotation on root (10.0.0.0/24).
+    assert_true(
+        "root rename marked changed",
+        by_cidr.get("10.0.0.0/24") == "changed",
+    )
+
+    # Summary line emits +/-/Δ counts.
+    summary = await page.locator("[data-role='diff-summary']").text_content()
+    assert_true("summary emits counts", bool(summary) and "+" in (summary or "") and "−" in (summary or ""))
+
+    # Markdown export records every category — clipboard stub installed pre-nav.
+    await page.click("[data-role='diff-copy-md']")
+    await page.wait_for_function("() => typeof window.__lastClipboard === 'string'")
+    md = await page.evaluate("() => window.__lastClipboard || ''")
+    assert_true("markdown contains added marker",   "+ 10.0.0.64/26" in md)
+    assert_true("markdown contains removed marker", "− 10.0.0.128/25" in md)
+    assert_true("markdown contains prefix marker",  "Δ 10.0.0.0/25 → 10.0.0.0/26" in md)
+    assert_true("markdown contains rename marker",  '~ 10.0.0.0/24: name "DMZ" → "Edge"' in md)
+
+
+# v3.1.0 #323 — tree presets
+async def test_tree_editor_apply_preset_then_undo(page: Page) -> None:
+    section("v3.1.0 #323 tree editor — apply LAN/DMZ/Mgmt preset, then undo")
+    await _open_tree_editor(page, "10.0.0.0/24")
+
+    # Open the preset picker.
+    await page.click(".tree-editor-toolbar [data-action='apply-template']")
+    await page.wait_for_selector("[data-role='preset-modal']:not([hidden])")
+    # Wait until the manifest loads and the picker renders preset items.
+    await page.wait_for_selector(".tree-preset-item[data-preset-id='lan-dmz-mgmt-24']")
+
+    # Click the lan-dmz-mgmt-24 preset.
+    await page.click(".tree-preset-item[data-preset-id='lan-dmz-mgmt-24']")
+    # Confirm pane appears with the editable Root CIDR.
+    await page.wait_for_selector("[data-role='preset-confirm']:not([hidden])")
+    root_value = await page.locator("[data-role='preset-root-cidr']").input_value()
+    assert_true(
+        "root CIDR pre-filled from preset (10.0.0.0/24)",
+        root_value.strip() == "10.0.0.0/24",
+        f"got: {root_value!r}",
+    )
+
+    # Apply.
+    await page.click("[data-role='preset-apply']")
+    # Picker should close; tree editor should now show the split children.
+    await page.wait_for_selector(".tree-editor-children .tree-editor-card")
+
+    # Tree should now have the root + 4 children = 5 nodes total.
+    cidrs = await page.evaluate(
+        "() => Array.from(document.querySelectorAll('.tree-editor-cidr')).map(e=>e.textContent)"
+    )
+    assert_eq("after apply → 5 nodes", str(len(cidrs)), "5")
+    assert_true("LAN child cidr present", "10.0.0.0/26" in cidrs)
+    assert_true("DMZ child cidr present", "10.0.0.64/26" in cidrs)
+    assert_true("Mgmt child cidr present", "10.0.0.128/26" in cidrs)
+    assert_true("Reserve child cidr present", "10.0.0.192/26" in cidrs)
+
+    # The rename ops should have applied — the names render on the cards.
+    names = await page.evaluate(
+        "() => Array.from(document.querySelectorAll('.tree-editor-name')).map(e=>e.textContent)"
+    )
+    for expected in ("LAN", "DMZ", "Mgmt", "Reserve"):
+        assert_true(f"name {expected} rendered", expected in names)
+
+    # Each preset op pushes its own undo frame — undo should peel back the
+    # last rename first (Reserve), not collapse the whole tree.
+    await page.locator(".tree-editor-canvas").click()  # focus inside editor
+    await page.keyboard.press("Control+z")
+    after_names = await page.evaluate(
+        "() => Array.from(document.querySelectorAll('.tree-editor-name')).map(e=>e.textContent)"
+    )
+    assert_true("undo dropped the Reserve rename", "Reserve" not in after_names)
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -4775,6 +5266,11 @@ async def main() -> None:
 
     print(f"{BOLD}Subnet Calculator — Playwright browser tests{RST}")
     print(f"{DIM}Target: {APP_URL}{RST}")
+
+    # v3.1.0 #324 — zero admin state at suite setup so a non-fresh webapp
+    # container does not carry api_keys / admin_audit rows from a previous
+    # crashed run. No-op when PHPUNIT_TEST_DRAIN_TOKEN is unset.
+    _drain_admin_state()
 
     async with async_playwright() as pw:
         # Chromium 127+ aggressively auto-upgrades plain HTTP to HTTPS via
@@ -4910,6 +5406,8 @@ async def main() -> None:
             await test_vlsm_session_ttl_notice(page)
             await test_session_forms_spacing(page)
             await test_vlsm6_session_save_load(page)
+            # v3.1.0 #321 — IPv6 VLSM Save Session drawer parity
+            await test_vlsm6_session_drawer_pattern(page)
             await test_admin_keys_unauth_challenge(page)
             await test_admin_keys_authed_renders(page)
             await test_admin_audit_renders(page)
@@ -4917,6 +5415,7 @@ async def main() -> None:
             await test_admin_keys_csrf_rejected(page)
             await test_admin_keys_per_row_rpm_edit(page)
             await test_admin_keys_revoke_confirm_present(page)
+            await test_admin_drain_endpoint_zeroes_state(page)
             await test_admin_audit_pagination_param(page)
             await test_admin_totp_page_renders(page)
             await test_admin_totp_generate_secret_flow(page)
@@ -4955,11 +5454,17 @@ async def main() -> None:
             await test_kbd_overlay_header_button_opens(page)
             await test_kbd_tab_switching_digits(page)
             await test_kbd_slash_focuses_input(page)
+            # v3.1.0 #328 — tab-switch focus
+            await test_kbd_tab_switch_focuses_input(page)
             await test_kbd_help_button_hidden_on_touch(page)
             await test_history_disabled_by_default(page)
             await test_history_opt_in_records_calculation(page)
             await test_history_clear_removes_entries(page)
             await test_history_h_key_opens(page)
+            # v3.1.0 #327 — data-history-source extension
+            await test_history_captures_lookup_result(page)
+            await test_history_captures_diff_result(page)
+            await test_history_captures_wildcard_result(page)
             # v3.0.0 PR3b — interactive subnet tree editor (#302)
             await test_tree_editor_split(page)
             await test_tree_editor_merge_via_drag(page)
@@ -4971,6 +5476,10 @@ async def main() -> None:
             await test_tree_editor_copy_formats(page)
             await test_tree_editor_action_sheet_on_touch(page)
             await test_tree_editor_share_too_large_fallback(page)
+            # v3.1.0 #322 — multi-tree diff
+            await test_tree_editor_diff_two_sessions(page)
+            # v3.1.0 #323 — tree presets
+            await test_tree_editor_apply_preset_then_undo(page)
             await test_v290_typography(page)
         finally:
             await context.close()

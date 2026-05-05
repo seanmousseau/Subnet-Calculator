@@ -1,0 +1,66 @@
+<?xml version="1.0"?>
+<ruleset name="SubnetCalculatorAdmin">
+    <description>PSR-12 with template-aware relaxations for Subnet-Calculator/admin/*.php.
+
+    Admin pages are template-style mixed PHP/HTML: a top-level controller block
+    (auth, CSRF, audit-log writes, redirects) followed by direct HTML output.
+    PSR-12 trips on seven sniffs that are unavoidable in this layer; each is
+    fully excluded (not relaxed via properties — PSR-12's whitespace sniffs
+    do not expose enough config surface to handle mixed PHP/HTML cleanly):
+
+      - Generic.Files.LineLength — HTML attribute soup + i18n strings
+        legitimately exceed 120 chars; wrapping hurts readability.
+      - PSR1.Files.SideEffects — every admin page IS a side-effect (boots
+        the SQLite admin DB, validates the session, emits HTML); splitting
+        declarations from execution is not appropriate for a front controller.
+      - Squiz.ControlStructures.ControlSignature — fires on inline
+        alternative-syntax `<?php if (...): ?>...<?php endif; ?>` patterns.
+      - Generic.WhiteSpace.ScopeIndent — fires across PHP/HTML transitions
+        where indentation re-anchors to outer markup, not PHP scope depth.
+      - Squiz.WhiteSpace.ScopeClosingBrace — fires on single-line
+        inline-template rows where `endif` shares a line with HTML output.
+      - Squiz.WhiteSpace.ControlStructureSpacing — fires on intentional
+        blank lines inside `<?php else : ?>` branches that let embedded
+        HTML breathe.
+      - PSR12.ControlStructures.ControlStructureSpacing.FirstExpressionLine —
+        fires on multi-line auth predicates wrapped on the opening `if (`.
+
+    Trade-off: PSR1.Files.SideEffects becomes an unenforced convention for
+    admin/. A future `admin/lib/foo.php` library file mixing declarations
+    and execution would not be caught here. Discipline: library code under
+    admin/ should live under admin/lib/ with its own targeted ruleset, or
+    be promoted to includes/, not absorbed silently here.
+    </description>
+
+    <file>Subnet-Calculator/admin</file>
+
+    <rule ref="PSR12">
+        <exclude name="Generic.Files.LineLength" />
+        <exclude name="PSR1.Files.SideEffects" />
+        <!-- Inline alternative syntax templates (`<?php if (...): ?>...`) and
+             single-line `<?php if (..) : ?>...<?php endif; ?>` patterns trip
+             this sniff. Relaxed for admin/ where templating mixes PHP and
+             HTML at the statement level. -->
+        <exclude name="Squiz.ControlStructures.ControlSignature" />
+        <!-- Indentation across HTML/PHP transitions (e.g. `<tbody>` followed
+             by a `<?php foreach ...` block whose body is HTML) anchors to the
+             outer markup, not the PHP scope depth. The standard sniff cannot
+             tell the difference; fully relaxed for admin/. -->
+        <exclude name="Generic.WhiteSpace.ScopeIndent" />
+        <!-- Single-line `<?php if (...): ?>...<?php endif; ?>` inline-template
+             rows — a common pattern for one-line alerts / badges — get flagged
+             by ScopeClosingBrace because the `endif` keyword shares its line
+             with HTML output. The pattern is explicitly part of PHP's
+             alternative syntax for templating. -->
+        <exclude name="Squiz.WhiteSpace.ScopeClosingBrace" />
+        <!-- Blank lines inside `<?php else : ?>` branches let the embedded
+             HTML breathe and match the page rhythm. The sniff can't see past
+             the alternative-syntax delimiter. -->
+        <exclude name="Squiz.WhiteSpace.ControlStructureSpacing" />
+        <!-- Multi-line control expressions in the controller block of an
+             admin page wrap on the opening `if (` for readability of long
+             auth predicates; forcing the first expression onto the next line
+             splits already-tight conditions awkwardly. -->
+        <exclude name="PSR12.ControlStructures.ControlStructureSpacing.FirstExpressionLine" />
+    </rule>
+</ruleset>

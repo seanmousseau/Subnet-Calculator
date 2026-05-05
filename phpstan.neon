@@ -17,11 +17,16 @@ parameters:
         - Subnet-Calculator/includes/functions-resolve.php
         - Subnet-Calculator/includes/functions-range.php
         - Subnet-Calculator/includes/functions-tree.php
+        - Subnet-Calculator/includes/functions-tree-diff.php
+        - Subnet-Calculator/includes/functions-tree-presets.php
         - Subnet-Calculator/includes/functions-apikeys.php
         - Subnet-Calculator/includes/functions-admin-auth.php
         - Subnet-Calculator/includes/functions-admin-totp.php
         - Subnet-Calculator/includes/functions-admin-wizard.php
         - Subnet-Calculator/includes/functions-audit.php
+        # admin/ pages — template-style mixed PHP/HTML, but the test-drain
+        # endpoint is pure PHP and benefits from L9 coverage.
+        - Subnet-Calculator/admin/_test-drain.php
         - Subnet-Calculator/api/v1/helpers.php
         - Subnet-Calculator/api/v1/index.php
         - Subnet-Calculator/api/v1/handlers/ipv4.php
@@ -37,10 +42,13 @@ parameters:
         - Subnet-Calculator/api/v1/handlers/sessions.php
         - Subnet-Calculator/api/v1/handlers/range.php
         - Subnet-Calculator/api/v1/handlers/tree.php
+        - Subnet-Calculator/api/v1/handlers/tree-presets.php
         - Subnet-Calculator/api/v1/handlers/changelog.php
         - Subnet-Calculator/api/v1/handlers/schemas.php
         - Subnet-Calculator/api/v1/handlers/admin_keys.php
         - Subnet-Calculator/clients/php/SubnetCalculatorClient.php
+        # Operator CLI (v3.1.0, #325) — bin/ is non-web-served (htaccess-denied).
+        - Subnet-Calculator/bin/sc-audit-purge.php
     # config.php is gitignored (user override) — skip if absent
     excludePaths:
         - Subnet-Calculator/config.php (?)

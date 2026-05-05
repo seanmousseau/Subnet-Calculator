@@ -41,6 +41,9 @@ jobs:
           if [ -d Subnet-Calculator/api ]; then
             find Subnet-Calculator/api -name '*.php' | while read f; do php -l "$f"; done
           fi
+          if [ -d Subnet-Calculator/admin ]; then
+            find Subnet-Calculator/admin -name '*.php' | while read f; do php -l "$f"; done
+          fi
 
       - name: PHPStan (level 9)
         run: vendor/bin/phpstan analyse --no-progress --memory-limit=512M
@@ -52,6 +55,10 @@ jobs:
       - name: PHPCS (PSR-12)
         if: hashFiles('composer.json') != ''
         run: vendor/bin/phpcs --standard=PSR12 Subnet-Calculator/includes/ Subnet-Calculator/api/
+
+      - name: PHPCS (admin/, template-aware ruleset)
+        if: hashFiles('composer.json') != ''
+        run: vendor/bin/phpcs --standard=.phpcs-admin.xml Subnet-Calculator/admin/
 
       - name: Spectral — lint OpenAPI spec
         if: hashFiles('Subnet-Calculator/api/openapi.yaml') != ''

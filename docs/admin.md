@@ -186,11 +186,78 @@ CREATE TABLE admin_audit (
 ```
 
 Retention is bounded by `$admin_audit_retention_days` (default `90`; set to
-`0` to keep everything until manually rotated). Old rows are purged lazily
-on every audit write — there is no separate cron required.
+`0` to keep everything until manually rotated).
 
 The audit module fails open: a write failure logs to `error_log` but never
 masks the underlying admin action.
+
+### Purge strategy (v3.1.0+, #325)
+
+Two settings control **when** old rows are deleted:
+
+- `$admin_audit_purge_strategy` — one of `'inline'`, `'sampled'` (default),
+  or `'cron'`.
+- `$admin_audit_purge_sample_rate` — float in `[0.0, 1.0]`; only consulted
+  when the strategy is `'sampled'`. Default `0.001` (≈1 write in 1000
+  triggers a purge).
+
+| Strategy | When the purge runs | When to use it |
+|---|---|---|
+| `inline` | Every call to `audit_log()`. | Low audit volume (< a few writes/min); the v3.0.0 default. |
+| `sampled` (default) | Probabilistic: each write rolls a die against `$admin_audit_purge_sample_rate`. | The general-purpose default. At the 0.001 default, busy bursts (mass key rotation, login.fail floods) pay the `DELETE` cost roughly once per thousand writes instead of every write. |
+| `cron` | Never inline. The operator runs the CLI script on a schedule. | High-volume deployments where the operator wants deterministic purge timing and zero per-write overhead. |
+
+The CLI script `bin/sc-audit-purge.php` is shipped with the release tarball.
+It is **not web-served** (the directory's `.htaccess` denies all HTTP
+access; the CLI also refuses to run outside the `cli` SAPI). Run it from
+cron — adjust the path to your install:
+
+```cron
+# Daily at 03:00, log to a file so a non-zero exit triggers cron mail.
+0 3 * * * php /opt/subnet-calculator/bin/sc-audit-purge.php >> /var/log/sc-audit-purge.log 2>&1
+```
+
+Output is one line of the form
+`sc-audit-purge: <before> → <after> rows (-<deleted>) [db=…, retention=… days]`.
+The script exits `0` on success and non-zero on any failure so the cron
+daemon mails you on errors.
+
+Switching strategies requires no schema or data migration — change the
+config value and the next request honours it. `cron` mode does **not**
+disable the table or the in-app audit viewer; only the inline purge.
+
+## Test-only drain endpoint (v3.1.0+, #324)
+
+The `admin/_test-drain.php` endpoint exists **only** in the docker test rig.
+It zeroes `api_keys`, `admin_audit`, and `admin_recovery_codes` and clears
+sc_admin PHP-session files so the Playwright suite can run repeatedly
+against a non-fresh `webapp` container without leftover rows tripping
+later assertions.
+
+The endpoint is hard-gated by the `PHPUNIT_TEST_DRAIN_TOKEN` environment
+variable:
+
+- `getenv('PHPUNIT_TEST_DRAIN_TOKEN')` empty / unset → endpoint returns
+  `404` and reveals nothing. This is the production case.
+- Token present, request `token` mismatched → `403`.
+- Token matched (timing-safe `hash_equals()`) → tables truncated, response
+  `{"ok":true,"drained":[…]}`.
+
+The token is generated per-run by `make test-docker` and passed to both
+the `webapp` and `playwright-tests` containers via docker-compose env. It
+is never baked into the image and never committed to source.
+
+The release-tarball build step in [CLAUDE.md](../CLAUDE.md) excludes
+`admin/_test-drain.php` so the file never ships to operators. If you copy
+the file to a production host by accident, it stays inert because the
+production environment does not set `PHPUNIT_TEST_DRAIN_TOKEN`.
+
+**Threat model note:** anyone with Docker socket access on the test host
+can read `PHPUNIT_TEST_DRAIN_TOKEN` from `docker inspect <container>`.
+This is acceptable because the token is regenerated per `make test-docker`
+invocation and grants no production capability — the production webapp
+never has the env var set, so even an exfiltrated token is useless against
+the live deployment.
 
 ## Out of scope
 

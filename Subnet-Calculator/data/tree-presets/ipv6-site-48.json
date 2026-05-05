@@ -1,0 +1,19 @@
+{
+  "id": "ipv6-site-48",
+  "name": "IPv6 Sites A–H (/48)",
+  "description": "Split an IPv6 /48 into 8 × /51 site blocks (Site-A through Site-H).",
+  "family": "ipv6",
+  "rootPrefix": 48,
+  "rootCidr": "2001:db8::/48",
+  "operations": [
+    { "op": "split", "cidr": "2001:db8::/48", "into": 8 },
+    { "op": "rename", "cidr": "2001:db8::/51", "name": "Site-A" },
+    { "op": "rename", "cidr": "2001:db8:0:2000::/51", "name": "Site-B" },
+    { "op": "rename", "cidr": "2001:db8:0:4000::/51", "name": "Site-C" },
+    { "op": "rename", "cidr": "2001:db8:0:6000::/51", "name": "Site-D" },
+    { "op": "rename", "cidr": "2001:db8:0:8000::/51", "name": "Site-E" },
+    { "op": "rename", "cidr": "2001:db8:0:a000::/51", "name": "Site-F" },
+    { "op": "rename", "cidr": "2001:db8:0:c000::/51", "name": "Site-G" },
+    { "op": "rename", "cidr": "2001:db8:0:e000::/51", "name": "Site-H" }
+  ]
+}

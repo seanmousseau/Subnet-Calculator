@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://subnetcalculator.app/api/schemas/tree-preset.schema.json",
+  "title": "Subnet Tree Preset (v3.1.0 #323)",
+  "description": "A reusable subnet-allocation template for the v3.0.0 tree editor. Each preset declares a root CIDR (parameterised by family + prefix length) and an ordered list of operations that mutate the tree via the editor's reducer. Operators may drop additional preset JSON files into the `Subnet-Calculator/data/tree-presets/` directory (or a directory configured via `$tree_presets_dir` in `config.php`); the file's basename without the `.json` extension MUST match the preset's `id` field, and `id` MUST match `^[a-z0-9-]+$` to keep filesystem lookups path-traversal-safe.",
+  "type": "object",
+  "required": ["id", "name", "family", "rootPrefix", "operations"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Slug identifier; must equal the filename without the .json extension."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human-readable preset title shown in the picker card heading."
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "Short summary shown beneath the name in the picker card."
+    },
+    "family": {
+      "type": "string",
+      "enum": ["ipv4", "ipv6"],
+      "description": "Address family the preset targets. Apply rejects a root CIDR from the wrong family."
+    },
+    "rootPrefix": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 128,
+      "description": "Default prefix length for the root CIDR (e.g. 24 for an IPv4 /24 plan, 48 for an IPv6 /48 plan)."
+    },
+    "rootCidr": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 64,
+      "description": "Default root CIDR used when crafting the preset's operation list. Operators can override this on Apply."
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["op", "cidr", "into"],
+            "additionalProperties": false,
+            "properties": {
+              "op": { "const": "split" },
+              "cidr": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 64,
+                "description": "CIDR to split. Must already exist in the tree at the time the operation runs."
+              },
+              "into": {
+                "type": "integer",
+                "enum": [2, 4, 8, 16],
+                "description": "Number of equal children to create."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["op", "cidr", "name"],
+            "additionalProperties": false,
+            "properties": {
+              "op": { "const": "rename" },
+              "cidr": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 64
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "notes": {
+                "type": "string",
+                "maxLength": 1024
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "id": "lan-dmz-mgmt-24",
+      "name": "LAN / DMZ / Mgmt (/24)",
+      "description": "Classic small-site /24 split: LAN, DMZ, management, and a reserve segment.",
+      "family": "ipv4",
+      "rootPrefix": 24,
+      "rootCidr": "10.0.0.0/24",
+      "operations": [
+        { "op": "split", "cidr": "10.0.0.0/24", "into": 4 },
+        { "op": "rename", "cidr": "10.0.0.0/26", "name": "LAN" },
+        { "op": "rename", "cidr": "10.0.0.64/26", "name": "DMZ" },
+        { "op": "rename", "cidr": "10.0.0.128/26", "name": "Mgmt" },
+        { "op": "rename", "cidr": "10.0.0.192/26", "name": "Reserve" }
+      ]
+    }
+  ]
+}

@@ -73,3 +73,108 @@ to the server for each edit.
 The mobile interaction model is desktop-first with a touch fallback: on
 `@media (hover: none)` devices, tapping a node opens a bottom action sheet
 instead of the click-split picker, and drag-merge is disabled.
+
+### Diff (v3.1.0+)
+
+Click **Diff** in the toolbar to compare two trees side-by-side.
+
+The Diff modal accepts each tree from one of three sources:
+
+- **Paste JSON** — drop in the JSON exported by the **JSON** download button
+  (or any `{"type":"tree","root":{…}}` payload).
+- **Share URL** — paste a full Share URL or a `?tree=…` fragment; the modal
+  decodes the embedded base64url payload.
+- **Current draft** — uses the autosaved draft for whichever root CIDR is open
+  in the editor (handy for "what changed since last save").
+
+Compare runs both inputs through the same canonicalisation as
+`tree_validate()` — host bits are zeroed and IPv6 is compressed before
+matching, so `10.0.0.5/24` and `10.0.0.0/24` collapse to the same node.
+
+Each result node is annotated:
+
+| Glyph | Border colour | Meaning |
+|---|---|---|
+| `+` | green | Added in Tree B |
+| `−` | red | Removed (struck through) |
+| `Δ` | amber | Prefix length, name, or notes changed |
+
+The toolbar above the result has a **Copy diff as Markdown** button that
+emits a checklist suitable for change-management tickets:
+
+```markdown
+# Subnet diff
+- + 10.0.4.0/24 (DC4)
+- − 10.0.5.0/24 (legacy)
+- Δ 10.0.0.0/24 → 10.0.0.0/23 (prefix)
+- ~ 10.0.1.0/24: name "DMZ" → "Edge"
+```
+
+The diff is computed client-side; the same algorithm is exposed as
+`tree_diff()` in `includes/functions-tree-diff.php` for tests and any future
+batch / API integration.
+
+### Templates (v3.1.0+)
+
+Click **Apply Template** in the toolbar to start from a pre-built subnet plan
+instead of building one click-by-click. The picker lists every preset
+available on the server, each tagged with the address family (`v4` / `v6`),
+its root prefix length, and the number of operations it will perform when
+applied.
+
+Selecting a preset reveals a confirmation pane with an editable **Root CIDR**
+field — pre-filled with the preset's default but freely overridable. The
+chosen CIDR must use the preset's family and prefix length (e.g. a
+`/24` preset rejects a `/23` root). Click **Apply** to replay the preset's
+operations through the same reducer that handles manual edits, so each step
+lands as its own undo frame — `Ctrl+Z` peels back the preset operation by
+operation.
+
+#### Bundled starter presets
+
+| ID | Family | Root | What it does |
+|---|---|---|---|
+| `lan-dmz-mgmt-24`     | IPv4 | `/24` | Splits a `/24` into LAN, DMZ, Mgmt, Reserve (4 × `/26`). |
+| `three-tier-24`       | IPv4 | `/24` | Splits a `/24` into Production, Staging, Dev, Reserve (4 × `/26`). |
+| `hq-branches-16`      | IPv4 | `/16` | Splits a `/16` into HQ + 3 branches (4 × `/18`). |
+| `flat-equal-split-24` | IPv4 | `/24` | Plain four-way split into 4 × `/26`, no naming — useful as a building block. |
+| `ipv6-site-48`        | IPv6 | `/48` | Splits a `/48` into 8 site blocks (8 × `/51`, Site-A through Site-H). |
+| `ipv6-three-tier-48`  | IPv6 | `/48` | Splits a `/48` into Production, Staging, Dev, Reserve (4 × `/50`). |
+
+#### Custom presets
+
+Drop a JSON file into `Subnet-Calculator/data/tree-presets/` (or override the
+location with `$tree_presets_dir` in `config.php`) and it appears in the
+picker on the next page load. The file's basename must match the preset's
+`id` field, and `id` must match `^[a-z0-9-]+$` to keep filesystem lookups
+path-traversal-safe.
+
+A minimal valid preset:
+
+```json
+{
+  "id": "edge-routers-22",
+  "name": "Edge router pair (/22)",
+  "description": "Split a /22 into two /23 edge router blocks.",
+  "family": "ipv4",
+  "rootPrefix": 22,
+  "rootCidr": "10.10.0.0/22",
+  "operations": [
+    { "op": "split",  "cidr": "10.10.0.0/22", "into": 2 },
+    { "op": "rename", "cidr": "10.10.0.0/23", "name": "Edge-A" },
+    { "op": "rename", "cidr": "10.10.2.0/23", "name": "Edge-B" }
+  ]
+}
+```
+
+Each operation is either `split` (with `cidr` + `into ∈ {2, 4, 8, 16}`) or
+`rename` (with `cidr` + `name` + optional `notes`). Operations run in order;
+each one references a CIDR that must already exist in the tree at that step.
+
+Presets are also exposed via REST:
+
+- `GET /api/v1/tree-presets` — manifest list (no `operations` field).
+- `GET /api/v1/tree-presets/{id}` — full preset including operations.
+
+The published JSON-Schema for preset files lives at
+[`api/schemas/tree-preset.schema.json`](https://github.com/seanmousseau/Subnet-Calculator/blob/main/Subnet-Calculator/api/schemas/tree-preset.schema.json).

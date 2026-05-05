@@ -24,6 +24,11 @@ vendor/bin/phpunit
 # PHPCS (PSR-12) — use .phpcs.xml for config
 vendor/bin/phpcs --standard=PSR12 Subnet-Calculator/includes/ Subnet-Calculator/api/
 
+# PHPCS — admin/*.php template-aware ruleset (PSR-12 with relaxations for
+# inline `<?php if (...): ?>...<?php endif; ?>` patterns and HTML/PHP
+# transitions in mixed-output controller pages).
+vendor/bin/phpcs --standard=.phpcs-admin.xml Subnet-Calculator/admin/
+
 # JS/CSS linting (requires: npm install)
 npm run lint:js   # ESLint on app.js
 npm run lint:css  # Stylelint on app.css
@@ -51,7 +56,9 @@ scp testing/fixtures/iframe-test.html root@192.168.80.15:/opt/container_data/dev
 # Also bump $app_version in Subnet-Calculator/includes/config.php before building
 # CHANGELOG.md is bundled so GET /api/v1/changelog works in tarball installs
 cp CHANGELOG.md Subnet-Calculator/CHANGELOG.md
-tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
+# admin/_test-drain.php is a test-rig-only endpoint (#324) — never ship it.
+tar --exclude='admin/_test-drain.php' \
+    -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
 rm Subnet-Calculator/CHANGELOG.md
 ```
 

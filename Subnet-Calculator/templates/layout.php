@@ -323,12 +323,27 @@ if ($i < 3) {
                     <?php if ($supernet_error) : ?>
                         <div class="error"><?= htmlspecialchars($supernet_error) ?></div>
                     <?php elseif ($supernet_result !== null) : ?>
+                        <?php
+                        $_supernet_inputs = count(array_filter(array_map('trim', explode("\n", $supernet_input))));
+                        if ($supernet_action === 'find') {
+                            $_supernet_label = 'Supernet: ' . $_supernet_inputs . ' CIDR' . ($_supernet_inputs !== 1 ? 's' : '');
+                        } else {
+                            $_supernet_outs  = count($supernet_result['summaries'] ?? []);
+                            $_supernet_label = 'Summarise: ' . $_supernet_inputs . ' → ' . $_supernet_outs;
+                        }
+                        ?>
                         <?php if ($supernet_action === 'find') : ?>
-                            <div class="overlap-result overlap-contains">
+                            <div class="overlap-result overlap-contains"
+                                 data-history-source="supernet"
+                                 data-history-active="1"
+                                 data-history-label="<?= htmlspecialchars($_supernet_label) ?>">
                                 <?= htmlspecialchars($supernet_result['supernet'] ?? '') ?>
                             </div>
                         <?php else : ?>
-                            <div class="split-list split-list--mt">
+                            <div class="split-list split-list--mt"
+                                 data-history-source="supernet"
+                                 data-history-active="1"
+                                 data-history-label="<?= htmlspecialchars($_supernet_label) ?>">
                                 <button type="button" class="copy-all-btn" data-target="supernet">Copy All</button>
                                 <?php foreach ($supernet_result['summaries'] ?? [] as $s) : ?>
                                     <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
@@ -370,7 +385,11 @@ if ($i < 3) {
                     <?php if ($range_error) : ?>
                         <div class="error"><?= htmlspecialchars($range_error) ?></div>
                     <?php elseif ($range_result !== null) : ?>
-                        <div class="split-list split-list--mt">
+                        <?php $_range_label = 'Range: ' . $range_start . ' → ' . $range_end; ?>
+                        <div class="split-list split-list--mt"
+                             data-history-source="range"
+                             data-history-active="1"
+                             data-history-label="<?= htmlspecialchars($_range_label) ?>">
                             <button type="button" class="copy-all-btn" data-target="range">Copy All</button>
                             <?php foreach ($range_result as $r_cidr) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($r_cidr) ?>">
@@ -407,7 +426,11 @@ if ($i < 3) {
                     <?php if ($tree_error) : ?>
                         <div class="error"><?= htmlspecialchars($tree_error) ?></div>
                     <?php elseif ($tree_result !== null) : ?>
-                        <div class="tree-view">
+                        <?php $_tree_label = 'Tree: ' . (string)($tree_result['cidr'] ?? $tree_parent); ?>
+                        <div class="tree-view"
+                             data-history-source="tree"
+                             data-history-active="1"
+                             data-history-label="<?= htmlspecialchars($_tree_label) ?>">
                             <?php
                             /**
                              * @param array<string, mixed> $node
@@ -466,7 +489,11 @@ if ($i < 3) {
                     <?php if ($wildcard_error) : ?>
                         <div class="error wildcard-error"><?= htmlspecialchars($wildcard_error) ?></div>
                     <?php elseif ($wildcard_result !== null) : ?>
-                        <div class="split-list split-list--mt">
+                        <?php $_wildcard_label = 'Wildcard: ' . $wildcard_input; ?>
+                        <div class="split-list split-list--mt"
+                             data-history-source="wildcard"
+                             data-history-active="1"
+                             data-history-label="<?= htmlspecialchars($_wildcard_label) ?>">
                             <div class="split-item" tabindex="0" role="button"
                                  data-copy="<?= htmlspecialchars($wildcard_result['cidr']) ?>">
                                 <span class="split-subnet-text" id="wildcard-result-cidr">CIDR: <?= htmlspecialchars($wildcard_result['cidr']) ?></span>
@@ -512,7 +539,21 @@ if ($i < 3) {
                     <?php if ($active_tab === 'ipv4' && $lookup_error) : ?>
                         <div class="error"><?= htmlspecialchars($lookup_error) ?></div>
                     <?php elseif ($active_tab === 'ipv4' && $lookup_result !== null) : ?>
-                        <div class="lookup-results">
+                        <?php
+                        $_lookup_ips_count   = count(array_filter(array_map('trim', explode("\n", $lookup_ips_input))));
+                        $_lookup_cidrs_count = count(array_filter(array_map('trim', explode("\n", $lookup_cidrs_input))));
+                        $_lookup_label = sprintf(
+                            'Lookup: %d IP%s in %d CIDR%s',
+                            $_lookup_ips_count,
+                            $_lookup_ips_count !== 1 ? 's' : '',
+                            $_lookup_cidrs_count,
+                            $_lookup_cidrs_count !== 1 ? 's' : ''
+                        );
+                        ?>
+                        <div class="lookup-results"
+                             data-history-source="lookup"
+                             data-history-active="1"
+                             data-history-label="<?= htmlspecialchars($_lookup_label) ?>">
                             <button type="button" class="copy-all-btn" data-target="lookup">Copy All</button>
                             <div class="lookup-table-wrap">
                                 <table class="lookup-table" aria-label="IP lookup results">
@@ -816,7 +857,11 @@ if ($i < 3) {
                     <?php if ($ula_error) : ?>
                         <div class="error"><?= htmlspecialchars($ula_error) ?></div>
                     <?php elseif ($ula_result !== null) : ?>
-                        <div class="ula-result">
+                        <?php $_ula_label = 'ULA: ' . (string)($ula_result['prefix'] ?? ''); ?>
+                        <div class="ula-result"
+                             data-history-source="ula"
+                             data-history-active="1"
+                             data-history-label="<?= htmlspecialchars($_ula_label) ?>">
                             <div class="overlap-result overlap-contains"><?= htmlspecialchars($ula_result['prefix'] ?? '') ?></div>
                             <div class="ula-meta">
                                 <span>Global ID: <code><?= htmlspecialchars($ula_result['global_id'] ?? '') ?></code></span>
@@ -862,7 +907,21 @@ if ($i < 3) {
                     <?php if ($active_tab === 'ipv6' && $lookup_error) : ?>
                         <div class="error"><?= htmlspecialchars($lookup_error) ?></div>
                     <?php elseif ($active_tab === 'ipv6' && $lookup_result !== null) : ?>
-                        <div class="lookup-results">
+                        <?php
+                        $_lookup_ips_count6   = count(array_filter(array_map('trim', explode("\n", $lookup_ips_input))));
+                        $_lookup_cidrs_count6 = count(array_filter(array_map('trim', explode("\n", $lookup_cidrs_input))));
+                        $_lookup_label6 = sprintf(
+                            'Lookup: %d IP%s in %d CIDR%s',
+                            $_lookup_ips_count6,
+                            $_lookup_ips_count6 !== 1 ? 's' : '',
+                            $_lookup_cidrs_count6,
+                            $_lookup_cidrs_count6 !== 1 ? 's' : ''
+                        );
+                        ?>
+                        <div class="lookup-results"
+                             data-history-source="lookup"
+                             data-history-active="1"
+                             data-history-label="<?= htmlspecialchars($_lookup_label6) ?>">
                             <button type="button" class="copy-all-btn" data-target="lookup">Copy All</button>
                             <div class="lookup-table-wrap">
                                 <table class="lookup-table" aria-label="IP lookup results">
@@ -1362,47 +1421,69 @@ if ($i < 3) {
             <?php endif; ?>
         <?php endif; ?>
 
-        <?php if ($session_enabled && $active_tab === 'vlsm6') : ?>
-        <!-- v3.0.0 (#315) IPv6 VLSM session save / load -->
-        <div class="vlsm6-session-controls" id="vlsm6-session-controls">
-            <div class="overlap-title">Save &amp; Restore IPv6 Session<?= help_bubble('vlsm6-session', 'Saves your IPv6 VLSM inputs to the server so you can restore them later via a short link. Sessions expire after the configured TTL.') ?></div>
-            <p class="session-ttl-notice">Saved sessions expire after <?= (int)$session_ttl_days ?> day<?= (int)$session_ttl_days === 1 ? '' : 's' ?>.</p>
-            <?php if ($session_save_id !== '' && $active_tab === 'vlsm6') : ?>
-                <div class="overlap-result overlap-contains share-bar session-saved-bar">
-                    <span class="share-label">Session saved. Share this link:</span>
-                    <code class="share-url"><?= htmlspecialchars($share_base_server . $session_save_url) ?></code>
-                    <button type="button" class="share-copy"
-                            data-copy="<?= htmlspecialchars($session_save_url) ?>">Copy</button>
-                </div>
-            <?php endif; ?>
-            <?php if ($session_error && $active_tab === 'vlsm6') : ?>
-                <div class="error"><?= htmlspecialchars($session_error) ?></div>
-            <?php endif; ?>
-            <div class="session-forms">
-                <?php if ($vlsm6_requirements !== []) : ?>
-                <form method="post" novalidate>
-                    <input type="hidden" name="tab" value="vlsm6">
-                    <input type="hidden" name="session_type" value="ipv6">
-                    <input type="hidden" name="vlsm6_network" value="<?= htmlspecialchars($vlsm6_network) ?>">
-                    <input type="hidden" name="vlsm6_cidr" value="<?= htmlspecialchars($vlsm6_cidr_input) ?>">
-                    <?php foreach ($vlsm6_requirements as $req6s) : ?>
-                        <input type="hidden" name="vlsm6_name[]"  value="<?= htmlspecialchars($req6s['name']) ?>">
-                        <input type="hidden" name="vlsm6_hosts[]" value="<?= htmlspecialchars((string)$req6s['hosts']) ?>">
-                    <?php endforeach; ?>
-                    <button type="submit" name="session_action" value="save" class="splitter-btn">Save Session</button>
-                </form>
-                <?php endif; ?>
-                <form method="get" novalidate>
-                    <div class="overlap-inputs">
-                        <input type="hidden" name="tab" value="vlsm6">
-                        <input type="text" name="s"
-                               value="<?= htmlspecialchars($session_load_id) ?>"
-                               placeholder="8-char session ID"
-                               autocomplete="off" spellcheck="false" maxlength="8"
-                               aria-label="Session ID">
-                        <button type="submit" class="splitter-btn">Load</button>
+        <?php
+        // v3.1.0 (#321) — IPv6 VLSM Save Session moved into the tool-drawer
+        // pattern to match the IPv4 VLSM tab. Auto-open the session6 drawer
+        // after a successful save (or session error) on the vlsm6 tab.
+        $open_tool_vlsm6 = null;
+        if ($session_enabled && $active_tab === 'vlsm6'
+            && ($session_save_id !== '' || $session_error !== null)) {
+            $open_tool_vlsm6 = 'session6';
+        }
+        ?>
+        <?php if ($session_enabled) : ?>
+        <div class="tool-toolbar"<?= $open_tool_vlsm6 ? ' data-open-tool="' . htmlspecialchars($open_tool_vlsm6) . '"' : '' ?>>
+            <button type="button" class="tool-trigger" data-tool="session6" aria-expanded="false">Save Session</button>
+        </div>
+
+        <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-vlsm6">
+            <div class="tool-drawer-header">
+                <span class="tool-drawer-title" id="drawer-title-vlsm6">Tool</span>
+                <button type="button" class="tool-drawer-close" aria-label="Close">&times;</button>
+            </div>
+
+            <div class="tool-panel" data-tool="session6">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Save &amp; Restore IPv6 Session<?= help_bubble('vlsm6-session', 'Saves your IPv6 VLSM inputs to the server so you can restore them later via a short link. Sessions expire after the configured TTL.') ?></div>
+                    <p class="session-ttl-notice">Saved sessions expire after <?= (int)$session_ttl_days ?> day<?= (int)$session_ttl_days === 1 ? '' : 's' ?>.</p>
+                    <?php if ($session_save_id !== '' && $active_tab === 'vlsm6') : ?>
+                        <div class="overlap-result overlap-contains share-bar session-saved-bar">
+                            <span class="share-label">Session saved. Share this link:</span>
+                            <code class="share-url"><?= htmlspecialchars($share_base_server . $session_save_url) ?></code>
+                            <button type="button" class="share-copy"
+                                    data-copy="<?= htmlspecialchars($session_save_url) ?>">Copy</button>
+                        </div>
+                    <?php endif; ?>
+                    <?php if ($session_error && $active_tab === 'vlsm6') : ?>
+                        <div class="error"><?= htmlspecialchars($session_error) ?></div>
+                    <?php endif; ?>
+                    <div class="session-forms">
+                        <?php if ($vlsm6_requirements !== []) : ?>
+                        <form method="post" novalidate>
+                            <input type="hidden" name="tab" value="vlsm6">
+                            <input type="hidden" name="session_type" value="ipv6">
+                            <input type="hidden" name="vlsm6_network" value="<?= htmlspecialchars($vlsm6_network) ?>">
+                            <input type="hidden" name="vlsm6_cidr" value="<?= htmlspecialchars($vlsm6_cidr_input) ?>">
+                            <?php foreach ($vlsm6_requirements as $req6s) : ?>
+                                <input type="hidden" name="vlsm6_name[]"  value="<?= htmlspecialchars($req6s['name']) ?>">
+                                <input type="hidden" name="vlsm6_hosts[]" value="<?= htmlspecialchars((string)$req6s['hosts']) ?>">
+                            <?php endforeach; ?>
+                            <button type="submit" name="session_action" value="save" class="splitter-btn">Save Session</button>
+                        </form>
+                        <?php endif; ?>
+                        <form method="get" novalidate>
+                            <div class="overlap-inputs">
+                                <input type="hidden" name="tab" value="vlsm6">
+                                <input type="text" name="s"
+                                       value="<?= htmlspecialchars($session_load_id) ?>"
+                                       placeholder="8-char session ID"
+                                       autocomplete="off" spellcheck="false" maxlength="8"
+                                       aria-label="Session ID">
+                                <button type="submit" class="splitter-btn">Load</button>
+                            </div>
+                        </form>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
         <?php endif; ?>
@@ -1428,7 +1509,7 @@ if ($i < 3) {
             <dl class="kbd-list">
                 <dt><kbd>?</kbd></dt><dd>Show this help</dd>
                 <dt><kbd>Esc</kbd></dt><dd>Close any open overlay or tool drawer</dd>
-                <dt><kbd>1</kbd> &hellip; <kbd>4</kbd></dt><dd>Switch to tab (IPv4, IPv6, VLSM, VLSM IPv6)</dd>
+                <dt><kbd>1</kbd> &hellip; <kbd>4</kbd></dt><dd>Switch tabs (IPv4, IPv6, VLSM, VLSM IPv6) and focus the first input</dd>
                 <dt><kbd>/</kbd></dt><dd>Focus the first input on the active tab</dd>
                 <dt><kbd>Enter</kbd></dt><dd>Submit the current form (native; from any input)</dd>
                 <dt><kbd>Ctrl</kbd>+<kbd>R</kbd> / <kbd>Cmd</kbd>+<kbd>R</kbd></dt><dd>Reset the active tab (intercepts browser reload)</dd>

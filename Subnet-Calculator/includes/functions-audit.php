@@ -11,8 +11,11 @@ declare(strict_types=1);
 // that lives in the same database as api_keys.
 //
 // Retention is bounded by $admin_audit_retention_days (default 90); rows
-// older than the window are purged whenever audit_log() runs (lazy purge,
-// matching session_create()'s pattern — no separate cron required).
+// older than the window are purged according to $admin_audit_purge_strategy
+// (v3.1.0, #325): 'inline' (every write — legacy v3.0.0 behaviour),
+// 'sampled' (probabilistic via $admin_audit_purge_sample_rate, default ~1
+// in 1000 writes — current default) or 'cron' (no inline purge; operator
+// runs bin/sc-audit-purge.php on a schedule).
 
 const AUDIT_RETENTION_DEFAULT_DAYS = 90;
 const AUDIT_ACTION_MAX             = 64;
@@ -90,7 +93,33 @@ function audit_log(
 
     try {
         audit_db_init($db);
-        audit_purge($db);
+
+        // v3.1.0 (#325) — purge dispatch. Reads the operator-configured
+        // strategy via global, matching the $admin_audit_trust_xff pattern.
+        // Unknown values fall back to 'sampled' (config sanitiser also
+        // clamps, but we re-check here so direct unit-test callers that
+        // bypass config.php still get safe behaviour).
+        global $admin_audit_purge_strategy, $admin_audit_purge_sample_rate;
+        $strategy = is_string($admin_audit_purge_strategy ?? null)
+            ? $admin_audit_purge_strategy
+            : 'sampled';
+        switch ($strategy) {
+            case 'inline':
+                audit_purge($db);
+                break;
+            case 'cron':
+                // No-op: operator runs bin/sc-audit-purge.php on a schedule.
+                break;
+            case 'sampled':
+            default:
+                $rate = is_numeric($admin_audit_purge_sample_rate ?? null)
+                    ? (float)$admin_audit_purge_sample_rate
+                    : 0.0;
+                if ($rate > 0.0 && (mt_rand() / mt_getrandmax()) < $rate) {
+                    audit_purge($db);
+                }
+                break;
+        }
 
         $stmt = $db->prepare(
             'INSERT INTO admin_audit (ts, actor, ip, action, target_id, meta)
