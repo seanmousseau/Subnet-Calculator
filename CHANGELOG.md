@@ -5,6 +5,108 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-05-05
+
+**Admin UX overhaul.** Eight PRs (`#342`–`#349`) bring the entire `/admin/`
+surface — login, logout, navigation, audit log, TOTP, API keys, and a new
+Settings page — under one cohesive design language with first-class
+accessibility, sticky chrome, sidebar navigation, and a schema-driven
+config editor.
+
+### Added
+
+- **Admin chrome adoption (#345).** `/admin/` pages now share the
+  calculator's header (logo, version pill, theme toggle) via the new
+  `templates/_app_header.php` partial, render under a single outer
+  `.card`, and inherit the v2.9.0 token palette for consistent
+  light/dark theming. Interim footer link cluster lasts only until the
+  sidebar lands in #344.
+- **Cookie-session admin login (#342).** New `/admin/login.php` form
+  replaces HTTP Basic Auth on web admin pages. Bcrypt + CSRF (timing-safe
+  `hash_equals`) + per-IP rate limiter (`auth_rate_limit` table) +
+  `sc_admin_sid` cookie (`HttpOnly; Secure; SameSite=Lax`). Plays nicely
+  with password managers. The legacy Basic Auth path is retained
+  exclusively for `/api/v1/admin/*`.
+- **Logout button (#343).** New `/admin/logout.php` POST endpoint ends
+  the session server-side, clears the cookie, and audit-logs `auth.logout`.
+  CSRF-protected; `405 Method Not Allowed` on non-POST.
+- **Left sidebar navigation (#344).** `admin/_sidebar.php` lists API
+  Keys, Audit Log, TOTP / 2FA, Settings; marks the active row with
+  `aria-current="page"` plus a 3 px teal left-border. Mobile (≤ 768 px)
+  collapses to a hamburger drawer with focus trap, Escape close, and
+  outside-click dismiss. Sidebar is suppressed on `login.php`.
+- **Audit log polish (#346).** Filter strip is now a real
+  `<div role="tablist">`. Action cells render colour-coded badges via the
+  shared `audit_action_badge_class()` helper (suffix beats prefix —
+  `auth.login.fail` is red, not blue). Sticky `<thead>`. Timestamps in
+  `<time datetime="…Z">`. Disabled pagination is `<span aria-disabled>`
+  not a focusable `<a tabindex=-1>`. Sr-only `<caption>`.
+- **TOTP enrol + disable + usage tracking (#347).** Inline enrol flow
+  on `/admin/totp.php` when no secret is configured (manual base32 +
+  `<details>` URI + 6-digit verify form; persists via
+  `admin_totp_enrol_persist()`). Disable sub-card requires a current
+  TOTP or recovery code; clears the secret AND wipes recovery rows on
+  success. Per-recovery-code usage list (row id + `used_at` + IP); last
+  TOTP login timestamp surfaced in the Status sub-section.
+- **API keys post-mint Copy + Got it controls (#348).** New-token panel
+  gets a Copy button (`navigator.clipboard.writeText` with execCommand
+  fallback, "Copied!" feedback for 1.5 s) and a Got it dismiss button.
+  Empty state replaced with a one-paragraph nudge plus links to API
+  reference and rate-limit headers.
+- **Settings page (#349).** New `/admin/settings.php` surfaces 23
+  config knobs across six visible sections (Branding, Forms / Captcha,
+  API limits, Sessions, Admin & audit, Limits) plus a collapsed Advanced
+  (CSP) `<details>`. Schema-driven validators (`string`, `int`, `float`,
+  `bool`, `enum`, `multiselect`) reject bad input before disk write. Per-row
+  source badges (`default` / `admin` / `config`) plus a `shadowed` tag
+  + inline banner when a hand-edit in `config.php` overrides the wizard
+  tier. Per-row reset-to-default button (greyed when shadowed). Secret
+  inputs render masked (`••••••• (set)` / `(empty)`) and never round-trip
+  the existing value. Per-section atomic write (tmp + rename) +
+  `opcache_invalidate()`. Audit log gets one `config.update` row per
+  changed key (secrets redacted to `(set)` / `(empty)`).
+
+### Changed
+
+- **`admin_recovery_codes` schema** gains a `used_via_ip TEXT` column
+  via idempotent `PRAGMA table_info` probe + `ALTER TABLE`. Existing
+  data unaffected.
+- **`admin_recovery_verify_and_consume()`** now records the
+  consumer's IP alongside `used_at`.
+- **`admin_state` k/v table added** for single-row server state
+  (currently only `last_totp_at`).
+- **`admin_config_admin_set_keys()` merge helper** (in
+  `functions-admin-wizard.php`) replaces or appends single-line
+  `$key = …;` rows in `config-admin.php`. Used by the TOTP enrol /
+  disable flow and the new Settings page.
+- **`/admin/audit.php`** filter strip switched from button group to
+  proper tablist semantics. Action badges restyled per
+  `audit_action_badge_class()` mapping.
+
+### Tests
+
+- **PHPUnit:** 351 → 377 tests / 820 → 906 assertions / 14 skipped
+  (`AdminSessionTest`, `AuditBadgeClassTest`, `AdminTotpEnhancementsTest`,
+  `AdminSettingsTest`).
+- **Playwright:** 952 → 1050 assertions across 31 new admin-related
+  test groups covering login, logout, sidebar (current page / mobile
+  collapse / keyboard order / login-absent), audit polish (tablist /
+  badges / sticky thead / disabled pagination / time attrs / caption),
+  TOTP enrol + audit events, keys Copy + empty state, and Settings
+  (renders / validation rejects / secret masking / anchors + multiselect
+  + reset).
+
+### Pull Requests
+
+- #351 (#345 admin chrome) — `feat(v3.2.0): #345 admin chrome adoption`
+- #352 (#342 admin login form) — `feat(v3.2.0): #342 admin login form`
+- #353 (#343 logout button) — `feat(v3.2.0): #343 logout button`
+- #354 (#344 sidebar) — `feat(v3.2.0): #344 left sidebar for admin`
+- #355 (#346 audit polish) — `feat(v3.2.0): #346 audit log polish`
+- #356 (#347 TOTP enhancements) — `feat(v3.2.0): #347 TOTP enrol + disable + usage tracking`
+- #357 (#348 keys polish) — `feat(v3.2.0): #348 keys post-mint Copy + helpful empty state`
+- #358 (#349 settings page) — `feat(v3.2.0): #349 admin settings page — 23 knobs, schema validators`
+
 ## [3.1.3] - 2026-05-04
 
 Tiny follow-up to v3.1.2.
