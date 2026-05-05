@@ -4008,7 +4008,7 @@ async def test_api_v1_admin_basic_auth_still_works(page: Page) -> None:
 async def test_admin_logout_button_visible_on_every_admin_page(page: Page) -> None:
     section("v3.2.0 #343 admin logout — form + user chip rendered on every admin page")
     sess = _admin_session_requests()
-    for path in ("admin/keys.php", "admin/audit.php", "admin/totp.php"):
+    for path in ("admin/keys.php", "admin/audit.php", "admin/totp.php", "admin/settings.php"):
         resp = sess.get(APP_URL + path, timeout=10)
         assert_eq(f"{path}: status 200", resp.status_code, 200)
         body = resp.text
@@ -4125,6 +4125,7 @@ ADMIN_SIDEBAR_PAGES = [
     ("admin/keys.php", "keys.php"),
     ("admin/audit.php", "audit.php"),
     ("admin/totp.php", "totp.php"),
+    ("admin/settings.php", "settings.php"),
 ]
 
 
@@ -4310,6 +4311,7 @@ ADMIN_PAGES_FOR_CHROME = [
     ("admin/keys.php", "API Keys"),
     ("admin/audit.php", "Admin Audit Log"),
     ("admin/totp.php", "TOTP / 2FA"),
+    ("admin/settings.php", "Settings"),
 ]
 
 
