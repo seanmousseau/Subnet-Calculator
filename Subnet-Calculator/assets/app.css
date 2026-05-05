@@ -2173,6 +2173,36 @@
     align-items: start;
 }
 .admin-shell.no-sidebar .admin-shell-grid { display: block; }
+/* Sign-in / TOTP-verify shell: narrow card, vertically-stacked form. */
+.admin-shell.no-sidebar .admin-card {
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+}
+.admin-shell.no-sidebar .admin-form {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+}
+.admin-shell.no-sidebar .admin-form .form-group { min-width: 0; width: 100%; }
+.admin-shell.no-sidebar .admin-form .form-group-action { width: 100%; }
+.admin-shell.no-sidebar .admin-form .form-group-action .splitter-btn { width: 100%; }
+.admin-form-secondary {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border);
+}
+.admin-link-btn {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    color: var(--color-text-muted);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+.admin-link-btn:hover,
+.admin-link-btn:focus-visible { color: var(--color-accent); }
 .admin-sidebar {
     display: flex;
     flex-direction: column;
@@ -2611,7 +2641,8 @@ html[data-theme="light"] .btn-danger:hover { filter: brightness(0.95); }
     border-color: var(--color-error-border);
     background: var(--color-error-bg);
 }
-.settings-shadow-tag {
+.settings-shadow-tag,
+.settings-lock-tag {
     display: inline-block;
     padding: 0.1rem 0.5rem;
     border-radius: 999px;
@@ -2620,6 +2651,22 @@ html[data-theme="light"] .btn-danger:hover { filter: brightness(0.95); }
     border: 1px solid var(--color-error-border);
     background: var(--color-error-bg);
 }
+.settings-row.is-locked .settings-input input,
+.settings-row.is-locked .settings-input select,
+.settings-row.is-locked .settings-input textarea {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+.settings-precedence-card {
+    margin-bottom: 1rem;
+}
+.settings-precedence-card p { margin: 0.25rem 0 0.5rem; }
+.settings-precedence-list {
+    margin: 0.25rem 0 0;
+    padding-left: 1.25rem;
+}
+.settings-precedence-list li { margin-bottom: 0.25rem; }
+.settings-precedence-list .settings-source { margin: 0 0.15rem; }
 .settings-actions {
     margin-top: 0.75rem;
 }

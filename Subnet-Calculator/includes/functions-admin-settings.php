@@ -316,6 +316,16 @@ function settings_parse_config_file(string $path, array $schemaKeys): array
     if (!is_string($path) || $path === '' || !file_exists($path) || !is_readable($path)) {
         return [];
     }
+    // The Settings UI reads + writes config-admin.php in the same request
+    // cycle, and the layered loader re-includes both config.php and
+    // config-admin.php on every render. PHP's stat cache + opcache can
+    // hand back a stale snapshot for a few seconds after a save, which
+    // surfaces as "settings revert after logout/login". Force a fresh
+    // read each time we parse a config file.
+    clearstatcache(true, $path);
+    if (function_exists('opcache_invalidate')) {
+        @opcache_invalidate($path, true);
+    }
     $closure = static function () use ($path) {
         // Suppress the file's own includes/headers by capturing $GLOBALS-like
         // state in a local scope. The $api_tokens / $admin_* sanitisation in
