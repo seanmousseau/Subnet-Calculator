@@ -3651,6 +3651,188 @@ async def test_admin_logout_csrf_protected(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# v3.2.0 #344 — Left sidebar for /admin/
+# ---------------------------------------------------------------------------
+
+ADMIN_SIDEBAR_PAGES = [
+    ("admin/keys.php", "keys.php"),
+    ("admin/audit.php", "audit.php"),
+    ("admin/totp.php", "totp.php"),
+]
+
+
+async def test_admin_sidebar_marks_current_page(page: Page) -> None:
+    section("v3.2.0 #344 admin sidebar — aria-current=\"page\" marks the active row")
+    import re as _re
+    sess = _admin_session_requests()
+    for path, slug in ADMIN_SIDEBAR_PAGES:
+        resp = sess.get(APP_URL + path, timeout=10)
+        assert_eq(f"{path}: status 200", resp.status_code, 200)
+        body = resp.text
+        # Sidebar landmark renders.
+        assert_true(
+            f"{path}: <nav class=\"admin-sidebar\" aria-label=\"Admin\"> rendered",
+            'class="admin-sidebar"' in body and 'aria-label="Admin"' in body,
+        )
+        # Exactly one sidebar <a aria-current="page">.
+        currents = _re.findall(
+            r'<a\b[^>]*\baria-current="page"[^>]*\bhref="([^"]+)"',
+            body,
+        ) or _re.findall(
+            r'<a\b[^>]*\bhref="([^"]+)"[^>]*\baria-current="page"',
+            body,
+        )
+        assert_true(
+            f"{path}: exactly one aria-current=\"page\" link in sidebar (got {len(currents)})",
+            len(currents) == 1,
+            f"hrefs: {currents!r}",
+        )
+        assert_true(
+            f"{path}: aria-current href matches current page slug {slug}",
+            currents and slug in currents[0],
+            f"got: {currents!r}",
+        )
+
+
+async def test_admin_sidebar_collapses_on_mobile(page: Page) -> None:
+    section("v3.2.0 #344 admin sidebar — hamburger toggle at viewport <= 768px")
+    auth = "Basic " + base64.b64encode(
+        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
+    ).decode()
+    # Form-login via context.request first to seed sc_admin_sid for the page.
+    import re as _re
+    get_resp = await page.context.request.get(
+        APP_URL + "admin/login.php",
+        headers={"Cookie": auth},
+    )
+    body = await get_resp.text()
+    m = _re.search(r'name="csrf"\s+value="([0-9a-f]+)"', body)
+    assert_true("login csrf token present", m is not None)
+    csrf = m.group(1) if m else ""
+    post_resp = await page.context.request.post(
+        APP_URL + "admin/login.php",
+        headers={"Cookie": auth},
+        form={"user": ADMIN_USER, "pass": ADMIN_PASS, "csrf": csrf, "next": "/admin/"},
+        max_redirects=0,
+    )
+    assert_true(
+        "form-login redirected (303)",
+        post_resp.status in (302, 303),
+        f"got: {post_resp.status}",
+    )
+
+    await page.set_viewport_size({"width": 480, "height": 720})
+    await page.context.set_extra_http_headers({"Cookie": auth})
+    try:
+        await navigate(page, APP_URL + "admin/keys.php")
+        # Hamburger button visible on narrow viewports.
+        toggle_visible = await page.evaluate(
+            "() => { const b = document.querySelector('.admin-sidebar-toggle');"
+            " if (!b) return false;"
+            " const r = b.getBoundingClientRect();"
+            " return r.width > 0 && r.height > 0; }"
+        )
+        assert_true("mobile: hamburger toggle visible", toggle_visible)
+        # Sidebar starts collapsed.
+        starts_open = await page.evaluate(
+            "() => document.querySelector('.admin-sidebar')?.classList.contains('open')"
+        )
+        assert_true("mobile: sidebar starts collapsed (no .open)", not starts_open)
+        # aria-expanded starts false.
+        expanded_pre = await page.evaluate(
+            "() => document.querySelector('.admin-sidebar-toggle')?.getAttribute('aria-expanded')"
+        )
+        assert_eq("mobile: aria-expanded='false' initially", expanded_pre, "false")
+        # Click hamburger -> sidebar opens, aria-expanded flips.
+        await page.click(".admin-sidebar-toggle")
+        await page.wait_for_timeout(50)
+        is_open = await page.evaluate(
+            "() => document.querySelector('.admin-sidebar')?.classList.contains('open')"
+        )
+        assert_true("mobile: sidebar has .open after click", is_open)
+        expanded_post = await page.evaluate(
+            "() => document.querySelector('.admin-sidebar-toggle')?.getAttribute('aria-expanded')"
+        )
+        assert_eq("mobile: aria-expanded='true' after click", expanded_post, "true")
+        # Click again -> closes.
+        await page.click(".admin-sidebar-toggle")
+        await page.wait_for_timeout(50)
+        is_open2 = await page.evaluate(
+            "() => document.querySelector('.admin-sidebar')?.classList.contains('open')"
+        )
+        assert_true("mobile: sidebar closes on second click", not is_open2)
+    finally:
+        await page.context.set_extra_http_headers({})
+        await page.set_viewport_size({"width": 1280, "height": 900})
+
+
+async def test_admin_sidebar_keyboard_order(page: Page) -> None:
+    section("v3.2.0 #344 admin sidebar — sidebar tabs land before main content")
+    auth = "Basic " + base64.b64encode(
+        f"{ADMIN_USER}:{ADMIN_PASS}".encode()
+    ).decode()
+    # Seed cookie session via form login.
+    import re as _re
+    get_resp = await page.context.request.get(
+        APP_URL + "admin/login.php",
+        headers={"Cookie": auth},
+    )
+    body = await get_resp.text()
+    m = _re.search(r'name="csrf"\s+value="([0-9a-f]+)"', body)
+    csrf = m.group(1) if m else ""
+    await page.context.request.post(
+        APP_URL + "admin/login.php",
+        headers={"Cookie": auth},
+        form={"user": ADMIN_USER, "pass": ADMIN_PASS, "csrf": csrf, "next": "/admin/"},
+        max_redirects=0,
+    )
+    await page.context.set_extra_http_headers({"Cookie": auth})
+    try:
+        await navigate(page, APP_URL + "admin/keys.php")
+        # Compute DOM order of the first sidebar <a> vs the first
+        # interactive element inside <main id="main-content">.
+        order = await page.evaluate(
+            """() => {
+                const sidebar = document.querySelector('.admin-sidebar');
+                const main = document.getElementById('main-content');
+                if (!sidebar || !main) return null;
+                const sidebarFirst = sidebar.querySelector('a, button');
+                const mainFirst = main.querySelector('a, button, input, select, textarea');
+                if (!sidebarFirst || !mainFirst) return null;
+                // Node.compareDocumentPosition: 4 = following, 2 = preceding
+                const pos = sidebarFirst.compareDocumentPosition(mainFirst);
+                return (pos & Node.DOCUMENT_POSITION_FOLLOWING) ? 'sidebar_before_main' : 'main_before_sidebar';
+            }"""
+        )
+        assert_eq(
+            "keyboard order: first sidebar element precedes first main element",
+            order, "sidebar_before_main",
+        )
+    finally:
+        await page.context.set_extra_http_headers({})
+
+
+async def test_admin_sidebar_absent_on_login(page: Page) -> None:
+    section("v3.2.0 #344 admin sidebar — not rendered on login page (no signed-in session)")
+    import requests as _r
+    sess = _r.Session()
+    if BASIC_USER and BASIC_PASS:
+        sess.auth = (BASIC_USER, BASIC_PASS)
+    sess.verify = False
+    resp = sess.get(APP_URL + "admin/login.php", timeout=10)
+    assert_eq("login.php: status 200", resp.status_code, 200)
+    body = resp.text
+    assert_true(
+        "login.php: no <nav class=\"admin-sidebar\"> rendered",
+        'class="admin-sidebar"' not in body,
+    )
+    assert_true(
+        "login.php: no admin-sidebar-toggle rendered",
+        'admin-sidebar-toggle' not in body,
+    )
+
+
+# ---------------------------------------------------------------------------
 # v3.2.0 #345 — Admin chrome adoption (shared header / single-card / theme)
 # ---------------------------------------------------------------------------
 
@@ -5946,6 +6128,12 @@ async def main() -> None:
             await test_admin_logout_clears_session(page)
             await test_admin_logout_rejects_get(page)
             await test_admin_logout_csrf_protected(page)
+            # v3.2.0 #344 — left sidebar (run after logout tests so a fresh
+            # cookie session is available for sidebar rendering checks).
+            await test_admin_sidebar_marks_current_page(page)
+            await test_admin_sidebar_collapses_on_mobile(page)
+            await test_admin_sidebar_keyboard_order(page)
+            await test_admin_sidebar_absent_on_login(page)
             # v3.2.0 #345 — admin chrome adoption (run AFTER theme tests
             # because the admin theme test mutates localStorage.theme).
             await test_admin_pages_share_app_header(page)

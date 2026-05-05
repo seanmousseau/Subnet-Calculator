@@ -4,15 +4,20 @@ declare(strict_types=1);
 
 /**
  * Shared /admin/ page shell — introduced in v3.2.0 (#345) to align the
- * admin chrome with the calculator. Renders:
+ * admin chrome with the calculator. Refactored in v3.2.0 (#344) to host
+ * the persistent left sidebar that replaces the interim
+ * `.admin-footer-links` cluster + the header user chip / Logout form.
+ *
+ * Renders:
  *
  *   <!doctype html>
  *   <head> (meta + theme-init + assets/app.css)
- *   <body>
- *     skip-link → <main id="main-content" class="card admin-card">
+ *   <body class="admin-shell[ no-sidebar]">
+ *     skip-link → #main-content
+ *     [ admin/_sidebar.php — only when signed in ]
+ *     <main id="main-content" class="card admin-card">
  *       title-row (logo + page title + version pill + breadcrumb + theme toggle)
  *       admin-card body (caller-supplied $admin_card_body)
- *       interim .admin-footer-links cluster (until #344's sidebar lands)
  *     </main>
  *     <script src="assets/app.js">
  *
@@ -25,14 +30,15 @@ declare(strict_types=1);
  *                               via ob_start() / ob_get_clean() in the
  *                               admin page itself. Already escaped.
  *   ?string $admin_user_signed_in  Username of the active admin session.
- *                                  When non-empty, the header renders a
- *                                  signed-in chip + Logout form (#343).
- *                                  Pages that don't have a session yet
- *                                  (login.php) leave this null.
+ *                                  When non-empty AND $admin_csrf_token
+ *                                  is also non-empty, the sidebar is
+ *                                  rendered. Pages without a signed-in
+ *                                  session (login.php) leave this null,
+ *                                  which suppresses the sidebar entirely.
  *   ?string $admin_csrf_token   Active session's CSRF token. Required
  *                               whenever $admin_user_signed_in is set —
  *                               wired into the hidden input on the
- *                               logout form.
+ *                               sidebar's Logout form.
  *
  * The required app-version + asset-base symbols are pulled from
  * includes/config.php (which the admin pages already require for their
@@ -53,10 +59,6 @@ if (!isset($csp_nonce) || !is_string($csp_nonce) || $csp_nonce === '') {
     $csp_nonce = bin2hex(random_bytes(8));
 }
 
-// Resolve the active admin page from SCRIPT_NAME so the footer link
-// cluster can suppress the link to "this page" and tag it aria-current.
-$_admin_script = basename((string)($_SERVER['SCRIPT_NAME'] ?? ''));
-
 // Breadcrumb chip — inserted between version pill and theme toggle by
 // _app_header.php. Uses the WAI-ARIA breadcrumb pattern (ordered list +
 // aria-current="page" on the leaf).
@@ -73,33 +75,18 @@ $breadcrumb_html = '<nav class="admin-breadcrumb" aria-label="Breadcrumb">'
 $show_app_actions       = false;
 $admin_card_extra_class = 'admin-card';
 
-// Signed-in user chip + Logout form (v3.2.0, #343). Rendered into the
-// header title-row by _app_header.php via $header_session_html. When the
-// caller did not supply a username (e.g. login.php), the cluster is
-// suppressed entirely. #344 will lift this into the left sidebar; the
-// markup here is the interim placement called out in the issue body.
-$header_session_html = null;
-$admin_user          = isset($admin_user_signed_in) && is_string($admin_user_signed_in)
+// Sidebar gating. When both username + csrf are supplied we render the
+// sidebar; otherwise we fall back to the no-sidebar shell (login.php).
+$admin_user = isset($admin_user_signed_in) && is_string($admin_user_signed_in)
     ? $admin_user_signed_in : '';
-$admin_csrf          = isset($admin_csrf_token) && is_string($admin_csrf_token)
+$admin_csrf = isset($admin_csrf_token) && is_string($admin_csrf_token)
     ? $admin_csrf_token : '';
-if ($admin_user !== '' && $admin_csrf !== '') {
-    $header_session_html =
-        '<span class="admin-user-chip" aria-label="Signed in as ' . $_h($admin_user) . '">'
-        . '<svg class="admin-user-chip-icon" width="12" height="12" viewBox="0 0 24 24" '
-        . 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" '
-        . 'stroke-linejoin="round" aria-hidden="true">'
-        . '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>'
-        . '<circle cx="12" cy="7" r="4"/>'
-        . '</svg>'
-        . '<span class="admin-user-chip-name">' . $_h($admin_user) . '</span>'
-        . '</span>'
-        . '<form class="admin-logout-form" method="post" action="logout.php" '
-        . 'aria-label="Sign out of admin">'
-        . '<input type="hidden" name="csrf" value="' . $_h($admin_csrf) . '">'
-        . '<button class="admin-logout-btn" type="submit">Sign out</button>'
-        . '</form>';
-}
+$render_sidebar = $admin_user !== '' && $admin_csrf !== '';
+
+// The user-chip / logout cluster used to inject into the header in #343
+// — the sidebar now owns that surface, so the header partial receives no
+// session HTML.
+$header_session_html = null;
 
 // Asset base path: admin pages live one level deep, so static assets
 // resolve via "../assets/…".
@@ -120,29 +107,26 @@ $asset_base = '../assets';
     <script nonce="<?= $_h($csp_nonce) ?>">(function(){var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme: light)').matches?'light':null);if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
     <link rel="stylesheet" href="<?= $_h($asset_base) ?>/app.css?v=<?= $_h((string)$app_version) ?>">
 </head>
-<body>
+<body class="admin-shell<?= $render_sidebar ? '' : ' no-sidebar' ?>">
+<?php
+// Skip-link first in the DOM order so keyboard users can bypass the
+// sidebar straight to #main-content. _app_header.php is told to suppress
+// its built-in skip-link so we don't render two of them.
+?>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<?php $skip_link_emitted = true; ?>
+<?php if ($render_sidebar) : ?>
+<div class="admin-shell-grid">
+    <?php require __DIR__ . '/../admin/_sidebar.php'; ?>
+    <?php require __DIR__ . '/_app_header.php'; ?>
+        <?= $admin_card_body ?? '' ?>
+    </main>
+</div>
+<?php else : ?>
 <?php require __DIR__ . '/_app_header.php'; ?>
     <?= $admin_card_body ?? '' ?>
-
-    <?php
-    // Interim footer link cluster. Replaced by the left sidebar in #344.
-    // Renders the active page as a non-link <span aria-current="page">.
-    $admin_links = [
-        'keys.php'  => 'API Keys',
-        'totp.php'  => 'TOTP / 2FA',
-        'audit.php' => 'Audit Log',
-    ];
-    ?>
-    <nav class="admin-footer-links" aria-label="Admin sections">
-        <?php foreach ($admin_links as $slug => $label) : ?>
-            <?php if ($_admin_script === $slug) : ?>
-                <span aria-current="page"><?= $_h($label) ?></span>
-            <?php else : ?>
-                <a href="<?= $_h($slug) ?>"><?= $_h($label) ?></a>
-            <?php endif; ?>
-        <?php endforeach; ?>
-    </nav>
 </main>
+<?php endif; ?>
 <script src="<?= $_h($asset_base) ?>/app.js?v=<?= $_h((string)$app_version) ?>" defer></script>
 </body>
 </html>
