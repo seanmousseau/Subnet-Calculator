@@ -16,6 +16,7 @@ declare(strict_types=1);
 // return target is /admin/keys.php.
 
 require __DIR__ . '/../includes/config.php';
+require __DIR__ . '/../includes/functions-util.php';
 require __DIR__ . '/../includes/functions-admin-auth.php';
 require __DIR__ . '/../includes/functions-admin-totp.php';
 require __DIR__ . '/../includes/functions-apikeys.php';
@@ -96,45 +97,30 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $error = 'Code did not match. Try again, or use a recovery code.';
 }
 
-?><!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Two-factor verification — Subnet Calculator</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<style>
-  :root { color-scheme: dark; }
-  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:#0a1a12; color:#e5e7eb; margin:0; padding:2rem; }
-  main { max-width: 480px; margin:0 auto; }
-  h1 { font-size:1.4rem; margin:0 0 1rem; }
-  .card { background:#0f2419; border:1px solid #1e3a2a; border-radius:8px; padding:1.5rem; }
-  .alert-err { background:#3b0606; border:1px solid #ef4444; color:#fecaca; padding:0.75rem 1rem; border-radius:6px; margin-bottom:1rem; }
-  label { display:block; margin-bottom:0.75rem; }
-  label .lbl { display:block; font-weight:600; margin-bottom:0.25rem; color:#a7f3d0; }
-  input[type=text] { width:100%; box-sizing:border-box; background:#000; border:1px solid #1e3a2a; color:#e5e7eb; padding:0.6rem; border-radius:4px; font-size:1.1rem; font-family: ui-monospace, monospace; letter-spacing:0.1em; }
-  .btn { background:#06d6a0; color:#0a1a12; border:none; padding:0.6rem 1.2rem; border-radius:4px; font-weight:600; cursor:pointer; font-size:1rem; }
-  .btn:hover { background:#34e2b5; }
-  small { color:#9ca3af; }
-</style>
-</head>
-<body>
-<main>
-<h1>Two-factor verification</h1>
-<?php if ($error !== null) : ?><div class="alert-err"><?= $h($error) ?></div><?php endif; ?>
-<div class="card">
-  <form method="post" action="" autocomplete="off">
-    <label>
-      <span class="lbl">Authenticator code or recovery code</span>
-      <input type="text" name="code" required autofocus
-             pattern="[0-9A-Za-z\- ]{6,}"
-             inputmode="text"
-             placeholder="123 456">
-    </label>
-    <button class="btn" type="submit">Verify</button>
-    <p><small>Lost your authenticator? Enter a recovery code instead — each one is single-use.</small></p>
-  </form>
-</div>
-</main>
-</body>
-</html>
+ob_start();
+?>
+<section class="admin-section" aria-labelledby="totp-verify-heading">
+    <h1 id="totp-verify-heading">Two-factor verification</h1>
+    <?php if ($error !== null) : ?>
+        <div class="alert alert-error" role="alert"><?= $h($error) ?></div>
+    <?php endif; ?>
+    <form method="post" action="" autocomplete="off" class="admin-form">
+        <div class="form-group">
+            <label for="totp-code">Authenticator code or recovery code</label>
+            <input id="totp-code" type="text" name="code" required autofocus
+                   pattern="[0-9A-Za-z\- ]{6,}"
+                   inputmode="text"
+                   class="admin-input-totp"
+                   placeholder="123 456">
+        </div>
+        <div class="form-group form-group-action">
+            <button class="splitter-btn" type="submit">Verify</button>
+        </div>
+    </form>
+    <p class="admin-meta-note">Lost your authenticator? Enter a recovery code instead — each one is single-use.</p>
+</section>
+<?php
+$admin_card_body  = ob_get_clean();
+$page_title       = 'Two-factor verification';
+$admin_breadcrumb = 'Verify';
+require __DIR__ . '/../templates/_admin_layout.php';
