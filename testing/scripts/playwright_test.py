@@ -3055,10 +3055,15 @@ async def test_admin_keys_empty_state_links_to_docs(page: Page) -> None:
     # Drain the api_keys table so the empty state renders.
     drain_token = os.environ.get("PHPUNIT_TEST_DRAIN_TOKEN", "")
     if drain_token:
-        await page.context.request.post(
+        drain = await page.context.request.post(
             APP_URL + "admin/_test-drain.php",
             data={"token": drain_token},
         )
+        if drain.status != 200:
+            ok(f"admin/keys empty state: drain returned {drain.status} — skipped")
+            return
+        # admin_sessions was truncated; the cached sid is now stale.
+        _admin_session_cookie_reset()
     resp = await page.context.request.get(
         APP_URL + "admin/keys.php",
         headers={"Cookie": _admin_session_cookie_header()},
@@ -3342,9 +3347,27 @@ def _admin_session_cookie_header() -> str:
             f"admin login POST: expected 303, got {post_resp.status_code} "
             f"(body: {post_resp.text[:200]})"
         )
+    # Reject TOTP-pending sessions — every caller of this helper expects
+    # direct access to /admin/*.php; a TOTP-pending sid would silently
+    # redirect them to totp-verify.php and break downstream assertions.
+    location = post_resp.headers.get("location", "") or post_resp.headers.get("Location", "")
+    if "totp-verify.php" in location:
+        raise RuntimeError(
+            "admin login redirected to totp-verify.php; this helper only supports "
+            "fully-authenticated sessions. Disable TOTP in the test fixture or "
+            "extend the helper to complete the second-factor step."
+        )
     new_sid = sess.cookies.get("sc_admin_sid") or sid_cookie
     _ADMIN_SESSION_COOKIE_CACHE = f"sc_admin_sid={new_sid}"
     return _ADMIN_SESSION_COOKIE_CACHE
+
+
+def _admin_session_cookie_reset() -> None:
+    """Drop the cached admin session cookie. Call after any operation that
+    invalidates the server-side session row (e.g. /admin/_test-drain.php
+    truncating admin_sessions)."""
+    global _ADMIN_SESSION_COOKIE_CACHE
+    _ADMIN_SESSION_COOKIE_CACHE = None
 
 
 def _admin_api_basic_header() -> str:
@@ -3389,6 +3412,12 @@ def _admin_session_requests():
     if post_resp.status_code != 303:
         raise RuntimeError(
             f"login.php POST: expected 303, got {post_resp.status_code}"
+        )
+    location = post_resp.headers.get("location", "") or post_resp.headers.get("Location", "")
+    if "totp-verify.php" in location:
+        raise RuntimeError(
+            "login.php redirected to totp-verify.php; _admin_session_requests "
+            "only supports fully-authenticated sessions"
         )
     return sess
 

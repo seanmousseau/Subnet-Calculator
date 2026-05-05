@@ -445,9 +445,25 @@ function admin_totp_disable(\SQLite3 $db): bool
     if (!function_exists('admin_config_admin_set_keys')) {
         return false;
     }
-    if (!admin_config_admin_set_keys(['admin_totp_secret' => ''])) {
+
+    // Atomic: BEGIN, DELETE recovery rows, write config; COMMIT only if
+    // both the DELETE and the config write succeed. A failure on either
+    // side rolls the DELETE back so we never leave a "secret cleared but
+    // recovery rows still present" state on disk.
+    $db->exec('BEGIN IMMEDIATE');
+    try {
+        $db->exec('DELETE FROM admin_recovery_codes');
+    } catch (\Throwable $e) {
+        $db->exec('ROLLBACK');
+        error_log('sc admin_totp_disable: DELETE failed: ' . $e->getMessage());
         return false;
     }
-    $db->exec('DELETE FROM admin_recovery_codes');
+
+    if (!admin_config_admin_set_keys(['admin_totp_secret' => ''])) {
+        $db->exec('ROLLBACK');
+        return false;
+    }
+
+    $db->exec('COMMIT');
     return true;
 }
