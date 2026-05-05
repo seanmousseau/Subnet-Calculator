@@ -44,10 +44,13 @@ if ($turnstile_active) {
     $csp_extra_script = ' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/';
     $csp_extra_frame  = ' https://www.google.com/recaptcha/ https://recaptchaenterprise.googleapis.com';
 }
-$csp_script = "'self' 'nonce-{$csp_nonce}'" . $csp_extra_script;
-$csp_style  = "'self' 'nonce-{$csp_nonce}'";
-$csp_frame  = "'self'" . $csp_extra_frame;
-header("Content-Security-Policy: default-src 'self'; base-uri 'self'; style-src {$csp_style}; script-src {$csp_script}; img-src 'self' data:; frame-src {$csp_frame}; frame-ancestors {$frame_ancestors}");
+$csp_script  = "'self' 'nonce-{$csp_nonce}'" . $csp_extra_script
+    . (!empty($csp_script_extra) ? ' ' . $csp_script_extra : '');
+$csp_style   = "'self' 'nonce-{$csp_nonce}'";
+$csp_frame   = "'self'" . $csp_extra_frame;
+$csp_img     = "'self' data:" . (!empty($csp_img_extra) ? ' ' . $csp_img_extra : '');
+$csp_connect = "'self'" . (!empty($csp_connect_extra) ? ' ' . $csp_connect_extra : '');
+header("Content-Security-Policy: default-src 'self'; base-uri 'self'; style-src {$csp_style}; script-src {$csp_script}; img-src {$csp_img}; connect-src {$csp_connect}; frame-src {$csp_frame}; frame-ancestors {$frame_ancestors}");
 $turnstile_curl_missing = $turnstile_active  && !function_exists('curl_init');
 $hcaptcha_curl_missing  = $hcaptcha_active   && !function_exists('curl_init');
 $recaptcha_curl_missing = $recaptcha_active  && !function_exists('curl_init');

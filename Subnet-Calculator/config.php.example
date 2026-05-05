@@ -57,6 +57,20 @@ $frame_ancestors = '*';
 // Set explicitly if behind a reverse proxy that mangles REQUEST_URI or HTTP_HOST.
 $canonical_url = '';
 
+// CSP extension hooks (v3.1.1). Append space-separated origins to extend the
+// default Content-Security-Policy without forking index.php. Pre-validate
+// values: origins only, no quotes, commas, or newlines.
+//   $csp_connect_extra — appended to connect-src (analytics beacons, fetches)
+//   $csp_script_extra  — appended to script-src  (CDN-injected JS)
+//   $csp_img_extra     — appended to img-src     (tracking pixels, CDN images)
+// Example for a Cloudflare Zaraz + GA4 deployment:
+//   $csp_connect_extra = 'https://*.cloudflareinsights.com https://*.google-analytics.com '
+//                      . 'https://stats.g.doubleclick.net https://www.google.com';
+//   $csp_script_extra  = 'https://static.cloudflareinsights.com';
+$csp_connect_extra = '';
+$csp_script_extra  = '';
+$csp_img_extra     = '';
+
 // ── Localisation (v2.4.0) ─────────────────────────────────────────────────
 // BCP 47 locale tag used for locale-aware number formatting via PHP's intl extension.
 // The default 'en' produces comma separators (1,234,567). Set to a different locale
