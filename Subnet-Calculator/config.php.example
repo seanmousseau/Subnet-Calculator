@@ -139,11 +139,14 @@ $apikey_db_path = '';
 // ── Admin TOTP / 2FA (v3.0.0, #313) ───────────────────────────────────────
 // Base32-encoded RFC 6238 TOTP secret used as the second factor for /admin/
 // login. Leave empty (default) to disable TOTP and authenticate with Basic
-// Auth alone. Generate via the first-run admin wizard at /admin/setup.php
-// or by hand: `php -r "echo base32_encode(random_bytes(20));"` (or any
-// authenticator-compatible 32-char base32 string). Pair the resulting
-// otpauth://… URI with Google Authenticator / 1Password / Authy. Treat this
-// value like a password — never commit, rotate if leaked.
+// Auth alone. Generate via the first-run admin wizard at /admin/setup.php,
+// or from the docroot:
+//   php -r 'require "includes/functions-admin-totp.php"; echo admin_totp_generate_secret(), PHP_EOL;'
+// (PHP core has no built-in base32 helper — admin_totp_generate_secret()
+// in functions-admin-totp.php wraps random_bytes(20) with the project's
+// RFC 4648 base32 encoder.) Pair the resulting otpauth:// URI with Google
+// Authenticator / 1Password / Authy. Treat this value like a password —
+// never commit, rotate if leaked.
 $admin_totp_secret = '';
 
 // ── Audit log retention (v3.0.0, #306) ────────────────────────────────────
