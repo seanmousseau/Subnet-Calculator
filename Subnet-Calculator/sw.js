@@ -1,6 +1,6 @@
 // Subnet Calculator — Service Worker
 // Caches the app shell for offline access. Bump CACHE_NAME on each release.
-const CACHE_NAME   = 'sc-v3.2.2';
+const CACHE_NAME   = 'sc-v3.2.3';
 const CACHE_PREFIX = 'sc-v';
 
 // Scope-relative paths — work in both root and subdir installs
@@ -43,6 +43,11 @@ self.addEventListener('fetch', event => {
     let url;
     try { url = new URL(request.url); } catch { return; }
     if (url.origin !== self.location.origin) return;
+
+    // Never touch the /admin/ surface — admin pages are dynamic, set
+    // their own no-store cache headers, and any SW caching here causes
+    // stale-shell bugs after settings saves / login state changes.
+    if (/^\/admin(?:\/|$)/.test(url.pathname)) return;
 
     // Static assets: cache-first, populate cache on network hit
     if (url.pathname.startsWith(ASSETS_PATH)) {
