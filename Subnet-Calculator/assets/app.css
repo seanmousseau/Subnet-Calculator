@@ -1615,6 +1615,10 @@
     align-items: end;
     flex-wrap: wrap;
 }
+/* `display: flex` overrides the browser's [hidden] { display: none } default
+   on this element, so the form stays visible after startEditor() sets
+   hidden=true. Force it back. */
+.tree-editor-init[hidden] { display: none; }
 .tree-editor-init input[type="text"] {
     flex: 1 1 14ch;
     min-width: 12ch;
