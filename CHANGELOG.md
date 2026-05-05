@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.3] - 2026-05-04
+
+Tiny follow-up to v3.1.2.
+
+### Fixed
+
+- **Tree Editor session load returned 404** — v3.1.1's `loadSession()`
+  fetched `api/v1/sessions?session_id=…`, but the API only routes
+  `GET /api/v1/sessions/{id}` (path segment) — query-string lookups hit
+  the front-controller's "not found" branch. Result: visiting a
+  Save-Session URL or entering a session ID into the *Load saved session*
+  form returned `Load failed: Not found.` and never hydrated the tree.
+  Switched the fetch to the path-segment route.
+
 ## [3.1.2] - 2026-05-04
 
 Tiny follow-up to v3.1.1.
