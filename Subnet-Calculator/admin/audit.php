@@ -20,7 +20,7 @@ if (admin_wizard_needed()) {
     exit;
 }
 
-admin_session_require();
+$admin_ctx = admin_session_require();
 
 header('Cache-Control: no-store, no-cache, must-revalidate, private, max-age=0');
 header('Pragma: no-cache');
@@ -145,7 +145,9 @@ ob_start();
     </section>
 <?php endif; ?>
 <?php
-$admin_card_body  = ob_get_clean();
-$page_title       = 'Audit Log';
-$admin_breadcrumb = 'Audit Log';
+$admin_card_body       = ob_get_clean();
+$page_title            = 'Audit Log';
+$admin_breadcrumb      = 'Audit Log';
+$admin_user_signed_in  = (string)($admin_ctx['user'] ?? '');
+$admin_csrf_token      = (string)($admin_ctx['csrf'] ?? '');
 require __DIR__ . '/../templates/_admin_layout.php';

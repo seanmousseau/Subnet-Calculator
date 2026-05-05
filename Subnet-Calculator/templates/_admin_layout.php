@@ -24,6 +24,15 @@ declare(strict_types=1);
  *   string  $admin_card_body    Pre-rendered HTML body — typically captured
  *                               via ob_start() / ob_get_clean() in the
  *                               admin page itself. Already escaped.
+ *   ?string $admin_user_signed_in  Username of the active admin session.
+ *                                  When non-empty, the header renders a
+ *                                  signed-in chip + Logout form (#343).
+ *                                  Pages that don't have a session yet
+ *                                  (login.php) leave this null.
+ *   ?string $admin_csrf_token   Active session's CSRF token. Required
+ *                               whenever $admin_user_signed_in is set —
+ *                               wired into the hidden input on the
+ *                               logout form.
  *
  * The required app-version + asset-base symbols are pulled from
  * includes/config.php (which the admin pages already require for their
@@ -63,6 +72,34 @@ $breadcrumb_html = '<nav class="admin-breadcrumb" aria-label="Breadcrumb">'
 // calculator-only buttons, outer card carries .admin-card alongside .card).
 $show_app_actions       = false;
 $admin_card_extra_class = 'admin-card';
+
+// Signed-in user chip + Logout form (v3.2.0, #343). Rendered into the
+// header title-row by _app_header.php via $header_session_html. When the
+// caller did not supply a username (e.g. login.php), the cluster is
+// suppressed entirely. #344 will lift this into the left sidebar; the
+// markup here is the interim placement called out in the issue body.
+$header_session_html = null;
+$admin_user          = isset($admin_user_signed_in) && is_string($admin_user_signed_in)
+    ? $admin_user_signed_in : '';
+$admin_csrf          = isset($admin_csrf_token) && is_string($admin_csrf_token)
+    ? $admin_csrf_token : '';
+if ($admin_user !== '' && $admin_csrf !== '') {
+    $header_session_html =
+        '<span class="admin-user-chip" aria-label="Signed in as ' . $_h($admin_user) . '">'
+        . '<svg class="admin-user-chip-icon" width="12" height="12" viewBox="0 0 24 24" '
+        . 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+        . 'stroke-linejoin="round" aria-hidden="true">'
+        . '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>'
+        . '<circle cx="12" cy="7" r="4"/>'
+        . '</svg>'
+        . '<span class="admin-user-chip-name">' . $_h($admin_user) . '</span>'
+        . '</span>'
+        . '<form class="admin-logout-form" method="post" action="logout.php" '
+        . 'aria-label="Sign out of admin">'
+        . '<input type="hidden" name="csrf" value="' . $_h($admin_csrf) . '">'
+        . '<button class="admin-logout-btn" type="submit">Sign out</button>'
+        . '</form>';
+}
 
 // Asset base path: admin pages live one level deep, so static assets
 // resolve via "../assets/…".

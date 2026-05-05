@@ -25,8 +25,10 @@ declare(strict_types=1);
  * admin layout, the outer card-wrapping helper closes it).
  */
 
-$_show_app_actions = $show_app_actions ?? true;
-$_breadcrumb_html  = $breadcrumb_html ?? null;
+$_show_app_actions    = $show_app_actions ?? true;
+$_breadcrumb_html     = $breadcrumb_html ?? null;
+$_header_session_html = (isset($header_session_html) && is_string($header_session_html))
+    ? $header_session_html : null;
 ?>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 <main class="card<?= isset($admin_card_extra_class) ? ' ' . htmlspecialchars((string)$admin_card_extra_class) : '' ?>" id="main-content">
@@ -40,6 +42,11 @@ $_breadcrumb_html  = $breadcrumb_html ?? null;
         <span class="version">v<?= htmlspecialchars($app_version) ?></span>
         <?php if ($_breadcrumb_html !== null) {
             echo $_breadcrumb_html;
+        } ?>
+        <?php if ($_header_session_html !== null) {
+            // Signed-in chip + Logout form (admin pages only, v3.2.0 #343).
+            // Pre-rendered + escaped by _admin_layout.php.
+            echo $_header_session_html;
         } ?>
         <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode" aria-label="Switch to light mode">
             <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>

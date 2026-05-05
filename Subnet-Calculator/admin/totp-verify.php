@@ -127,7 +127,12 @@ ob_start();
     <p class="admin-meta-note">Lost your authenticator? Enter a recovery code instead — each one is single-use.</p>
 </section>
 <?php
-$admin_card_body  = ob_get_clean();
-$page_title       = 'Two-factor verification';
-$admin_breadcrumb = 'Verify';
+$admin_card_body       = ob_get_clean();
+$page_title            = 'Two-factor verification';
+$admin_breadcrumb      = 'Verify';
+// Pre-promote the session row carries the placeholder user ('') and the
+// pending CSRF; we surface them here so a stuck operator can hit Sign out
+// from the verify page without first having to complete TOTP.
+$admin_user_signed_in  = (string)($ctx['user'] ?? '');
+$admin_csrf_token      = (string)($ctx['csrf'] ?? '');
 require __DIR__ . '/../templates/_admin_layout.php';

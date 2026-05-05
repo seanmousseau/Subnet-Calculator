@@ -25,7 +25,7 @@ if (admin_wizard_needed()) {
     exit;
 }
 
-admin_session_require();
+$admin_ctx = admin_session_require();
 
 // Never cache admin output — the one-time minted token must not survive
 // in browser/disk/back-forward caches.
@@ -301,7 +301,9 @@ $keys_help = 'Keys authenticate against POST/GET /api/v1/* via Authorization: Be
     <?php endif; ?>
 </section>
 <?php
-$admin_card_body  = ob_get_clean();
-$page_title       = 'API Keys';
-$admin_breadcrumb = 'API Keys';
+$admin_card_body       = ob_get_clean();
+$page_title            = 'API Keys';
+$admin_breadcrumb      = 'API Keys';
+$admin_user_signed_in  = (string)($admin_ctx['user'] ?? '');
+$admin_csrf_token      = (string)($admin_ctx['csrf'] ?? '');
 require __DIR__ . '/../templates/_admin_layout.php';
