@@ -21,6 +21,7 @@ require $base . 'functions-util.php';
 require $base . 'functions-vlsm.php';
 require $base . 'functions-vlsm6.php';
 require $base . 'functions-supernet.php';
+require $base . 'functions-supernet6.php';
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require_once $base . 'functions-resolve.php';
@@ -98,6 +99,7 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/split/ipv4',
             'POST /api/v1/split/ipv6',
             'POST /api/v1/supernet',
+            'POST /api/v1/supernet6',
             'POST /api/v1/ula',
             'POST /api/v1/rdns',
             'POST /api/v1/bulk',
@@ -202,6 +204,9 @@ switch ($route_key) {
         break;
     case 'POST /supernet':
         require __DIR__ . '/handlers/supernet.php';
+        break;
+    case 'POST /supernet6':
+        require __DIR__ . '/handlers/supernet6.php';
         break;
     case 'POST /ula':
         require __DIR__ . '/handlers/ula.php';

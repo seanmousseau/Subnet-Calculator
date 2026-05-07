@@ -4787,6 +4787,130 @@ async def test_api_range6(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# v3.3.0 — IPv6 Supernet / Summarise (supernet6) UI + API
+# ---------------------------------------------------------------------------
+
+async def test_ipv6_supernet_ui(page: Page) -> None:
+    section("IPv6 Supernet / Summarise UI")
+
+    # Find adjacent /64s → /63
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='supernet6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("textarea[name='supernet6_input']", "2001:db8::/64\n2001:db8:0:1::/64")
+    await page.click("button[name='supernet6_action'][value='find']")
+    await page.wait_for_load_state("load")
+    sn_text = await page.text_content("#panel-ipv6 .overlap-panel .overlap-result")
+    assert_contains("supernet6: two adjacent /64s → /63", sn_text or "", "2001:db8::/63")
+
+    # Disjoint roots → still produces a common supernet (/0 fallback acceptable; no error band)
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='supernet6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("textarea[name='supernet6_input']", "2001:db8::/64\nfd00::/64")
+    await page.click("button[name='supernet6_action'][value='find']")
+    await page.wait_for_load_state("load")
+    sup6_panel = page.locator("#panel-ipv6 .overlap-panel").filter(
+        has=page.locator("textarea[name='supernet6_input']")
+    )
+    err_count = await sup6_panel.locator(".error").count()
+    assert_true("supernet6: disjoint roots do not raise error band", err_count == 0,
+                f"unexpected error band on disjoint roots")
+
+    # Summarise four adjacent /64s → /62
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='supernet6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill(
+        "textarea[name='supernet6_input']",
+        "2001:db8::/64\n2001:db8:0:1::/64\n2001:db8:0:2::/64\n2001:db8:0:3::/64",
+    )
+    await page.click("button[name='supernet6_action'][value='summarise']")
+    await page.wait_for_load_state("load")
+    items = await page.locator("#panel-ipv6 .split-item .split-subnet-text").all_text_contents()
+    assert_true("summarise6: four /64s collapse to single /62",
+                "2001:db8::/62" in items, f"got: {items}")
+    copy_all = await page.query_selector(
+        "#panel-ipv6 .overlap-panel .copy-all-btn[data-target='supernet6']"
+    )
+    assert_true("summarise6: Copy All button present", copy_all is not None)
+
+    # Mixed v4/v6 → error band
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='supernet6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("textarea[name='supernet6_input']", "10.0.0.0/24\n2001:db8::/64")
+    await page.click("button[name='supernet6_action'][value='find']")
+    await page.wait_for_load_state("load")
+    err_text = await page.text_content("#panel-ipv6 .overlap-panel .error") or ""
+    assert_true("supernet6: mixed v4 input shows error band", len(err_text) > 0,
+                f"got: {err_text!r}")
+
+    # > 50 CIDRs → error band
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='supernet6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    too_many = "\n".join([f"2001:db8::{i:x}/128" for i in range(1, 53)])
+    await page.fill("textarea[name='supernet6_input']", too_many)
+    await page.click("button[name='supernet6_action'][value='find']")
+    await page.wait_for_load_state("load")
+    err_cap = await page.text_content("#panel-ipv6 .overlap-panel .error") or ""
+    assert_contains("supernet6: > 50 inputs → cap error", err_cap, "Maximum 50")
+
+    # Shareable URL hydrates find
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&supernet6_action=find"
+        "&supernet6_input=2001%3Adb8%3A%3A%2F64%0A2001%3Adb8%3A0%3A1%3A%3A%2F64",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    sn2 = await page.text_content("#panel-ipv6 .overlap-panel .overlap-result")
+    assert_contains("supernet6: shareable URL hydrates find result", sn2 or "", "2001:db8::/63")
+
+    # Shareable URL hydrates summarise
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&supernet6_action=summarise"
+        "&supernet6_input=2001%3Adb8%3A%3A%2F64%0A2001%3Adb8%3A0%3A1%3A%3A%2F64",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    items3 = await page.locator("#panel-ipv6 .split-item .split-subnet-text").all_text_contents()
+    assert_true("supernet6: shareable URL hydrates summarise result",
+                "2001:db8::/63" in items3, f"got: {items3}")
+
+
+async def test_api_supernet6(page: Page) -> None:
+    section("API — POST /api/v1/supernet6")
+    status, data = _api_post("supernet6", {
+        "action": "find",
+        "cidrs":  ["2001:db8::/64", "2001:db8:0:1::/64"],
+    })
+    assert_eq("api supernet6 find: HTTP 200", status, 200)
+    assert_eq("api supernet6 find: result",
+              data.get("data", {}).get("supernet"), "2001:db8::/63")
+
+    status2, data2 = _api_post("supernet6", {
+        "action": "summarise",
+        "cidrs":  ["2001:db8::/64", "2001:db8:0:1::/64",
+                   "2001:db8:0:2::/64", "2001:db8:0:3::/64"],
+    })
+    assert_eq("api supernet6 summarise: HTTP 200", status2, 200)
+    summaries = data2.get("data", {}).get("summaries", [])
+    assert_eq("api supernet6 summarise: 1 result (/62)", len(summaries), 1)
+    assert_true("api supernet6 summarise: returns /62",
+                "2001:db8::/62" in summaries, f"got: {summaries}")
+
+    # IPv4 input → 4xx
+    status3, data3 = _api_post("supernet6", {
+        "action": "find",
+        "cidrs":  ["10.0.0.0/24"],
+    })
+    assert_true("api supernet6: ipv4 input yields 4xx",
+                400 <= status3 < 500, f"got: {status3}")
+    assert_eq("api supernet6: ipv4 input ok=false", data3.get("ok"), False)
+
+
+# ---------------------------------------------------------------------------
 # v2.3.0 — API: range/ipv4 and tree (#182, #183)
 # ---------------------------------------------------------------------------
 
@@ -6708,6 +6832,8 @@ async def main() -> None:
             await test_tree_view(page)
             await test_api_range(page)
             await test_api_range6(page)
+            await test_ipv6_supernet_ui(page)
+            await test_api_supernet6(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)
