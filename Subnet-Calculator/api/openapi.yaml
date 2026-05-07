@@ -282,6 +282,7 @@ paths:
                     - split/ipv6
                     - supernet
                     - supernet6
+                    - zone-id
                     - ula
                     - rdns
                     - bulk
@@ -992,6 +993,84 @@ paths:
                   supernet: "2001:db8::/63"
         "400":
           description: Invalid input (non-IPv6 CIDR, malformed prefix, > 50 entries, etc.)
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /zone-id:
+    post:
+      operationId: parseZoneId
+      tags: [IPv6]
+      summary: Parse an IPv6 address with optional zone identifier
+      description: >
+        Parses an IPv6 `address[%zone]` string per RFC 4007 section 11.
+        Returns the canonicalised address (compressed via inet_ntop), the zone
+        identifier when present, an `is_link_local` flag (true when the
+        address falls within `fe80::/10`), and a `warning` string when a zone
+        identifier is supplied on a non-link-local address (zone IDs are only
+        meaningful on link-local addresses). Added in v3.3.0.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input]
+              properties:
+                input:
+                  type: string
+                  description: IPv6 address with optional `%zone` suffix.
+                  example: "fe80::1%eth0"
+      responses:
+        "200":
+          description: Parsed address, zone, link-local flag, and optional warning
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [address, zone_id, is_link_local, warning]
+                        properties:
+                          address:       { type: string, example: "fe80::1" }
+                          zone_id:       { type: [string, "null"], example: "eth0" }
+                          is_link_local: { type: boolean, example: true }
+                          warning:       { type: [string, "null"], example: null }
+              example:
+                ok: true
+                data:
+                  address: "fe80::1"
+                  zone_id: "eth0"
+                  is_link_local: true
+                  warning: null
+        "400":
+          description: Empty input, invalid IPv6 address, or malformed zone identifier
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
