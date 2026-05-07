@@ -116,6 +116,13 @@ async def main() -> int:
     try:
         # Wait briefly for server (TCP connect probe — no HTTP fetch needed).
         for _ in range(50):
+            if server.poll() is not None:
+                print(
+                    f"PHP dev server exited early (code={server.returncode}); "
+                    f"port {PORT} may already be in use",
+                    file=sys.stderr,
+                )
+                return 1
             try:
                 with socket.create_connection((HOST, PORT), timeout=0.3):
                     break
@@ -146,7 +153,7 @@ async def main() -> int:
         server.terminate()
         try:
             server.wait(timeout=2)
-        except Exception:
+        except subprocess.TimeoutExpired:
             server.kill()
 
 

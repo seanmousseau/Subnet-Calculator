@@ -6,8 +6,12 @@ if ($method !== 'POST') {
     json_err('Method not allowed.', 405);
 }
 
-$body  = api_body();
-$input = trim((string)($body['input'] ?? ''));
+$body = api_body();
+$raw_input = $body['input'] ?? '';
+if (!is_string($raw_input)) {
+    json_err('Field "input" must be a string.', 400);
+}
+$input = trim($raw_input);
 
 try {
     $r = parse_zone_id($input);

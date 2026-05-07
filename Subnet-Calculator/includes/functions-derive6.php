@@ -41,7 +41,9 @@ function parse_zone_id(string $input): array
         $addr_part = substr($trimmed, 0, $pct);
         $zone_part = substr($trimmed, $pct + 1);
         if ($zone_part === '' || preg_match('/^[A-Za-z0-9_-]{1,32}$/', $zone_part) !== 1) {
-            throw new \InvalidArgumentException('Zone identifier must be 1–32 alphanumeric characters.');
+            throw new \InvalidArgumentException(
+                'Zone identifier must be 1–32 characters using letters, digits, "_" or "-".'
+            );
         }
     }
 
@@ -96,11 +98,21 @@ function parse_zone_id(string $input): array
  */
 function mac_normalize_internal(string $mac): string
 {
-    $stripped = strtolower(str_replace([':', '-', '.'], '', trim($mac)));
-    if (preg_match('/^[0-9a-f]{12}$/', $stripped) !== 1) {
+    $trimmed = trim($mac);
+    // Validate the original shape against the four documented formats BEFORE
+    // stripping separators. This rejects mixed-separator inputs like
+    // `00:24-b9.7e:ab:cd` that would otherwise normalise to 12 hex chars.
+    $valid = preg_match(
+        '/^(?:[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}'
+        . '|[0-9A-Fa-f]{2}(?:-[0-9A-Fa-f]{2}){5}'
+        . '|[0-9A-Fa-f]{4}(?:\.[0-9A-Fa-f]{4}){2}'
+        . '|[0-9A-Fa-f]{12})$/',
+        $trimmed
+    ) === 1;
+    if (!$valid) {
         throw new \InvalidArgumentException('Invalid MAC address: ' . $mac);
     }
-    return $stripped;
+    return strtolower(str_replace([':', '-', '.'], '', $trimmed));
 }
 
 /**

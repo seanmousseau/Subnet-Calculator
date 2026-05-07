@@ -4815,7 +4815,7 @@ async def test_ipv6_supernet_ui(page: Page) -> None:
     )
     err_count = await sup6_panel.locator(".error").count()
     assert_true("supernet6: disjoint roots do not raise error band", err_count == 0,
-                f"unexpected error band on disjoint roots")
+                "unexpected error band on disjoint roots")
 
     # Summarise four adjacent /64s → /62
     await navigate(page, APP_URL + "?tab=ipv6")

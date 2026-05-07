@@ -59,7 +59,7 @@ never be assigned to a real interface.
 The tool supports the standard shareable-URL pattern. The colon
 separators must be URL-encoded as `%3A`:
 
-```
+```text
 ?tab=ipv6&derive_mac=00%3A24%3Ab9%3A7e%3Aab%3Acd
 ```
 
@@ -123,7 +123,7 @@ curl -s -X POST https://your-host/api/v1/derive \
 ```json
 {
   "ok": false,
-  "error": "Invalid MAC address format."
+  "error": "Invalid MAC address: not-a-mac"
 }
 ```
 

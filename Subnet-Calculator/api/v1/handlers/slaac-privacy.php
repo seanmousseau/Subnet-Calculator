@@ -6,12 +6,19 @@ if ($method !== 'POST') {
     json_err('Method not allowed.', 405);
 }
 
-$body   = api_body();
-$prefix = trim((string)($body['prefix'] ?? ''));
+$body = api_body();
+$raw_prefix = $body['prefix'] ?? '';
+if (!is_string($raw_prefix)) {
+    json_err('Field "prefix" must be a string.', 400);
+}
+$prefix = trim($raw_prefix);
 
 $seed = null;
 if (array_key_exists('seed', $body) && $body['seed'] !== null) {
-    $seed_raw = trim((string)$body['seed']);
+    if (!is_string($body['seed'])) {
+        json_err('Field "seed" must be a string.', 400);
+    }
+    $seed_raw = trim($body['seed']);
     if ($seed_raw !== '') {
         $seed = $seed_raw;
     }

@@ -26,7 +26,7 @@ declare(strict_types=1);
  *     error?: string,
  * }
  */
-function range_to_cidrs(string $start, string $end): array
+function range_to_cidrs(string $start, string $end, ?int $max_cidrs = null): array
 {
     $start_long = ip2long($start);
     $end_long   = ip2long($end);
@@ -46,9 +46,15 @@ function range_to_cidrs(string $start, string $end): array
         return ['error' => 'Start address must be less than or equal to end address.'];
     }
 
-    // v3.3.0 — output cap (configurable via $range_max_cidrs).
-    global $range_max_cidrs;
-    $cap = isset($range_max_cidrs) ? max(1, min((int)$range_max_cidrs, 100000)) : 256;
+    // v3.3.0 — output cap. Explicit $max_cidrs argument wins (used by tests
+    // and any caller that wants to override per-call); otherwise fall back to
+    // the configured global $range_max_cidrs (default 256).
+    if ($max_cidrs !== null) {
+        $cap = max(1, min($max_cidrs, 100000));
+    } else {
+        global $range_max_cidrs;
+        $cap = isset($range_max_cidrs) ? max(1, min((int)$range_max_cidrs, 100000)) : 256;
+    }
 
     $cidrs = [];
     $cur   = $start_long;

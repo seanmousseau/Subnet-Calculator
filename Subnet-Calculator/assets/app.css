@@ -1344,6 +1344,7 @@
                 --color-border:       #cbd5e1;
                 --color-accent:       #0a8f6b;
                 --color-btn-text:     #0a1a12;
+                --color-warning-fg:   #b45309;
             }
             html[data-theme="dark"] body,
             html[data-theme="dark"] .card,

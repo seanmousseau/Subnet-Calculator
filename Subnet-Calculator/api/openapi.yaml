@@ -243,6 +243,68 @@ components:
           example: ["fd1a:2b3c:4d5e:0000::/64", "fd1a:2b3c:4d5e:0001::/64"]
         available_64s: { type: integer, example: 65536 }
 
+    # ── v3.3.0 IPv6 endpoint request bodies (extracted per CR feedback PR #369) ──
+    Supernet6Request:
+      type: object
+      required: [cidrs]
+      properties:
+        action:
+          type: string
+          enum: [find, summarise]
+          default: find
+          description: "`find` returns the smallest enclosing IPv6 supernet; `summarise` reduces to minimal covering IPv6 prefixes."
+        cidrs:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { type: string }
+          example: ["2001:db8::/64", "2001:db8:0:1::/64"]
+
+    ZoneIdRequest:
+      type: object
+      required: [input]
+      properties:
+        input:
+          type: string
+          description: IPv6 address with optional `%zone` suffix.
+          example: "fe80::1%eth0"
+
+    DeriveRequest:
+      type: object
+      required: [mac]
+      properties:
+        mac:
+          type: string
+          description: 48-bit MAC address in any common format.
+          example: "00:24:b9:7e:ab:cd"
+
+    SlaacPrivacyRequest:
+      type: object
+      required: [prefix]
+      properties:
+        prefix:
+          type: string
+          description: IPv6 /64 prefix; non-/64 prefixes are rejected.
+          example: "2001:db8:1:2::/64"
+        seed:
+          type: string
+          description: Optional 16 hexadecimal characters for reproducible output.
+          pattern: "^[0-9a-fA-F]{16}$"
+          example: "a8d3f4e10c529837"
+
+    Range6Request:
+      type: object
+      required: [start, end]
+      properties:
+        start:
+          type: string
+          description: Start IPv6 address (inclusive)
+          example: "2001:db8::"
+        end:
+          type: string
+          description: End IPv6 address (inclusive)
+          example: "2001:db8::ffff"
+
 paths:
   /:
     get:
@@ -274,25 +336,26 @@ paths:
                 data:
                   version: "1"
                   endpoints:
-                    - ipv4
-                    - ipv6
-                    - vlsm
-                    - overlap
-                    - split/ipv4
-                    - split/ipv6
-                    - supernet
-                    - supernet6
-                    - zone-id
-                    - derive
-                    - slaac-privacy
-                    - ula
-                    - rdns
-                    - bulk
-                    - range/ipv4
-                    - range6
-                    - tree
-                    - sessions
-                    - changelog
+                    - "POST /api/v1/ipv4"
+                    - "POST /api/v1/ipv6"
+                    - "POST /api/v1/vlsm"
+                    - "POST /api/v1/overlap"
+                    - "POST /api/v1/split/ipv4"
+                    - "POST /api/v1/split/ipv6"
+                    - "POST /api/v1/supernet"
+                    - "POST /api/v1/supernet6"
+                    - "POST /api/v1/zone-id"
+                    - "POST /api/v1/derive"
+                    - "POST /api/v1/slaac-privacy"
+                    - "POST /api/v1/ula"
+                    - "POST /api/v1/rdns"
+                    - "POST /api/v1/bulk"
+                    - "POST /api/v1/range/ipv4"
+                    - "POST /api/v1/range6"
+                    - "POST /api/v1/tree"
+                    - "POST /api/v1/sessions"
+                    - "GET  /api/v1/sessions/{id}"
+                    - "GET  /api/v1/changelog"
 
   /ipv4:
     post:
@@ -952,24 +1015,14 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [cidrs]
-              properties:
-                action:
-                  type: string
-                  enum: [find, summarise]
-                  default: find
-                  description: "`find` returns the smallest enclosing IPv6 supernet; `summarise` reduces to minimal covering IPv6 prefixes."
-                cidrs:
-                  type: array
-                  minItems: 1
-                  maxItems: 50
-                  items: { type: string }
-                  example: ["2001:db8::/64", "2001:db8:0:1::/64"]
+            schema: { $ref: "#/components/schemas/Supernet6Request" }
       responses:
         "200":
           description: IPv6 supernet or summarised routes
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
           content:
             application/json:
               schema:
@@ -1038,17 +1091,14 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [input]
-              properties:
-                input:
-                  type: string
-                  description: IPv6 address with optional `%zone` suffix.
-                  example: "fe80::1%eth0"
+            schema: { $ref: "#/components/schemas/ZoneIdRequest" }
       responses:
         "200":
           description: Parsed address, zone, link-local flag, and optional warning
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
           content:
             application/json:
               schema:
@@ -1122,17 +1172,14 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [mac]
-              properties:
-                mac:
-                  type: string
-                  description: 48-bit MAC address in any common format.
-                  example: "00:24:b9:7e:ab:cd"
+            schema: { $ref: "#/components/schemas/DeriveRequest" }
       responses:
         "200":
           description: Canonical MAC plus derived EUI-64, link-local, and solicited-node addresses
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
           content:
             application/json:
               schema:
@@ -1207,22 +1254,14 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [prefix]
-              properties:
-                prefix:
-                  type: string
-                  description: IPv6 /64 prefix; non-/64 prefixes are rejected.
-                  example: "2001:db8:1:2::/64"
-                seed:
-                  type: string
-                  description: Optional 16 hexadecimal characters for reproducible output.
-                  pattern: "^[0-9a-fA-F]{16}$"
-                  example: "a8d3f4e10c529837"
+            schema: { $ref: "#/components/schemas/SlaacPrivacyRequest" }
       responses:
         "200":
           description: Canonicalised prefix plus generated SLAAC privacy address
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
           content:
             application/json:
               schema:
@@ -1754,6 +1793,10 @@ paths:
       responses:
         "200":
           description: List of covering CIDRs
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
           content:
             application/json:
               schema:
@@ -1763,7 +1806,7 @@ paths:
                     properties:
                       data:
                         type: object
-                        required: [cidrs]
+                        required: [cidrs, count, total_addresses, truncated, cap]
                         properties:
                           cidrs:
                             type: array
@@ -1846,21 +1889,14 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [start, end]
-              properties:
-                start:
-                  type: string
-                  description: Start IPv6 address (inclusive)
-                  example: "2001:db8::"
-                end:
-                  type: string
-                  description: End IPv6 address (inclusive)
-                  example: "2001:db8::ffff"
+            schema: { $ref: "#/components/schemas/Range6Request" }
       responses:
         "200":
           description: List of covering CIDRs
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
           content:
             application/json:
               schema:

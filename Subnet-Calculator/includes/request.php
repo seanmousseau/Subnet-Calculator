@@ -1055,6 +1055,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($is_range6 && !$form_blocked) {
+        $active_tab   = 'ipv6';
         $range6_start = trim((string)($_POST['range6_start'] ?? ''));
         $range6_end   = trim((string)($_POST['range6_end']   ?? ''));
         sc_run_range6(

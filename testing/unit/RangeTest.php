@@ -117,23 +117,14 @@ class RangeTest extends TestCase
 
     public function testRange_CapHit_TruncatesAndFlags(): void
     {
-        $saved = $GLOBALS['range_max_cidrs'] ?? null;
-        $GLOBALS['range_max_cidrs'] = 4;
-        try {
-            // 10.0.0.1 – 10.0.0.255 yields 8 CIDRs with no cap; with cap=4 it
-            // truncates to 4 blocks.
-            $r = range_to_cidrs('10.0.0.1', '10.0.0.255');
-            $this->assertTrue($r['truncated']);
-            $this->assertSame(4, $r['count']);
-            $this->assertSame(4, $r['cap']);
-            $this->assertCount(4, $r['cidrs']);
-        } finally {
-            if ($saved === null) {
-                unset($GLOBALS['range_max_cidrs']);
-            } else {
-                $GLOBALS['range_max_cidrs'] = $saved;
-            }
-        }
+        // 10.0.0.1 – 10.0.0.255 yields 8 CIDRs with no cap; with cap=4 it
+        // truncates to 4 blocks. The explicit third argument keeps the test
+        // free of $GLOBALS mutation (CR feedback PR #369).
+        $r = range_to_cidrs('10.0.0.1', '10.0.0.255', 4);
+        $this->assertTrue($r['truncated']);
+        $this->assertSame(4, $r['count']);
+        $this->assertSame(4, $r['cap']);
+        $this->assertCount(4, $r['cidrs']);
     }
 
     public function testRange_FragmentedRange_NotTruncatedAtDefaultCap(): void

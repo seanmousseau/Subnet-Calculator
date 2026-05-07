@@ -63,6 +63,14 @@ class Derive6Test extends TestCase
         mac_to_eui64('');
     }
 
+    public function testMacToEui64MixedSeparatorsRejected(): void
+    {
+        // Inputs that would normalise to 12 hex chars but mix separators
+        // outside the four documented formats must be rejected.
+        $this->expectException(InvalidArgumentException::class);
+        mac_to_eui64('00:24-b9.7e:ab:cd');
+    }
+
     // ── mac_to_link_local ───────────────────────────────────────────────────
 
     public function testMacToLinkLocalRfc4291Vector(): void

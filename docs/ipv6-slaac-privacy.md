@@ -131,7 +131,7 @@ curl -sS -X POST https://example.com/api/v1/slaac-privacy \
 The IPv6 tab hydrates from query parameters. Either parameter alone
 will trigger the calculation; the seed is optional.
 
-```
+```text
 ?tab=ipv6&slaac_prefix=2001:db8:1:2::/64
 ?tab=ipv6&slaac_prefix=2001:db8:1:2::/64&slaac_seed=a8d3f4e10c529837
 ```

@@ -10,9 +10,17 @@ if ($method !== 'POST') {
     json_err('Method not allowed.', 405);
 }
 
-$body  = api_body();
-$start = trim((string)($body['start'] ?? ''));
-$end   = trim((string)($body['end']   ?? ''));
+$body = api_body();
+$raw_start = $body['start'] ?? '';
+$raw_end   = $body['end']   ?? '';
+if (!is_string($raw_start)) {
+    json_err('Field "start" must be a string.', 400);
+}
+if (!is_string($raw_end)) {
+    json_err('Field "end" must be a string.', 400);
+}
+$start = trim($raw_start);
+$end   = trim($raw_end);
 
 if ($start === '') {
     json_err('Field "start" is required.');

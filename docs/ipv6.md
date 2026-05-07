@@ -61,17 +61,20 @@ Response shape:
 
 ```json
 {
-  "cidrs": ["2001:db8::/112"],
-  "count": 1,
-  "total_addresses": 65536,
-  "truncated": false,
-  "cap": 256
+  "ok": true,
+  "data": {
+    "cidrs": ["2001:db8::/112"],
+    "count": 1,
+    "total_addresses": 65536,
+    "truncated": false,
+    "cap": 256
+  }
 }
 ```
 
 ### Shareable URL
 
-```
+```text
 ?tab=ipv6&tool=range6&range6_start=2001:db8::&range6_end=2001:db8::ffff
 ```
 
@@ -107,7 +110,7 @@ curl -sX POST https://example.org/api/v1/supernet6 \
 
 ### Shareable URL
 
-```
+```text
 ?tab=ipv6&tool=supernet6&supernet6_action=find&supernet6_input=2001:db8::/64%0A2001:db8:0:1::/64
 ```
 

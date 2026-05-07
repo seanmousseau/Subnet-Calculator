@@ -7,7 +7,11 @@ if ($method !== 'POST') {
 }
 
 $body = api_body();
-$mac  = trim((string)($body['mac'] ?? ''));
+$raw_mac = $body['mac'] ?? '';
+if (!is_string($raw_mac)) {
+    json_err('Field "mac" must be a string.', 400);
+}
+$mac = trim($raw_mac);
 
 try {
     $r = derive_from_mac($mac);

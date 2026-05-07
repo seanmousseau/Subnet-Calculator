@@ -13,7 +13,7 @@ and are required to disambiguate **link-local** addresses on hosts with
 more than one interface, because the same `fe80::/10` prefix exists
 independently on every link.
 
-```
+```text
 fe80::1%eth0   →  link-local address fe80::1, scoped to interface eth0
 fe80::1%en0    →  same address, scoped to a different interface
 ```
@@ -53,7 +53,7 @@ configuration that is silently broken.
 The parser supports the standard shareable-URL pattern. The percent sign
 in a zone identifier must be URL-encoded as `%25`:
 
-```
+```text
 ?tab=ipv6&zoneid_input=fe80::1%25eth0
 ```
 
@@ -107,7 +107,7 @@ will ignore the zone:
 ```json
 {
   "ok": false,
-  "error": "Zone identifier must be 1–32 alphanumeric characters."
+  "error": "Zone identifier must be 1–32 characters using letters, digits, \"_\" or \"-\"."
 }
 ```
 
