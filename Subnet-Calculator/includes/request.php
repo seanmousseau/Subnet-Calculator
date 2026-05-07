@@ -249,6 +249,47 @@ function sc_run_derive(
     $warning_out        = $r['warning'];
 }
 
+// ─── SLAAC privacy helper (shared by POST handler and GET shareable URL) ────
+
+/**
+ * Run slaac_privacy_address() against the given prefix + optional seed and
+ * write the outcome into the by-reference outputs. Used by both the POST
+ * handler and the GET shareable-URL hydration path. (v3.3.0 Task 5)
+ *
+ * Empty seed strings are treated as "unseeded" so a shareable URL with an
+ * empty `slaac_seed=` parameter still produces a fresh address.
+ */
+function sc_run_slaac(
+    string $prefix,
+    string $seed,
+    ?string &$prefix_out,
+    ?string &$address_out,
+    ?string &$interface_id_out,
+    ?string &$seed_used_out,
+    bool &$seed_was_provided_out,
+    ?string &$warning_out,
+    ?string &$error_out
+): void {
+    if ($prefix === '') {
+        return;
+    }
+    $seed_arg = ($seed === '') ? null : $seed;
+    try {
+        $r = slaac_privacy_address($prefix, $seed_arg);
+    } catch (\InvalidArgumentException $e) {
+        $error_out = $e->getMessage();
+        return;
+    }
+    $prefix_out            = $r['prefix'];
+    $address_out           = $r['address'];
+    $interface_id_out      = $r['interface_id'];
+    $seed_used_out         = $r['seed_used'];
+    $seed_was_provided_out = $r['seed_was_provided'];
+    // $warning_out reserved for future use (e.g. callers may surface "seed is
+    // a documentation/example value" hints). Currently always null.
+    $warning_out           = null;
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -354,6 +395,17 @@ $derive_solicited_node = null;
 $derive_warning        = null;
 $derive_error          = null;
 
+// v3.3.0 — SLAAC privacy address generator (RFC 8981)
+$slaac_prefix_input      = '';
+$slaac_seed_input        = '';
+$slaac_prefix            = null;
+$slaac_address           = null;
+$slaac_interface_id      = null;
+$slaac_seed_used         = null;
+$slaac_seed_was_provided = false;
+$slaac_warning           = null;
+$slaac_error             = null;
+
 $ula_global_id_input = '';
 /** @var array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}|null $ula_result */
 $ula_result = null;
@@ -426,6 +478,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_diff          = isset($_POST['diff_before']) || isset($_POST['diff_after']);
     $is_zoneid        = isset($_POST['zoneid_input']);
     $is_derive        = isset($_POST['derive_mac']);
+    $is_slaac         = isset($_POST['slaac_prefix']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -433,7 +486,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
         || $is_vlsm6 || $is_supernet || $is_supernet6 || $is_ula || $is_session_save || $is_range
         || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid
-        || $is_derive;
+        || $is_derive || $is_slaac;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -831,6 +884,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $derive_solicited_node,
             $derive_warning,
             $derive_error
+        );
+    }
+
+    if ($is_slaac && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $slaac_prefix_input = trim((string)($_POST['slaac_prefix'] ?? ''));
+        $slaac_seed_input   = trim((string)($_POST['slaac_seed']   ?? ''));
+        sc_run_slaac(
+            $slaac_prefix_input,
+            $slaac_seed_input,
+            $slaac_prefix,
+            $slaac_address,
+            $slaac_interface_id,
+            $slaac_seed_used,
+            $slaac_seed_was_provided,
+            $slaac_warning,
+            $slaac_error
         );
     }
 
@@ -1251,6 +1321,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $derive_solicited_node,
             $derive_warning,
             $derive_error
+        );
+    }
+
+    // SLAAC privacy address shareable GET URL (v3.3.0 Task 5)
+    if ($active_tab === 'ipv6' && isset($_GET['slaac_prefix'])) {
+        $slaac_prefix_input = trim((string)($_GET['slaac_prefix'] ?? ''));
+        $slaac_seed_input   = trim((string)($_GET['slaac_seed']   ?? ''));
+        sc_run_slaac(
+            $slaac_prefix_input,
+            $slaac_seed_input,
+            $slaac_prefix,
+            $slaac_address,
+            $slaac_interface_id,
+            $slaac_seed_used,
+            $slaac_seed_was_provided,
+            $slaac_warning,
+            $slaac_error
         );
     }
 

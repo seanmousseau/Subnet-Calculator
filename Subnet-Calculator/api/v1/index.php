@@ -103,6 +103,7 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/supernet6',
             'POST /api/v1/zone-id',
             'POST /api/v1/derive',
+            'POST /api/v1/slaac-privacy',
             'POST /api/v1/ula',
             'POST /api/v1/rdns',
             'POST /api/v1/bulk',
@@ -216,6 +217,9 @@ switch ($route_key) {
         break;
     case 'POST /derive':
         require __DIR__ . '/handlers/derive.php';
+        break;
+    case 'POST /slaac-privacy':
+        require __DIR__ . '/handlers/slaac-privacy.php';
         break;
     case 'POST /ula':
         require __DIR__ . '/handlers/ula.php';
