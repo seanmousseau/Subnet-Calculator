@@ -12,6 +12,7 @@ require $base . 'functions-util.php';
 require $base . 'functions-vlsm.php';
 require $base . 'functions-vlsm6.php';
 require $base . 'functions-supernet.php';
+require $base . 'functions-supernet6.php';
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require $base . 'functions-resolve.php';

@@ -760,6 +760,7 @@ if ($i < 3) {
         if ($split_result6 !== null || $split_error6 !== null) { $open_tool_ipv6 = 'split6'; }
         elseif ($ula_result !== null || $ula_error !== null) { $open_tool_ipv6 = 'ula'; }
         elseif ($range6_result !== null || $range6_error !== null) { $open_tool_ipv6 = 'range6'; }
+        elseif ($supernet6_result !== null || $supernet6_error !== null) { $open_tool_ipv6 = 'supernet6'; }
         elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
         elseif (($diff_result !== null || $diff_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'diff'; }
         ?>
@@ -767,6 +768,7 @@ if ($i < 3) {
             <button type="button" class="tool-trigger" data-tool="split6" aria-expanded="false">Split Subnet</button>
             <button type="button" class="tool-trigger" data-tool="ula" aria-expanded="false">ULA Generator</button>
             <button type="button" class="tool-trigger" data-tool="range6" aria-expanded="false">Range&rarr;CIDR</button>
+            <button type="button" class="tool-trigger" data-tool="supernet6" aria-expanded="false">Supernet</button>
             <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
             <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
         </div>
@@ -914,6 +916,62 @@ if ($i < 3) {
                             <?php endforeach; ?>
                             <div class="split-more"><?= count($range6_result) ?> CIDR block<?= count($range6_result) !== 1 ? 's' : '' ?><?php if ($range6_total !== null) : ?> · <?= htmlspecialchars(is_string($range6_total) ? $range6_total : (string)$range6_total) ?> addresses<?php endif; ?></div>
                         </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="supernet6">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IPv6 Supernet &amp; Route Summarisation<?= help_bubble('ipv6-supernet', 'IPv6 counterpart to the IPv4 Supernet tool. Find returns the smallest CIDR enclosing all listed IPv6 prefixes; Summarise reduces the list to the minimal covering IPv6 prefixes. Pure GMP — works for /128-wide inputs. Maximum 50 CIDRs per check.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <label for="supernet6_input" class="sr-only">IPv6 CIDR list (one per line)</label>
+                        <textarea id="supernet6_input" name="supernet6_input" rows="4" class="multi-overlap-input"
+                                  placeholder="One IPv6 CIDR per line (max 50):&#10;2001:db8::/64&#10;2001:db8:0:1::/64"
+                                  autocomplete="off" spellcheck="false"><?= htmlspecialchars($supernet6_input) ?></textarea>
+                        <div class="splitter-row supernet-action-row">
+                            <button type="submit" name="supernet6_action" value="find" class="splitter-btn">Find Supernet</button><?= help_bubble('supernet6-find', 'Finds the smallest single IPv6 CIDR block that contains all of the listed CIDRs. Useful for aggregating IPv6 routes into a single summary route.') ?>
+                            <button type="submit" name="supernet6_action" value="summarise" class="splitter-btn">Summarise Routes</button><?= help_bubble('supernet6-summarise', 'Computes the minimal set of non-overlapping IPv6 CIDRs that exactly covers the listed networks. Unlike Find Supernet, this avoids including addresses outside the input ranges.') ?>
+                        </div>
+                    </form>
+                    <?php if ($supernet6_error) : ?>
+                        <div class="error"><?= htmlspecialchars($supernet6_error) ?></div>
+                    <?php elseif ($supernet6_result !== null) : ?>
+                        <?php
+                        $_supernet6_inputs = count(array_filter(array_map('trim', explode("\n", $supernet6_input))));
+                        if ($supernet6_action === 'find') {
+                            $_supernet6_label = 'Supernet6: ' . $_supernet6_inputs . ' CIDR' . ($_supernet6_inputs !== 1 ? 's' : '');
+                        } else {
+                            $_supernet6_outs  = count($supernet6_result['summaries'] ?? []);
+                            $_supernet6_label = 'Summarise6: ' . $_supernet6_inputs . ' → ' . $_supernet6_outs;
+                        }
+                        ?>
+                        <?php if ($supernet6_action === 'find') : ?>
+                            <div class="overlap-result overlap-contains"
+                                 data-history-source="supernet6"
+                                 data-history-active="1"
+                                 data-history-label="<?= htmlspecialchars($_supernet6_label) ?>">
+                                <?= htmlspecialchars($supernet6_result['supernet'] ?? '') ?>
+                            </div>
+                        <?php else : ?>
+                            <div class="split-list split-list--mt"
+                                 data-history-source="supernet6"
+                                 data-history-active="1"
+                                 data-history-label="<?= htmlspecialchars($_supernet6_label) ?>">
+                                <button type="button" class="copy-all-btn" data-target="supernet6">Copy All</button>
+                                <?php foreach ($supernet6_result['summaries'] ?? [] as $s6) : ?>
+                                    <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s6) ?>">
+                                        <span class="split-subnet-text"><?= htmlspecialchars($s6) ?></span>
+                                        <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s6) ?>" aria-label="Copy <?= htmlspecialchars($s6) ?>">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        </button>
+                                    </div>
+                                <?php endforeach; ?>
+                                <?php $s6_count = count($supernet6_result['summaries'] ?? []);
+                                      $i6_count = count(array_filter(explode("\n", $supernet6_input))); ?>
+                                <div class="split-more"><?= $s6_count ?> prefix<?= $s6_count !== 1 ? 'es' : '' ?> from <?= $i6_count ?> input<?= $i6_count !== 1 ? 's' : '' ?></div>
+                            </div>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </div>

@@ -75,6 +75,42 @@ Response shape:
 ?tab=ipv6&tool=range6&range6_start=2001:db8::&range6_end=2001:db8::ffff
 ```
 
+## Supernet & Summarise (v3.3.0)
+
+The **IPv6 Supernet** tool lives in the IPv6 tab's **Tool Drawer** under the `Supernet` button. It mirrors the v4 Supernet tool and offers two actions on a list of IPv6 CIDRs (one per line, up to 50):
+
+- **Find** — returns the smallest single prefix that fully encloses every input CIDR.
+- **Summarise** — merges adjacent and removes contained prefixes, returning the minimal equivalent list in canonical lowercase compressed form.
+
+GMP is used end-to-end so /128-wide inputs and very large counts are handled without overflow.
+
+### Examples
+
+| Action | Input | Output |
+|---|---|---|
+| `find` | `2001:db8::/64`, `2001:db8:0:1::/64` | `2001:db8::/63` |
+| `summarise` | `2001:db8::/65`, `2001:db8:0:0:8000::/65`, `2001:db8::/64` | `2001:db8::/64` |
+
+### REST API
+
+```bash
+curl -sX POST https://example.org/api/v1/supernet6 \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"find","cidrs":["2001:db8::/64","2001:db8:0:1::/64"]}'
+```
+
+```bash
+curl -sX POST https://example.org/api/v1/supernet6 \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"summarise","cidrs":["2001:db8::/65","2001:db8:0:0:8000::/65"]}'
+```
+
+### Shareable URL
+
+```
+?tab=ipv6&tool=supernet6&supernet6_action=find&supernet6_input=2001:db8::/64%0A2001:db8:0:1::/64
+```
+
 ## REST API
 
-IPv6 subnet calculations are available programmatically via [`POST /api/v1/ipv6`](api.md#post-apiv1ipv6). The `Range → CIDR` tool exposes [`POST /api/v1/range6`](api.md#post-apiv1range6).
+IPv6 subnet calculations are available programmatically via [`POST /api/v1/ipv6`](api.md#post-apiv1ipv6). The `Range → CIDR` tool exposes [`POST /api/v1/range6`](api.md#post-apiv1range6). The `Supernet` tool exposes [`POST /api/v1/supernet6`](api.md#post-apiv1supernet6).

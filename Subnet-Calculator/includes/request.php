@@ -261,6 +261,13 @@ $supernet_action = '';
 $supernet_result = null;
 $supernet_error  = null;
 
+// v3.3.0 — IPv6 supernet / summarise (supernet6)
+$supernet6_input  = '';
+$supernet6_action = '';
+/** @var array{supernet?: string, summaries?: string[]}|null $supernet6_result */
+$supernet6_result = null;
+$supernet6_error  = null;
+
 $ula_global_id_input = '';
 /** @var array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}|null $ula_result */
 $ula_result = null;
@@ -322,6 +329,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_vlsm          = isset($_POST['vlsm_network']);
     $is_vlsm6         = isset($_POST['vlsm6_network']);
     $is_supernet      = isset($_POST['supernet_action']);
+    $is_supernet6     = isset($_POST['supernet6_action']);
     $is_ula           = isset($_POST['ula_generate']);
     $is_session_save  = isset($_POST['session_action']) && (string)($_POST['session_action'] ?? '') === 'save';
     $is_range         = isset($_POST['range_start']) || isset($_POST['range_end']);
@@ -335,7 +343,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
     // not entry-point form posts. Only the main IPv4/IPv6 calculator forms are gated.
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
-        || $is_vlsm6 || $is_supernet || $is_ula || $is_session_save || $is_range
+        || $is_vlsm6 || $is_supernet || $is_supernet6 || $is_ula || $is_session_save || $is_range
         || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff;
 
     if (!$is_tool && $form_protection === 'honeypot') {
@@ -684,6 +692,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $supernet_error = $sr['error'];
             } else {
                 $supernet_result = $sr;
+            }
+        }
+    }
+
+    if ($is_supernet6 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $supernet6_action = in_array((string)($_POST['supernet6_action'] ?? ''), ['find', 'summarise'], true)
+            ? (string)$_POST['supernet6_action']
+            : 'find';
+        $supernet6_input  = trim((string)($_POST['supernet6_input'] ?? ''));
+        $lines6 = array_values(array_filter(array_map('trim', explode("\n", $supernet6_input))));
+        if (count($lines6) < 1) {
+            $supernet6_error = 'Enter at least one CIDR.';
+        } elseif (count($lines6) > 50) {
+            $supernet6_error = 'Maximum 50 CIDRs per check.';
+        } else {
+            $sr6 = $supernet6_action === 'find' ? supernet6_find($lines6) : summarise6_cidrs($lines6);
+            if (isset($sr6['error'])) {
+                $supernet6_error = $sr6['error'];
+            } else {
+                $supernet6_result = $sr6;
             }
         }
     }
@@ -1076,6 +1105,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $supernet_error = $sr['error'];
             } else {
                 $supernet_result = $sr;
+            }
+        }
+    }
+
+    // Supernet6 / summarise6 shareable GET URL (v3.3.0)
+    if ($active_tab === 'ipv6' && isset($_GET['supernet6_action'])) {
+        $supernet6_action = in_array((string)($_GET['supernet6_action'] ?? ''), ['find', 'summarise'], true)
+            ? (string)$_GET['supernet6_action']
+            : 'find';
+        $supernet6_input = trim((string)($_GET['supernet6_input'] ?? ''));
+        $lines6 = array_values(array_filter(array_map('trim', explode("\n", $supernet6_input))));
+        if (count($lines6) >= 1 && count($lines6) <= 50) {
+            $sr6 = $supernet6_action === 'find' ? supernet6_find($lines6) : summarise6_cidrs($lines6);
+            if (isset($sr6['error'])) {
+                $supernet6_error = $sr6['error'];
+            } else {
+                $supernet6_result = $sr6;
             }
         }
     }
