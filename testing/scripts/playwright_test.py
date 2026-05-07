@@ -4914,6 +4914,105 @@ async def test_api_supernet6(page: Page) -> None:
 # v2.3.0 — API: range/ipv4 and tree (#182, #183)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# v3.3.0 — IPv6 Zone-ID parser UI + API
+# ---------------------------------------------------------------------------
+
+async def test_ipv6_zoneid_ui(page: Page) -> None:
+    section("IPv6 Zone-ID parser UI")
+
+    # Success — link-local with zone
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='zoneid']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='zoneid_input']", "fe80::1%eth0")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='zoneid'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='zoneid'] .zoneid-result__row")
+    assert_eq("zoneid: three result rows render", await rows.count(), 3)
+    addr_text = await rows.nth(0).locator(".zoneid-result__value").text_content() or ""
+    zone_text = await rows.nth(1).locator(".zoneid-result__value").text_content() or ""
+    ll_text   = await rows.nth(2).locator(".zoneid-result__value").text_content() or ""
+    assert_contains("zoneid: address row", addr_text, "fe80::1")
+    assert_contains("zoneid: zone row",    zone_text, "eth0")
+    assert_contains("zoneid: link-local Yes", ll_text, "Yes")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='zoneid']")
+    assert_eq("zoneid: no warning band on link-local",
+              await panel.locator(".warning").count(), 0)
+    assert_eq("zoneid: no error band on success",
+              await panel.locator(".error").count(), 0)
+
+    # Warning — global address with zone
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='zoneid']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='zoneid_input']", "2001:db8::1%eth0")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='zoneid'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='zoneid']")
+    warn_text = await panel.locator(".warning").text_content() or ""
+    assert_true("zoneid: warning band visible on non-link-local + zone",
+                len(warn_text) > 0, f"got: {warn_text!r}")
+    ll2 = await panel.locator(".zoneid-result__row").nth(2).locator(".zoneid-result__value").text_content() or ""
+    assert_contains("zoneid: link-local No on global", ll2, "No")
+
+    # Error — malformed zone (empty after %)
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='zoneid']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='zoneid_input']", "fe80::1%")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='zoneid'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='zoneid']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("zoneid: error band visible on malformed zone",
+                len(err_text) > 0, f"got: {err_text!r}")
+    assert_eq("zoneid: no result rows on error",
+              await panel.locator(".zoneid-result__row").count(), 0)
+
+
+async def test_ipv6_zoneid_shareable_url(page: Page) -> None:
+    section("IPv6 Zone-ID shareable URL")
+    # %25 is URL-encoded %; PHP $_GET decodes it back to literal %.
+    await navigate(page, APP_URL + "?tab=ipv6&zoneid_input=fe80%3A%3A1%25eth0")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='zoneid'] .zoneid-result__row")
+    assert_eq("zoneid shareable: three result rows", await rows.count(), 3)
+    addr_text = await rows.nth(0).locator(".zoneid-result__value").text_content() or ""
+    zone_text = await rows.nth(1).locator(".zoneid-result__value").text_content() or ""
+    assert_contains("zoneid shareable: address",  addr_text, "fe80::1")
+    assert_contains("zoneid shareable: zone",     zone_text, "eth0")
+
+
+async def test_api_zoneid(page: Page) -> None:
+    section("API — POST /api/v1/zone-id")
+    # Success
+    status, data = _api_post("zone-id", {"input": "fe80::1%eth0"})
+    assert_eq("api zone-id: HTTP 200", status, 200)
+    payload = data.get("data", {})
+    assert_eq("api zone-id: address",       payload.get("address"), "fe80::1")
+    assert_eq("api zone-id: zone_id",       payload.get("zone_id"), "eth0")
+    assert_eq("api zone-id: is_link_local", payload.get("is_link_local"), True)
+    assert_eq("api zone-id: warning null on link-local",
+              payload.get("warning"), None)
+
+    # Warning — global with zone
+    status2, data2 = _api_post("zone-id", {"input": "2001:db8::1%eth0"})
+    assert_eq("api zone-id warn: HTTP 200", status2, 200)
+    payload2 = data2.get("data", {})
+    assert_eq("api zone-id warn: is_link_local false",
+              payload2.get("is_link_local"), False)
+    assert_true("api zone-id warn: warning string present",
+                isinstance(payload2.get("warning"), str)
+                and len(payload2.get("warning") or "") > 0,
+                f"got: {payload2.get('warning')!r}")
+
+    # Error — malformed zone
+    status3, data3 = _api_post("zone-id", {"input": "fe80::1%"})
+    assert_true("api zone-id err: 4xx", 400 <= status3 < 500, f"got: {status3}")
+    assert_eq("api zone-id err: ok=false", data3.get("ok"), False)
+
+
 async def test_api_range(page: Page) -> None:
     section("API — POST /api/v1/range/ipv4")
     status, data = _api_post("range/ipv4", {"start": "10.0.0.0", "end": "10.0.0.255"})
@@ -6834,6 +6933,9 @@ async def main() -> None:
             await test_api_range6(page)
             await test_ipv6_supernet_ui(page)
             await test_api_supernet6(page)
+            await test_ipv6_zoneid_ui(page)
+            await test_ipv6_zoneid_shareable_url(page)
+            await test_api_zoneid(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)
