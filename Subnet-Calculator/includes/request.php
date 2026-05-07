@@ -139,6 +139,48 @@ function sc_run_lookup(
     }
 }
 
+// ─── Range6 helper (shared by POST handler and GET shareable URL) ───────────
+
+/**
+ * Run range6_to_cidrs against the given inputs and write the outcome into
+ * $result_out / $error_out / $warning_out by reference. Used by both the POST
+ * handler and the GET shareable-URL hydration path. (v3.3.0)
+ *
+ * Mirrors the v2.11 sc_run_lookup / sc_run_diff pattern: ONE helper for both
+ * methods, populates the same template globals regardless of entry point.
+ *
+ * @param list<string>|null $result_out
+ */
+function sc_run_range6(
+    string $start,
+    string $end,
+    ?array &$result_out,
+    ?string &$error_out,
+    ?string &$warning_out,
+    ?int &$count_out,
+    int|string|null &$total_out
+): void {
+    if ($start === '' && $end === '') {
+        return;
+    }
+    if ($start === '' || $end === '') {
+        $error_out = 'Start and end IPv6 addresses are required.';
+        return;
+    }
+    $r = range6_to_cidrs($start, $end);
+    if (isset($r['error'])) {
+        $error_out = $r['error'];
+        return;
+    }
+    $result_out = $r['cidrs'] ?? [];
+    $count_out  = $r['count'] ?? null;
+    $total_out  = $r['total_addresses'] ?? null;
+    if (!empty($r['truncated'])) {
+        $cap = (int)($r['cap'] ?? 256);
+        $warning_out = 'Result truncated at ' . $cap . ' CIDRs (configure via $range_max_cidrs).';
+    }
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -234,6 +276,18 @@ $range_end    = '';
 $range_result = null;
 $range_error  = null;
 
+// v3.3.0 — IPv6 range → CIDR (range6)
+$range6_start  = '';
+$range6_end    = '';
+/** @var list<string>|null $range6_result */
+$range6_result   = null;
+$range6_error    = null;
+$range6_warning  = null;
+/** @var int|null $range6_count */
+$range6_count    = null;
+/** @var int|string|null $range6_total */
+$range6_total    = null;
+
 $tree_parent   = '';
 $tree_children = '';
 /** @var array<string, mixed>|null $tree_result */
@@ -271,6 +325,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_ula           = isset($_POST['ula_generate']);
     $is_session_save  = isset($_POST['session_action']) && (string)($_POST['session_action'] ?? '') === 'save';
     $is_range         = isset($_POST['range_start']) || isset($_POST['range_end']);
+    $is_range6        = isset($_POST['range6_start']) || isset($_POST['range6_end']);
     $is_tree          = isset($_POST['tree_parent']);
     $is_wildcard      = isset($_POST['wildcard_input']);
     $is_lookup        = isset($_POST['lookup_cidrs']) || isset($_POST['lookup_ips']);
@@ -281,7 +336,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // not entry-point form posts. Only the main IPv4/IPv6 calculator forms are gated.
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
         || $is_vlsm6 || $is_supernet || $is_ula || $is_session_save || $is_range
-        || $is_tree || $is_wildcard || $is_lookup || $is_diff;
+        || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -781,6 +836,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $range_result = $rr['cidrs'] ?? [];
             }
         }
+    }
+
+    if ($is_range6 && !$form_blocked) {
+        $range6_start = trim((string)($_POST['range6_start'] ?? ''));
+        $range6_end   = trim((string)($_POST['range6_end']   ?? ''));
+        sc_run_range6(
+            $range6_start,
+            $range6_end,
+            $range6_result,
+            $range6_error,
+            $range6_warning,
+            $range6_count,
+            $range6_total,
+        );
     }
 
     if ($is_wildcard && !$form_blocked) {

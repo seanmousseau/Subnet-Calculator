@@ -98,4 +98,49 @@ class RangeTest extends TestCase
         $r = range_to_cidrs('127.0.0.1', '127.0.0.1');
         $this->assertSame(['127.0.0.1/32'], $r['cidrs']);
     }
+
+    // ── v3.3.0 cap backport ──────────────────────────────────────────────────
+
+    public function testRange_DefaultShape_IncludesNewKeys(): void
+    {
+        $r = range_to_cidrs('10.0.0.0', '10.0.0.4');
+        $this->assertArrayHasKey('cidrs', $r);
+        $this->assertArrayHasKey('count', $r);
+        $this->assertArrayHasKey('total_addresses', $r);
+        $this->assertArrayHasKey('truncated', $r);
+        $this->assertArrayHasKey('cap', $r);
+        $this->assertFalse($r['truncated']);
+        $this->assertSame(256, $r['cap']);
+        $this->assertSame(5, $r['total_addresses']);
+        $this->assertSame(2, $r['count']);
+    }
+
+    public function testRange_CapHit_TruncatesAndFlags(): void
+    {
+        $saved = $GLOBALS['range_max_cidrs'] ?? null;
+        $GLOBALS['range_max_cidrs'] = 4;
+        try {
+            // 10.0.0.1 – 10.0.0.255 yields 8 CIDRs with no cap; with cap=4 it
+            // truncates to 4 blocks.
+            $r = range_to_cidrs('10.0.0.1', '10.0.0.255');
+            $this->assertTrue($r['truncated']);
+            $this->assertSame(4, $r['count']);
+            $this->assertSame(4, $r['cap']);
+            $this->assertCount(4, $r['cidrs']);
+        } finally {
+            if ($saved === null) {
+                unset($GLOBALS['range_max_cidrs']);
+            } else {
+                $GLOBALS['range_max_cidrs'] = $saved;
+            }
+        }
+    }
+
+    public function testRange_FragmentedRange_NotTruncatedAtDefaultCap(): void
+    {
+        // 10.0.0.1 .. 10.0.0.6 = 4 CIDRs (a /30 + ...) — well under 256.
+        $r = range_to_cidrs('10.0.0.1', '10.0.0.6');
+        $this->assertFalse($r['truncated']);
+        $this->assertSame(6, $r['total_addresses']);
+    }
 }
