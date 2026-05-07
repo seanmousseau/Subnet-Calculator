@@ -181,6 +181,40 @@ function sc_run_range6(
     }
 }
 
+// ─── Zone-ID helper (shared by POST handler and GET shareable URL) ──────────
+
+/**
+ * Run parse_zone_id() against the given input and write the outcome into the
+ * by-reference outputs. Used by both the POST handler and the GET
+ * shareable-URL hydration path. (v3.3.0)
+ *
+ * Mirrors the v2.11 sc_run_lookup / sc_run_diff and v3.3.0 sc_run_range6
+ * pattern: ONE helper for both methods, populates the same template globals
+ * regardless of entry point.
+ */
+function sc_run_zoneid(
+    string $input,
+    ?string &$address_out,
+    ?string &$zone_id_out,
+    ?bool &$is_link_local_out,
+    ?string &$warning_out,
+    ?string &$error_out
+): void {
+    if ($input === '') {
+        return;
+    }
+    try {
+        $r = parse_zone_id($input);
+    } catch (\InvalidArgumentException $e) {
+        $error_out = $e->getMessage();
+        return;
+    }
+    $address_out       = $r['address'];
+    $zone_id_out       = $r['zone_id'];
+    $is_link_local_out = $r['is_link_local'];
+    $warning_out       = $r['warning'];
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -268,6 +302,14 @@ $supernet6_action = '';
 $supernet6_result = null;
 $supernet6_error  = null;
 
+// v3.3.0 — IPv6 zone-ID parser
+$zoneid_input         = '';
+$zoneid_address       = null;
+$zoneid_zone_id       = null;
+$zoneid_is_link_local = null;
+$zoneid_warning       = null;
+$zoneid_error         = null;
+
 $ula_global_id_input = '';
 /** @var array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}|null $ula_result */
 $ula_result = null;
@@ -338,13 +380,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_wildcard      = isset($_POST['wildcard_input']);
     $is_lookup        = isset($_POST['lookup_cidrs']) || isset($_POST['lookup_ips']);
     $is_diff          = isset($_POST['diff_before']) || isset($_POST['diff_after']);
+    $is_zoneid        = isset($_POST['zoneid_input']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
     // not entry-point form posts. Only the main IPv4/IPv6 calculator forms are gated.
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
         || $is_vlsm6 || $is_supernet || $is_supernet6 || $is_ula || $is_session_save || $is_range
-        || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff;
+        || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -715,6 +758,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $supernet6_result = $sr6;
             }
         }
+    }
+
+    if ($is_zoneid && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $zoneid_input = trim((string)($_POST['zoneid_input'] ?? ''));
+        sc_run_zoneid(
+            $zoneid_input,
+            $zoneid_address,
+            $zoneid_zone_id,
+            $zoneid_is_link_local,
+            $zoneid_warning,
+            $zoneid_error
+        );
     }
 
     if ($is_ula && !$form_blocked) {
@@ -1107,6 +1163,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $supernet_result = $sr;
             }
         }
+    }
+
+    // Zone-ID parser shareable GET URL (v3.3.0)
+    if ($active_tab === 'ipv6' && isset($_GET['zoneid_input'])) {
+        $zoneid_input = trim((string)($_GET['zoneid_input'] ?? ''));
+        sc_run_zoneid(
+            $zoneid_input,
+            $zoneid_address,
+            $zoneid_zone_id,
+            $zoneid_is_link_local,
+            $zoneid_warning,
+            $zoneid_error
+        );
     }
 
     // Supernet6 / summarise6 shareable GET URL (v3.3.0)

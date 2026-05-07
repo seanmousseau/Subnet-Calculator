@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `?tab=ipv6&tool=range6&range6_start=…&range6_end=…`. First feature of
   v3.3.0 IPv6 Foundations.
 - IPv6 supernet finder + summariser as new drawer entry on the IPv6 tab. Mirrors the v4 Supernet drawer. UI + `POST /api/v1/supernet6` + shareable URL.
+- IPv6 zone-ID parser. Splits `fe80::1%eth0`-style input into address + zone with link-local validation. UI + `POST /api/v1/zone-id` + shareable URL.
 
 ### Changed
 
