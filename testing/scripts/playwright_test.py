@@ -5013,6 +5013,144 @@ async def test_api_zoneid(page: Page) -> None:
     assert_eq("api zone-id err: ok=false", data3.get("ok"), False)
 
 
+async def test_ipv6_derive_ui(page: Page) -> None:
+    section("IPv6 MAC-derivation UI")
+
+    # Success — full RFC 4291 vector
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='derive']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='derive_mac']", "00:24:b9:7e:ab:cd")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='derive'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='derive'] .derive-result__row")
+    assert_eq("derive: four result rows render", await rows.count(), 4)
+    mac_text = await rows.nth(0).locator(".derive-result__value").text_content() or ""
+    eui_text = await rows.nth(1).locator(".derive-result__value").text_content() or ""
+    ll_text  = await rows.nth(2).locator(".derive-result__value").text_content() or ""
+    sn_text  = await rows.nth(3).locator(".derive-result__value").text_content() or ""
+    assert_contains("derive: MAC canonical row", mac_text, "00:24:b9:7e:ab:cd")
+    assert_contains("derive: EUI-64 row",        eui_text, "0224:b9ff:fe7e:abcd")
+    assert_contains("derive: link-local row",    ll_text,  "fe80::224:b9ff:fe7e:abcd")
+    assert_contains("derive: solicited-node",    sn_text,  "ff02::1:ff7e:abcd")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='derive']")
+    assert_eq("derive: no warning band on unicast MAC",
+              await panel.locator(".warning").count(), 0)
+    assert_eq("derive: no error band on success",
+              await panel.locator(".error").count(), 0)
+
+    # Warning — multicast bit set
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='derive']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='derive_mac']", "01:00:5e:00:00:01")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='derive'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='derive']")
+    warn_text = await panel.locator(".warning").text_content() or ""
+    assert_true("derive: warning band visible on multicast MAC",
+                len(warn_text) > 0, f"got: {warn_text!r}")
+    assert_eq("derive: result rows still render with warning",
+              await panel.locator(".derive-result__row").count(), 4)
+
+    # Error — malformed MAC
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='derive']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='derive_mac']", "not-a-mac")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='derive'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='derive']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("derive: error band visible on bad MAC",
+                len(err_text) > 0, f"got: {err_text!r}")
+    assert_eq("derive: no result rows on error",
+              await panel.locator(".derive-result__row").count(), 0)
+
+
+async def test_ipv6_derive_copy_buttons(page: Page) -> None:
+    section("IPv6 MAC-derivation copy buttons")
+
+    # Install clipboard intercept BEFORE the page loads (per CLAUDE.md guidance —
+    # docker test harness serves over insecure HTTP where navigator.clipboard is undefined).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    await navigate(page, APP_URL + "?tab=ipv6&derive_mac=00%3A24%3Ab9%3A7e%3Aab%3Acd")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='derive'] .derive-result__row")
+    assert_eq("derive copy: four rows hydrated from URL", await rows.count(), 4)
+
+    # EUI-64 (row 1)
+    await rows.nth(1).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    eui_clip = await page.evaluate("window.__lastClipboard")
+    assert_eq("derive copy: EUI-64 copy", eui_clip, "0224:b9ff:fe7e:abcd")
+
+    # Link-local (row 2)
+    await rows.nth(2).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    ll_clip = await page.evaluate("window.__lastClipboard")
+    assert_eq("derive copy: link-local copy", ll_clip, "fe80::224:b9ff:fe7e:abcd")
+
+    # Solicited-node (row 3)
+    await rows.nth(3).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    sn_clip = await page.evaluate("window.__lastClipboard")
+    assert_eq("derive copy: solicited-node copy", sn_clip, "ff02::1:ff7e:abcd")
+
+
+async def test_ipv6_derive_shareable_url(page: Page) -> None:
+    section("IPv6 MAC-derivation shareable URL")
+    await navigate(page, APP_URL + "?tab=ipv6&derive_mac=00%3A24%3Ab9%3A7e%3Aab%3Acd")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='derive'] .derive-result__row")
+    assert_eq("derive shareable: four result rows", await rows.count(), 4)
+    mac_text = await rows.nth(0).locator(".derive-result__value").text_content() or ""
+    eui_text = await rows.nth(1).locator(".derive-result__value").text_content() or ""
+    ll_text  = await rows.nth(2).locator(".derive-result__value").text_content() or ""
+    sn_text  = await rows.nth(3).locator(".derive-result__value").text_content() or ""
+    assert_contains("derive shareable: MAC canonical", mac_text, "00:24:b9:7e:ab:cd")
+    assert_contains("derive shareable: EUI-64",        eui_text, "0224:b9ff:fe7e:abcd")
+    assert_contains("derive shareable: link-local",    ll_text,  "fe80::224:b9ff:fe7e:abcd")
+    assert_contains("derive shareable: solicited",     sn_text,  "ff02::1:ff7e:abcd")
+
+
+async def test_api_derive(page: Page) -> None:
+    section("API — POST /api/v1/derive")
+    # Success
+    status, data = _api_post("derive", {"mac": "00:24:b9:7e:ab:cd"})
+    assert_eq("api derive: HTTP 200", status, 200)
+    payload = data.get("data", {})
+    assert_eq("api derive: mac_canonical",  payload.get("mac_canonical"),  "00:24:b9:7e:ab:cd")
+    assert_eq("api derive: eui64",          payload.get("eui64"),          "0224:b9ff:fe7e:abcd")
+    assert_eq("api derive: link_local",     payload.get("link_local"),     "fe80::224:b9ff:fe7e:abcd")
+    assert_eq("api derive: solicited_node", payload.get("solicited_node"), "ff02::1:ff7e:abcd")
+    assert_eq("api derive: ul_bit_flipped true", payload.get("ul_bit_flipped"), True)
+    assert_eq("api derive: warning null on unicast",
+              payload.get("warning"), None)
+
+    # Warning — multicast MAC
+    status2, data2 = _api_post("derive", {"mac": "01:00:5e:00:00:01"})
+    assert_eq("api derive warn: HTTP 200", status2, 200)
+    payload2 = data2.get("data", {})
+    assert_true("api derive warn: warning string present",
+                isinstance(payload2.get("warning"), str)
+                and len(payload2.get("warning") or "") > 0,
+                f"got: {payload2.get('warning')!r}")
+
+    # Error — malformed MAC
+    status3, data3 = _api_post("derive", {"mac": "not-a-mac"})
+    assert_true("api derive err: 4xx", 400 <= status3 < 500, f"got: {status3}")
+    assert_eq("api derive err: ok=false", data3.get("ok"), False)
+
+
 async def test_api_range(page: Page) -> None:
     section("API — POST /api/v1/range/ipv4")
     status, data = _api_post("range/ipv4", {"start": "10.0.0.0", "end": "10.0.0.255"})
@@ -6936,6 +7074,10 @@ async def main() -> None:
             await test_ipv6_zoneid_ui(page)
             await test_ipv6_zoneid_shareable_url(page)
             await test_api_zoneid(page)
+            await test_ipv6_derive_ui(page)
+            await test_ipv6_derive_copy_buttons(page)
+            await test_ipv6_derive_shareable_url(page)
+            await test_api_derive(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)

@@ -1045,6 +1045,51 @@
             }
         }
 
+        .derive-result {
+            margin: 0.6rem 0 0;
+            padding: 0.5rem 0.75rem;
+            background: var(--color-input-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            display: grid;
+            gap: 0.35rem;
+        }
+
+        .derive-result__row {
+            display: grid;
+            grid-template-columns: 9rem 1fr;
+            align-items: baseline;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .derive-result__label {
+            color: var(--color-text-faint);
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .derive-result__value {
+            margin: 0;
+            color: var(--color-text);
+            font-family: 'Fira Code', 'Courier New', monospace;
+            word-break: break-all;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .derive-result__value .subnet-copy {
+            flex: 0 0 auto;
+        }
+
+        @media (width <= 480px) {
+            .derive-result__row {
+                grid-template-columns: 1fr;
+                gap: 0.1rem;
+            }
+        }
+
         .multi-overlap-panel { margin-top: 0.75rem; }
 
         .multi-overlap-input {
