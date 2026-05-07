@@ -6832,6 +6832,8 @@ async def main() -> None:
             await test_tree_view(page)
             await test_api_range(page)
             await test_api_range6(page)
+            await test_ipv6_supernet_ui(page)
+            await test_api_supernet6(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)
