@@ -5,7 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.3.0] - 2026-05-07
+
+**IPv6 Foundations.** Five new IPv6-native tools land on the IPv6 tab:
+range → CIDR converter, supernet finder + summariser, zone-ID parser,
+combined MAC-derivation tool (EUI-64 + link-local + solicited-node), and
+SLAAC privacy address generator (RFC 8981). All five ship with REST API
+endpoints, shareable URLs, full Playwright coverage, visual snapshots,
+and dedicated docs pages. The release also backports a configurable
+output cap to the existing IPv4 `range_to_cidrs` helper so pathological
+fragmented inputs degrade gracefully instead of returning thousands of
+CIDRs.
 
 ### Added
 
