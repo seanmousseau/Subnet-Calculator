@@ -96,8 +96,8 @@ $api_rate_limit_tokens = [];
 // Endpoint allowlist (v2.2.0).
 // Empty array = all endpoints available (default). Non-empty = allowlist.
 // Valid endpoint names: ipv4, ipv6, vlsm, vlsm6, overlap, split/ipv4,
-//   split/ipv6, supernet, ula, rdns, bulk, sessions, range/ipv4, tree,
-//   wildcard, lookup, diff, changelog, schemas, admin.
+//   split/ipv6, supernet, ula, rdns, bulk, sessions, range/ipv4, range6,
+//   tree, wildcard, lookup, diff, changelog, schemas, admin.
 // The meta endpoint (GET /) is always available regardless of this setting.
 // Example: ['ipv4', 'ipv6'] — expose only the core calculation endpoints.
 $api_allowed_endpoints = [];

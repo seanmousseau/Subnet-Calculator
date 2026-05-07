@@ -4695,6 +4695,98 @@ async def test_tree_view(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# v3.3.0 — IPv6 Range → CIDR UI + API (#364)
+# ---------------------------------------------------------------------------
+
+async def test_ipv6_range_to_cidr(page: Page) -> None:
+    section("IPv6 Range → CIDR UI")
+    # Switch to the IPv6 tab first so the IPv6 drawer is in the active panel.
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='range6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    # Single-CIDR exact range: 2001:db8::/112 (65536 addresses)
+    await page.fill("input[name='range6_start']", "2001:db8::")
+    await page.fill("input[name='range6_end']",   "2001:db8::ffff")
+    await page.click("button.splitter-btn[type='submit']:near(input[name='range6_end'])")
+    await page.wait_for_load_state("load")
+    items = await page.locator("#panel-ipv6 .split-item .split-subnet-text").all_text_contents()
+    assert_true(
+        "ipv6 range->cidr: 2001:db8::-2001:db8::ffff = single /112",
+        "2001:db8::/112" in items,
+        f"got: {items}",
+    )
+    # Fragmented range: 2001:db8::1 to 2001:db8::3 produces /128 + /127
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='range6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='range6_start']", "2001:db8::1")
+    await page.fill("input[name='range6_end']",   "2001:db8::3")
+    await page.click("button.splitter-btn[type='submit']:near(input[name='range6_end'])")
+    await page.wait_for_load_state("load")
+    items2 = await page.locator("#panel-ipv6 .split-item .split-subnet-text").all_text_contents()
+    assert_true(
+        "ipv6 range->cidr: includes /128 leading singleton",
+        "2001:db8::1/128" in items2,
+        f"got: {items2}",
+    )
+    assert_true(
+        "ipv6 range->cidr: includes /127 trailing pair",
+        "2001:db8::2/127" in items2,
+        f"got: {items2}",
+    )
+    # Inverted range: clear error message
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='range6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='range6_start']", "2001:db8::ffff")
+    await page.fill("input[name='range6_end']",   "2001:db8::")
+    await page.click("button.splitter-btn[type='submit']:near(input[name='range6_end'])")
+    await page.wait_for_load_state("load")
+    range6_panel = page.locator("#panel-ipv6 .overlap-panel").filter(
+        has=page.locator("input[name='range6_start']")
+    )
+    err = await range6_panel.locator(".error").text_content() or ""
+    assert_contains(
+        "ipv6 range->cidr: inverted-range error message",
+        err,
+        "Start must be less than or equal to end.",
+    )
+    # Shareable URL hydration: drawer auto-opens and result renders
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&range6_start=2001:db8::&range6_end=2001:db8::ffff",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    items3 = await page.locator("#panel-ipv6 .split-item .split-subnet-text").all_text_contents()
+    assert_true(
+        "ipv6 range->cidr: shareable URL hydrates result",
+        "2001:db8::/112" in items3,
+        f"got: {items3}",
+    )
+
+
+async def test_api_range6(page: Page) -> None:
+    section("API — POST /api/v1/range6")
+    status, data = _api_post("range6", {"start": "2001:db8::", "end": "2001:db8::ffff"})
+    assert_eq("api range6: HTTP 200", status, 200)
+    assert_eq("api range6: ok=true",  data.get("ok"), True)
+    payload = data.get("data", {})
+    cidrs = payload.get("cidrs", [])
+    assert_true("api range6: cidrs is list", isinstance(cidrs, list), f"got: {cidrs!r}")
+    assert_true("api range6: returns expected /112",
+                "2001:db8::/112" in cidrs, f"got: {cidrs}")
+    assert_eq("api range6: count == 1",     payload.get("count"), 1)
+    assert_eq("api range6: truncated=false", payload.get("truncated"), False)
+    assert_eq("api range6: cap == 256",      payload.get("cap"), 256)
+    # Inverted range → 4xx error
+    status_err, data_err = _api_post("range6",
+                                     {"start": "2001:db8::ffff", "end": "2001:db8::"})
+    assert_true("api range6: inverted range yields 4xx",
+                400 <= status_err < 500, f"got status: {status_err}")
+    assert_eq("api range6: inverted range ok=false", data_err.get("ok"), False)
+
+
+# ---------------------------------------------------------------------------
 # v2.3.0 — API: range/ipv4 and tree (#182, #183)
 # ---------------------------------------------------------------------------
 
@@ -6612,8 +6704,10 @@ async def main() -> None:
             await test_api_v220_endpoint_allowlist(page)
             await test_api_v220_rate_limit_contract(page)
             await test_ipv4_range_to_cidr(page)
+            await test_ipv6_range_to_cidr(page)
             await test_tree_view(page)
             await test_api_range(page)
+            await test_api_range6(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)

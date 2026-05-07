@@ -304,6 +304,17 @@
             padding: 0.65rem 0.85rem;
         }
 
+        /* Warning (non-blocking notice — result still rendered) */
+        .warning {
+            background: transparent;
+            border: 1px solid var(--color-warning-fg);
+            border-radius: 6px;
+            color: var(--color-warning-fg);
+            font-size: 0.875rem;
+            margin-top: 1.25rem;
+            padding: 0.65rem 0.85rem;
+        }
+
         /* Results */
         .results {
             margin-top: 1.5rem;
@@ -2655,7 +2666,7 @@ html[data-theme="light"] .btn-danger:hover { filter: brightness(0.95); }
 .settings-row.is-locked .settings-input input,
 .settings-row.is-locked .settings-input select,
 .settings-row.is-locked .settings-input textarea {
-    opacity: 0.6;
+    opacity: 60%;
     cursor: not-allowed;
 }
 .settings-precedence-card {

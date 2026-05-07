@@ -13,6 +13,7 @@ $default_tab          = 'ipv4'; // 'ipv4', 'ipv6', or 'vlsm'
 $split_max_subnets    = 16;
 $lookup_max_cidrs     = 100;  // Inverse subnet lookup: max CIDRs per request
 $lookup_max_ips       = 1000; // Inverse subnet lookup: max IPs per request
+$range_max_cidrs      = 256;  // IP range → CIDR converter: max CIDRs returned (v3.3.0)
 $form_protection      = 'none';
 $turnstile_site_key   = '';
 $turnstile_secret_key = '';
@@ -109,6 +110,7 @@ $admin_audit_trust_xff = filter_var(
 $split_max_subnets = max(1, min((int)$split_max_subnets, 256));
 $lookup_max_cidrs  = max(1, min((int)$lookup_max_cidrs, 1000));
 $lookup_max_ips    = max(1, min((int)$lookup_max_ips, 10000));
+$range_max_cidrs   = max(1, min((int)$range_max_cidrs, 100000));
 $fa = trim(preg_replace('/[\r\n]/', '', (string)$frame_ancestors));
 if (!preg_match('/^(\*|\'none\'|\'self\'|(\s*(https?:\/\/[^\s;,]+))+)$/', $fa)) {
     error_log('sc: invalid $frame_ancestors value — reset to *');

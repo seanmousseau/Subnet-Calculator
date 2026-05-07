@@ -25,6 +25,7 @@ require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require_once $base . 'functions-resolve.php';
 require $base . 'functions-range.php';
+require $base . 'functions-range6.php';
 require $base . 'functions-tree.php';
 require $base . 'functions-tree-diff.php';
 require $base . 'functions-tree-presets.php';
@@ -103,6 +104,7 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/sessions',
             'GET  /api/v1/sessions/{id}',
             'POST /api/v1/range/ipv4',
+            'POST /api/v1/range6',
             'POST /api/v1/tree',
             'GET  /api/v1/tree-presets',
             'GET  /api/v1/tree-presets/{id}',
@@ -215,6 +217,9 @@ switch ($route_key) {
         break;
     case 'POST /range/ipv4':
         require __DIR__ . '/handlers/range.php';
+        break;
+    case 'POST /range6':
+        require __DIR__ . '/handlers/range6.php';
         break;
     case 'POST /tree':
         require __DIR__ . '/handlers/tree.php';
