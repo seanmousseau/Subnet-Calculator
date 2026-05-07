@@ -283,6 +283,7 @@ paths:
                     - supernet
                     - supernet6
                     - zone-id
+                    - derive
                     - ula
                     - rdns
                     - bulk
@@ -1071,6 +1072,94 @@ paths:
                   warning: null
         "400":
           description: Empty input, invalid IPv6 address, or malformed zone identifier
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /derive:
+    post:
+      operationId: deriveFromMac
+      tags: [IPv6]
+      summary: Derive EUI-64, link-local, and solicited-node addresses from a 48-bit MAC
+      description: >
+        Given a 48-bit MAC address (accepted in `xx:xx:xx:xx:xx:xx`,
+        `xx-xx-xx-xx-xx-xx`, `xxxx.xxxx.xxxx`, or bare `xxxxxxxxxxxx` form;
+        mixed case allowed), derive the canonical lowercase MAC, the Modified
+        EUI-64 interface identifier per RFC 4291 §2.5.1 (with the U/L bit
+        flipped), the IPv6 link-local address (`fe80::` + EUI-64), and the
+        solicited-node multicast address (`ff02::1:ff` + low 24 bits) per
+        RFC 4291 §2.7.1. `ul_bit_flipped` reports whether the U/L flip went
+        0 → 1 (the standard case) — false when the input MAC already had
+        U/L set. `warning` is populated when the multicast bit (LSB of the
+        first octet) is set on input, indicating the source MAC is not a
+        valid unicast hardware address; outputs are still computed.
+        Added in v3.3.0.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mac]
+              properties:
+                mac:
+                  type: string
+                  description: 48-bit MAC address in any common format.
+                  example: "00:24:b9:7e:ab:cd"
+      responses:
+        "200":
+          description: Canonical MAC plus derived EUI-64, link-local, and solicited-node addresses
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [mac_canonical, eui64, ul_bit_flipped, link_local, solicited_node, warning]
+                        properties:
+                          mac_canonical:  { type: string,  example: "00:24:b9:7e:ab:cd" }
+                          eui64:          { type: string,  example: "0224:b9ff:fe7e:abcd" }
+                          ul_bit_flipped: { type: boolean, example: true }
+                          link_local:     { type: string,  example: "fe80::224:b9ff:fe7e:abcd" }
+                          solicited_node: { type: string,  example: "ff02::1:ff7e:abcd" }
+                          warning:        { type: [string, "null"], example: null }
+              example:
+                ok: true
+                data:
+                  mac_canonical: "00:24:b9:7e:ab:cd"
+                  eui64: "0224:b9ff:fe7e:abcd"
+                  ul_bit_flipped: true
+                  link_local: "fe80::224:b9ff:fe7e:abcd"
+                  solicited_node: "ff02::1:ff7e:abcd"
+                  warning: null
+        "400":
+          description: Empty input or malformed MAC address
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }

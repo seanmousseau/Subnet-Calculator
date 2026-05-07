@@ -215,6 +215,40 @@ function sc_run_zoneid(
     $warning_out       = $r['warning'];
 }
 
+// ─── Derive helper (shared by POST handler and GET shareable URL) ───────────
+
+/**
+ * Run derive_from_mac() against the given input MAC and write the outcome
+ * into the by-reference outputs. Used by both the POST handler and the GET
+ * shareable-URL hydration path. (v3.3.0 Task 4)
+ */
+function sc_run_derive(
+    string $mac,
+    ?string &$mac_canonical_out,
+    ?string &$eui64_out,
+    ?bool &$ul_bit_flipped_out,
+    ?string &$link_local_out,
+    ?string &$solicited_node_out,
+    ?string &$warning_out,
+    ?string &$error_out
+): void {
+    if ($mac === '') {
+        return;
+    }
+    try {
+        $r = derive_from_mac($mac);
+    } catch (\InvalidArgumentException $e) {
+        $error_out = $e->getMessage();
+        return;
+    }
+    $mac_canonical_out  = $r['mac_canonical'];
+    $eui64_out          = $r['eui64'];
+    $ul_bit_flipped_out = $r['ul_bit_flipped'];
+    $link_local_out     = $r['link_local'];
+    $solicited_node_out = $r['solicited_node'];
+    $warning_out        = $r['warning'];
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -310,6 +344,16 @@ $zoneid_is_link_local = null;
 $zoneid_warning       = null;
 $zoneid_error         = null;
 
+// v3.3.0 — MAC → IPv6 derivation tool (derive)
+$derive_input          = '';
+$derive_mac_canonical  = null;
+$derive_eui64          = null;
+$derive_ul_bit_flipped = null;
+$derive_link_local     = null;
+$derive_solicited_node = null;
+$derive_warning        = null;
+$derive_error          = null;
+
 $ula_global_id_input = '';
 /** @var array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}|null $ula_result */
 $ula_result = null;
@@ -381,13 +425,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_lookup        = isset($_POST['lookup_cidrs']) || isset($_POST['lookup_ips']);
     $is_diff          = isset($_POST['diff_before']) || isset($_POST['diff_after']);
     $is_zoneid        = isset($_POST['zoneid_input']);
+    $is_derive        = isset($_POST['derive_mac']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
     // not entry-point form posts. Only the main IPv4/IPv6 calculator forms are gated.
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
         || $is_vlsm6 || $is_supernet || $is_supernet6 || $is_ula || $is_session_save || $is_range
-        || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid;
+        || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid
+        || $is_derive;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -770,6 +816,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $zoneid_is_link_local,
             $zoneid_warning,
             $zoneid_error
+        );
+    }
+
+    if ($is_derive && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $derive_input = trim((string)($_POST['derive_mac'] ?? ''));
+        sc_run_derive(
+            $derive_input,
+            $derive_mac_canonical,
+            $derive_eui64,
+            $derive_ul_bit_flipped,
+            $derive_link_local,
+            $derive_solicited_node,
+            $derive_warning,
+            $derive_error
         );
     }
 
@@ -1175,6 +1236,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $zoneid_is_link_local,
             $zoneid_warning,
             $zoneid_error
+        );
+    }
+
+    // MAC-derivation tool shareable GET URL (v3.3.0 Task 4)
+    if ($active_tab === 'ipv6' && isset($_GET['derive_mac'])) {
+        $derive_input = trim((string)($_GET['derive_mac'] ?? ''));
+        sc_run_derive(
+            $derive_input,
+            $derive_mac_canonical,
+            $derive_eui64,
+            $derive_ul_bit_flipped,
+            $derive_link_local,
+            $derive_solicited_node,
+            $derive_warning,
+            $derive_error
         );
     }
 
