@@ -304,6 +304,17 @@
             padding: 0.65rem 0.85rem;
         }
 
+        /* Warning (non-blocking notice — result still rendered) */
+        .warning {
+            background: transparent;
+            border: 1px solid var(--color-warning-fg);
+            border-radius: 6px;
+            color: var(--color-warning-fg);
+            font-size: 0.875rem;
+            margin-top: 1.25rem;
+            padding: 0.65rem 0.85rem;
+        }
+
         /* Results */
         .results {
             margin-top: 1.5rem;
@@ -991,6 +1002,177 @@
         .overlap-identical { color: var(--color-accent-light); font-weight: 600; }
         .overlap-contains { color: #e5a23a; font-weight: 600; }
 
+        .zoneid-result {
+            margin: 0.6rem 0 0;
+            padding: 0.5rem 0.75rem;
+            background: var(--color-input-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            display: grid;
+            gap: 0.35rem;
+        }
+
+        .zoneid-result__row {
+            display: grid;
+            grid-template-columns: 7rem 1fr;
+            align-items: baseline;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .zoneid-result__label {
+            color: var(--color-text-faint);
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .zoneid-result__value {
+            margin: 0;
+            color: var(--color-text);
+            font-family: 'Fira Code', 'Courier New', monospace;
+            word-break: break-all;
+        }
+
+        .zoneid-result__empty {
+            color: var(--color-text-faint);
+            font-family: inherit;
+        }
+
+        @media (width <= 480px) {
+            .zoneid-result__row {
+                grid-template-columns: 1fr;
+                gap: 0.1rem;
+            }
+        }
+
+        .derive-result {
+            margin: 0.6rem 0 0;
+            padding: 0.5rem 0.75rem;
+            background: var(--color-input-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            display: grid;
+            gap: 0.35rem;
+        }
+
+        .derive-result__row {
+            display: grid;
+            grid-template-columns: 9rem 1fr;
+            align-items: baseline;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .derive-result__label {
+            color: var(--color-text-faint);
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .derive-result__value {
+            margin: 0;
+            color: var(--color-text);
+            font-family: 'Fira Code', 'Courier New', monospace;
+            word-break: break-all;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .derive-result__value .subnet-copy {
+            flex: 0 0 auto;
+        }
+
+        @media (width <= 480px) {
+            .derive-result__row {
+                grid-template-columns: 1fr;
+                gap: 0.1rem;
+            }
+        }
+
+        .slaac-result {
+            margin: 0.6rem 0 0;
+            padding: 0.5rem 0.75rem;
+            background: var(--color-input-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            display: grid;
+            gap: 0.35rem;
+        }
+
+        .slaac-result__row {
+            display: grid;
+            grid-template-columns: 9rem 1fr;
+            align-items: baseline;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .slaac-result__label {
+            color: var(--color-text-faint);
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .slaac-result__value {
+            margin: 0;
+            color: var(--color-text);
+            font-family: 'Fira Code', 'Courier New', monospace;
+            word-break: break-all;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .slaac-result__value .subnet-copy {
+            flex: 0 0 auto;
+        }
+
+        .slaac-advanced {
+            margin-top: 0.6rem;
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            padding: 0.4rem 0.7rem;
+            background: var(--color-input-bg);
+        }
+
+        .slaac-advanced > summary {
+            cursor: pointer;
+            color: var(--color-text-faint);
+            font-size: 0.85rem;
+            font-weight: 600;
+            list-style: none;
+            user-select: none;
+        }
+
+        .slaac-advanced > summary::-webkit-details-marker { display: none; }
+
+        .slaac-advanced > summary::before {
+            content: "\25B6"; /* right-pointing triangle */
+            display: inline-block;
+            margin-right: 0.4rem;
+            font-size: 0.7em;
+            transition: transform 0.15s ease;
+        }
+
+        .slaac-advanced[open] > summary::before {
+            transform: rotate(90deg);
+        }
+
+        .slaac-advanced__hint {
+            margin: 0.5rem 0 0.4rem;
+            color: var(--color-text-faint);
+            font-size: 0.8rem;
+            line-height: 1.4;
+        }
+
+        @media (width <= 480px) {
+            .slaac-result__row {
+                grid-template-columns: 1fr;
+                gap: 0.1rem;
+            }
+        }
+
         .multi-overlap-panel { margin-top: 0.75rem; }
 
         .multi-overlap-input {
@@ -1162,6 +1344,7 @@
                 --color-border:       #cbd5e1;
                 --color-accent:       #0a8f6b;
                 --color-btn-text:     #0a1a12;
+                --color-warning-fg:   #b45309;
             }
             html[data-theme="dark"] body,
             html[data-theme="dark"] .card,
@@ -2655,7 +2838,7 @@ html[data-theme="light"] .btn-danger:hover { filter: brightness(0.95); }
 .settings-row.is-locked .settings-input input,
 .settings-row.is-locked .settings-input select,
 .settings-row.is-locked .settings-input textarea {
-    opacity: 0.6;
+    opacity: 60%;
     cursor: not-allowed;
 }
 .settings-precedence-card {

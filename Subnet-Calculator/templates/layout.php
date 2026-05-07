@@ -759,12 +759,22 @@ if ($i < 3) {
         $open_tool_ipv6 = null;
         if ($split_result6 !== null || $split_error6 !== null) { $open_tool_ipv6 = 'split6'; }
         elseif ($ula_result !== null || $ula_error !== null) { $open_tool_ipv6 = 'ula'; }
+        elseif ($range6_result !== null || $range6_error !== null) { $open_tool_ipv6 = 'range6'; }
+        elseif ($supernet6_result !== null || $supernet6_error !== null) { $open_tool_ipv6 = 'supernet6'; }
+        elseif ($zoneid_address !== null || $zoneid_error !== null) { $open_tool_ipv6 = 'zoneid'; }
+        elseif ($derive_eui64 !== null || $derive_error !== null) { $open_tool_ipv6 = 'derive'; }
+        elseif ($slaac_address !== null || $slaac_error !== null) { $open_tool_ipv6 = 'slaac'; }
         elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
         elseif (($diff_result !== null || $diff_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'diff'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv6 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv6) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split6" aria-expanded="false">Split Subnet</button>
             <button type="button" class="tool-trigger" data-tool="ula" aria-expanded="false">ULA Generator</button>
+            <button type="button" class="tool-trigger" data-tool="range6" aria-expanded="false">Range&rarr;CIDR</button>
+            <button type="button" class="tool-trigger" data-tool="supernet6" aria-expanded="false">Supernet</button>
+            <button type="button" class="tool-trigger" data-tool="zoneid" aria-expanded="false">Zone ID</button>
+            <button type="button" class="tool-trigger" data-tool="derive" aria-expanded="false">Derive Address</button>
+            <button type="button" class="tool-trigger" data-tool="slaac" aria-expanded="false">SLAAC Privacy</button>
             <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
             <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
         </div>
@@ -866,6 +876,311 @@ if ($i < 3) {
                             </div>
                             <?php endif; ?>
                         </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="range6">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IPv6 Range &rarr; CIDR<?= help_bubble('ipv6-range-cidr', 'Enter a start and end IPv6 address to get the minimal set of CIDR blocks that exactly covers that range. Uses GMP arithmetic so /128-wide ranges work without overflow. Output is capped (default 256 blocks); the cap is configurable via $range_max_cidrs.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="overlap-inputs">
+                            <input type="text" name="range6_start"
+                                   value="<?= htmlspecialchars($range6_start) ?>"
+                                   placeholder="Start IPv6 (e.g. 2001:db8::)"
+                                   autocomplete="off" spellcheck="false"
+                                   aria-label="Start IPv6 address">
+                            <span class="overlap-vs">to</span>
+                            <input type="text" name="range6_end"
+                                   value="<?= htmlspecialchars($range6_end) ?>"
+                                   placeholder="End IPv6 (e.g. 2001:db8::ffff)"
+                                   autocomplete="off" spellcheck="false"
+                                   aria-label="End IPv6 address">
+                            <button type="submit" class="splitter-btn">Convert</button>
+                        </div>
+                    </form>
+                    <?php if ($range6_error) : ?>
+                        <div class="error"><?= htmlspecialchars($range6_error) ?></div>
+                    <?php elseif ($range6_result !== null) : ?>
+                        <?php if ($range6_warning) : ?>
+                            <div class="warning"><?= htmlspecialchars($range6_warning) ?></div>
+                        <?php endif; ?>
+                        <?php $_range6_label = 'Range: ' . $range6_start . ' → ' . $range6_end; ?>
+                        <div class="split-list split-list--mt"
+                             data-history-source="range6"
+                             data-history-active="1"
+                             data-history-label="<?= htmlspecialchars($_range6_label) ?>">
+                            <button type="button" class="copy-all-btn" data-target="range6">Copy All</button>
+                            <?php foreach ($range6_result as $r6_cidr) : ?>
+                                <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($r6_cidr) ?>">
+                                    <span class="split-subnet-text"><?= htmlspecialchars($r6_cidr) ?></span>
+                                    <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($r6_cidr) ?>" aria-label="Copy <?= htmlspecialchars($r6_cidr) ?>">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                </div>
+                            <?php endforeach; ?>
+                            <div class="split-more"><?= count($range6_result) ?> CIDR block<?= count($range6_result) !== 1 ? 's' : '' ?><?php if ($range6_total !== null) : ?> · <?= htmlspecialchars(is_string($range6_total) ? $range6_total : (string)$range6_total) ?> addresses<?php endif; ?></div>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="supernet6">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IPv6 Supernet &amp; Route Summarisation<?= help_bubble('ipv6-supernet', 'IPv6 counterpart to the IPv4 Supernet tool. Find returns the smallest CIDR enclosing all listed IPv6 prefixes; Summarise reduces the list to the minimal covering IPv6 prefixes. Pure GMP — works for /128-wide inputs. Maximum 50 CIDRs per check.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <label for="supernet6_input" class="sr-only">IPv6 CIDR list (one per line)</label>
+                        <textarea id="supernet6_input" name="supernet6_input" rows="4" class="multi-overlap-input"
+                                  placeholder="One IPv6 CIDR per line (max 50):&#10;2001:db8::/64&#10;2001:db8:0:1::/64"
+                                  autocomplete="off" spellcheck="false"><?= htmlspecialchars($supernet6_input) ?></textarea>
+                        <div class="splitter-row supernet-action-row">
+                            <button type="submit" name="supernet6_action" value="find" class="splitter-btn">Find Supernet</button><?= help_bubble('supernet6-find', 'Finds the smallest single IPv6 CIDR block that contains all of the listed CIDRs. Useful for aggregating IPv6 routes into a single summary route.') ?>
+                            <button type="submit" name="supernet6_action" value="summarise" class="splitter-btn">Summarise Routes</button><?= help_bubble('supernet6-summarise', 'Computes the minimal set of non-overlapping IPv6 CIDRs that exactly covers the listed networks. Unlike Find Supernet, this avoids including addresses outside the input ranges.') ?>
+                        </div>
+                    </form>
+                    <?php if ($supernet6_error) : ?>
+                        <div class="error"><?= htmlspecialchars($supernet6_error) ?></div>
+                    <?php elseif ($supernet6_result !== null) : ?>
+                        <?php
+                        $_supernet6_inputs = count(array_filter(array_map('trim', explode("\n", $supernet6_input))));
+                        if ($supernet6_action === 'find') {
+                            $_supernet6_label = 'Supernet6: ' . $_supernet6_inputs . ' CIDR' . ($_supernet6_inputs !== 1 ? 's' : '');
+                        } else {
+                            $_supernet6_outs  = count($supernet6_result['summaries'] ?? []);
+                            $_supernet6_label = 'Summarise6: ' . $_supernet6_inputs . ' → ' . $_supernet6_outs;
+                        }
+                        ?>
+                        <?php if ($supernet6_action === 'find') : ?>
+                            <div class="overlap-result overlap-contains"
+                                 data-history-source="supernet6"
+                                 data-history-active="1"
+                                 data-history-label="<?= htmlspecialchars($_supernet6_label) ?>">
+                                <?= htmlspecialchars($supernet6_result['supernet'] ?? '') ?>
+                            </div>
+                        <?php else : ?>
+                            <div class="split-list split-list--mt"
+                                 data-history-source="supernet6"
+                                 data-history-active="1"
+                                 data-history-label="<?= htmlspecialchars($_supernet6_label) ?>">
+                                <button type="button" class="copy-all-btn" data-target="supernet6">Copy All</button>
+                                <?php foreach ($supernet6_result['summaries'] ?? [] as $s6) : ?>
+                                    <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s6) ?>">
+                                        <span class="split-subnet-text"><?= htmlspecialchars($s6) ?></span>
+                                        <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s6) ?>" aria-label="Copy <?= htmlspecialchars($s6) ?>">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        </button>
+                                    </div>
+                                <?php endforeach; ?>
+                                <?php $s6_count = count($supernet6_result['summaries'] ?? []);
+                                      $i6_count = count(array_filter(explode("\n", $supernet6_input))); ?>
+                                <div class="split-more"><?= $s6_count ?> prefix<?= $s6_count !== 1 ? 'es' : '' ?> from <?= $i6_count ?> input<?= $i6_count !== 1 ? 's' : '' ?></div>
+                            </div>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="zoneid">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Zone ID Parser<?= help_bubble('ipv6-zoneid', 'Zone identifiers (RFC 4007) scope an IPv6 address to a specific interface. They are written after a percent sign — e.g. fe80::1%eth0 — and are only meaningful on link-local (fe80::/10) addresses; most operating systems ignore zones supplied on global addresses.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <label for="zoneid_input" class="sr-only">IPv6 address with optional zone identifier</label>
+                        <div class="splitter-row">
+                            <input type="text" id="zoneid_input" name="zoneid_input" class="splitter-input"
+                                   placeholder="fe80::1%eth0"
+                                   value="<?= htmlspecialchars($zoneid_input) ?>"
+                                   autocomplete="off" spellcheck="false"
+                                   <?= $zoneid_error ? 'aria-invalid="true" aria-describedby="zoneid-error"' : '' ?>>
+                            <button type="submit" class="splitter-btn">Parse</button>
+                        </div>
+                    </form>
+                    <?php if ($zoneid_error) : ?>
+                        <div class="error" id="zoneid-error"><?= htmlspecialchars($zoneid_error) ?></div>
+                    <?php elseif ($zoneid_address !== null) : ?>
+                        <?php if ($zoneid_warning) : ?>
+                            <div class="warning"><?= htmlspecialchars($zoneid_warning) ?></div>
+                        <?php endif; ?>
+                        <?php $_zoneid_label = 'Zone ID: ' . $zoneid_address . ($zoneid_zone_id !== null ? '%' . $zoneid_zone_id : ''); ?>
+                        <dl class="zoneid-result"
+                            data-history-source="zoneid"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_zoneid_label) ?>">
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Address</dt>
+                                <dd class="zoneid-result__value"><code><?= htmlspecialchars($zoneid_address) ?></code></dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Zone ID</dt>
+                                <dd class="zoneid-result__value">
+                                    <?php if ($zoneid_zone_id !== null) : ?>
+                                        <code><?= htmlspecialchars($zoneid_zone_id) ?></code>
+                                    <?php else : ?>
+                                        <span class="zoneid-result__empty" aria-label="no zone identifier">&mdash;</span>
+                                    <?php endif; ?>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Link-local</dt>
+                                <dd class="zoneid-result__value"><?= $zoneid_is_link_local ? 'Yes' : 'No' ?></dd>
+                            </div>
+                        </dl>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="derive">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Derive Address<?= help_bubble('ipv6-derive', 'Derives the IPv6 forms generated from a 48-bit MAC address per RFC 4291 §2.5.1: the modified EUI-64 interface identifier (with the U/L bit flipped), the link-local address (fe80:: + EUI-64), and the solicited-node multicast address (ff02::1:ff + the low 24 bits of the unicast address). Accepts colon, hyphen, Cisco dotted, or bare-hex MAC formats.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <label for="derive_mac" class="sr-only">MAC address</label>
+                        <div class="splitter-row">
+                            <input type="text" id="derive_mac" name="derive_mac" class="splitter-input"
+                                   placeholder="00:24:b9:7e:ab:cd"
+                                   value="<?= htmlspecialchars($derive_input) ?>"
+                                   autocomplete="off" spellcheck="false"
+                                   <?= $derive_error ? 'aria-invalid="true" aria-describedby="derive-error"' : '' ?>>
+                            <button type="submit" class="splitter-btn">Derive</button>
+                        </div>
+                    </form>
+                    <?php if ($derive_error) : ?>
+                        <div class="error" id="derive-error"><?= htmlspecialchars($derive_error) ?></div>
+                    <?php elseif ($derive_eui64 !== null) : ?>
+                        <?php if ($derive_warning) : ?>
+                            <div class="warning"><?= htmlspecialchars($derive_warning) ?></div>
+                        <?php endif; ?>
+                        <?php $_derive_label = 'Derive: ' . ($derive_mac_canonical ?? ''); ?>
+                        <dl class="derive-result"
+                            data-history-source="derive"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_derive_label) ?>">
+                            <div class="derive-result__row">
+                                <dt class="derive-result__label">MAC (canonical)</dt>
+                                <dd class="derive-result__value">
+                                    <code><?= htmlspecialchars((string)$derive_mac_canonical) ?></code>
+                                </dd>
+                            </div>
+                            <div class="derive-result__row">
+                                <dt class="derive-result__label">EUI-64<?= help_bubble('ipv6-derive-eui64', 'Modified EUI-64 interface identifier — the U/L (universal/local) bit in the first MAC byte is inverted, then the 16-bit value 0xFFFE is inserted between the OUI and the NIC half (RFC 4291 §2.5.1).') ?></dt>
+                                <dd class="derive-result__value">
+                                    <code><?= htmlspecialchars((string)$derive_eui64) ?></code>
+                                    <button type="button" class="subnet-copy"
+                                            data-copy="<?= htmlspecialchars((string)$derive_eui64) ?>"
+                                            aria-label="Copy EUI-64 interface ID">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                </dd>
+                            </div>
+                            <div class="derive-result__row">
+                                <dt class="derive-result__label">Link-local<?= help_bubble('ipv6-derive-ll', 'Link-local address — the fe80::/64 prefix concatenated with the EUI-64 interface identifier. Always assigned automatically to every IPv6-enabled interface (RFC 4291 §2.5.6).') ?></dt>
+                                <dd class="derive-result__value">
+                                    <code><?= htmlspecialchars((string)$derive_link_local) ?></code>
+                                    <button type="button" class="subnet-copy"
+                                            data-copy="<?= htmlspecialchars((string)$derive_link_local) ?>"
+                                            aria-label="Copy link-local address">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                </dd>
+                            </div>
+                            <div class="derive-result__row">
+                                <dt class="derive-result__label">Solicited-node<?= help_bubble('ipv6-derive-sn', 'Solicited-node multicast address — ff02::1:ff followed by the low 24 bits of the unicast address. Used by IPv6 Neighbor Discovery so a host only listens for resolution requests targeted at its own address (RFC 4291 §2.7.1).') ?></dt>
+                                <dd class="derive-result__value">
+                                    <code><?= htmlspecialchars((string)$derive_solicited_node) ?></code>
+                                    <button type="button" class="subnet-copy"
+                                            data-copy="<?= htmlspecialchars((string)$derive_solicited_node) ?>"
+                                            aria-label="Copy solicited-node multicast address">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                </dd>
+                            </div>
+                        </dl>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="slaac">
+                <div class="overlap-panel">
+                    <div class="overlap-title">SLAAC Privacy<?= help_bubble('ipv6-slaac', 'Generates an RFC 8981 privacy interface identifier inside the supplied /64 prefix. The 64-bit interface ID is cryptographically random (PHP random_bytes), with the U/L bit cleared so it cannot be confused with an EUI-64 address derived from a real MAC. Production hosts should leave the seed blank; the seed input is provided only for reproducible documentation/testing output.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <label for="slaac_prefix" class="sr-only">IPv6 /64 prefix</label>
+                        <div class="splitter-row">
+                            <input type="text" id="slaac_prefix" name="slaac_prefix" class="splitter-input"
+                                   placeholder="2001:db8:1:2::/64"
+                                   value="<?= htmlspecialchars($slaac_prefix_input) ?>"
+                                   autocomplete="off" spellcheck="false"
+                                   required
+                                   <?= $slaac_error ? 'aria-invalid="true" aria-describedby="slaac-error"' : '' ?>>
+                            <button type="submit" class="splitter-btn">Generate</button>
+                            <button type="reset" class="splitter-btn-ghost">Reset</button>
+                        </div>
+                        <details class="slaac-advanced"<?= $slaac_seed_was_provided ? ' open' : '' ?>>
+                            <summary>Advanced (seed for reproducibility)</summary>
+                            <p class="slaac-advanced__hint">Optional 16-hex seed for reproducible output (RFC 8981 §3.3.1). Leave blank in production &mdash; every fresh generation should be cryptographically random.</p>
+                            <label for="slaac_seed" class="sr-only">Seed (16 hex characters)</label>
+                            <input type="text" id="slaac_seed" name="slaac_seed" class="splitter-input"
+                                   placeholder="a8d3f4e10c529837"
+                                   value="<?= htmlspecialchars($slaac_seed_input) ?>"
+                                   pattern="[0-9a-fA-F]{16}"
+                                   maxlength="16"
+                                   autocomplete="off" spellcheck="false">
+                            <?= help_bubble('ipv6-slaac-seed', 'A 16-character hexadecimal seed (64 bits) makes the generated interface ID deterministic. Useful for reproducing examples in documentation or tests; never use a fixed seed in production because it defeats the privacy purpose of RFC 8981.') ?>
+                        </details>
+                    </form>
+                    <?php if ($slaac_error) : ?>
+                        <div class="error" id="slaac-error"><?= htmlspecialchars($slaac_error) ?></div>
+                    <?php elseif ($slaac_address !== null) : ?>
+                        <?php if ($slaac_warning) : ?>
+                            <div class="warning"><?= htmlspecialchars($slaac_warning) ?></div>
+                        <?php endif; ?>
+                        <?php $_slaac_label = 'SLAAC: ' . ($slaac_prefix ?? ''); ?>
+                        <dl class="slaac-result"
+                            data-history-source="slaac"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_slaac_label) ?>">
+                            <div class="slaac-result__row">
+                                <dt class="slaac-result__label">Prefix (canonical)</dt>
+                                <dd class="slaac-result__value">
+                                    <code><?= htmlspecialchars((string)$slaac_prefix) ?></code>
+                                </dd>
+                            </div>
+                            <div class="slaac-result__row">
+                                <dt class="slaac-result__label">Address<?= help_bubble('ipv6-slaac-addr', 'The full 128-bit IPv6 address: the supplied /64 prefix concatenated with the random 64-bit privacy interface identifier. This is what would be assigned to the host as a temporary SLAAC address per RFC 8981.') ?></dt>
+                                <dd class="slaac-result__value">
+                                    <code><?= htmlspecialchars((string)$slaac_address) ?></code>
+                                    <button type="button" class="subnet-copy"
+                                            data-copy="<?= htmlspecialchars((string)$slaac_address) ?>"
+                                            aria-label="Copy SLAAC privacy address">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                </dd>
+                            </div>
+                            <div class="slaac-result__row">
+                                <dt class="slaac-result__label">Interface ID<?= help_bubble('ipv6-slaac-iid', 'The 64-bit random interface identifier in colon-separated hextet form. The U/L bit (second-lowest bit of the first byte) is cleared per RFC 4291 §2.5.1 so the address cannot be mistaken for an EUI-64 derived from a hardware MAC.') ?></dt>
+                                <dd class="slaac-result__value">
+                                    <code><?= htmlspecialchars((string)$slaac_interface_id) ?></code>
+                                    <button type="button" class="subnet-copy"
+                                            data-copy="<?= htmlspecialchars((string)$slaac_interface_id) ?>"
+                                            aria-label="Copy interface ID">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                </dd>
+                            </div>
+                            <div class="slaac-result__row">
+                                <dt class="slaac-result__label">Seed used<?= help_bubble('ipv6-slaac-seed-used', 'The 16-hex seed value that produced this address. If you supplied a seed it is echoed here; otherwise the random seed used internally is shown so you can reproduce the result later (e.g. by pasting it back into the Advanced field).') ?></dt>
+                                <dd class="slaac-result__value">
+                                    <code><?= htmlspecialchars((string)$slaac_seed_used) ?></code>
+                                    <button type="button" class="subnet-copy"
+                                            data-copy="<?= htmlspecialchars((string)$slaac_seed_used) ?>"
+                                            aria-label="Copy seed">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                </dd>
+                            </div>
+                        </dl>
                     <?php endif; ?>
                 </div>
             </div>

@@ -12,9 +12,21 @@ declare(strict_types=1);
  * its own size, and (c) does not extend past $end; emit that block as a CIDR,
  * advance the pointer, and repeat until the range is exhausted.
  *
- * @return array{cidrs?: list<string>, error?: string}
+ * v3.3.0: output cap added. Reads the global $range_max_cidrs (default 256) —
+ * the same knob that caps range6_to_cidrs(). When the cap is reached the
+ * partial result is returned with truncated=true; existing keys are preserved
+ * so callers that don't check `truncated` still get a usable list.
+ *
+ * @return array{
+ *     cidrs?: list<string>,
+ *     count?: int,
+ *     total_addresses?: int,
+ *     truncated?: bool,
+ *     cap?: int,
+ *     error?: string,
+ * }
  */
-function range_to_cidrs(string $start, string $end): array
+function range_to_cidrs(string $start, string $end, ?int $max_cidrs = null): array
 {
     $start_long = ip2long($start);
     $end_long   = ip2long($end);
@@ -34,10 +46,26 @@ function range_to_cidrs(string $start, string $end): array
         return ['error' => 'Start address must be less than or equal to end address.'];
     }
 
+    // v3.3.0 — output cap. Explicit $max_cidrs argument wins (used by tests
+    // and any caller that wants to override per-call); otherwise fall back to
+    // the configured global $range_max_cidrs (default 256).
+    if ($max_cidrs !== null) {
+        $cap = max(1, min($max_cidrs, 100000));
+    } else {
+        global $range_max_cidrs;
+        $cap = isset($range_max_cidrs) ? max(1, min((int)$range_max_cidrs, 100000)) : 256;
+    }
+
     $cidrs = [];
     $cur   = $start_long;
+    $truncated = false;
 
     while ($cur <= $end_long) {
+        if (count($cidrs) >= $cap) {
+            $truncated = true;
+            break;
+        }
+
         // Find the largest prefix (smallest block) aligned at $cur that fits.
         $max_k = 0;
         for ($k = 32; $k >= 0; $k--) {
@@ -76,5 +104,12 @@ function range_to_cidrs(string $start, string $end): array
         }
     }
 
-    return ['cidrs' => $cidrs];
+    return [
+        'cidrs'           => $cidrs,
+        'count'           => count($cidrs),
+        // Total address count fits in PHP int (max 2^32 = 4294967296 < PHP_INT_MAX on 64-bit).
+        'total_addresses' => (int)($end_long - $start_long + 1),
+        'truncated'       => $truncated,
+        'cap'             => $cap,
+    ];
 }

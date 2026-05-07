@@ -4695,8 +4695,675 @@ async def test_tree_view(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# v3.3.0 — IPv6 Range → CIDR UI + API (#364)
+# ---------------------------------------------------------------------------
+
+async def test_ipv6_range_to_cidr(page: Page) -> None:
+    section("IPv6 Range → CIDR UI")
+    # Switch to the IPv6 tab first so the IPv6 drawer is in the active panel.
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='range6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    # Single-CIDR exact range: 2001:db8::/112 (65536 addresses)
+    await page.fill("input[name='range6_start']", "2001:db8::")
+    await page.fill("input[name='range6_end']",   "2001:db8::ffff")
+    await page.click("button.splitter-btn[type='submit']:near(input[name='range6_end'])")
+    await page.wait_for_load_state("load")
+    items = await page.locator("#panel-ipv6 .split-item .split-subnet-text").all_text_contents()
+    assert_true(
+        "ipv6 range->cidr: 2001:db8::-2001:db8::ffff = single /112",
+        "2001:db8::/112" in items,
+        f"got: {items}",
+    )
+    # Fragmented range: 2001:db8::1 to 2001:db8::3 produces /128 + /127
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='range6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='range6_start']", "2001:db8::1")
+    await page.fill("input[name='range6_end']",   "2001:db8::3")
+    await page.click("button.splitter-btn[type='submit']:near(input[name='range6_end'])")
+    await page.wait_for_load_state("load")
+    items2 = await page.locator("#panel-ipv6 .split-item .split-subnet-text").all_text_contents()
+    assert_true(
+        "ipv6 range->cidr: includes /128 leading singleton",
+        "2001:db8::1/128" in items2,
+        f"got: {items2}",
+    )
+    assert_true(
+        "ipv6 range->cidr: includes /127 trailing pair",
+        "2001:db8::2/127" in items2,
+        f"got: {items2}",
+    )
+    # Inverted range: clear error message
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='range6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='range6_start']", "2001:db8::ffff")
+    await page.fill("input[name='range6_end']",   "2001:db8::")
+    await page.click("button.splitter-btn[type='submit']:near(input[name='range6_end'])")
+    await page.wait_for_load_state("load")
+    range6_panel = page.locator("#panel-ipv6 .overlap-panel").filter(
+        has=page.locator("input[name='range6_start']")
+    )
+    err = await range6_panel.locator(".error").text_content() or ""
+    assert_contains(
+        "ipv6 range->cidr: inverted-range error message",
+        err,
+        "Start must be less than or equal to end.",
+    )
+    # Shareable URL hydration: drawer auto-opens and result renders
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&range6_start=2001:db8::&range6_end=2001:db8::ffff",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    items3 = await page.locator("#panel-ipv6 .split-item .split-subnet-text").all_text_contents()
+    assert_true(
+        "ipv6 range->cidr: shareable URL hydrates result",
+        "2001:db8::/112" in items3,
+        f"got: {items3}",
+    )
+
+
+async def test_api_range6(page: Page) -> None:
+    section("API — POST /api/v1/range6")
+    status, data = _api_post("range6", {"start": "2001:db8::", "end": "2001:db8::ffff"})
+    assert_eq("api range6: HTTP 200", status, 200)
+    assert_eq("api range6: ok=true",  data.get("ok"), True)
+    payload = data.get("data", {})
+    cidrs = payload.get("cidrs", [])
+    assert_true("api range6: cidrs is list", isinstance(cidrs, list), f"got: {cidrs!r}")
+    assert_true("api range6: returns expected /112",
+                "2001:db8::/112" in cidrs, f"got: {cidrs}")
+    assert_eq("api range6: count == 1",     payload.get("count"), 1)
+    assert_eq("api range6: truncated=false", payload.get("truncated"), False)
+    assert_eq("api range6: cap == 256",      payload.get("cap"), 256)
+    # Inverted range → 4xx error
+    status_err, data_err = _api_post("range6",
+                                     {"start": "2001:db8::ffff", "end": "2001:db8::"})
+    assert_true("api range6: inverted range yields 4xx",
+                400 <= status_err < 500, f"got status: {status_err}")
+    assert_eq("api range6: inverted range ok=false", data_err.get("ok"), False)
+
+
+# ---------------------------------------------------------------------------
+# v3.3.0 — IPv6 Supernet / Summarise (supernet6) UI + API
+# ---------------------------------------------------------------------------
+
+async def test_ipv6_supernet_ui(page: Page) -> None:
+    section("IPv6 Supernet / Summarise UI")
+
+    # Find adjacent /64s → /63
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='supernet6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("textarea[name='supernet6_input']", "2001:db8::/64\n2001:db8:0:1::/64")
+    await page.click("button[name='supernet6_action'][value='find']")
+    await page.wait_for_load_state("load")
+    sn_text = await page.text_content("#panel-ipv6 .overlap-panel .overlap-result")
+    assert_contains("supernet6: two adjacent /64s → /63", sn_text or "", "2001:db8::/63")
+
+    # Disjoint roots → still produces a common supernet (/0 fallback acceptable; no error band)
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='supernet6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("textarea[name='supernet6_input']", "2001:db8::/64\nfd00::/64")
+    await page.click("button[name='supernet6_action'][value='find']")
+    await page.wait_for_load_state("load")
+    sup6_panel = page.locator("#panel-ipv6 .overlap-panel").filter(
+        has=page.locator("textarea[name='supernet6_input']")
+    )
+    err_count = await sup6_panel.locator(".error").count()
+    assert_true("supernet6: disjoint roots do not raise error band", err_count == 0,
+                "unexpected error band on disjoint roots")
+
+    # Summarise four adjacent /64s → /62
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='supernet6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill(
+        "textarea[name='supernet6_input']",
+        "2001:db8::/64\n2001:db8:0:1::/64\n2001:db8:0:2::/64\n2001:db8:0:3::/64",
+    )
+    await page.click("button[name='supernet6_action'][value='summarise']")
+    await page.wait_for_load_state("load")
+    items = await page.locator("#panel-ipv6 .split-item .split-subnet-text").all_text_contents()
+    assert_true("summarise6: four /64s collapse to single /62",
+                "2001:db8::/62" in items, f"got: {items}")
+    copy_all = await page.query_selector(
+        "#panel-ipv6 .overlap-panel .copy-all-btn[data-target='supernet6']"
+    )
+    assert_true("summarise6: Copy All button present", copy_all is not None)
+
+    # Mixed v4/v6 → error band
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='supernet6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("textarea[name='supernet6_input']", "10.0.0.0/24\n2001:db8::/64")
+    await page.click("button[name='supernet6_action'][value='find']")
+    await page.wait_for_load_state("load")
+    err_text = await page.text_content("#panel-ipv6 .overlap-panel .error") or ""
+    assert_true("supernet6: mixed v4 input shows error band", len(err_text) > 0,
+                f"got: {err_text!r}")
+
+    # > 50 CIDRs → error band
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='supernet6']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    too_many = "\n".join([f"2001:db8::{i:x}/128" for i in range(1, 53)])
+    await page.fill("textarea[name='supernet6_input']", too_many)
+    await page.click("button[name='supernet6_action'][value='find']")
+    await page.wait_for_load_state("load")
+    err_cap = await page.text_content("#panel-ipv6 .overlap-panel .error") or ""
+    assert_contains("supernet6: > 50 inputs → cap error", err_cap, "Maximum 50")
+
+    # Shareable URL hydrates find
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&supernet6_action=find"
+        "&supernet6_input=2001%3Adb8%3A%3A%2F64%0A2001%3Adb8%3A0%3A1%3A%3A%2F64",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    sn2 = await page.text_content("#panel-ipv6 .overlap-panel .overlap-result")
+    assert_contains("supernet6: shareable URL hydrates find result", sn2 or "", "2001:db8::/63")
+
+    # Shareable URL hydrates summarise
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&supernet6_action=summarise"
+        "&supernet6_input=2001%3Adb8%3A%3A%2F64%0A2001%3Adb8%3A0%3A1%3A%3A%2F64",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    items3 = await page.locator("#panel-ipv6 .split-item .split-subnet-text").all_text_contents()
+    assert_true("supernet6: shareable URL hydrates summarise result",
+                "2001:db8::/63" in items3, f"got: {items3}")
+
+
+async def test_api_supernet6(page: Page) -> None:
+    section("API — POST /api/v1/supernet6")
+    status, data = _api_post("supernet6", {
+        "action": "find",
+        "cidrs":  ["2001:db8::/64", "2001:db8:0:1::/64"],
+    })
+    assert_eq("api supernet6 find: HTTP 200", status, 200)
+    assert_eq("api supernet6 find: result",
+              data.get("data", {}).get("supernet"), "2001:db8::/63")
+
+    status2, data2 = _api_post("supernet6", {
+        "action": "summarise",
+        "cidrs":  ["2001:db8::/64", "2001:db8:0:1::/64",
+                   "2001:db8:0:2::/64", "2001:db8:0:3::/64"],
+    })
+    assert_eq("api supernet6 summarise: HTTP 200", status2, 200)
+    summaries = data2.get("data", {}).get("summaries", [])
+    assert_eq("api supernet6 summarise: 1 result (/62)", len(summaries), 1)
+    assert_true("api supernet6 summarise: returns /62",
+                "2001:db8::/62" in summaries, f"got: {summaries}")
+
+    # IPv4 input → 4xx
+    status3, data3 = _api_post("supernet6", {
+        "action": "find",
+        "cidrs":  ["10.0.0.0/24"],
+    })
+    assert_true("api supernet6: ipv4 input yields 4xx",
+                400 <= status3 < 500, f"got: {status3}")
+    assert_eq("api supernet6: ipv4 input ok=false", data3.get("ok"), False)
+
+
+# ---------------------------------------------------------------------------
 # v2.3.0 — API: range/ipv4 and tree (#182, #183)
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# v3.3.0 — IPv6 Zone-ID parser UI + API
+# ---------------------------------------------------------------------------
+
+async def test_ipv6_zoneid_ui(page: Page) -> None:
+    section("IPv6 Zone-ID parser UI")
+
+    # Success — link-local with zone
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='zoneid']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='zoneid_input']", "fe80::1%eth0")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='zoneid'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='zoneid'] .zoneid-result__row")
+    assert_eq("zoneid: three result rows render", await rows.count(), 3)
+    addr_text = await rows.nth(0).locator(".zoneid-result__value").text_content() or ""
+    zone_text = await rows.nth(1).locator(".zoneid-result__value").text_content() or ""
+    ll_text   = await rows.nth(2).locator(".zoneid-result__value").text_content() or ""
+    assert_contains("zoneid: address row", addr_text, "fe80::1")
+    assert_contains("zoneid: zone row",    zone_text, "eth0")
+    assert_contains("zoneid: link-local Yes", ll_text, "Yes")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='zoneid']")
+    assert_eq("zoneid: no warning band on link-local",
+              await panel.locator(".warning").count(), 0)
+    assert_eq("zoneid: no error band on success",
+              await panel.locator(".error").count(), 0)
+
+    # Warning — global address with zone
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='zoneid']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='zoneid_input']", "2001:db8::1%eth0")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='zoneid'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='zoneid']")
+    warn_text = await panel.locator(".warning").text_content() or ""
+    assert_true("zoneid: warning band visible on non-link-local + zone",
+                len(warn_text) > 0, f"got: {warn_text!r}")
+    ll2 = await panel.locator(".zoneid-result__row").nth(2).locator(".zoneid-result__value").text_content() or ""
+    assert_contains("zoneid: link-local No on global", ll2, "No")
+
+    # Error — malformed zone (empty after %)
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='zoneid']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='zoneid_input']", "fe80::1%")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='zoneid'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='zoneid']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("zoneid: error band visible on malformed zone",
+                len(err_text) > 0, f"got: {err_text!r}")
+    assert_eq("zoneid: no result rows on error",
+              await panel.locator(".zoneid-result__row").count(), 0)
+
+
+async def test_ipv6_zoneid_shareable_url(page: Page) -> None:
+    section("IPv6 Zone-ID shareable URL")
+    # %25 is URL-encoded %; PHP $_GET decodes it back to literal %.
+    await navigate(page, APP_URL + "?tab=ipv6&zoneid_input=fe80%3A%3A1%25eth0")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='zoneid'] .zoneid-result__row")
+    assert_eq("zoneid shareable: three result rows", await rows.count(), 3)
+    addr_text = await rows.nth(0).locator(".zoneid-result__value").text_content() or ""
+    zone_text = await rows.nth(1).locator(".zoneid-result__value").text_content() or ""
+    assert_contains("zoneid shareable: address",  addr_text, "fe80::1")
+    assert_contains("zoneid shareable: zone",     zone_text, "eth0")
+
+
+async def test_api_zoneid(page: Page) -> None:
+    section("API — POST /api/v1/zone-id")
+    # Success
+    status, data = _api_post("zone-id", {"input": "fe80::1%eth0"})
+    assert_eq("api zone-id: HTTP 200", status, 200)
+    payload = data.get("data", {})
+    assert_eq("api zone-id: address",       payload.get("address"), "fe80::1")
+    assert_eq("api zone-id: zone_id",       payload.get("zone_id"), "eth0")
+    assert_eq("api zone-id: is_link_local", payload.get("is_link_local"), True)
+    assert_eq("api zone-id: warning null on link-local",
+              payload.get("warning"), None)
+
+    # Warning — global with zone
+    status2, data2 = _api_post("zone-id", {"input": "2001:db8::1%eth0"})
+    assert_eq("api zone-id warn: HTTP 200", status2, 200)
+    payload2 = data2.get("data", {})
+    assert_eq("api zone-id warn: is_link_local false",
+              payload2.get("is_link_local"), False)
+    assert_true("api zone-id warn: warning string present",
+                isinstance(payload2.get("warning"), str)
+                and len(payload2.get("warning") or "") > 0,
+                f"got: {payload2.get('warning')!r}")
+
+    # Error — malformed zone
+    status3, data3 = _api_post("zone-id", {"input": "fe80::1%"})
+    assert_true("api zone-id err: 4xx", 400 <= status3 < 500, f"got: {status3}")
+    assert_eq("api zone-id err: ok=false", data3.get("ok"), False)
+
+
+async def test_ipv6_derive_ui(page: Page) -> None:
+    section("IPv6 MAC-derivation UI")
+
+    # Success — full RFC 4291 vector
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='derive']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='derive_mac']", "00:24:b9:7e:ab:cd")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='derive'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='derive'] .derive-result__row")
+    assert_eq("derive: four result rows render", await rows.count(), 4)
+    mac_text = await rows.nth(0).locator(".derive-result__value").text_content() or ""
+    eui_text = await rows.nth(1).locator(".derive-result__value").text_content() or ""
+    ll_text  = await rows.nth(2).locator(".derive-result__value").text_content() or ""
+    sn_text  = await rows.nth(3).locator(".derive-result__value").text_content() or ""
+    assert_contains("derive: MAC canonical row", mac_text, "00:24:b9:7e:ab:cd")
+    assert_contains("derive: EUI-64 row",        eui_text, "0224:b9ff:fe7e:abcd")
+    assert_contains("derive: link-local row",    ll_text,  "fe80::224:b9ff:fe7e:abcd")
+    assert_contains("derive: solicited-node",    sn_text,  "ff02::1:ff7e:abcd")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='derive']")
+    assert_eq("derive: no warning band on unicast MAC",
+              await panel.locator(".warning").count(), 0)
+    assert_eq("derive: no error band on success",
+              await panel.locator(".error").count(), 0)
+
+    # Warning — multicast bit set
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='derive']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='derive_mac']", "01:00:5e:00:00:01")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='derive'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='derive']")
+    warn_text = await panel.locator(".warning").text_content() or ""
+    assert_true("derive: warning band visible on multicast MAC",
+                len(warn_text) > 0, f"got: {warn_text!r}")
+    assert_eq("derive: result rows still render with warning",
+              await panel.locator(".derive-result__row").count(), 4)
+
+    # Error — malformed MAC
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='derive']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='derive_mac']", "not-a-mac")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='derive'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='derive']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("derive: error band visible on bad MAC",
+                len(err_text) > 0, f"got: {err_text!r}")
+    assert_eq("derive: no result rows on error",
+              await panel.locator(".derive-result__row").count(), 0)
+
+
+async def test_ipv6_derive_copy_buttons(page: Page) -> None:
+    section("IPv6 MAC-derivation copy buttons")
+
+    # Install clipboard intercept BEFORE the page loads (per CLAUDE.md guidance —
+    # docker test harness serves over insecure HTTP where navigator.clipboard is undefined).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    await navigate(page, APP_URL + "?tab=ipv6&derive_mac=00%3A24%3Ab9%3A7e%3Aab%3Acd")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='derive'] .derive-result__row")
+    assert_eq("derive copy: four rows hydrated from URL", await rows.count(), 4)
+
+    # EUI-64 (row 1)
+    await rows.nth(1).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    eui_clip = await page.evaluate("window.__lastClipboard")
+    assert_eq("derive copy: EUI-64 copy", eui_clip, "0224:b9ff:fe7e:abcd")
+
+    # Link-local (row 2)
+    await rows.nth(2).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    ll_clip = await page.evaluate("window.__lastClipboard")
+    assert_eq("derive copy: link-local copy", ll_clip, "fe80::224:b9ff:fe7e:abcd")
+
+    # Solicited-node (row 3)
+    await rows.nth(3).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    sn_clip = await page.evaluate("window.__lastClipboard")
+    assert_eq("derive copy: solicited-node copy", sn_clip, "ff02::1:ff7e:abcd")
+
+
+async def test_ipv6_derive_shareable_url(page: Page) -> None:
+    section("IPv6 MAC-derivation shareable URL")
+    await navigate(page, APP_URL + "?tab=ipv6&derive_mac=00%3A24%3Ab9%3A7e%3Aab%3Acd")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='derive'] .derive-result__row")
+    assert_eq("derive shareable: four result rows", await rows.count(), 4)
+    mac_text = await rows.nth(0).locator(".derive-result__value").text_content() or ""
+    eui_text = await rows.nth(1).locator(".derive-result__value").text_content() or ""
+    ll_text  = await rows.nth(2).locator(".derive-result__value").text_content() or ""
+    sn_text  = await rows.nth(3).locator(".derive-result__value").text_content() or ""
+    assert_contains("derive shareable: MAC canonical", mac_text, "00:24:b9:7e:ab:cd")
+    assert_contains("derive shareable: EUI-64",        eui_text, "0224:b9ff:fe7e:abcd")
+    assert_contains("derive shareable: link-local",    ll_text,  "fe80::224:b9ff:fe7e:abcd")
+    assert_contains("derive shareable: solicited",     sn_text,  "ff02::1:ff7e:abcd")
+
+
+async def test_api_derive(page: Page) -> None:
+    section("API — POST /api/v1/derive")
+    # Success
+    status, data = _api_post("derive", {"mac": "00:24:b9:7e:ab:cd"})
+    assert_eq("api derive: HTTP 200", status, 200)
+    payload = data.get("data", {})
+    assert_eq("api derive: mac_canonical",  payload.get("mac_canonical"),  "00:24:b9:7e:ab:cd")
+    assert_eq("api derive: eui64",          payload.get("eui64"),          "0224:b9ff:fe7e:abcd")
+    assert_eq("api derive: link_local",     payload.get("link_local"),     "fe80::224:b9ff:fe7e:abcd")
+    assert_eq("api derive: solicited_node", payload.get("solicited_node"), "ff02::1:ff7e:abcd")
+    assert_eq("api derive: ul_bit_flipped true", payload.get("ul_bit_flipped"), True)
+    assert_eq("api derive: warning null on unicast",
+              payload.get("warning"), None)
+
+    # Warning — multicast MAC
+    status2, data2 = _api_post("derive", {"mac": "01:00:5e:00:00:01"})
+    assert_eq("api derive warn: HTTP 200", status2, 200)
+    payload2 = data2.get("data", {})
+    assert_true("api derive warn: warning string present",
+                isinstance(payload2.get("warning"), str)
+                and len(payload2.get("warning") or "") > 0,
+                f"got: {payload2.get('warning')!r}")
+
+    # Error — malformed MAC
+    status3, data3 = _api_post("derive", {"mac": "not-a-mac"})
+    assert_true("api derive err: 4xx", 400 <= status3 < 500, f"got: {status3}")
+    assert_eq("api derive err: ok=false", data3.get("ok"), False)
+
+
+async def test_ipv6_slaac_ui(page: Page) -> None:
+    section("IPv6 SLAAC privacy UI")
+
+    # Success — unseeded /64
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='slaac']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='slaac_prefix']", "2001:db8:1:2::/64")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='slaac'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac'] .slaac-result__row")
+    assert_eq("slaac: four result rows render", await rows.count(), 4)
+    prefix_text = await rows.nth(0).locator(".slaac-result__value").text_content() or ""
+    addr_text   = await rows.nth(1).locator(".slaac-result__value").text_content() or ""
+    iid_text    = await rows.nth(2).locator(".slaac-result__value").text_content() or ""
+    seed_text   = await rows.nth(3).locator(".slaac-result__value").text_content() or ""
+    assert_contains("slaac: prefix canonical row", prefix_text, "2001:db8:1:2::/64")
+    assert_contains("slaac: address starts with prefix", addr_text, "2001:db8:1:2:")
+    iid_clean = iid_text.strip()
+    assert_eq("slaac: interface ID is 4 hextets",
+              iid_clean.count(":"), 3)
+    seed_clean = "".join(c for c in seed_text if c in "0123456789abcdefABCDEF")
+    assert_eq("slaac: seed used is 16 hex chars", len(seed_clean), 16)
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac']")
+    assert_eq("slaac: no warning band on success",
+              await panel.locator(".warning").count(), 0)
+    assert_eq("slaac: no error band on success",
+              await panel.locator(".error").count(), 0)
+
+    # Advanced disclosure opens the seed input
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='slaac']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    summary = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac'] details.slaac-advanced > summary")
+    await summary.click()
+    is_open = await page.evaluate(
+        "() => document.querySelector(\"#panel-ipv6 .tool-panel[data-tool='slaac'] details.slaac-advanced\").open"
+    )
+    assert_true("slaac: advanced disclosure opens", bool(is_open),
+                f"got: {is_open!r}")
+    seed_input = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac'] input[name='slaac_seed']")
+    assert_true("slaac: seed input visible after opening Advanced",
+                await seed_input.is_visible(), "")
+
+    # Error — non-/64 prefix
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='slaac']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='slaac_prefix']", "2001:db8::/48")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='slaac'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("slaac: error band visible on non-/64 prefix",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+
+async def test_ipv6_slaac_seeded_determinism(page: Page) -> None:
+    section("IPv6 SLAAC seeded determinism")
+
+    async def _submit_seeded() -> str:
+        await navigate(page, APP_URL + "?tab=ipv6")
+        await page.click("#panel-ipv6 .tool-trigger[data-tool='slaac']")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        # Open advanced disclosure first so the seed input is interactable.
+        await page.locator(
+            "#panel-ipv6 .tool-panel[data-tool='slaac'] details.slaac-advanced > summary"
+        ).click()
+        await page.fill("input[name='slaac_prefix']", "2001:db8:1:2::/64")
+        await page.fill("input[name='slaac_seed']", "a8d3f4e10c529837")
+        await page.click("#panel-ipv6 .tool-panel[data-tool='slaac'] button.splitter-btn")
+        await page.wait_for_load_state("load")
+        rows = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac'] .slaac-result__row")
+        return (await rows.nth(1).locator(".slaac-result__value code").text_content() or "").strip()
+
+    addr1 = await _submit_seeded()
+    addr2 = await _submit_seeded()
+    assert_eq("slaac: seeded determinism — same seed produces same address",
+              addr2, addr1)
+
+
+async def test_ipv6_slaac_unseeded_uniqueness(page: Page) -> None:
+    section("IPv6 SLAAC unseeded uniqueness")
+
+    async def _submit_unseeded() -> str:
+        await navigate(page, APP_URL + "?tab=ipv6")
+        await page.click("#panel-ipv6 .tool-trigger[data-tool='slaac']")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        await page.fill("input[name='slaac_prefix']", "2001:db8:1:2::/64")
+        await page.click("#panel-ipv6 .tool-panel[data-tool='slaac'] button.splitter-btn")
+        await page.wait_for_load_state("load")
+        rows = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac'] .slaac-result__row")
+        return (await rows.nth(1).locator(".slaac-result__value code").text_content() or "").strip()
+
+    addr1 = await _submit_unseeded()
+    addr2 = await _submit_unseeded()
+    assert_true("slaac: unseeded uniqueness — random_bytes produces different addresses",
+                addr1 != addr2,
+                f"both runs produced {addr1!r} (collision probability ~2^-64)")
+
+
+async def test_ipv6_slaac_copy_buttons(page: Page) -> None:
+    section("IPv6 SLAAC copy buttons")
+
+    # Install clipboard intercept BEFORE the page loads (per CLAUDE.md guidance —
+    # docker test harness serves over insecure HTTP where navigator.clipboard is undefined).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    await navigate(page,
+        APP_URL + "?tab=ipv6&slaac_prefix=2001%3Adb8%3A1%3A2%3A%3A%2F64&slaac_seed=a8d3f4e10c529837")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac'] .slaac-result__row")
+    assert_eq("slaac copy: four rows hydrated from URL", await rows.count(), 4)
+
+    expected_addr = "2001:db8:1:2:a8d3:f4e1:c52:9837"
+    expected_iid  = "a8d3:f4e1:0c52:9837"  # IID rendered without zero-suppression
+    expected_seed = "a8d3f4e10c529837"
+
+    # Address (row 1)
+    await rows.nth(1).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    addr_clip = await page.evaluate("window.__lastClipboard")
+    assert_eq("slaac copy: address copy", addr_clip, expected_addr)
+
+    # Interface ID (row 2)
+    await rows.nth(2).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    iid_clip = await page.evaluate("window.__lastClipboard")
+    assert_eq("slaac copy: interface ID copy", iid_clip, expected_iid)
+
+    # Seed used (row 3)
+    await rows.nth(3).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    seed_clip = await page.evaluate("window.__lastClipboard")
+    assert_eq("slaac copy: seed copy", seed_clip, expected_seed)
+
+
+async def test_ipv6_slaac_shareable_url(page: Page) -> None:
+    section("IPv6 SLAAC shareable URL")
+    await navigate(page,
+        APP_URL + "?tab=ipv6&slaac_prefix=2001%3Adb8%3A1%3A2%3A%3A%2F64&slaac_seed=a8d3f4e10c529837")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac'] .slaac-result__row")
+    assert_eq("slaac shareable: four result rows", await rows.count(), 4)
+    prefix_text = await rows.nth(0).locator(".slaac-result__value code").text_content() or ""
+    addr_text   = await rows.nth(1).locator(".slaac-result__value code").text_content() or ""
+    iid_text    = await rows.nth(2).locator(".slaac-result__value code").text_content() or ""
+    seed_text   = await rows.nth(3).locator(".slaac-result__value code").text_content() or ""
+    assert_eq("slaac shareable: prefix",       prefix_text.strip(), "2001:db8:1:2::/64")
+    assert_eq("slaac shareable: address",      addr_text.strip(),   "2001:db8:1:2:a8d3:f4e1:c52:9837")
+    assert_eq("slaac shareable: interface ID", iid_text.strip(),    "a8d3:f4e1:0c52:9837")
+    assert_eq("slaac shareable: seed used",    seed_text.strip(),   "a8d3f4e10c529837")
+
+
+async def test_api_slaac(page: Page) -> None:
+    section("API — POST /api/v1/slaac-privacy")
+    # Unseeded success
+    status, data = _api_post("slaac-privacy", {"prefix": "2001:db8:1:2::/64"})
+    assert_eq("api slaac: HTTP 200", status, 200)
+    payload = data.get("data", {})
+    assert_eq("api slaac: seed_was_provided=false",
+              payload.get("seed_was_provided"), False)
+    assert_true("api slaac: address starts with prefix",
+                isinstance(payload.get("address"), str)
+                and (payload.get("address") or "").startswith("2001:db8:1:2:"),
+                f"got: {payload.get('address')!r}")
+    assert_true("api slaac: seed_used is 16 hex",
+                isinstance(payload.get("seed_used"), str)
+                and len(payload.get("seed_used") or "") == 16,
+                f"got: {payload.get('seed_used')!r}")
+
+    # Seeded — deterministic vector
+    status2, data2 = _api_post("slaac-privacy", {
+        "prefix": "2001:db8:1:2::/64",
+        "seed":   "a8d3f4e10c529837",
+    })
+    assert_eq("api slaac seeded: HTTP 200", status2, 200)
+    payload2 = data2.get("data", {})
+    assert_eq("api slaac seeded: address",
+              payload2.get("address"), "2001:db8:1:2:a8d3:f4e1:c52:9837")
+    assert_eq("api slaac seeded: seed_was_provided=true",
+              payload2.get("seed_was_provided"), True)
+
+    # Error — non-/64 prefix
+    status3, data3 = _api_post("slaac-privacy", {"prefix": "2001:db8::/48"})
+    assert_eq("api slaac err: non-/64 → 400", status3, 400)
+    assert_eq("api slaac err: ok=false", data3.get("ok"), False)
+    err_msg = data3.get("error")
+    if isinstance(err_msg, dict):
+        err_msg = err_msg.get("message")
+    assert_contains("api slaac err: /64 message",
+                    str(err_msg or ""), "/64")
+
+    # Error — bad seed
+    status4, data4 = _api_post("slaac-privacy", {
+        "prefix": "2001:db8:1:2::/64",
+        "seed":   "abc",
+    })
+    assert_eq("api slaac err: bad seed → 400", status4, 400)
+    assert_eq("api slaac err: ok=false (bad seed)", data4.get("ok"), False)
+    err_msg2 = data4.get("error")
+    if isinstance(err_msg2, dict):
+        err_msg2 = err_msg2.get("message")
+    assert_contains("api slaac err: 16-hex message",
+                    str(err_msg2 or ""), "16")
+
 
 async def test_api_range(page: Page) -> None:
     section("API — POST /api/v1/range/ipv4")
@@ -6612,8 +7279,25 @@ async def main() -> None:
             await test_api_v220_endpoint_allowlist(page)
             await test_api_v220_rate_limit_contract(page)
             await test_ipv4_range_to_cidr(page)
+            await test_ipv6_range_to_cidr(page)
             await test_tree_view(page)
             await test_api_range(page)
+            await test_api_range6(page)
+            await test_ipv6_supernet_ui(page)
+            await test_api_supernet6(page)
+            await test_ipv6_zoneid_ui(page)
+            await test_ipv6_zoneid_shareable_url(page)
+            await test_api_zoneid(page)
+            await test_ipv6_derive_ui(page)
+            await test_ipv6_derive_copy_buttons(page)
+            await test_ipv6_derive_shareable_url(page)
+            await test_api_derive(page)
+            await test_ipv6_slaac_ui(page)
+            await test_ipv6_slaac_seeded_determinism(page)
+            await test_ipv6_slaac_unseeded_uniqueness(page)
+            await test_ipv6_slaac_copy_buttons(page)
+            await test_ipv6_slaac_shareable_url(page)
+            await test_api_slaac(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)

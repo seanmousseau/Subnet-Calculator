@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-05-07
+
+**IPv6 Foundations.** Five new IPv6-native tools land on the IPv6 tab:
+range → CIDR converter, supernet finder + summariser, zone-ID parser,
+combined MAC-derivation tool (EUI-64 + link-local + solicited-node), and
+SLAAC privacy address generator (RFC 8981). All five ship with REST API
+endpoints, shareable URLs, full Playwright coverage, visual snapshots,
+and dedicated docs pages. The release also backports a configurable
+output cap to the existing IPv4 `range_to_cidrs` helper so pathological
+fragmented inputs degrade gracefully instead of returning thousands of
+CIDRs.
+
+### Added
+
+- **IPv6 range → CIDR converter.** New drawer entry on the IPv6 tab
+  (`Range→CIDR`) mirroring the existing v4 Range tool. Pure GMP arithmetic
+  so /128-wide ranges work without overflow. Available via UI,
+  `POST /api/v1/range6`, and the shareable URL
+  `?tab=ipv6&tool=range6&range6_start=…&range6_end=…`. First feature of
+  v3.3.0 IPv6 Foundations.
+- IPv6 supernet finder + summariser as new drawer entry on the IPv6 tab. Mirrors the v4 Supernet drawer. UI + `POST /api/v1/supernet6` + shareable URL.
+- IPv6 zone-ID parser. Splits `fe80::1%eth0`-style input into address + zone with link-local validation. UI + `POST /api/v1/zone-id` + shareable URL.
+- MAC-to-IPv6 derivation tool. One MAC input → EUI-64 interface ID + link-local address + solicited-node multicast. Per RFC 4291 §2.5.1 (with U/L bit flip). UI + `POST /api/v1/derive` + shareable URL.
+- SLAAC privacy address generator (RFC 8981). Optional 16-hex seed for reproducibility (advanced/testing use); unseeded output uses `random_bytes`. UI + `POST /api/v1/slaac-privacy` + shareable URL.
+
+### Changed
+
+- **`range_to_cidrs` (v4) now enforces a configurable output cap.** Default
+  256 CIDRs, configurable via `$range_max_cidrs` in `config.php`.
+  Pathological fragmented inputs that previously returned thousands of
+  CIDRs now return the first 256 with `truncated: true` in the response.
+  API consumers should check the new `truncated` and `cap` response fields.
+  Same cap applies to the new `range6_to_cidrs`.
+
 ## [3.2.4] - 2026-05-06
 
 **Tab-bar polish.** The "VLSM IPv6" tab label wrapped to two lines on

@@ -21,10 +21,13 @@ require $base . 'functions-util.php';
 require $base . 'functions-vlsm.php';
 require $base . 'functions-vlsm6.php';
 require $base . 'functions-supernet.php';
+require $base . 'functions-supernet6.php';
+require $base . 'functions-derive6.php';
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require_once $base . 'functions-resolve.php';
 require $base . 'functions-range.php';
+require $base . 'functions-range6.php';
 require $base . 'functions-tree.php';
 require $base . 'functions-tree-diff.php';
 require $base . 'functions-tree-presets.php';
@@ -97,12 +100,17 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/split/ipv4',
             'POST /api/v1/split/ipv6',
             'POST /api/v1/supernet',
+            'POST /api/v1/supernet6',
+            'POST /api/v1/zone-id',
+            'POST /api/v1/derive',
+            'POST /api/v1/slaac-privacy',
             'POST /api/v1/ula',
             'POST /api/v1/rdns',
             'POST /api/v1/bulk',
             'POST /api/v1/sessions',
             'GET  /api/v1/sessions/{id}',
             'POST /api/v1/range/ipv4',
+            'POST /api/v1/range6',
             'POST /api/v1/tree',
             'GET  /api/v1/tree-presets',
             'GET  /api/v1/tree-presets/{id}',
@@ -201,6 +209,18 @@ switch ($route_key) {
     case 'POST /supernet':
         require __DIR__ . '/handlers/supernet.php';
         break;
+    case 'POST /supernet6':
+        require __DIR__ . '/handlers/supernet6.php';
+        break;
+    case 'POST /zone-id':
+        require __DIR__ . '/handlers/zone-id.php';
+        break;
+    case 'POST /derive':
+        require __DIR__ . '/handlers/derive.php';
+        break;
+    case 'POST /slaac-privacy':
+        require __DIR__ . '/handlers/slaac-privacy.php';
+        break;
     case 'POST /ula':
         require __DIR__ . '/handlers/ula.php';
         break;
@@ -215,6 +235,9 @@ switch ($route_key) {
         break;
     case 'POST /range/ipv4':
         require __DIR__ . '/handlers/range.php';
+        break;
+    case 'POST /range6':
+        require __DIR__ . '/handlers/range6.php';
         break;
     case 'POST /tree':
         require __DIR__ . '/handlers/tree.php';

@@ -243,6 +243,68 @@ components:
           example: ["fd1a:2b3c:4d5e:0000::/64", "fd1a:2b3c:4d5e:0001::/64"]
         available_64s: { type: integer, example: 65536 }
 
+    # ── v3.3.0 IPv6 endpoint request bodies (extracted per CR feedback PR #369) ──
+    Supernet6Request:
+      type: object
+      required: [cidrs]
+      properties:
+        action:
+          type: string
+          enum: [find, summarise]
+          default: find
+          description: "`find` returns the smallest enclosing IPv6 supernet; `summarise` reduces to minimal covering IPv6 prefixes."
+        cidrs:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { type: string }
+          example: ["2001:db8::/64", "2001:db8:0:1::/64"]
+
+    ZoneIdRequest:
+      type: object
+      required: [input]
+      properties:
+        input:
+          type: string
+          description: IPv6 address with optional `%zone` suffix.
+          example: "fe80::1%eth0"
+
+    DeriveRequest:
+      type: object
+      required: [mac]
+      properties:
+        mac:
+          type: string
+          description: 48-bit MAC address in any common format.
+          example: "00:24:b9:7e:ab:cd"
+
+    SlaacPrivacyRequest:
+      type: object
+      required: [prefix]
+      properties:
+        prefix:
+          type: string
+          description: IPv6 /64 prefix; non-/64 prefixes are rejected.
+          example: "2001:db8:1:2::/64"
+        seed:
+          type: string
+          description: Optional 16 hexadecimal characters for reproducible output.
+          pattern: "^[0-9a-fA-F]{16}$"
+          example: "a8d3f4e10c529837"
+
+    Range6Request:
+      type: object
+      required: [start, end]
+      properties:
+        start:
+          type: string
+          description: Start IPv6 address (inclusive)
+          example: "2001:db8::"
+        end:
+          type: string
+          description: End IPv6 address (inclusive)
+          example: "2001:db8::ffff"
+
 paths:
   /:
     get:
@@ -274,20 +336,26 @@ paths:
                 data:
                   version: "1"
                   endpoints:
-                    - ipv4
-                    - ipv6
-                    - vlsm
-                    - overlap
-                    - split/ipv4
-                    - split/ipv6
-                    - supernet
-                    - ula
-                    - rdns
-                    - bulk
-                    - range/ipv4
-                    - tree
-                    - sessions
-                    - changelog
+                    - "POST /api/v1/ipv4"
+                    - "POST /api/v1/ipv6"
+                    - "POST /api/v1/vlsm"
+                    - "POST /api/v1/overlap"
+                    - "POST /api/v1/split/ipv4"
+                    - "POST /api/v1/split/ipv6"
+                    - "POST /api/v1/supernet"
+                    - "POST /api/v1/supernet6"
+                    - "POST /api/v1/zone-id"
+                    - "POST /api/v1/derive"
+                    - "POST /api/v1/slaac-privacy"
+                    - "POST /api/v1/ula"
+                    - "POST /api/v1/rdns"
+                    - "POST /api/v1/bulk"
+                    - "POST /api/v1/range/ipv4"
+                    - "POST /api/v1/range6"
+                    - "POST /api/v1/tree"
+                    - "POST /api/v1/sessions"
+                    - "GET  /api/v1/sessions/{id}"
+                    - "GET  /api/v1/changelog"
 
   /ipv4:
     post:
@@ -932,6 +1000,321 @@ paths:
             X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
             Retry-After:           { $ref: "#/components/headers/RetryAfter" }
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /supernet6:
+    post:
+      operationId: supernet6
+      tags: [Supernet]
+      summary: Find supernet or summarise IPv6 routes
+      description: >
+        IPv6 counterpart to `/supernet`. Two modes: `find` returns the tightest
+        IPv6 supernet covering all input CIDRs; `summarise` returns the minimal
+        set of covering IPv6 prefixes via greedy aggregation. Uses GMP
+        arithmetic throughout so /128-wide inputs work without overflow.
+        Accepts IPv6 CIDRs only. Added in v3.3.0.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Supernet6Request" }
+      responses:
+        "200":
+          description: IPv6 supernet or summarised routes
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        oneOf:
+                          - type: object
+                            required: [supernet]
+                            properties:
+                              supernet: { type: string, example: "2001:db8::/63" }
+                          - type: object
+                            required: [summaries]
+                            properties:
+                              summaries:
+                                type: array
+                                items: { type: string }
+              example:
+                ok: true
+                data:
+                  supernet: "2001:db8::/63"
+        "400":
+          description: Invalid input (non-IPv6 CIDR, malformed prefix, > 50 entries, etc.)
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /zone-id:
+    post:
+      operationId: parseZoneId
+      tags: [IPv6]
+      summary: Parse an IPv6 address with optional zone identifier
+      description: >
+        Parses an IPv6 `address[%zone]` string per RFC 4007 section 11.
+        Returns the canonicalised address (compressed via inet_ntop), the zone
+        identifier when present, an `is_link_local` flag (true when the
+        address falls within `fe80::/10`), and a `warning` string when a zone
+        identifier is supplied on a non-link-local address (zone IDs are only
+        meaningful on link-local addresses). Added in v3.3.0.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ZoneIdRequest" }
+      responses:
+        "200":
+          description: Parsed address, zone, link-local flag, and optional warning
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [address, zone_id, is_link_local, warning]
+                        properties:
+                          address:       { type: string, example: "fe80::1" }
+                          zone_id:       { type: [string, "null"], example: "eth0" }
+                          is_link_local: { type: boolean, example: true }
+                          warning:       { type: [string, "null"], example: null }
+              example:
+                ok: true
+                data:
+                  address: "fe80::1"
+                  zone_id: "eth0"
+                  is_link_local: true
+                  warning: null
+        "400":
+          description: Empty input, invalid IPv6 address, or malformed zone identifier
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /derive:
+    post:
+      operationId: deriveFromMac
+      tags: [IPv6]
+      summary: Derive EUI-64, link-local, and solicited-node addresses from a 48-bit MAC
+      description: >
+        Given a 48-bit MAC address (accepted in `xx:xx:xx:xx:xx:xx`,
+        `xx-xx-xx-xx-xx-xx`, `xxxx.xxxx.xxxx`, or bare `xxxxxxxxxxxx` form;
+        mixed case allowed), derive the canonical lowercase MAC, the Modified
+        EUI-64 interface identifier per RFC 4291 §2.5.1 (with the U/L bit
+        flipped), the IPv6 link-local address (`fe80::` + EUI-64), and the
+        solicited-node multicast address (`ff02::1:ff` + low 24 bits) per
+        RFC 4291 §2.7.1. `ul_bit_flipped` reports whether the U/L flip went
+        0 → 1 (the standard case) — false when the input MAC already had
+        U/L set. `warning` is populated when the multicast bit (LSB of the
+        first octet) is set on input, indicating the source MAC is not a
+        valid unicast hardware address; outputs are still computed.
+        Added in v3.3.0.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeriveRequest" }
+      responses:
+        "200":
+          description: Canonical MAC plus derived EUI-64, link-local, and solicited-node addresses
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [mac_canonical, eui64, ul_bit_flipped, link_local, solicited_node, warning]
+                        properties:
+                          mac_canonical:  { type: string,  example: "00:24:b9:7e:ab:cd" }
+                          eui64:          { type: string,  example: "0224:b9ff:fe7e:abcd" }
+                          ul_bit_flipped: { type: boolean, example: true }
+                          link_local:     { type: string,  example: "fe80::224:b9ff:fe7e:abcd" }
+                          solicited_node: { type: string,  example: "ff02::1:ff7e:abcd" }
+                          warning:        { type: [string, "null"], example: null }
+              example:
+                ok: true
+                data:
+                  mac_canonical: "00:24:b9:7e:ab:cd"
+                  eui64: "0224:b9ff:fe7e:abcd"
+                  ul_bit_flipped: true
+                  link_local: "fe80::224:b9ff:fe7e:abcd"
+                  solicited_node: "ff02::1:ff7e:abcd"
+                  warning: null
+        "400":
+          description: Empty input or malformed MAC address
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /slaac-privacy:
+    post:
+      operationId: slaacPrivacyAddress
+      tags: [IPv6]
+      summary: Generate a SLAAC privacy address (RFC 8981) from a /64 prefix
+      description: >
+        Combines a /64 IPv6 prefix with a 64-bit interface identifier — either
+        a caller-supplied 16-hexadecimal-character `seed` (for reproducible
+        output, e.g. documentation or regression tests) or a cryptographically
+        random one generated via `random_bytes(8)`. The U/L bit on the
+        interface identifier is cleared per RFC 8981 §3.3.2 so the address is
+        recognisably a privacy IID rather than a Modified EUI-64. Host bits in
+        the prefix's address portion are ignored. `seed_was_provided`
+        distinguishes caller-supplied seeds from auto-generated ones; the
+        echoed `seed_used` is always lowercased. Added in v3.3.0.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SlaacPrivacyRequest" }
+      responses:
+        "200":
+          description: Canonicalised prefix plus generated SLAAC privacy address
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [prefix, address, interface_id, seed_used, seed_was_provided]
+                        properties:
+                          prefix:            { type: string,  example: "2001:db8:1:2::/64" }
+                          address:           { type: string,  example: "2001:db8:1:2:a8d3:f4e1:c52:9837" }
+                          interface_id:      { type: string,  example: "a8d3:f4e1:0c52:9837" }
+                          seed_used:         { type: string,  example: "a8d3f4e10c529837" }
+                          seed_was_provided: { type: boolean, example: true }
+              example:
+                ok: true
+                data:
+                  prefix: "2001:db8:1:2::/64"
+                  address: "2001:db8:1:2:a8d3:f4e1:c52:9837"
+                  interface_id: "a8d3:f4e1:0c52:9837"
+                  seed_used: "a8d3f4e10c529837"
+                  seed_was_provided: true
+        "400":
+          description: Empty input, non-/64 prefix, malformed prefix, or malformed seed
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /ula:
     post:
       operationId: generateUla
@@ -1410,6 +1793,10 @@ paths:
       responses:
         "200":
           description: List of covering CIDRs
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
           content:
             application/json:
               schema:
@@ -1419,19 +1806,142 @@ paths:
                     properties:
                       data:
                         type: object
-                        required: [cidrs]
+                        required: [cidrs, count, total_addresses, truncated, cap]
                         properties:
                           cidrs:
                             type: array
                             items: { type: string }
                             example: ["10.0.0.0/24"]
+                          count:
+                            type: integer
+                            description: Number of CIDR blocks emitted (v3.3.0)
+                            example: 1
+                          total_addresses:
+                            type: integer
+                            description: Inclusive count of addresses in the range (v3.3.0)
+                            example: 256
+                          truncated:
+                            type: boolean
+                            description: |
+                              True when the configured `$range_max_cidrs` cap was
+                              hit and the result was cut short. Default cap 256;
+                              configurable via `$range_max_cidrs` in `config.php`.
+                              Added in v3.3.0 — pre-v3.3.0 responses omitted this field.
+                            example: false
+                          cap:
+                            type: integer
+                            description: Effective output-CIDR cap for this request (v3.3.0)
+                            example: 256
               example:
                 ok: true
                 data:
                   cidrs:
                     - "10.0.0.0/24"
+                  count: 1
+                  total_addresses: 256
+                  truncated: false
+                  cap: 256
         "400":
           description: Invalid IPs or end < start
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /range6:
+    post:
+      operationId: rangeToIPv6CIDRs
+      tags: [Range]
+      summary: Convert an IPv6 address range to its minimal covering CIDR list
+      description: |
+        Accepts a start and end IPv6 address (both inclusive) and returns the
+        minimal list of CIDRs that exactly covers the range using a greedy
+        largest-aligned block algorithm. Pure GMP — no overflow on /128-wide
+        ranges. Added in v3.3.0.
+
+        The output cap is configurable via `$range_max_cidrs` in `config.php`
+        (default 256). When the cap is hit the response sets `truncated: true`
+        and returns the partial CIDR list — clients should always check this
+        flag before assuming the list is exhaustive.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Range6Request" }
+      responses:
+        "200":
+          description: List of covering CIDRs
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [cidrs, count, total_addresses, truncated, cap]
+                        properties:
+                          cidrs:
+                            type: array
+                            items: { type: string }
+                            example: ["2001:db8::/112"]
+                          count:
+                            type: integer
+                            example: 1
+                          total_addresses:
+                            description: |
+                              Inclusive address count. PHP integer when small;
+                              `2^N` string when the value overflows a 64-bit int
+                              (e.g. a /48 range covers `2^80` addresses).
+                            oneOf:
+                              - type: integer
+                              - type: string
+                                pattern: "^2\\^[0-9]{1,3}$"
+                            example: 65536
+                          truncated:
+                            type: boolean
+                            example: false
+                          cap:
+                            type: integer
+                            example: 256
+              example:
+                ok: true
+                data:
+                  cidrs:
+                    - "2001:db8::/112"
+                  count: 1
+                  total_addresses: 65536
+                  truncated: false
+                  cap: 256
+        "400":
+          description: Invalid IPv6 addresses, IPv4 input, or end < start
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }

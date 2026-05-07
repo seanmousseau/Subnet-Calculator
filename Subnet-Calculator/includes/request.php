@@ -139,6 +139,157 @@ function sc_run_lookup(
     }
 }
 
+// ─── Range6 helper (shared by POST handler and GET shareable URL) ───────────
+
+/**
+ * Run range6_to_cidrs against the given inputs and write the outcome into
+ * $result_out / $error_out / $warning_out by reference. Used by both the POST
+ * handler and the GET shareable-URL hydration path. (v3.3.0)
+ *
+ * Mirrors the v2.11 sc_run_lookup / sc_run_diff pattern: ONE helper for both
+ * methods, populates the same template globals regardless of entry point.
+ *
+ * @param list<string>|null $result_out
+ */
+function sc_run_range6(
+    string $start,
+    string $end,
+    ?array &$result_out,
+    ?string &$error_out,
+    ?string &$warning_out,
+    ?int &$count_out,
+    int|string|null &$total_out
+): void {
+    if ($start === '' && $end === '') {
+        return;
+    }
+    if ($start === '' || $end === '') {
+        $error_out = 'Start and end IPv6 addresses are required.';
+        return;
+    }
+    $r = range6_to_cidrs($start, $end);
+    if (isset($r['error'])) {
+        $error_out = $r['error'];
+        return;
+    }
+    $result_out = $r['cidrs'] ?? [];
+    $count_out  = $r['count'] ?? null;
+    $total_out  = $r['total_addresses'] ?? null;
+    if (!empty($r['truncated'])) {
+        $cap = (int)($r['cap'] ?? 256);
+        $warning_out = 'Result truncated at ' . $cap . ' CIDRs (configure via $range_max_cidrs).';
+    }
+}
+
+// ─── Zone-ID helper (shared by POST handler and GET shareable URL) ──────────
+
+/**
+ * Run parse_zone_id() against the given input and write the outcome into the
+ * by-reference outputs. Used by both the POST handler and the GET
+ * shareable-URL hydration path. (v3.3.0)
+ *
+ * Mirrors the v2.11 sc_run_lookup / sc_run_diff and v3.3.0 sc_run_range6
+ * pattern: ONE helper for both methods, populates the same template globals
+ * regardless of entry point.
+ */
+function sc_run_zoneid(
+    string $input,
+    ?string &$address_out,
+    ?string &$zone_id_out,
+    ?bool &$is_link_local_out,
+    ?string &$warning_out,
+    ?string &$error_out
+): void {
+    if ($input === '') {
+        return;
+    }
+    try {
+        $r = parse_zone_id($input);
+    } catch (\InvalidArgumentException $e) {
+        $error_out = $e->getMessage();
+        return;
+    }
+    $address_out       = $r['address'];
+    $zone_id_out       = $r['zone_id'];
+    $is_link_local_out = $r['is_link_local'];
+    $warning_out       = $r['warning'];
+}
+
+// ─── Derive helper (shared by POST handler and GET shareable URL) ───────────
+
+/**
+ * Run derive_from_mac() against the given input MAC and write the outcome
+ * into the by-reference outputs. Used by both the POST handler and the GET
+ * shareable-URL hydration path. (v3.3.0 Task 4)
+ */
+function sc_run_derive(
+    string $mac,
+    ?string &$mac_canonical_out,
+    ?string &$eui64_out,
+    ?bool &$ul_bit_flipped_out,
+    ?string &$link_local_out,
+    ?string &$solicited_node_out,
+    ?string &$warning_out,
+    ?string &$error_out
+): void {
+    if ($mac === '') {
+        return;
+    }
+    try {
+        $r = derive_from_mac($mac);
+    } catch (\InvalidArgumentException $e) {
+        $error_out = $e->getMessage();
+        return;
+    }
+    $mac_canonical_out  = $r['mac_canonical'];
+    $eui64_out          = $r['eui64'];
+    $ul_bit_flipped_out = $r['ul_bit_flipped'];
+    $link_local_out     = $r['link_local'];
+    $solicited_node_out = $r['solicited_node'];
+    $warning_out        = $r['warning'];
+}
+
+// ─── SLAAC privacy helper (shared by POST handler and GET shareable URL) ────
+
+/**
+ * Run slaac_privacy_address() against the given prefix + optional seed and
+ * write the outcome into the by-reference outputs. Used by both the POST
+ * handler and the GET shareable-URL hydration path. (v3.3.0 Task 5)
+ *
+ * Empty seed strings are treated as "unseeded" so a shareable URL with an
+ * empty `slaac_seed=` parameter still produces a fresh address.
+ */
+function sc_run_slaac(
+    string $prefix,
+    string $seed,
+    ?string &$prefix_out,
+    ?string &$address_out,
+    ?string &$interface_id_out,
+    ?string &$seed_used_out,
+    bool &$seed_was_provided_out,
+    ?string &$warning_out,
+    ?string &$error_out
+): void {
+    if ($prefix === '') {
+        return;
+    }
+    $seed_arg = ($seed === '') ? null : $seed;
+    try {
+        $r = slaac_privacy_address($prefix, $seed_arg);
+    } catch (\InvalidArgumentException $e) {
+        $error_out = $e->getMessage();
+        return;
+    }
+    $prefix_out            = $r['prefix'];
+    $address_out           = $r['address'];
+    $interface_id_out      = $r['interface_id'];
+    $seed_used_out         = $r['seed_used'];
+    $seed_was_provided_out = $r['seed_was_provided'];
+    // $warning_out reserved for future use (e.g. callers may surface "seed is
+    // a documentation/example value" hints). Currently always null.
+    $warning_out           = null;
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -219,6 +370,42 @@ $supernet_action = '';
 $supernet_result = null;
 $supernet_error  = null;
 
+// v3.3.0 — IPv6 supernet / summarise (supernet6)
+$supernet6_input  = '';
+$supernet6_action = '';
+/** @var array{supernet?: string, summaries?: string[]}|null $supernet6_result */
+$supernet6_result = null;
+$supernet6_error  = null;
+
+// v3.3.0 — IPv6 zone-ID parser
+$zoneid_input         = '';
+$zoneid_address       = null;
+$zoneid_zone_id       = null;
+$zoneid_is_link_local = null;
+$zoneid_warning       = null;
+$zoneid_error         = null;
+
+// v3.3.0 — MAC → IPv6 derivation tool (derive)
+$derive_input          = '';
+$derive_mac_canonical  = null;
+$derive_eui64          = null;
+$derive_ul_bit_flipped = null;
+$derive_link_local     = null;
+$derive_solicited_node = null;
+$derive_warning        = null;
+$derive_error          = null;
+
+// v3.3.0 — SLAAC privacy address generator (RFC 8981)
+$slaac_prefix_input      = '';
+$slaac_seed_input        = '';
+$slaac_prefix            = null;
+$slaac_address           = null;
+$slaac_interface_id      = null;
+$slaac_seed_used         = null;
+$slaac_seed_was_provided = false;
+$slaac_warning           = null;
+$slaac_error             = null;
+
 $ula_global_id_input = '';
 /** @var array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}|null $ula_result */
 $ula_result = null;
@@ -233,6 +420,18 @@ $range_end    = '';
 /** @var list<string>|null $range_result */
 $range_result = null;
 $range_error  = null;
+
+// v3.3.0 — IPv6 range → CIDR (range6)
+$range6_start  = '';
+$range6_end    = '';
+/** @var list<string>|null $range6_result */
+$range6_result   = null;
+$range6_error    = null;
+$range6_warning  = null;
+/** @var int|null $range6_count */
+$range6_count    = null;
+/** @var int|string|null $range6_total */
+$range6_total    = null;
 
 $tree_parent   = '';
 $tree_children = '';
@@ -268,20 +467,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_vlsm          = isset($_POST['vlsm_network']);
     $is_vlsm6         = isset($_POST['vlsm6_network']);
     $is_supernet      = isset($_POST['supernet_action']);
+    $is_supernet6     = isset($_POST['supernet6_action']);
     $is_ula           = isset($_POST['ula_generate']);
     $is_session_save  = isset($_POST['session_action']) && (string)($_POST['session_action'] ?? '') === 'save';
     $is_range         = isset($_POST['range_start']) || isset($_POST['range_end']);
+    $is_range6        = isset($_POST['range6_start']) || isset($_POST['range6_end']);
     $is_tree          = isset($_POST['tree_parent']);
     $is_wildcard      = isset($_POST['wildcard_input']);
     $is_lookup        = isset($_POST['lookup_cidrs']) || isset($_POST['lookup_ips']);
     $is_diff          = isset($_POST['diff_before']) || isset($_POST['diff_after']);
+    $is_zoneid        = isset($_POST['zoneid_input']);
+    $is_derive        = isset($_POST['derive_mac']);
+    $is_slaac         = isset($_POST['slaac_prefix']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
     // not entry-point form posts. Only the main IPv4/IPv6 calculator forms are gated.
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
-        || $is_vlsm6 || $is_supernet || $is_ula || $is_session_save || $is_range
-        || $is_tree || $is_wildcard || $is_lookup || $is_diff;
+        || $is_vlsm6 || $is_supernet || $is_supernet6 || $is_ula || $is_session_save || $is_range
+        || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid
+        || $is_derive || $is_slaac;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -633,6 +838,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if ($is_supernet6 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $supernet6_action = in_array((string)($_POST['supernet6_action'] ?? ''), ['find', 'summarise'], true)
+            ? (string)$_POST['supernet6_action']
+            : 'find';
+        $supernet6_input  = trim((string)($_POST['supernet6_input'] ?? ''));
+        $lines6 = array_values(array_filter(array_map('trim', explode("\n", $supernet6_input))));
+        if (count($lines6) < 1) {
+            $supernet6_error = 'Enter at least one CIDR.';
+        } elseif (count($lines6) > 50) {
+            $supernet6_error = 'Maximum 50 CIDRs per check.';
+        } else {
+            $sr6 = $supernet6_action === 'find' ? supernet6_find($lines6) : summarise6_cidrs($lines6);
+            if (isset($sr6['error'])) {
+                $supernet6_error = $sr6['error'];
+            } else {
+                $supernet6_result = $sr6;
+            }
+        }
+    }
+
+    if ($is_zoneid && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $zoneid_input = trim((string)($_POST['zoneid_input'] ?? ''));
+        sc_run_zoneid(
+            $zoneid_input,
+            $zoneid_address,
+            $zoneid_zone_id,
+            $zoneid_is_link_local,
+            $zoneid_warning,
+            $zoneid_error
+        );
+    }
+
+    if ($is_derive && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $derive_input = trim((string)($_POST['derive_mac'] ?? ''));
+        sc_run_derive(
+            $derive_input,
+            $derive_mac_canonical,
+            $derive_eui64,
+            $derive_ul_bit_flipped,
+            $derive_link_local,
+            $derive_solicited_node,
+            $derive_warning,
+            $derive_error
+        );
+    }
+
+    if ($is_slaac && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $slaac_prefix_input = trim((string)($_POST['slaac_prefix'] ?? ''));
+        $slaac_seed_input   = trim((string)($_POST['slaac_seed']   ?? ''));
+        sc_run_slaac(
+            $slaac_prefix_input,
+            $slaac_seed_input,
+            $slaac_prefix,
+            $slaac_address,
+            $slaac_interface_id,
+            $slaac_seed_used,
+            $slaac_seed_was_provided,
+            $slaac_warning,
+            $slaac_error
+        );
+    }
+
     if ($is_ula && !$form_blocked) {
         $ula_global_id_input = trim((string)($_POST['ula_global_id'] ?? ''));
         $ur = generate_ula_prefix($ula_global_id_input);
@@ -781,6 +1052,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $range_result = $rr['cidrs'] ?? [];
             }
         }
+    }
+
+    if ($is_range6 && !$form_blocked) {
+        $active_tab   = 'ipv6';
+        $range6_start = trim((string)($_POST['range6_start'] ?? ''));
+        $range6_end   = trim((string)($_POST['range6_end']   ?? ''));
+        sc_run_range6(
+            $range6_start,
+            $range6_end,
+            $range6_result,
+            $range6_error,
+            $range6_warning,
+            $range6_count,
+            $range6_total,
+        );
     }
 
     if ($is_wildcard && !$form_blocked) {
@@ -979,6 +1265,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
     }
 
+    // IPv6 range → CIDR shareable GET URL (v3.3.0)
+    if ($active_tab === 'ipv6' && (isset($_GET['range6_start']) || isset($_GET['range6_end']))) {
+        $range6_start = trim((string)($_GET['range6_start'] ?? ''));
+        $range6_end   = trim((string)($_GET['range6_end']   ?? ''));
+        sc_run_range6(
+            $range6_start,
+            $range6_end,
+            $range6_result,
+            $range6_error,
+            $range6_warning,
+            $range6_count,
+            $range6_total,
+        );
+    }
+
     // Supernet / summarise shareable GET URL
     if ($active_tab === 'ipv4' && isset($_GET['supernet_action'])) {
         $supernet_action = in_array((string)($_GET['supernet_action'] ?? ''), ['find', 'summarise'], true)
@@ -992,6 +1293,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $supernet_error = $sr['error'];
             } else {
                 $supernet_result = $sr;
+            }
+        }
+    }
+
+    // Zone-ID parser shareable GET URL (v3.3.0)
+    if ($active_tab === 'ipv6' && isset($_GET['zoneid_input'])) {
+        $zoneid_input = trim((string)($_GET['zoneid_input'] ?? ''));
+        sc_run_zoneid(
+            $zoneid_input,
+            $zoneid_address,
+            $zoneid_zone_id,
+            $zoneid_is_link_local,
+            $zoneid_warning,
+            $zoneid_error
+        );
+    }
+
+    // MAC-derivation tool shareable GET URL (v3.3.0 Task 4)
+    if ($active_tab === 'ipv6' && isset($_GET['derive_mac'])) {
+        $derive_input = trim((string)($_GET['derive_mac'] ?? ''));
+        sc_run_derive(
+            $derive_input,
+            $derive_mac_canonical,
+            $derive_eui64,
+            $derive_ul_bit_flipped,
+            $derive_link_local,
+            $derive_solicited_node,
+            $derive_warning,
+            $derive_error
+        );
+    }
+
+    // SLAAC privacy address shareable GET URL (v3.3.0 Task 5)
+    if ($active_tab === 'ipv6' && isset($_GET['slaac_prefix'])) {
+        $slaac_prefix_input = trim((string)($_GET['slaac_prefix'] ?? ''));
+        $slaac_seed_input   = trim((string)($_GET['slaac_seed']   ?? ''));
+        sc_run_slaac(
+            $slaac_prefix_input,
+            $slaac_seed_input,
+            $slaac_prefix,
+            $slaac_address,
+            $slaac_interface_id,
+            $slaac_seed_used,
+            $slaac_seed_was_provided,
+            $slaac_warning,
+            $slaac_error
+        );
+    }
+
+    // Supernet6 / summarise6 shareable GET URL (v3.3.0)
+    if ($active_tab === 'ipv6' && isset($_GET['supernet6_action'])) {
+        $supernet6_action = in_array((string)($_GET['supernet6_action'] ?? ''), ['find', 'summarise'], true)
+            ? (string)$_GET['supernet6_action']
+            : 'find';
+        $supernet6_input = trim((string)($_GET['supernet6_input'] ?? ''));
+        $lines6 = array_values(array_filter(array_map('trim', explode("\n", $supernet6_input))));
+        if (count($lines6) >= 1 && count($lines6) <= 50) {
+            $sr6 = $supernet6_action === 'find' ? supernet6_find($lines6) : summarise6_cidrs($lines6);
+            if (isset($sr6['error'])) {
+                $supernet6_error = $sr6['error'];
+            } else {
+                $supernet6_result = $sr6;
             }
         }
     }

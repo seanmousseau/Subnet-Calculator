@@ -49,6 +49,9 @@ nav:
     - Subnet Splitter: splitter.md
     - Overlap Checker: overlap.md
     - Supernet & Summarisation: supernet.md
+    - IPv6 Zone ID Parser: ipv6-zone-id.md
+    - MAC → IPv6 Derivation: ipv6-derive.md
+    - SLAAC Privacy Generator: ipv6-slaac-privacy.md
     - IPv6 ULA Generator: ula.md
     - Binary / Hex Panel: binary.md
     - Reverse DNS Zones: rdns.md
@@ -70,7 +73,7 @@ nav:
     - Operator Config: config.md
 
 extra:
-  version: "3.2.4"
+  version: "3.3.0"
 
 extra_css:
   - stylesheets/extra.css
