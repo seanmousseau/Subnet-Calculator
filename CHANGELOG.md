@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.4] - 2026-05-06
+
+**Tab-bar polish.** The "VLSM IPv6" tab label wrapped to two lines on
+every viewport (mobile and desktop alike) because `.tab-btn` had no
+`white-space` rule, so the space inside the label broke at the
+narrowest fit point. Single-line tab labels are the design intent;
+the wrap was a latent CSS gap inherited from earlier releases.
+
+### Fixed
+
+- **Tab labels stay on one line.** Adds `white-space: nowrap` to
+  `.tab-btn` in `assets/app.css`. "VLSM IPv6" now renders cleanly on
+  one line at 375 px and up. No other tab text was wrapping; this is
+  forward-compatible with future multi-word tab labels.
+- **Bump `CACHE_NAME` to `sc-v3.2.4`** so the activate handler
+  purges the v3.2.3 cache on rollout.
+
 ## [3.2.3] - 2026-05-05
 
 **Admin service-worker hotfix.** Earlier releases shipped
