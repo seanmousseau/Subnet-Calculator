@@ -759,12 +759,14 @@ if ($i < 3) {
         $open_tool_ipv6 = null;
         if ($split_result6 !== null || $split_error6 !== null) { $open_tool_ipv6 = 'split6'; }
         elseif ($ula_result !== null || $ula_error !== null) { $open_tool_ipv6 = 'ula'; }
+        elseif ($range6_result !== null || $range6_error !== null) { $open_tool_ipv6 = 'range6'; }
         elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
         elseif (($diff_result !== null || $diff_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'diff'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv6 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv6) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split6" aria-expanded="false">Split Subnet</button>
             <button type="button" class="tool-trigger" data-tool="ula" aria-expanded="false">ULA Generator</button>
+            <button type="button" class="tool-trigger" data-tool="range6" aria-expanded="false">Range&rarr;CIDR</button>
             <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
             <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
         </div>
@@ -865,6 +867,52 @@ if ($i < 3) {
                                 <?php endforeach; ?>
                             </div>
                             <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="range6">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IPv6 Range &rarr; CIDR<?= help_bubble('ipv6-range-cidr', 'Enter a start and end IPv6 address to get the minimal set of CIDR blocks that exactly covers that range. Uses GMP arithmetic so /128-wide ranges work without overflow. Output is capped (default 256 blocks); the cap is configurable via $range_max_cidrs.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="overlap-inputs">
+                            <input type="text" name="range6_start"
+                                   value="<?= htmlspecialchars($range6_start) ?>"
+                                   placeholder="Start IPv6 (e.g. 2001:db8::)"
+                                   autocomplete="off" spellcheck="false"
+                                   aria-label="Start IPv6 address">
+                            <span class="overlap-vs">to</span>
+                            <input type="text" name="range6_end"
+                                   value="<?= htmlspecialchars($range6_end) ?>"
+                                   placeholder="End IPv6 (e.g. 2001:db8::ffff)"
+                                   autocomplete="off" spellcheck="false"
+                                   aria-label="End IPv6 address">
+                            <button type="submit" class="splitter-btn">Convert</button>
+                        </div>
+                    </form>
+                    <?php if ($range6_error) : ?>
+                        <div class="error"><?= htmlspecialchars($range6_error) ?></div>
+                    <?php elseif ($range6_result !== null) : ?>
+                        <?php if ($range6_warning) : ?>
+                            <div class="warning"><?= htmlspecialchars($range6_warning) ?></div>
+                        <?php endif; ?>
+                        <?php $_range6_label = 'Range: ' . $range6_start . ' → ' . $range6_end; ?>
+                        <div class="split-list split-list--mt"
+                             data-history-source="range6"
+                             data-history-active="1"
+                             data-history-label="<?= htmlspecialchars($_range6_label) ?>">
+                            <button type="button" class="copy-all-btn" data-target="range6">Copy All</button>
+                            <?php foreach ($range6_result as $r6_cidr) : ?>
+                                <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($r6_cidr) ?>">
+                                    <span class="split-subnet-text"><?= htmlspecialchars($r6_cidr) ?></span>
+                                    <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($r6_cidr) ?>" aria-label="Copy <?= htmlspecialchars($r6_cidr) ?>">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                </div>
+                            <?php endforeach; ?>
+                            <div class="split-more"><?= count($range6_result) ?> CIDR block<?= count($range6_result) !== 1 ? 's' : '' ?><?php if ($range6_total !== null) : ?> · <?= htmlspecialchars(is_string($range6_total) ? $range6_total : (string)$range6_total) ?> addresses<?php endif; ?></div>
                         </div>
                     <?php endif; ?>
                 </div>

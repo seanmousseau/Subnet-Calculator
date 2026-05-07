@@ -2,12 +2,9 @@
 
 declare(strict_types=1);
 
-/**
- * POST /api/v1/range6 — IPv6 inclusive range → minimal CIDR list (v3.3.0).
- *
- * Body: { "start": "2001:db8::", "end": "2001:db8::ffff" }
- * Response: { ok: true, cidrs, count, total_addresses, truncated, cap }
- */
+// POST /api/v1/range6 — IPv6 inclusive range → minimal CIDR list (v3.3.0).
+// Body: { "start": "2001:db8::", "end": "2001:db8::ffff" }
+// Response: { ok: true, cidrs, count, total_addresses, truncated, cap }
 
 if ($method !== 'POST') {
     json_err('Method not allowed.', 405);

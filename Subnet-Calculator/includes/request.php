@@ -1048,6 +1048,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
     }
 
+    // IPv6 range → CIDR shareable GET URL (v3.3.0)
+    if ($active_tab === 'ipv6' && (isset($_GET['range6_start']) || isset($_GET['range6_end']))) {
+        $range6_start = trim((string)($_GET['range6_start'] ?? ''));
+        $range6_end   = trim((string)($_GET['range6_end']   ?? ''));
+        sc_run_range6(
+            $range6_start,
+            $range6_end,
+            $range6_result,
+            $range6_error,
+            $range6_warning,
+            $range6_count,
+            $range6_total,
+        );
+    }
+
     // Supernet / summarise shareable GET URL
     if ($active_tab === 'ipv4' && isset($_GET['supernet_action'])) {
         $supernet_action = in_array((string)($_GET['supernet_action'] ?? ''), ['find', 'summarise'], true)

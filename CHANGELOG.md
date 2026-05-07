@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **IPv6 range → CIDR converter.** New drawer entry on the IPv6 tab
+  (`Range→CIDR`) mirroring the existing v4 Range tool. Pure GMP arithmetic
+  so /128-wide ranges work without overflow. Available via UI,
+  `POST /api/v1/range6`, and the shareable URL
+  `?tab=ipv6&tool=range6&range6_start=…&range6_end=…`. First feature of
+  v3.3.0 IPv6 Foundations.
+
+### Changed
+
+- **`range_to_cidrs` (v4) now enforces a configurable output cap.** Default
+  256 CIDRs, configurable via `$range_max_cidrs` in `config.php`.
+  Pathological fragmented inputs that previously returned thousands of
+  CIDRs now return the first 256 with `truncated: true` in the response.
+  API consumers should check the new `truncated` and `cap` response fields.
+  Same cap applies to the new `range6_to_cidrs`.
+
 ## [3.2.4] - 2026-05-06
 
 **Tab-bar polish.** The "VLSM IPv6" tab label wrapped to two lines on
