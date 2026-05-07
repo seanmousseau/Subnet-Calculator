@@ -762,6 +762,7 @@ if ($i < 3) {
         elseif ($range6_result !== null || $range6_error !== null) { $open_tool_ipv6 = 'range6'; }
         elseif ($supernet6_result !== null || $supernet6_error !== null) { $open_tool_ipv6 = 'supernet6'; }
         elseif ($zoneid_address !== null || $zoneid_error !== null) { $open_tool_ipv6 = 'zoneid'; }
+        elseif ($derive_eui64 !== null || $derive_error !== null) { $open_tool_ipv6 = 'derive'; }
         elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
         elseif (($diff_result !== null || $diff_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'diff'; }
         ?>
@@ -771,6 +772,7 @@ if ($i < 3) {
             <button type="button" class="tool-trigger" data-tool="range6" aria-expanded="false">Range&rarr;CIDR</button>
             <button type="button" class="tool-trigger" data-tool="supernet6" aria-expanded="false">Supernet</button>
             <button type="button" class="tool-trigger" data-tool="zoneid" aria-expanded="false">Zone ID</button>
+            <button type="button" class="tool-trigger" data-tool="derive" aria-expanded="false">Derive Address</button>
             <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
             <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
         </div>
@@ -1021,6 +1023,76 @@ if ($i < 3) {
                             <div class="zoneid-result__row">
                                 <dt class="zoneid-result__label">Link-local</dt>
                                 <dd class="zoneid-result__value"><?= $zoneid_is_link_local ? 'Yes' : 'No' ?></dd>
+                            </div>
+                        </dl>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="derive">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Derive Address<?= help_bubble('ipv6-derive', 'Derives the IPv6 forms generated from a 48-bit MAC address per RFC 4291 §2.5.1: the modified EUI-64 interface identifier (with the U/L bit flipped), the link-local address (fe80:: + EUI-64), and the solicited-node multicast address (ff02::1:ff + the low 24 bits of the unicast address). Accepts colon, hyphen, Cisco dotted, or bare-hex MAC formats.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <label for="derive_mac" class="sr-only">MAC address</label>
+                        <div class="splitter-row">
+                            <input type="text" id="derive_mac" name="derive_mac" class="splitter-input"
+                                   placeholder="00:24:b9:7e:ab:cd"
+                                   value="<?= htmlspecialchars($derive_input) ?>"
+                                   autocomplete="off" spellcheck="false"
+                                   <?= $derive_error ? 'aria-invalid="true" aria-describedby="derive-error"' : '' ?>>
+                            <button type="submit" class="splitter-btn">Derive</button>
+                        </div>
+                    </form>
+                    <?php if ($derive_error) : ?>
+                        <div class="error" id="derive-error"><?= htmlspecialchars($derive_error) ?></div>
+                    <?php elseif ($derive_eui64 !== null) : ?>
+                        <?php if ($derive_warning) : ?>
+                            <div class="warning"><?= htmlspecialchars($derive_warning) ?></div>
+                        <?php endif; ?>
+                        <?php $_derive_label = 'Derive: ' . ($derive_mac_canonical ?? ''); ?>
+                        <dl class="derive-result"
+                            data-history-source="derive"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_derive_label) ?>">
+                            <div class="derive-result__row">
+                                <dt class="derive-result__label">MAC (canonical)</dt>
+                                <dd class="derive-result__value">
+                                    <code><?= htmlspecialchars((string)$derive_mac_canonical) ?></code>
+                                </dd>
+                            </div>
+                            <div class="derive-result__row">
+                                <dt class="derive-result__label">EUI-64<?= help_bubble('ipv6-derive-eui64', 'Modified EUI-64 interface identifier — the U/L (universal/local) bit in the first MAC byte is inverted, then the 16-bit value 0xFFFE is inserted between the OUI and the NIC half (RFC 4291 §2.5.1).') ?></dt>
+                                <dd class="derive-result__value">
+                                    <code><?= htmlspecialchars((string)$derive_eui64) ?></code>
+                                    <button type="button" class="subnet-copy"
+                                            data-copy="<?= htmlspecialchars((string)$derive_eui64) ?>"
+                                            aria-label="Copy EUI-64 interface ID">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                </dd>
+                            </div>
+                            <div class="derive-result__row">
+                                <dt class="derive-result__label">Link-local<?= help_bubble('ipv6-derive-ll', 'Link-local address — the fe80::/64 prefix concatenated with the EUI-64 interface identifier. Always assigned automatically to every IPv6-enabled interface (RFC 4291 §2.5.6).') ?></dt>
+                                <dd class="derive-result__value">
+                                    <code><?= htmlspecialchars((string)$derive_link_local) ?></code>
+                                    <button type="button" class="subnet-copy"
+                                            data-copy="<?= htmlspecialchars((string)$derive_link_local) ?>"
+                                            aria-label="Copy link-local address">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                </dd>
+                            </div>
+                            <div class="derive-result__row">
+                                <dt class="derive-result__label">Solicited-node<?= help_bubble('ipv6-derive-sn', 'Solicited-node multicast address — ff02::1:ff followed by the low 24 bits of the unicast address. Used by IPv6 Neighbor Discovery so a host only listens for resolution requests targeted at its own address (RFC 4291 §2.7.1).') ?></dt>
+                                <dd class="derive-result__value">
+                                    <code><?= htmlspecialchars((string)$derive_solicited_node) ?></code>
+                                    <button type="button" class="subnet-copy"
+                                            data-copy="<?= htmlspecialchars((string)$derive_solicited_node) ?>"
+                                            aria-label="Copy solicited-node multicast address">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                </dd>
                             </div>
                         </dl>
                     <?php endif; ?>

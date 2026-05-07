@@ -50,6 +50,7 @@ nav:
     - Overlap Checker: overlap.md
     - Supernet & Summarisation: supernet.md
     - IPv6 Zone ID Parser: ipv6-zone-id.md
+    - MAC → IPv6 Derivation: ipv6-derive.md
     - IPv6 ULA Generator: ula.md
     - Binary / Hex Panel: binary.md
     - Reverse DNS Zones: rdns.md
