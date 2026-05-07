@@ -107,7 +107,7 @@ function mac_normalize_internal(string $mac): string
  * Derive the 64-bit Modified EUI-64 interface identifier from a 48-bit MAC,
  * per RFC 4291 §2.5.1. Inserts `ff:fe` between octets 3 and 4 and flips the
  * universal/local bit (bit 1 of the first octet, mask 0x02). Output is four
- * lowercase colon-separated hextets, e.g. `0226:b9ff:fe7e:abcd`.
+ * lowercase colon-separated hextets, e.g. `0224:b9ff:fe7e:abcd`.
  *
  * @throws \InvalidArgumentException on a malformed MAC.
  */
@@ -129,7 +129,7 @@ function mac_to_eui64(string $mac): string
  * Derive the IPv6 link-local address (fe80::/64) for a 48-bit MAC. Combines
  * `fe80::` with the Modified EUI-64 interface identifier and round-trips
  * through inet_pton/inet_ntop for canonical compressed form
- * (e.g. `fe80::226:b9ff:fe7e:abcd`).
+ * (e.g. `fe80::224:b9ff:fe7e:abcd`).
  *
  * @throws \InvalidArgumentException on a malformed MAC.
  */
