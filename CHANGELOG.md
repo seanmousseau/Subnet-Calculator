@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - IPv6 supernet finder + summariser as new drawer entry on the IPv6 tab. Mirrors the v4 Supernet drawer. UI + `POST /api/v1/supernet6` + shareable URL.
 - IPv6 zone-ID parser. Splits `fe80::1%eth0`-style input into address + zone with link-local validation. UI + `POST /api/v1/zone-id` + shareable URL.
 - MAC-to-IPv6 derivation tool. One MAC input → EUI-64 interface ID + link-local address + solicited-node multicast. Per RFC 4291 §2.5.1 (with U/L bit flip). UI + `POST /api/v1/derive` + shareable URL.
+- SLAAC privacy address generator (RFC 8981). Optional 16-hex seed for reproducibility (advanced/testing use); unseeded output uses `random_bytes`. UI + `POST /api/v1/slaac-privacy` + shareable URL.
 
 ### Changed
 

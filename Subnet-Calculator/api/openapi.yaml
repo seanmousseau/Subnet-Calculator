@@ -284,6 +284,7 @@ paths:
                     - supernet6
                     - zone-id
                     - derive
+                    - slaac-privacy
                     - ula
                     - rdns
                     - bulk
@@ -1160,6 +1161,94 @@ paths:
                   warning: null
         "400":
           description: Empty input or malformed MAC address
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /slaac-privacy:
+    post:
+      operationId: slaacPrivacyAddress
+      tags: [IPv6]
+      summary: Generate a SLAAC privacy address (RFC 8981) from a /64 prefix
+      description: >
+        Combines a /64 IPv6 prefix with a 64-bit interface identifier — either
+        a caller-supplied 16-hexadecimal-character `seed` (for reproducible
+        output, e.g. documentation or regression tests) or a cryptographically
+        random one generated via `random_bytes(8)`. The U/L bit on the
+        interface identifier is cleared per RFC 8981 §3.3.2 so the address is
+        recognisably a privacy IID rather than a Modified EUI-64. Host bits in
+        the prefix's address portion are ignored. `seed_was_provided`
+        distinguishes caller-supplied seeds from auto-generated ones; the
+        echoed `seed_used` is always lowercased. Added in v3.3.0.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prefix]
+              properties:
+                prefix:
+                  type: string
+                  description: IPv6 /64 prefix; non-/64 prefixes are rejected.
+                  example: "2001:db8:1:2::/64"
+                seed:
+                  type: string
+                  description: Optional 16 hexadecimal characters for reproducible output.
+                  pattern: "^[0-9a-fA-F]{16}$"
+                  example: "a8d3f4e10c529837"
+      responses:
+        "200":
+          description: Canonicalised prefix plus generated SLAAC privacy address
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [prefix, address, interface_id, seed_used, seed_was_provided]
+                        properties:
+                          prefix:            { type: string,  example: "2001:db8:1:2::/64" }
+                          address:           { type: string,  example: "2001:db8:1:2:a8d3:f4e1:c52:9837" }
+                          interface_id:      { type: string,  example: "a8d3:f4e1:0c52:9837" }
+                          seed_used:         { type: string,  example: "a8d3f4e10c529837" }
+                          seed_was_provided: { type: boolean, example: true }
+              example:
+                ok: true
+                data:
+                  prefix: "2001:db8:1:2::/64"
+                  address: "2001:db8:1:2:a8d3:f4e1:c52:9837"
+                  interface_id: "a8d3:f4e1:0c52:9837"
+                  seed_used: "a8d3f4e10c529837"
+                  seed_was_provided: true
+        "400":
+          description: Empty input, non-/64 prefix, malformed prefix, or malformed seed
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }

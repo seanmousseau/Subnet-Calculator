@@ -5151,6 +5151,220 @@ async def test_api_derive(page: Page) -> None:
     assert_eq("api derive err: ok=false", data3.get("ok"), False)
 
 
+async def test_ipv6_slaac_ui(page: Page) -> None:
+    section("IPv6 SLAAC privacy UI")
+
+    # Success — unseeded /64
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='slaac']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='slaac_prefix']", "2001:db8:1:2::/64")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='slaac'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac'] .slaac-result__row")
+    assert_eq("slaac: four result rows render", await rows.count(), 4)
+    prefix_text = await rows.nth(0).locator(".slaac-result__value").text_content() or ""
+    addr_text   = await rows.nth(1).locator(".slaac-result__value").text_content() or ""
+    iid_text    = await rows.nth(2).locator(".slaac-result__value").text_content() or ""
+    seed_text   = await rows.nth(3).locator(".slaac-result__value").text_content() or ""
+    assert_contains("slaac: prefix canonical row", prefix_text, "2001:db8:1:2::/64")
+    assert_contains("slaac: address starts with prefix", addr_text, "2001:db8:1:2:")
+    iid_clean = iid_text.strip()
+    assert_eq("slaac: interface ID is 4 hextets",
+              iid_clean.count(":"), 3)
+    seed_clean = "".join(c for c in seed_text if c in "0123456789abcdefABCDEF")
+    assert_eq("slaac: seed used is 16 hex chars", len(seed_clean), 16)
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac']")
+    assert_eq("slaac: no warning band on success",
+              await panel.locator(".warning").count(), 0)
+    assert_eq("slaac: no error band on success",
+              await panel.locator(".error").count(), 0)
+
+    # Advanced disclosure opens the seed input
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='slaac']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    summary = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac'] details.slaac-advanced > summary")
+    await summary.click()
+    is_open = await page.evaluate(
+        "() => document.querySelector(\"#panel-ipv6 .tool-panel[data-tool='slaac'] details.slaac-advanced\").open"
+    )
+    assert_true("slaac: advanced disclosure opens", bool(is_open),
+                f"got: {is_open!r}")
+    seed_input = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac'] input[name='slaac_seed']")
+    assert_true("slaac: seed input visible after opening Advanced",
+                await seed_input.is_visible(), "")
+
+    # Error — non-/64 prefix
+    await navigate(page, APP_URL + "?tab=ipv6")
+    await page.click("#panel-ipv6 .tool-trigger[data-tool='slaac']")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("input[name='slaac_prefix']", "2001:db8::/48")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='slaac'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("slaac: error band visible on non-/64 prefix",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+
+async def test_ipv6_slaac_seeded_determinism(page: Page) -> None:
+    section("IPv6 SLAAC seeded determinism")
+
+    async def _submit_seeded() -> str:
+        await navigate(page, APP_URL + "?tab=ipv6")
+        await page.click("#panel-ipv6 .tool-trigger[data-tool='slaac']")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        # Open advanced disclosure first so the seed input is interactable.
+        await page.locator(
+            "#panel-ipv6 .tool-panel[data-tool='slaac'] details.slaac-advanced > summary"
+        ).click()
+        await page.fill("input[name='slaac_prefix']", "2001:db8:1:2::/64")
+        await page.fill("input[name='slaac_seed']", "a8d3f4e10c529837")
+        await page.click("#panel-ipv6 .tool-panel[data-tool='slaac'] button.splitter-btn")
+        await page.wait_for_load_state("load")
+        rows = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac'] .slaac-result__row")
+        return (await rows.nth(1).locator(".slaac-result__value code").text_content() or "").strip()
+
+    addr1 = await _submit_seeded()
+    addr2 = await _submit_seeded()
+    assert_eq("slaac: seeded determinism — same seed produces same address",
+              addr2, addr1)
+
+
+async def test_ipv6_slaac_unseeded_uniqueness(page: Page) -> None:
+    section("IPv6 SLAAC unseeded uniqueness")
+
+    async def _submit_unseeded() -> str:
+        await navigate(page, APP_URL + "?tab=ipv6")
+        await page.click("#panel-ipv6 .tool-trigger[data-tool='slaac']")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        await page.fill("input[name='slaac_prefix']", "2001:db8:1:2::/64")
+        await page.click("#panel-ipv6 .tool-panel[data-tool='slaac'] button.splitter-btn")
+        await page.wait_for_load_state("load")
+        rows = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac'] .slaac-result__row")
+        return (await rows.nth(1).locator(".slaac-result__value code").text_content() or "").strip()
+
+    addr1 = await _submit_unseeded()
+    addr2 = await _submit_unseeded()
+    assert_true("slaac: unseeded uniqueness — random_bytes produces different addresses",
+                addr1 != addr2,
+                f"both runs produced {addr1!r} (collision probability ~2^-64)")
+
+
+async def test_ipv6_slaac_copy_buttons(page: Page) -> None:
+    section("IPv6 SLAAC copy buttons")
+
+    # Install clipboard intercept BEFORE the page loads (per CLAUDE.md guidance —
+    # docker test harness serves over insecure HTTP where navigator.clipboard is undefined).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    await navigate(page,
+        APP_URL + "?tab=ipv6&slaac_prefix=2001%3Adb8%3A1%3A2%3A%3A%2F64&slaac_seed=a8d3f4e10c529837")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac'] .slaac-result__row")
+    assert_eq("slaac copy: four rows hydrated from URL", await rows.count(), 4)
+
+    expected_addr = "2001:db8:1:2:a8d3:f4e1:c52:9837"
+    expected_iid  = "a8d3:f4e1:0c52:9837"  # IID rendered without zero-suppression
+    expected_seed = "a8d3f4e10c529837"
+
+    # Address (row 1)
+    await rows.nth(1).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    addr_clip = await page.evaluate("window.__lastClipboard")
+    assert_eq("slaac copy: address copy", addr_clip, expected_addr)
+
+    # Interface ID (row 2)
+    await rows.nth(2).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    iid_clip = await page.evaluate("window.__lastClipboard")
+    assert_eq("slaac copy: interface ID copy", iid_clip, expected_iid)
+
+    # Seed used (row 3)
+    await rows.nth(3).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    seed_clip = await page.evaluate("window.__lastClipboard")
+    assert_eq("slaac copy: seed copy", seed_clip, expected_seed)
+
+
+async def test_ipv6_slaac_shareable_url(page: Page) -> None:
+    section("IPv6 SLAAC shareable URL")
+    await navigate(page,
+        APP_URL + "?tab=ipv6&slaac_prefix=2001%3Adb8%3A1%3A2%3A%3A%2F64&slaac_seed=a8d3f4e10c529837")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    rows = page.locator("#panel-ipv6 .tool-panel[data-tool='slaac'] .slaac-result__row")
+    assert_eq("slaac shareable: four result rows", await rows.count(), 4)
+    prefix_text = await rows.nth(0).locator(".slaac-result__value code").text_content() or ""
+    addr_text   = await rows.nth(1).locator(".slaac-result__value code").text_content() or ""
+    iid_text    = await rows.nth(2).locator(".slaac-result__value code").text_content() or ""
+    seed_text   = await rows.nth(3).locator(".slaac-result__value code").text_content() or ""
+    assert_eq("slaac shareable: prefix",       prefix_text.strip(), "2001:db8:1:2::/64")
+    assert_eq("slaac shareable: address",      addr_text.strip(),   "2001:db8:1:2:a8d3:f4e1:c52:9837")
+    assert_eq("slaac shareable: interface ID", iid_text.strip(),    "a8d3:f4e1:0c52:9837")
+    assert_eq("slaac shareable: seed used",    seed_text.strip(),   "a8d3f4e10c529837")
+
+
+async def test_api_slaac(page: Page) -> None:
+    section("API — POST /api/v1/slaac-privacy")
+    # Unseeded success
+    status, data = _api_post("slaac-privacy", {"prefix": "2001:db8:1:2::/64"})
+    assert_eq("api slaac: HTTP 200", status, 200)
+    payload = data.get("data", {})
+    assert_eq("api slaac: seed_was_provided=false",
+              payload.get("seed_was_provided"), False)
+    assert_true("api slaac: address starts with prefix",
+                isinstance(payload.get("address"), str)
+                and (payload.get("address") or "").startswith("2001:db8:1:2:"),
+                f"got: {payload.get('address')!r}")
+    assert_true("api slaac: seed_used is 16 hex",
+                isinstance(payload.get("seed_used"), str)
+                and len(payload.get("seed_used") or "") == 16,
+                f"got: {payload.get('seed_used')!r}")
+
+    # Seeded — deterministic vector
+    status2, data2 = _api_post("slaac-privacy", {
+        "prefix": "2001:db8:1:2::/64",
+        "seed":   "a8d3f4e10c529837",
+    })
+    assert_eq("api slaac seeded: HTTP 200", status2, 200)
+    payload2 = data2.get("data", {})
+    assert_eq("api slaac seeded: address",
+              payload2.get("address"), "2001:db8:1:2:a8d3:f4e1:c52:9837")
+    assert_eq("api slaac seeded: seed_was_provided=true",
+              payload2.get("seed_was_provided"), True)
+
+    # Error — non-/64 prefix
+    status3, data3 = _api_post("slaac-privacy", {"prefix": "2001:db8::/48"})
+    assert_eq("api slaac err: non-/64 → 400", status3, 400)
+    assert_eq("api slaac err: ok=false", data3.get("ok"), False)
+    err_msg = data3.get("error")
+    if isinstance(err_msg, dict):
+        err_msg = err_msg.get("message")
+    assert_contains("api slaac err: /64 message",
+                    str(err_msg or ""), "/64")
+
+    # Error — bad seed
+    status4, data4 = _api_post("slaac-privacy", {
+        "prefix": "2001:db8:1:2::/64",
+        "seed":   "abc",
+    })
+    assert_eq("api slaac err: bad seed → 400", status4, 400)
+    assert_eq("api slaac err: ok=false (bad seed)", data4.get("ok"), False)
+    err_msg2 = data4.get("error")
+    if isinstance(err_msg2, dict):
+        err_msg2 = err_msg2.get("message")
+    assert_contains("api slaac err: 16-hex message",
+                    str(err_msg2 or ""), "16")
+
+
 async def test_api_range(page: Page) -> None:
     section("API — POST /api/v1/range/ipv4")
     status, data = _api_post("range/ipv4", {"start": "10.0.0.0", "end": "10.0.0.255"})
@@ -7078,6 +7292,12 @@ async def main() -> None:
             await test_ipv6_derive_copy_buttons(page)
             await test_ipv6_derive_shareable_url(page)
             await test_api_derive(page)
+            await test_ipv6_slaac_ui(page)
+            await test_ipv6_slaac_seeded_determinism(page)
+            await test_ipv6_slaac_unseeded_uniqueness(page)
+            await test_ipv6_slaac_copy_buttons(page)
+            await test_ipv6_slaac_shareable_url(page)
+            await test_api_slaac(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)
