@@ -1417,7 +1417,6 @@ if ($i < 3) {
                             '6to4'       => '6to4 (RFC 3056)',
                             'teredo'     => 'Teredo (RFC 4380)',
                             'nat64-wkp'  => 'NAT64 well-known prefix (RFC 6052)',
-                            'nat64-nsp'  => 'NAT64 network-specific prefix (RFC 6052)',
                             'isatap'     => 'ISATAP (RFC 5214)',
                         ];
                         $_ev4_scheme    = (string)($embedded_v4['scheme'] ?? '');

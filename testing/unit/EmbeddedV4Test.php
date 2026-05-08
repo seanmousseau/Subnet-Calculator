@@ -31,9 +31,13 @@ final class EmbeddedV4Test extends TestCase
 
     public function test_teredo_detected(): void
     {
-        // RFC 4380 §4 example
+        // RFC 4380 §4 worked example: server 65.54.227.120, obfuscated client
+        // 192.0.2.45, UDP port 40000.
         $result = detect_embedded_v4('2001:0:4136:e378:8000:63bf:3fff:fdd2');
         $this->assertSame('teredo', $result['scheme']);
+        $this->assertSame('192.0.2.45', $result['ipv4']);
+        $this->assertSame('65.54.227.120', $result['extra']['server_ipv4']);
+        $this->assertSame(40000, $result['extra']['udp_port']);
     }
 
     public function test_nat64_wkp_detected(): void

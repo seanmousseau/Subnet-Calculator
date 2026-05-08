@@ -1936,7 +1936,7 @@ paths:
                           scheme:
                             type: string
                             nullable: true
-                            enum: [mapped, compatible, 6to4, teredo, nat64-wkp, nat64-nsp, isatap]
+                            enum: [mapped, compatible, 6to4, teredo, nat64-wkp, isatap]
                             example: "mapped"
                           ipv4:
                             type: string

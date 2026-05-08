@@ -64,7 +64,7 @@ function ipv6_in_prefix(string $address, string $prefix, int $prefix_length): bo
  * Detect any embedded-IPv4 scheme in the given IPv6 address.
  *
  * @return array{
- *     scheme: ?string,
+ *     scheme: 'mapped'|'compatible'|'6to4'|'teredo'|'nat64-wkp'|'isatap'|null,
  *     ipv4: ?string,
  *     deprecated: bool,
  *     detail_route: ?string,
@@ -101,6 +101,9 @@ function detect_embedded_v4(string $ipv6): array
     }
 
     // 2. NAT64 well-known prefix: 64:ff9b::/96.
+    // TODO(nat64-nsp): reintroduce 'nat64-nsp' scheme when operator NSP
+    // configuration lands (T3–T7); add the matching enum value back to
+    // openapi.yaml and the layout.php scheme-label map atomically.
     if (substr($bin, 0, 12) === EMBEDDEDV4_NAT64_WKP_PREFIX_BIN) {
         $v4 = @inet_ntop(substr($bin, 12, 4));
         return [
