@@ -119,12 +119,24 @@ class RangeTest extends TestCase
     {
         // 10.0.0.1 – 10.0.0.255 yields 8 CIDRs with no cap; with cap=4 it
         // truncates to 4 blocks. The explicit third argument keeps the test
-        // free of $GLOBALS mutation (CR feedback PR #369).
+        // DI-friendly and free of any global-state mutation.
         $r = range_to_cidrs('10.0.0.1', '10.0.0.255', 4);
         $this->assertTrue($r['truncated']);
         $this->assertSame(4, $r['count']);
         $this->assertSame(4, $r['cap']);
         $this->assertCount(4, $r['cidrs']);
+    }
+
+    public function testRangeToCidrsAcceptsCapAsParameter(): void
+    {
+        // v3.4.0: explicit cap parameter, no $GLOBALS mutation required.
+        // 10.0.0.0/24 produces a single /24 with no cap; with cap=4 we still
+        // get one CIDR (cap is a list-length cap, not a coverage cap).
+        // Use an asymmetric start to force fragmentation: 10.0.0.1 – 10.0.0.15
+        // produces 4 CIDRs naturally (/32, /31, /30, /29) under cap=4.
+        $r = range_to_cidrs('10.0.0.1', '10.0.0.15', 4);
+        $this->assertCount(4, $r['cidrs'], 'cap parameter limits result list');
+        $this->assertSame(4, $r['cap']);
     }
 
     public function testRange_FragmentedRange_NotTruncatedAtDefaultCap(): void

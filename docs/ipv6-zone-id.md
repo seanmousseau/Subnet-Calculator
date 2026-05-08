@@ -54,7 +54,7 @@ The parser supports the standard shareable-URL pattern. The percent sign
 in a zone identifier must be URL-encoded as `%25`:
 
 ```text
-?tab=ipv6&zoneid_input=fe80::1%25eth0
+/ipv6/zoneid?zoneid_input=fe80::1%25eth0
 ```
 
 PHP decodes the `%25` back to a literal `%` server-side, so the parser

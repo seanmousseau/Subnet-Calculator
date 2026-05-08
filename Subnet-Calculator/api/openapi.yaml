@@ -63,6 +63,8 @@ tags:
     description: VLSM session persistence
   - name: RDNS
     description: Reverse-DNS zone generation
+  - name: Mapped6
+    description: IPv4-mapped IPv6 and NAT64 conversion
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -349,6 +351,8 @@ paths:
                     - "POST /api/v1/slaac-privacy"
                     - "POST /api/v1/ula"
                     - "POST /api/v1/rdns"
+                    - "POST /api/v1/rdns6"
+                    - "POST /api/v1/mapped6"
                     - "POST /api/v1/bulk"
                     - "POST /api/v1/range/ipv4"
                     - "POST /api/v1/range6"
@@ -1162,12 +1166,14 @@ paths:
         EUI-64 interface identifier per RFC 4291 §2.5.1 (with the U/L bit
         flipped), the IPv6 link-local address (`fe80::` + EUI-64), and the
         solicited-node multicast address (`ff02::1:ff` + low 24 bits) per
-        RFC 4291 §2.7.1. `ul_bit_flipped` reports whether the U/L flip went
-        0 → 1 (the standard case) — false when the input MAC already had
-        U/L set. `warning` is populated when the multicast bit (LSB of the
-        first octet) is set on input, indicating the source MAC is not a
-        valid unicast hardware address; outputs are still computed.
-        Added in v3.3.0.
+        RFC 4291 §2.7.1. `ul_bit_flipped` is True if the U/L bit was originally
+        0 in the input MAC and was therefore flipped to 1 to form the EUI-64
+        modified-IID. False if the U/L bit was already 1 in the input. The
+        flip operation always runs unconditionally; this field reports whether
+        the flip changed the value. `warning` is populated when the multicast
+        bit (LSB of the first octet) is set on input, indicating the source
+        MAC is not a valid unicast hardware address; outputs are still
+        computed. Added in v3.3.0.
       requestBody:
         required: true
         content:
@@ -1193,7 +1199,15 @@ paths:
                         properties:
                           mac_canonical:  { type: string,  example: "00:24:b9:7e:ab:cd" }
                           eui64:          { type: string,  example: "0224:b9ff:fe7e:abcd" }
-                          ul_bit_flipped: { type: boolean, example: true }
+                          ul_bit_flipped:
+                            type: boolean
+                            example: true
+                            description: |
+                              True if the U/L bit was originally 0 in the input MAC and was
+                              therefore flipped to 1 to form the EUI-64 modified-IID. False
+                              if the U/L bit was already 1 in the input. The flip operation
+                              always runs unconditionally; this field reports whether the
+                              flip changed the value.
                           link_local:     { type: string,  example: "fe80::224:b9ff:fe7e:abcd" }
                           solicited_node: { type: string,  example: "ff02::1:ff7e:abcd" }
                           warning:        { type: [string, "null"], example: null }
@@ -1660,34 +1674,269 @@ paths:
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
             X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
-  /bulk:
+  /rdns6:
     post:
-      operationId: bulkCalculate
-      tags: [Bulk]
-      summary: Calculate multiple subnets in a single request
+      operationId: ipv6ToArpa
+      tags: [RDNS]
+      summary: Generate an ip6.arpa zone name for an IPv6 address (RFC 3596)
       description: |
-        Accepts up to 50 CIDR inputs and returns a per-item result array.
-        Individual failures do not abort the request; each item carries its own ok/error status.
-        IPv6 items require the PHP GMP extension.
+        Generates the ip6.arpa zone-delegation name for an IPv6 address
+        and an optional nibble-aligned prefix length. With no prefix (or
+        /128) returns the full reverse name (32 nibbles + ".ip6.arpa").
+        Prefix must be a multiple of 4 — RFC 3596's nibble-boundary
+        requirement for delegation.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [cidrs]
+              required: [address]
               properties:
-                cidrs:
-                  type: array
-                  minItems: 1
-                  maxItems: 50
-                  items: { type: string }
-                  example: ["10.0.0.0/24", "2001:db8::/32"]
-                type:
+                address:
                   type: string
-                  enum: [auto, ipv4, ipv6]
-                  default: auto
-                  description: Force all items to a specific IP version. `auto` detects per-item.
+                  description: IPv6 address (compressed or expanded form).
+                  example: "2001:db8::1"
+                prefix:
+                  type: integer
+                  description: Optional prefix length, 0..128, multiple of 4.
+                  minimum: 0
+                  maximum: 128
+                  example: 64
+            examples:
+              full-128:
+                summary: Full reverse name (no prefix)
+                value: { address: "2001:db8::1" }
+              zone-64:
+                summary: /64 zone delegation
+                value: { address: "2001:db8::", prefix: 64 }
+      responses:
+        "200":
+          description: ip6.arpa name
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [address, prefix, arpa]
+                        properties:
+                          address: { type: string,  example: "2001:db8::" }
+                          prefix:  { type: integer, example: 64 }
+                          arpa:    { type: string,  example: "0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa" }
+              example:
+                ok: true
+                data:
+                  address: "2001:db8::"
+                  prefix: 64
+                  arpa: "0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa"
+        "400":
+          description: Invalid input (invalid address, prefix out of range, or non-nibble-aligned prefix)
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /mapped6:
+    post:
+      operationId: mappedNat64Convert
+      tags: [Mapped6]
+      summary: Convert between IPv4, IPv4-mapped IPv6, and NAT64 IPv6
+      description: |
+        Bidirectional conversion between an IPv4 dotted-quad, an
+        IPv4-mapped IPv6 address (`::ffff:0:0/96`, RFC 4291 §2.5.5.2),
+        and a NAT64 IPv6 address (RFC 6052). Accepts any of the three
+        forms as `input` and returns all four representations
+        (IPv4, IPv4-mapped, NAT64, NAT64 prefix used).
+
+        The default NAT64 prefix is the well-known `64:ff9b::/96`. An
+        operator-supplied custom NAT64 prefix is accepted via
+        `nat64_prefix` and must be in `/96` form — the other RFC 6052
+        prefix lengths (`/32`, `/40`, `/48`, `/56`, `/64`) are not
+        supported by this endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input]
+              properties:
+                input:
+                  type: string
+                  description: An IPv4 address, an IPv4-mapped IPv6 address, or a NAT64 IPv6 address within the supplied prefix.
+                  example: "192.0.2.1"
+                nat64_prefix:
+                  type: string
+                  description: NAT64 prefix in `/96` form. Defaults to `64:ff9b::/96`.
+                  default: "64:ff9b::/96"
+                  example: "64:ff9b::/96"
+            examples:
+              ipv4-in:
+                summary: IPv4 input
+                value: { input: "192.0.2.1" }
+              mapped-in:
+                summary: IPv4-mapped IPv6 input
+                value: { input: "::ffff:192.0.2.1" }
+              nat64-in:
+                summary: NAT64 IPv6 input (well-known prefix)
+                value: { input: "64:ff9b::c000:201" }
+              custom-prefix:
+                summary: Custom /96 NAT64 prefix
+                value: { input: "192.0.2.1", nat64_prefix: "2001:db8:1::/96" }
+      responses:
+        "200":
+          description: All four representations of the address
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [input, ipv4, ipv4_mapped, nat64, nat64_prefix]
+                        properties:
+                          input:        { type: string, example: "192.0.2.1" }
+                          ipv4:         { type: string, example: "192.0.2.1" }
+                          ipv4_mapped:  { type: string, example: "::ffff:192.0.2.1" }
+                          nat64:        { type: string, example: "64:ff9b::c000:201" }
+                          nat64_prefix: { type: string, example: "64:ff9b::/96" }
+              example:
+                ok: true
+                data:
+                  input: "192.0.2.1"
+                  ipv4: "192.0.2.1"
+                  ipv4_mapped: "::ffff:192.0.2.1"
+                  nat64: "64:ff9b::c000:201"
+                  nat64_prefix: "64:ff9b::/96"
+        "400":
+          description: Invalid input (unparseable address, not within supplied prefix, or non-/96 NAT64 prefix)
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /bulk:
+    post:
+      operationId: bulkCalculate
+      tags: [Bulk]
+      summary: Calculate multiple subnets in a single request
+      description: |
+        Two request modes are supported, selected by the body shape:
+
+        - **Legacy CIDR mode** — body contains `cidrs[]`. Resolves each CIDR
+          via /ipv4 or /ipv6 logic. Per-item envelope: `{input, ok, data?, error?}`.
+        - **Multi-op mode (v3.4.0)** — body contains `items[]`. Each item
+          has its own `op` slug and `params` payload. Supported ops:
+          `range6`, `supernet6`, `zone-id`, `derive`, `slaac-privacy`,
+          `rdns6`, `mapped6`. Per-item envelope: `{op, ok, error?, ...result}`
+          where `...result` matches the standalone endpoint's success body.
+
+        Up to 50 entries per request. Individual failures do not abort the
+        request — each item carries its own ok/error status. IPv6 ops
+        require the PHP GMP extension.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [cidrs]
+                  properties:
+                    cidrs:
+                      type: array
+                      minItems: 1
+                      maxItems: 50
+                      items: { type: string }
+                      example: ["10.0.0.0/24", "2001:db8::/32"]
+                    type:
+                      type: string
+                      enum: [auto, ipv4, ipv6]
+                      default: auto
+                      description: Force all items to a specific IP version. `auto` detects per-item.
+                - type: object
+                  required: [items]
+                  properties:
+                    items:
+                      type: array
+                      minItems: 1
+                      maxItems: 50
+                      items:
+                        type: object
+                        required: [op, params]
+                        properties:
+                          op:
+                            type: string
+                            enum: [range6, supernet6, zone-id, derive, slaac-privacy, rdns6, mapped6]
+                          params:
+                            type: object
+                            description: Per-op parameters; shape matches the corresponding standalone endpoint's request body.
+                  example:
+                    items:
+                      - op: range6
+                        params: { start: "2001:db8::", end: "2001:db8::ff" }
+                      - op: supernet6
+                        params: { action: find, cidrs: ["2001:db8:0::/48", "2001:db8:1::/48"] }
+                      - op: zone-id
+                        params: { input: "fe80::1%eth0" }
+                      - op: derive
+                        params: { mac: "00:11:22:33:44:55" }
+                      - op: slaac-privacy
+                        params: { prefix: "2001:db8::/64", seed: "deadbeefcafef00d" }
+                      - op: rdns6
+                        params: { address: "2001:db8::1", prefix: 64 }
+                      - op: mapped6
+                        params: { input: "192.0.2.1" }
       responses:
         "200":
           description: Per-item calculation results
@@ -1704,13 +1953,18 @@ paths:
                         properties:
                           results:
                             type: array
+                            description: |
+                              In legacy `cidrs[]` mode, each entry is `{input, ok, data?, error?}`.
+                              In multi-op `items[]` mode, each entry is
+                              `{op, ok, error?, ...result}` where `...result` matches the
+                              corresponding standalone endpoint's success body.
                             items:
                               type: object
-                              required: [input, ok]
                               properties:
-                                input: { type: string }
+                                input: { type: string, description: "Present in legacy cidrs[] mode." }
+                                op:    { type: string, description: "Present in multi-op items[] mode." }
                                 ok:    { type: boolean }
-                                data:  { description: "Present when ok is true. Shape matches /ipv4 or /ipv6 response data." }
+                                data:  { description: "Legacy cidrs[] mode — present when ok is true. Shape matches /ipv4 or /ipv6 response data." }
                                 error: { type: string, description: "Present when ok is false." }
               example:
                 ok: true

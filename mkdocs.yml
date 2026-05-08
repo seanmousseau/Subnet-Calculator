@@ -55,6 +55,8 @@ nav:
     - IPv6 ULA Generator: ula.md
     - Binary / Hex Panel: binary.md
     - Reverse DNS Zones: rdns.md
+    - IPv6 Reverse DNS (rdns6): ipv6-rdns6.md
+    - IPv4-mapped / NAT64 (mapped6): ipv6-mapped6.md
     - Allocation Tree: tree.md
     - Wildcard ↔ CIDR: wildcard.md
     - IP Lookup: lookup.md
@@ -73,7 +75,7 @@ nav:
     - Operator Config: config.md
 
 extra:
-  version: "3.3.0"
+  version: "3.4.0"
 
 extra_css:
   - stylesheets/extra.css

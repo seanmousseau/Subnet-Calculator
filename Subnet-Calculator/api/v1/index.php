@@ -18,11 +18,16 @@ require $base . 'functions-ipv4.php';
 require $base . 'functions-ipv6.php';
 require $base . 'functions-split.php';
 require $base . 'functions-util.php';
+require $base . 'functions-type6.php';
 require $base . 'functions-vlsm.php';
 require $base . 'functions-vlsm6.php';
 require $base . 'functions-supernet.php';
 require $base . 'functions-supernet6.php';
+require $base . 'functions-zone6.php';
 require $base . 'functions-derive6.php';
+require $base . 'functions-slaac6.php';
+require $base . 'functions-rdns6.php';
+require $base . 'functions-mapped6.php';
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require_once $base . 'functions-resolve.php';
@@ -34,6 +39,7 @@ require $base . 'functions-tree-presets.php';
 require $base . 'functions-lookup.php';
 require $base . 'functions-diff.php';
 require $base . 'functions-apikeys.php';
+require $base . 'functions-bulk.php';
 require $base . 'functions-admin-auth.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -106,6 +112,8 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/slaac-privacy',
             'POST /api/v1/ula',
             'POST /api/v1/rdns',
+            'POST /api/v1/rdns6',
+            'POST /api/v1/mapped6',
             'POST /api/v1/bulk',
             'POST /api/v1/sessions',
             'GET  /api/v1/sessions/{id}',
@@ -226,6 +234,12 @@ switch ($route_key) {
         break;
     case 'POST /rdns':
         require __DIR__ . '/handlers/rdns.php';
+        break;
+    case 'POST /rdns6':
+        require __DIR__ . '/handlers/rdns6.php';
+        break;
+    case 'POST /mapped6':
+        require __DIR__ . '/handlers/mapped6.php';
         break;
     case 'POST /bulk':
         require __DIR__ . '/handlers/bulk.php';

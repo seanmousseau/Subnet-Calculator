@@ -4,6 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development
 
+**Prereqs (macOS):** `brew install gnu-tar` — the release build uses `gtar`
+to strip build-user UID/GID from tarball entries (`--owner=0 --group=0
+--numeric-owner`) and to avoid the macOS-only PAX xattr records that
+bsdtar otherwise materialises as `._FILENAME` AppleDouble sidecars on
+extract. The other PHP/composer/node tools are standard.
+
 ```bash
 # Run the app locally (serve the Subnet-Calculator/ subfolder)
 php -S localhost:8080 -t Subnet-Calculator/
@@ -56,9 +62,15 @@ scp testing/fixtures/iframe-test.html root@192.168.80.15:/opt/container_data/dev
 # Also bump $app_version in Subnet-Calculator/includes/config.php before building
 # CHANGELOG.md is bundled so GET /api/v1/changelog works in tarball installs
 cp CHANGELOG.md Subnet-Calculator/CHANGELOG.md
+# Use GNU tar (gtar on macOS — `brew install gnu-tar`) so we can strip the
+# build user's UID/GID and skip macOS-only PAX xattr records that bsdtar
+# would otherwise materialise as `._FILENAME` AppleDouble sidecars on
+# extract. --owner=0 --group=0 --numeric-owner make the artifact
+# reproducible and prevent leaking local account names into the tarball.
 # admin/_test-drain.php is a test-rig-only endpoint (#324) — never ship it.
-tar --exclude='admin/_test-drain.php' \
-    -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
+gtar --owner=0 --group=0 --numeric-owner \
+     --exclude='admin/_test-drain.php' \
+     -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .
 rm Subnet-Calculator/CHANGELOG.md
 ```
 

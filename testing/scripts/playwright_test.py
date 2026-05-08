@@ -545,6 +545,99 @@ async def test_ipv6_shareable_url(page: Page) -> None:
     assert_eq("GET auto-calc IPv6: prefix length", await result_value(page, "Prefix Length"), "/8")
 
 
+async def test_per_tool_routes_equivalence(page: Page) -> None:
+    # v3.4.0 — Apache rewrites /ipv[46]/<tool> and /ipv[46] to the existing
+    # ?tab=&tool= form. The two URL forms must render identical content so
+    # that bookmarks and iframe consumers using the legacy form stay valid.
+    section("v3.4.0 — per-tool URL routes: canonical vs legacy equivalence")
+
+    # Bare tab routes
+    await navigate(page, APP_URL + "ipv4")
+    canonical_ipv4 = await page.locator("#main-content").inner_html()
+    await navigate(page, APP_URL + "?tab=ipv4")
+    legacy_ipv4 = await page.locator("#main-content").inner_html()
+    assert_true("/ipv4 vs ?tab=ipv4 render identical content",
+                canonical_ipv4 == legacy_ipv4)
+
+    await navigate(page, APP_URL + "ipv6")
+    canonical_ipv6 = await page.locator("#main-content").inner_html()
+    await navigate(page, APP_URL + "?tab=ipv6")
+    legacy_ipv6 = await page.locator("#main-content").inner_html()
+    assert_true("/ipv6 vs ?tab=ipv6 render identical content",
+                canonical_ipv6 == legacy_ipv6)
+
+    # Per-tool routes — derive opens the IPv6 derive drawer
+    await navigate(page, APP_URL + "ipv6/derive")
+    canonical_derive = await page.locator(
+        '#panel-ipv6 .tool-panel[data-tool="derive"]'
+    ).count()
+    assert_true("/ipv6/derive renders derive tool panel",
+                canonical_derive > 0)
+
+    # Drawer should be auto-opened on canonical route. JS reads
+    # data-open-tool from PHP and toggles aria-expanded after load — wait
+    # for it instead of asserting synchronously, otherwise the JS may not
+    # have run yet on slower CI.
+    try:
+        await page.wait_for_selector(
+            '#panel-ipv6 .tool-trigger[data-tool="derive"][aria-expanded="true"]',
+            timeout=3000,
+        )
+        drawer_open = True
+    except Exception:
+        drawer_open = False
+    assert_true("/ipv6/derive auto-opens the derive tool drawer",
+                drawer_open)
+
+    # Same drawer must auto-open via the legacy ?tab=&tool= form
+    await navigate(page, APP_URL + "?tab=ipv6&tool=derive")
+    try:
+        await page.wait_for_selector(
+            '#panel-ipv6 .tool-trigger[data-tool="derive"][aria-expanded="true"]',
+            timeout=3000,
+        )
+        legacy_drawer_open = True
+    except Exception:
+        legacy_drawer_open = False
+    assert_true("?tab=ipv6&tool=derive auto-opens the derive drawer (legacy form)",
+                legacy_drawer_open)
+
+
+async def test_legacy_query_param_url_no_redirect(_page: Page) -> None:
+    # v3.4.0 — legacy ?tab=&tool= URLs MUST NOT auto-redirect to the canonical
+    # form. iframe embedders and bookmarks rely on the legacy form continuing
+    # to work unchanged.
+    section("v3.4.0 — legacy ?tab=&tool= URL is not redirected")
+
+    resp = _SESSION.get(_APP_BASE + "?tab=ipv6&tool=derive",
+                        allow_redirects=False, timeout=10)
+    assert_eq("legacy URL returns 200 (no redirect)", resp.status_code, 200)
+    assert_true("legacy URL has no Location header",
+                "location" not in {k.lower() for k in resp.headers})
+
+    # Canonical form returns 200 directly (Apache mod_rewrite is internal,
+    # so the client never sees a redirect for this either).
+    resp2 = _SESSION.get(_APP_BASE + "ipv6/derive",
+                         allow_redirects=False, timeout=10)
+    assert_eq("canonical /ipv6/derive returns 200", resp2.status_code, 200)
+
+
+async def test_canonical_route_with_query_params(page: Page) -> None:
+    # v3.4.0 — Apache QSA must preserve query params on the rewritten path.
+    section("v3.4.0 — per-tool route preserves query string (QSA)")
+
+    await navigate(page, APP_URL + "ipv6/derive?derive_mac=00%3A24%3Ab9%3A7e%3Aab%3Acd")
+    # Page rendered + IPv6 panel exists
+    main_html = await page.locator("#main-content").count()
+    assert_true("canonical route + query string renders without 404",
+                main_html > 0)
+    derive_panel = await page.locator(
+        '#panel-ipv6 .tool-panel[data-tool="derive"]'
+    ).count()
+    assert_true("derive tool panel present on canonical route",
+                derive_panel > 0)
+
+
 async def test_iframe(page: Page) -> None:
     IFRAME_HARNESS = APP_URL + "iframe-test.html"
 
@@ -2616,6 +2709,232 @@ async def test_api_rdns(page: Page) -> None:
     assert_contains("api rdns: /25 zone has classless format", data5.get("data", {}).get("zone", ""), "/25")
 
 
+async def test_api_rdns6(page: Page) -> None:
+    section("API — POST /api/v1/rdns6")
+    # /64 zone delegation
+    status, data = _api_post("rdns6", {"address": "2001:db8::1", "prefix": 64})
+    assert_eq("api rdns6: HTTP 200", status, 200)
+    assert_eq("api rdns6: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api rdns6: address echoed", d.get("address"), "2001:db8::1")
+    assert_eq("api rdns6: prefix echoed", d.get("prefix"), 64)
+    assert_eq("api rdns6: arpa /64",
+              d.get("arpa"), "0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa")
+
+    # No prefix → full reverse name
+    status2, data2 = _api_post("rdns6", {"address": "2001:db8::1"})
+    assert_eq("api rdns6: HTTP 200 (no prefix)", status2, 200)
+    assert_eq("api rdns6: full reverse name",
+              data2.get("data", {}).get("arpa"),
+              "1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa")
+    assert_eq("api rdns6: prefix defaults to 128",
+              data2.get("data", {}).get("prefix"), 128)
+
+    # Non-nibble-aligned prefix → 400
+    status3, data3 = _api_post("rdns6", {"address": "2001:db8::", "prefix": 49})
+    assert_eq("api rdns6: /49 → 400", status3, 400)
+    assert_eq("api rdns6 err: ok=false", data3.get("ok"), False)
+
+    # Missing address → 400
+    status4, _ = _api_post("rdns6", {})
+    assert_eq("api rdns6: missing address → 400", status4, 400)
+
+    # Invalid address → 400
+    status5, _ = _api_post("rdns6", {"address": "not-an-address"})
+    assert_eq("api rdns6: invalid address → 400", status5, 400)
+
+
+async def test_ipv6_rdns6_ui(page: Page) -> None:
+    section("IPv6 reverse-DNS (rdns6) UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # T7 per-tool URL routing — /ipv6/rdns6 should auto-open the drawer.
+    # Test harness serves under /testing/sc/ so use the ?tool= equivalent that
+    # the rewrite produces (works regardless of base path).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=rdns6")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='rdns6']")
+    assert_eq("rdns6 UI: panel exists", await panel.count(), 1)
+
+    # Submit address + /64 prefix
+    await page.fill("#rdns6_address", "2001:db8::1")
+    await page.fill("#rdns6_prefix", "64")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='rdns6'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='rdns6']")
+    rows = panel.locator(".zoneid-result__row")
+    assert_eq("rdns6 UI: three result rows", await rows.count(), 3)
+    arpa_text = await rows.nth(2).locator(".zoneid-result__value code").text_content() or ""
+    assert_eq("rdns6 UI: arpa zone /64",
+              arpa_text.strip(),
+              "0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa")
+    assert_eq("rdns6 UI: no error band",
+              await panel.locator(".error").count(), 0)
+
+    # Click copy button
+    await rows.nth(2).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    clip = await page.evaluate("window.__lastClipboard")
+    assert_eq("rdns6 UI: copy ip6.arpa zone",
+              clip, "0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa")
+
+    # Error path — non-nibble-aligned
+    await navigate(page, APP_URL + "?tab=ipv6&tool=rdns6")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#rdns6_address", "2001:db8::")
+    await page.fill("#rdns6_prefix", "49")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='rdns6'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='rdns6']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("rdns6 UI: error band visible on /49",
+                len(err_text) > 0, f"got: {err_text!r}")
+    assert_eq("rdns6 UI: no result rows on error",
+              await panel.locator(".zoneid-result__row").count(), 0)
+
+
+async def test_api_mapped6(page: Page) -> None:
+    section("API — POST /api/v1/mapped6")
+    # IPv4 input → all four representations
+    status, data = _api_post("mapped6", {"input": "192.0.2.1"})
+    assert_eq("api mapped6: HTTP 200", status, 200)
+    assert_eq("api mapped6: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api mapped6: ipv4 echoed", d.get("ipv4"), "192.0.2.1")
+    assert_eq("api mapped6: ipv4_mapped", d.get("ipv4_mapped"), "::ffff:192.0.2.1")
+    assert_eq("api mapped6: nat64 default", d.get("nat64"), "64:ff9b::c000:201")
+    assert_eq("api mapped6: nat64_prefix default",
+              d.get("nat64_prefix"), "64:ff9b::/96")
+
+    # IPv4-mapped input → same outputs
+    status2, data2 = _api_post("mapped6", {"input": "::ffff:192.0.2.1"})
+    assert_eq("api mapped6 (mapped in): HTTP 200", status2, 200)
+    assert_eq("api mapped6 (mapped in): ipv4",
+              data2.get("data", {}).get("ipv4"), "192.0.2.1")
+    assert_eq("api mapped6 (mapped in): nat64",
+              data2.get("data", {}).get("nat64"), "64:ff9b::c000:201")
+
+    # NAT64 input (default prefix) → same outputs
+    status3, data3 = _api_post("mapped6", {"input": "64:ff9b::c000:201"})
+    assert_eq("api mapped6 (nat64 in): HTTP 200", status3, 200)
+    assert_eq("api mapped6 (nat64 in): ipv4",
+              data3.get("data", {}).get("ipv4"), "192.0.2.1")
+    assert_eq("api mapped6 (nat64 in): ipv4_mapped",
+              data3.get("data", {}).get("ipv4_mapped"), "::ffff:192.0.2.1")
+
+    # Custom /96 prefix
+    status4, data4 = _api_post("mapped6", {
+        "input": "192.0.2.1",
+        "nat64_prefix": "2001:db8:1::/96",
+    })
+    assert_eq("api mapped6 (custom /96): HTTP 200", status4, 200)
+    assert_eq("api mapped6 (custom /96): nat64",
+              data4.get("data", {}).get("nat64"), "2001:db8:1::c000:201")
+    assert_eq("api mapped6 (custom /96): nat64_prefix echoed",
+              data4.get("data", {}).get("nat64_prefix"), "2001:db8:1::/96")
+
+    # Non-/96 prefix → 400
+    status5, data5 = _api_post("mapped6", {
+        "input": "192.0.2.1",
+        "nat64_prefix": "2001:db8::/64",
+    })
+    assert_eq("api mapped6 (non-/96): HTTP 400", status5, 400)
+    assert_eq("api mapped6 (non-/96): ok=false", data5.get("ok"), False)
+
+    # Missing input → 400
+    status6, _ = _api_post("mapped6", {})
+    assert_eq("api mapped6: missing input → 400", status6, 400)
+
+    # Garbage input → 400
+    status7, _ = _api_post("mapped6", {"input": "not-an-address"})
+    assert_eq("api mapped6: invalid input → 400", status7, 400)
+
+
+async def test_ipv6_mapped6_ui(page: Page) -> None:
+    section("IPv6 IPv4-mapped / NAT64 (mapped6) UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # T7 per-tool URL routing — /ipv6/mapped6 should auto-open the drawer.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=mapped6")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='mapped6']")
+    assert_eq("mapped6 UI: panel exists", await panel.count(), 1)
+
+    # Submit IPv4 address
+    await page.fill("#mapped6_input", "192.0.2.1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='mapped6'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='mapped6']")
+    rows = panel.locator(".zoneid-result__row")
+    # 4 rows: IPv4 / IPv4-mapped / NAT64 / NAT64 prefix
+    assert_eq("mapped6 UI: four result rows", await rows.count(), 4)
+
+    ipv4_text   = (await rows.nth(0).locator(".zoneid-result__value code").text_content() or "").strip()
+    mapped_text = (await rows.nth(1).locator(".zoneid-result__value code").text_content() or "").strip()
+    nat64_text  = (await rows.nth(2).locator(".zoneid-result__value code").text_content() or "").strip()
+    prefix_text = (await rows.nth(3).locator(".zoneid-result__value code").text_content() or "").strip()
+    assert_eq("mapped6 UI: ipv4 row",        ipv4_text,   "192.0.2.1")
+    assert_eq("mapped6 UI: ipv4_mapped row", mapped_text, "::ffff:192.0.2.1")
+    assert_eq("mapped6 UI: nat64 row",       nat64_text,  "64:ff9b::c000:201")
+    assert_eq("mapped6 UI: nat64_prefix row", prefix_text, "64:ff9b::/96")
+    assert_eq("mapped6 UI: no error band",
+              await panel.locator(".error").count(), 0)
+
+    # Click each copy button (rows 0..2 — prefix row has no copy button)
+    await rows.nth(0).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    assert_eq("mapped6 UI: copy IPv4",
+              await page.evaluate("window.__lastClipboard"), "192.0.2.1")
+
+    await rows.nth(1).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    assert_eq("mapped6 UI: copy IPv4-mapped",
+              await page.evaluate("window.__lastClipboard"), "::ffff:192.0.2.1")
+
+    await rows.nth(2).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    assert_eq("mapped6 UI: copy NAT64",
+              await page.evaluate("window.__lastClipboard"), "64:ff9b::c000:201")
+
+    # Error path — non-/96 NAT64 prefix
+    await navigate(page, APP_URL + "?tab=ipv6&tool=mapped6")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#mapped6_input", "192.0.2.1")
+    # Open the advanced disclosure and supply a non-/96 prefix
+    await page.evaluate(
+        "document.querySelector(\"#panel-ipv6 .tool-panel[data-tool='mapped6'] details.slaac-advanced\").open = true"
+    )
+    await page.fill("#mapped6_nat64_prefix", "2001:db8::/64")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='mapped6'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='mapped6']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("mapped6 UI: error band on non-/96",
+                len(err_text) > 0, f"got: {err_text!r}")
+    assert_eq("mapped6 UI: no result rows on error",
+              await panel.locator(".zoneid-result__row").count(), 0)
+
+
 async def test_api_bulk(page: Page) -> None:
     section("API — bulk calculation")
     # Two valid IPv4 CIDRs
@@ -2660,6 +2979,64 @@ async def test_api_bulk(page: Page) -> None:
     assert_eq("api bulk: explicit type=ipv4 → 200", status6, 200)
     r6 = data6.get("data", {}).get("results", [{}])
     assert_eq("api bulk: explicit type=ipv4 item ok=true", r6[0].get("ok") if r6 else None, True)
+
+
+async def test_api_bulk_covers_new_ipv6_endpoints(page: Page) -> None:
+    section("API — bulk multi-op covers v3.3.0 + v3.4.0 IPv6 endpoints")
+    items = [
+        {"op": "range6",        "params": {"start": "2001:db8::", "end": "2001:db8::ff"}},
+        {"op": "supernet6",     "params": {"action": "find",
+                                            "cidrs": ["2001:db8:0::/48", "2001:db8:1::/48"]}},
+        {"op": "zone-id",       "params": {"input": "fe80::1%eth0"}},
+        {"op": "derive",        "params": {"mac": "00:11:22:33:44:55"}},
+        {"op": "slaac-privacy", "params": {"prefix": "2001:db8::/64",
+                                            "seed": "deadbeefcafef00d"}},
+        {"op": "rdns6",         "params": {"address": "2001:db8::1", "prefix": 64}},
+        {"op": "mapped6",       "params": {"input": "192.0.2.1"}},
+    ]
+    status, data = _api_post("bulk", {"items": items})
+    assert_eq("api bulk multi-op: HTTP 200", status, 200)
+    assert_eq("api bulk multi-op: ok=true", data.get("ok"), True)
+    results = data.get("data", {}).get("results", [])
+    assert_eq("api bulk multi-op: 7 results returned", len(results), 7)
+    expected_ops = ["range6", "supernet6", "zone-id", "derive",
+                    "slaac-privacy", "rdns6", "mapped6"]
+    for i, op in enumerate(expected_ops):
+        envelope = results[i] if i < len(results) else {}
+        assert_eq(f"api bulk multi-op: item[{i}] op={op}", envelope.get("op"), op)
+        assert_eq(f"api bulk multi-op: item[{i}] ok=true", envelope.get("ok"), True)
+    # Spot-check a couple of payloads to confirm the result fields land at the
+    # top level of the envelope (not nested under `data`).
+    rdns = results[5]
+    assert_true("api bulk multi-op: rdns6 envelope has arpa", "arpa" in rdns)
+    mapped = results[6]
+    assert_eq("api bulk multi-op: mapped6 ipv4", mapped.get("ipv4"), "192.0.2.1")
+    assert_eq("api bulk multi-op: mapped6 ipv4_mapped",
+              mapped.get("ipv4_mapped"), "::ffff:192.0.2.1")
+
+    # Mixed valid + invalid — request still succeeds; bad item carries ok=false.
+    status_mix, data_mix = _api_post("bulk", {"items": [
+        {"op": "range6", "params": {"start": "2001:db8::", "end": "2001:db8::ff"}},
+        {"op": "rdns6",  "params": {"address": "not-an-address"}},
+    ]})
+    assert_eq("api bulk multi-op mixed: HTTP 200", status_mix, 200)
+    results_mix = data_mix.get("data", {}).get("results", [])
+    assert_eq("api bulk multi-op mixed: 2 results", len(results_mix), 2)
+    assert_eq("api bulk multi-op mixed: item[0] ok=true",
+              results_mix[0].get("ok") if results_mix else None, True)
+    assert_eq("api bulk multi-op mixed: item[1] ok=false",
+              results_mix[1].get("ok") if len(results_mix) > 1 else None, False)
+    assert_true("api bulk multi-op mixed: item[1] has error",
+                "error" in results_mix[1] if len(results_mix) > 1 else False)
+
+    # Unsupported op slug → ok=false envelope, request still 200.
+    status_bad, data_bad = _api_post("bulk", {"items": [
+        {"op": "flux-capacitor", "params": {}},
+    ]})
+    assert_eq("api bulk multi-op unsupported: HTTP 200", status_bad, 200)
+    bad_results = data_bad.get("data", {}).get("results", [])
+    assert_eq("api bulk multi-op unsupported: ok=false",
+              bad_results[0].get("ok") if bad_results else None, False)
 
 
 async def test_vlsm_session_ttl_notice(page: Page) -> None:
@@ -5365,6 +5742,146 @@ async def test_api_slaac(page: Page) -> None:
                     str(err_msg2 or ""), "16")
 
 
+async def test_a11y_ipv6_drawers(page: Page) -> None:
+    """v3.4.0 (T11) — a11y audit for the 5 IPv6 tool drawers.
+
+    Asserts, per drawer:
+      1. Every form input has an associated <label> or aria-label.
+      2. Every help_bubble() icon is keyboard-focusable (tabindex="0").
+      3. Every copy_button() has aria-label starting with 'Copy'.
+      4. Any <details> Advanced disclosure uses native <summary>.
+      5. Submit buttons have an accessible name.
+
+    Any gap surfaced here is a real a11y bug — fix the markup, not the test.
+    """
+    section("v3.4.0 — a11y audit for the 5 new IPv6 drawers")
+
+    drawers = ["zoneid", "derive", "slaac", "rdns6", "mapped6"]
+
+    for slug in drawers:
+        await navigate(page, APP_URL + f"?tab=ipv6&tool={slug}")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        drawer = page.locator(f"#panel-ipv6 .tool-panel[data-tool='{slug}']")
+        assert_eq(f"a11y {slug}: panel rendered", await drawer.count(), 1)
+
+        # 1. Every input has a label or aria-label
+        inputs = drawer.locator(
+            "input[type=text], input[type=number], input[type=tel], input:not([type])"
+        )
+        n_inputs = await inputs.count()
+        assert_true(
+            f"a11y {slug}: at least one form input present",
+            n_inputs >= 1,
+            f"got: {n_inputs}",
+        )
+        for i in range(n_inputs):
+            el = inputs.nth(i)
+            has_label = await el.evaluate(
+                "(e) => !!(e.labels && e.labels.length) "
+                "|| !!e.getAttribute('aria-label') "
+                "|| !!e.closest('label')"
+            )
+            ident = await el.get_attribute("id") or await el.get_attribute("name") or f"#{i}"
+            assert_true(
+                f"a11y {slug}: input '{ident}' has label/aria-label",
+                bool(has_label),
+                f"got has_label={has_label!r}",
+            )
+
+        # 2. Every help bubble icon is keyboard-focusable (tabindex="0")
+        bubbles = drawer.locator(".help-bubble-icon")
+        n_bubbles = await bubbles.count()
+        for i in range(n_bubbles):
+            ti = await bubbles.nth(i).get_attribute("tabindex")
+            assert_eq(
+                f"a11y {slug}: help-bubble[{i}] tabindex='0'",
+                ti,
+                "0",
+            )
+            role = await bubbles.nth(i).get_attribute("role")
+            assert_eq(
+                f"a11y {slug}: help-bubble[{i}] role='button'",
+                role,
+                "button",
+            )
+
+        # 3. Every copy button has aria-label beginning with 'Copy'
+        copies = drawer.locator("button.subnet-copy")
+        n_copies = await copies.count()
+        for i in range(n_copies):
+            al = await copies.nth(i).get_attribute("aria-label") or ""
+            assert_true(
+                f"a11y {slug}: copy-button[{i}] aria-label starts with 'Copy'",
+                al.startswith("Copy"),
+                f"got: {al!r}",
+            )
+
+        # 4. If a <details> Advanced disclosure exists, it must use native
+        # <summary> (keyboard-operable by default).
+        advanced_summaries = drawer.locator("details > summary")
+        n_adv = await advanced_summaries.count()
+        for i in range(n_adv):
+            tag = await advanced_summaries.nth(i).evaluate("(e) => e.tagName")
+            assert_eq(
+                f"a11y {slug}: advanced disclosure[{i}] uses <summary>",
+                tag,
+                "SUMMARY",
+            )
+
+        # 5. Submit button has accessible name (visible text or aria-label)
+        submits = drawer.locator("button[type=submit]")
+        n_submits = await submits.count()
+        assert_true(
+            f"a11y {slug}: at least one submit button",
+            n_submits >= 1,
+            f"got: {n_submits}",
+        )
+        for i in range(n_submits):
+            name = await submits.nth(i).evaluate(
+                "(e) => (e.textContent || '').trim() || e.getAttribute('aria-label') || ''"
+            )
+            assert_true(
+                f"a11y {slug}: submit-button[{i}] has accessible name",
+                bool(name),
+                f"got: {name!r}",
+            )
+
+    # Result-state copy-button audit: drive each drawer that emits copy
+    # buttons through a successful submission and verify every rendered
+    # copy_button() carries an aria-label starting with 'Copy'. (Empty-state
+    # panels rarely contain copy buttons, so the loop above can't exercise
+    # this assertion on its own.)
+    result_cases = [
+        ("derive",  "derive_mac",     "00:24:b9:7e:ab:cd"),
+        ("slaac",   "slaac_prefix",   "2001:db8:1:2::/64"),
+        ("rdns6",   "rdns6_address",  "2001:db8::1"),
+        ("mapped6", "mapped6_input",  "192.0.2.1"),
+    ]
+    for slug, input_name, value in result_cases:
+        await navigate(page, APP_URL + f"?tab=ipv6&tool={slug}")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        await page.fill(f"input[name='{input_name}']", value)
+        await page.click(
+            f"#panel-ipv6 .tool-panel[data-tool='{slug}'] button.splitter-btn"
+        )
+        await page.wait_for_load_state("load")
+        drawer = page.locator(f"#panel-ipv6 .tool-panel[data-tool='{slug}']")
+        copies = drawer.locator("button.subnet-copy")
+        n_copies = await copies.count()
+        assert_true(
+            f"a11y {slug}: result state renders >=1 copy button",
+            n_copies >= 1,
+            f"got: {n_copies}",
+        )
+        for i in range(n_copies):
+            al = await copies.nth(i).get_attribute("aria-label") or ""
+            assert_true(
+                f"a11y {slug}: copy-button[{i}] aria-label starts with 'Copy'",
+                al.startswith("Copy"),
+                f"got: {al!r}",
+            )
+
+
 async def test_api_range(page: Page) -> None:
     section("API — POST /api/v1/range/ipv4")
     status, data = _api_post("range/ipv4", {"start": "10.0.0.0", "end": "10.0.0.255"})
@@ -7149,6 +7666,9 @@ async def main() -> None:
             await test_ipv6_errors(page)
             await test_ipv6_splitter(page)
             await test_ipv6_shareable_url(page)
+            await test_per_tool_routes_equivalence(page)
+            await test_legacy_query_param_url_no_redirect(page)
+            await test_canonical_route_with_query_params(page)
             await test_iframe(page)
             await test_theme_toggle(page)
             await test_tab_switch(page)
@@ -7235,6 +7755,7 @@ async def main() -> None:
             await test_api_openapi_spec(page)
             await test_api_rdns(page)
             await test_api_bulk(page)
+            await test_api_bulk_covers_new_ipv6_endpoints(page)
             await test_vlsm_session_ttl_notice(page)
             await test_session_forms_spacing(page)
             await test_vlsm6_session_save_load(page)
@@ -7298,6 +7819,11 @@ async def main() -> None:
             await test_ipv6_slaac_copy_buttons(page)
             await test_ipv6_slaac_shareable_url(page)
             await test_api_slaac(page)
+            await test_ipv6_rdns6_ui(page)
+            await test_api_rdns6(page)
+            await test_ipv6_mapped6_ui(page)
+            await test_api_mapped6(page)
+            await test_a11y_ipv6_drawers(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)
