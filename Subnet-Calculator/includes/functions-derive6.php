@@ -2,91 +2,23 @@
 
 declare(strict_types=1);
 
-// ─── IPv6 derivation helpers (v3.3.0) ────────────────────────────────────────
+// ─── MAC → IPv6 derivation helpers (v3.3.0) ──────────────────────────────────
 //
-// Pure functions that derive metadata from a raw IPv6 address string. Sibling
-// of functions-supernet6.php / functions-range6.php — same style: typed,
+// Slimmed in v3.4.0 (carry-forward item #1): zone-ID parsing moved to
+// functions-zone6.php and SLAAC privacy moved to functions-slaac6.php.
+// This module retains the MAC-derived address surface only.
+//
+// Pure functions that derive metadata from a 48-bit MAC. Sibling of
+// functions-supernet6.php / functions-range6.php — same style: typed,
 // GMP-backed where 128-bit math is needed, throws InvalidArgumentException on
 // validation failure so handlers can render the message verbatim.
 //
-// `parse_zone_id()` parses an `address[%zone]` string per RFC 4007 section 11.
-// Output address is always normalised via inet_pton/inet_ntop so compressed
-// and expanded forms canonicalise identically. Zone identifiers are accepted
-// for any IPv6 address but only meaningful on link-local (fe80::/10); a
-// warning string is returned when a zone is supplied on a non-link-local
-// address.
-
-/**
- * Parse an IPv6 `address[%zone]` string into address + zone components,
- * detect whether the address is link-local (fe80::/10), and surface a
- * warning when a zone identifier is attached to a non-link-local address.
- *
- * @return array{address: string, zone_id: string|null, is_link_local: bool, warning: string|null}
- *
- * @throws \InvalidArgumentException on empty input, invalid IPv6 address, or
- *                                   malformed zone identifier.
- */
-function parse_zone_id(string $input): array
-{
-    $trimmed = trim($input);
-    if ($trimmed === '') {
-        throw new \InvalidArgumentException('Enter an address (with optional %zone).');
-    }
-
-    $pct = strpos($trimmed, '%');
-    if ($pct === false) {
-        $addr_part = $trimmed;
-        $zone_part = null;
-    } else {
-        $addr_part = substr($trimmed, 0, $pct);
-        $zone_part = substr($trimmed, $pct + 1);
-        if ($zone_part === '' || preg_match('/^[A-Za-z0-9_-]{1,32}$/', $zone_part) !== 1) {
-            throw new \InvalidArgumentException(
-                'Zone identifier must be 1–32 characters using letters, digits, "_" or "-".'
-            );
-        }
-    }
-
-    $bin = @inet_pton($addr_part);
-    if ($bin === false || strlen($bin) !== 16) {
-        throw new \InvalidArgumentException('Invalid IPv6 address: ' . $addr_part);
-    }
-
-    $canonical = inet_ntop($bin);
-    if ($canonical === false) {
-        throw new \InvalidArgumentException('Invalid IPv6 address: ' . $addr_part);
-    }
-
-    // Link-local detection: top 10 bits == fe80 (1111 1110 10xx xxxx).
-    // Mask the GMP value with /10 and compare to fe80::.
-    $addr_gmp = ipv6_to_gmp($canonical);
-    $mask10   = supernet6_prefix_mask(10);
-    $ll_net   = ipv6_to_gmp('fe80::');
-    $is_link_local = (gmp_cmp(gmp_and($addr_gmp, $mask10), $ll_net) === 0);
-
-    $warning = null;
-    if ($zone_part !== null && !$is_link_local) {
-        $warning = 'Zone identifiers are only meaningful on link-local (fe80::/10) addresses; '
-            . 'the zone will be ignored by most operating systems.';
-    }
-
-    return [
-        'address'       => $canonical,
-        'zone_id'       => $zone_part,
-        'is_link_local' => $is_link_local,
-        'warning'       => $warning,
-    ];
-}
-
-// ─── MAC → IPv6 derivation helpers (v3.3.0 Task 4) ───────────────────────────
-//
-// Derive EUI-64 interface IDs, link-local addresses, and solicited-node
-// multicast addresses from a 48-bit MAC. Per RFC 4291 §2.5.1 the EUI-64 is
-// formed by inserting `ff:fe` between the third and fourth octets and then
-// flipping the universal/local bit (bit 1 of the first octet). Link-local is
-// `fe80::` + EUI-64; solicited-node is `ff02::1:ff` + low 24 bits of the
-// unicast address. All outputs are canonicalised via inet_pton/inet_ntop so
-// compressed and expanded inputs render identically.
+// Per RFC 4291 §2.5.1 the EUI-64 is formed by inserting `ff:fe` between the
+// third and fourth octets and then flipping the universal/local bit (bit 1 of
+// the first octet). Link-local is `fe80::` + EUI-64; solicited-node is
+// `ff02::1:ff` + low 24 bits of the unicast address. All outputs are
+// canonicalised via inet_pton/inet_ntop so compressed and expanded inputs
+// render identically.
 
 /**
  * Strip separators, validate, and lowercase a MAC address string. Accepts
@@ -243,119 +175,5 @@ function derive_from_mac(string $mac): array
         'link_local'     => $link_local,
         'solicited_node' => $solicited_node,
         'warning'        => $warning,
-    ];
-}
-
-// ─── SLAAC privacy addresses (RFC 8981 / v3.3.0 Task 5) ──────────────────────
-//
-// Generate a stable-but-pseudo-random 64-bit interface identifier and combine
-// it with a /64 prefix. Per RFC 8981 §3.3.2 the U/L bit (bit 6 of byte 8 of
-// the address, mask 0x02) MUST be cleared so the address is recognisably a
-// privacy IID rather than a Modified EUI-64. Two modes are supported:
-//
-//   * Unseeded — `random_bytes(8)` provides cryptographically strong entropy.
-//   * Seeded — caller supplies a 16-hex-char string for reproducible output
-//              (intended for documentation, regression tests, and operator
-//              "show me what this prefix would yield" workflows).
-//
-// `random_bytes` failures are intentionally NOT caught: per the spec, falling
-// back to `mt_rand` would silently weaken the privacy guarantee.
-
-/**
- * Generate a SLAAC privacy address (RFC 8981) by combining a /64 prefix with
- * either a caller-supplied or randomly generated 64-bit interface identifier.
- * The U/L bit on the IID is cleared per RFC 8981 §3.3.2.
- *
- * @param string      $prefix Canonical or compressed IPv6 /64 prefix
- *                            (e.g. `2001:db8:1:2::/64`). Host bits in the
- *                            address portion are ignored / zeroed.
- * @param string|null $seed   Optional 16 hexadecimal characters; if omitted a
- *                            cryptographically random seed is generated via
- *                            `random_bytes(8)`.
- *
- * @return array{
- *     prefix: string,
- *     address: string,
- *     interface_id: string,
- *     seed_used: string,
- *     seed_was_provided: bool
- * }
- *
- * @throws \InvalidArgumentException on empty/invalid prefix, non-/64 prefix,
- *                                   or malformed seed.
- */
-function slaac_privacy_address(string $prefix, ?string $seed = null): array
-{
-    $trimmed = trim($prefix);
-    if ($trimmed === '') {
-        throw new \InvalidArgumentException('Enter a /64 IPv6 prefix.');
-    }
-    if (!str_contains($trimmed, '/')) {
-        throw new \InvalidArgumentException('Invalid IPv6 prefix: ' . $prefix);
-    }
-    [$addr_part, $len_part] = explode('/', $trimmed, 2);
-    if ($len_part !== '64') {
-        throw new \InvalidArgumentException('SLAAC privacy addresses require a /64 prefix.');
-    }
-
-    $prefix_bin = @inet_pton($addr_part);
-    if ($prefix_bin === false || strlen($prefix_bin) !== 16) {
-        throw new \InvalidArgumentException('Invalid IPv6 prefix: ' . $prefix);
-    }
-
-    // Network-canonicalize: zero out host bits (defensive; we only consume the
-    // first 8 bytes anyway).
-    $network_bin = substr($prefix_bin, 0, 8) . str_repeat("\0", 8);
-    $canonical_addr = inet_ntop($network_bin);
-    if ($canonical_addr === false) {
-        throw new \InvalidArgumentException('Invalid IPv6 prefix: ' . $prefix);
-    }
-    $canonical_prefix = $canonical_addr . '/64';
-
-    if ($seed === null) {
-        $seed_bytes        = random_bytes(8);
-        $seed_used         = bin2hex($seed_bytes);
-        $seed_was_provided = false;
-    } else {
-        $seed_lc = strtolower($seed);
-        if (preg_match('/^[0-9a-f]{16}$/', $seed_lc) !== 1) {
-            throw new \InvalidArgumentException('Seed must be 16 hexadecimal characters.');
-        }
-        $bin_seed = hex2bin($seed_lc);
-        if ($bin_seed === false || strlen($bin_seed) !== 8) {
-            // Unreachable given the regex above, but guard for static analysis.
-            throw new \InvalidArgumentException('Seed must be 16 hexadecimal characters.');
-        }
-        $seed_bytes        = $bin_seed;
-        $seed_used         = $seed_lc;
-        $seed_was_provided = true;
-    }
-
-    // Clear the U/L bit on the first byte of the interface ID (mask 0x02,
-    // bit 6 in network byte order per RFC 4291 §2.5.1). EUI-64 sets it;
-    // SLAAC privacy clears it.
-    $seed_bytes[0] = chr(ord($seed_bytes[0]) & ~0x02);
-
-    $addr_bytes = substr($prefix_bin, 0, 8) . $seed_bytes;
-    $address    = inet_ntop($addr_bytes);
-    if ($address === false) {
-        // Unreachable — 16-byte input always renders.
-        throw new \InvalidArgumentException('Failed to assemble SLAAC privacy address.');
-    }
-
-    // interface_id rendered as four colon-separated hextets from the modified
-    // seed bytes (lowercase, no zero-suppression).
-    $iid_hex = bin2hex($seed_bytes);
-    $interface_id = substr($iid_hex, 0, 4) . ':'
-        . substr($iid_hex, 4, 4) . ':'
-        . substr($iid_hex, 8, 4) . ':'
-        . substr($iid_hex, 12, 4);
-
-    return [
-        'prefix'            => $canonical_prefix,
-        'address'           => $address,
-        'interface_id'      => $interface_id,
-        'seed_used'         => $seed_used,
-        'seed_was_provided' => $seed_was_provided,
     ];
 }
