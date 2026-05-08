@@ -6,7 +6,33 @@ if ($method !== 'POST') {
     json_err('Method not allowed.', 405);
 }
 
-$body  = api_body();
+$body = api_body();
+
+// ── Multi-op mode (v3.4.0) ───────────────────────────────────────────────────
+//
+// When the request body contains an `items[]` array, dispatch each item to
+// its corresponding op handler (range6, supernet6, zone-id, derive,
+// slaac-privacy, rdns6, mapped6). Per-item errors are returned as
+// `{op, ok: false, error}` envelopes; the request itself succeeds with HTTP
+// 200 as long as the top-level shape is valid.
+if (array_key_exists('items', $body)) {
+    $items = $body['items'];
+    if (!is_array($items) || count($items) === 0) {
+        json_err('Field "items" must be a non-empty array.');
+    }
+    if (count($items) > 50) {
+        json_err('Maximum 50 items per request.');
+    }
+
+    $gmp_loaded = extension_loaded('gmp');
+    if (!$gmp_loaded) {
+        json_err('The /bulk multi-op mode requires the PHP GMP extension.', 503);
+    }
+
+    json_ok(['results' => bulk_dispatch_ops(array_values($items))]);
+}
+
+// ── Legacy single-op mode (CIDR resolution) ──────────────────────────────────
 $cidrs = $body['cidrs'] ?? [];
 $type  = trim((string)($body['type'] ?? 'auto'));
 
