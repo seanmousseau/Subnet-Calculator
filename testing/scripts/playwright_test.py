@@ -2981,6 +2981,64 @@ async def test_api_bulk(page: Page) -> None:
     assert_eq("api bulk: explicit type=ipv4 item ok=true", r6[0].get("ok") if r6 else None, True)
 
 
+async def test_api_bulk_covers_new_ipv6_endpoints(page: Page) -> None:
+    section("API — bulk multi-op covers v3.3.0 + v3.4.0 IPv6 endpoints")
+    items = [
+        {"op": "range6",        "params": {"start": "2001:db8::", "end": "2001:db8::ff"}},
+        {"op": "supernet6",     "params": {"action": "find",
+                                            "cidrs": ["2001:db8:0::/48", "2001:db8:1::/48"]}},
+        {"op": "zone-id",       "params": {"input": "fe80::1%eth0"}},
+        {"op": "derive",        "params": {"mac": "00:11:22:33:44:55"}},
+        {"op": "slaac-privacy", "params": {"prefix": "2001:db8::/64",
+                                            "seed": "deadbeefcafef00d"}},
+        {"op": "rdns6",         "params": {"address": "2001:db8::1", "prefix": 64}},
+        {"op": "mapped6",       "params": {"input": "192.0.2.1"}},
+    ]
+    status, data = _api_post("bulk", {"items": items})
+    assert_eq("api bulk multi-op: HTTP 200", status, 200)
+    assert_eq("api bulk multi-op: ok=true", data.get("ok"), True)
+    results = data.get("data", {}).get("results", [])
+    assert_eq("api bulk multi-op: 7 results returned", len(results), 7)
+    expected_ops = ["range6", "supernet6", "zone-id", "derive",
+                    "slaac-privacy", "rdns6", "mapped6"]
+    for i, op in enumerate(expected_ops):
+        envelope = results[i] if i < len(results) else {}
+        assert_eq(f"api bulk multi-op: item[{i}] op={op}", envelope.get("op"), op)
+        assert_eq(f"api bulk multi-op: item[{i}] ok=true", envelope.get("ok"), True)
+    # Spot-check a couple of payloads to confirm the result fields land at the
+    # top level of the envelope (not nested under `data`).
+    rdns = results[5]
+    assert_true("api bulk multi-op: rdns6 envelope has arpa", "arpa" in rdns)
+    mapped = results[6]
+    assert_eq("api bulk multi-op: mapped6 ipv4", mapped.get("ipv4"), "192.0.2.1")
+    assert_eq("api bulk multi-op: mapped6 ipv4_mapped",
+              mapped.get("ipv4_mapped"), "::ffff:192.0.2.1")
+
+    # Mixed valid + invalid — request still succeeds; bad item carries ok=false.
+    status_mix, data_mix = _api_post("bulk", {"items": [
+        {"op": "range6", "params": {"start": "2001:db8::", "end": "2001:db8::ff"}},
+        {"op": "rdns6",  "params": {"address": "not-an-address"}},
+    ]})
+    assert_eq("api bulk multi-op mixed: HTTP 200", status_mix, 200)
+    results_mix = data_mix.get("data", {}).get("results", [])
+    assert_eq("api bulk multi-op mixed: 2 results", len(results_mix), 2)
+    assert_eq("api bulk multi-op mixed: item[0] ok=true",
+              results_mix[0].get("ok") if results_mix else None, True)
+    assert_eq("api bulk multi-op mixed: item[1] ok=false",
+              results_mix[1].get("ok") if len(results_mix) > 1 else None, False)
+    assert_true("api bulk multi-op mixed: item[1] has error",
+                "error" in results_mix[1] if len(results_mix) > 1 else False)
+
+    # Unsupported op slug → ok=false envelope, request still 200.
+    status_bad, data_bad = _api_post("bulk", {"items": [
+        {"op": "flux-capacitor", "params": {}},
+    ]})
+    assert_eq("api bulk multi-op unsupported: HTTP 200", status_bad, 200)
+    bad_results = data_bad.get("data", {}).get("results", [])
+    assert_eq("api bulk multi-op unsupported: ok=false",
+              bad_results[0].get("ok") if bad_results else None, False)
+
+
 async def test_vlsm_session_ttl_notice(page: Page) -> None:
     section("VLSM session TTL notice")
     await navigate(page, APP_URL)
@@ -7557,6 +7615,7 @@ async def main() -> None:
             await test_api_openapi_spec(page)
             await test_api_rdns(page)
             await test_api_bulk(page)
+            await test_api_bulk_covers_new_ipv6_endpoints(page)
             await test_vlsm_session_ttl_notice(page)
             await test_session_forms_spacing(page)
             await test_vlsm6_session_save_load(page)

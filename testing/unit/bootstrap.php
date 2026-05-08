@@ -27,3 +27,4 @@ require $base . 'functions-range6.php';
 require $base . 'functions-tree.php';
 require $base . 'functions-tree-diff.php';
 require $base . 'functions-tree-presets.php';
+require $base . 'functions-bulk.php';

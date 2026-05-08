@@ -1871,28 +1871,72 @@ paths:
       tags: [Bulk]
       summary: Calculate multiple subnets in a single request
       description: |
-        Accepts up to 50 CIDR inputs and returns a per-item result array.
-        Individual failures do not abort the request; each item carries its own ok/error status.
-        IPv6 items require the PHP GMP extension.
+        Two request modes are supported, selected by the body shape:
+
+        - **Legacy CIDR mode** — body contains `cidrs[]`. Resolves each CIDR
+          via /ipv4 or /ipv6 logic. Per-item envelope: `{input, ok, data?, error?}`.
+        - **Multi-op mode (v3.4.0)** — body contains `items[]`. Each item
+          has its own `op` slug and `params` payload. Supported ops:
+          `range6`, `supernet6`, `zone-id`, `derive`, `slaac-privacy`,
+          `rdns6`, `mapped6`. Per-item envelope: `{op, ok, error?, ...result}`
+          where `...result` matches the standalone endpoint's success body.
+
+        Up to 50 entries per request. Individual failures do not abort the
+        request — each item carries its own ok/error status. IPv6 ops
+        require the PHP GMP extension.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [cidrs]
-              properties:
-                cidrs:
-                  type: array
-                  minItems: 1
-                  maxItems: 50
-                  items: { type: string }
-                  example: ["10.0.0.0/24", "2001:db8::/32"]
-                type:
-                  type: string
-                  enum: [auto, ipv4, ipv6]
-                  default: auto
-                  description: Force all items to a specific IP version. `auto` detects per-item.
+              oneOf:
+                - type: object
+                  required: [cidrs]
+                  properties:
+                    cidrs:
+                      type: array
+                      minItems: 1
+                      maxItems: 50
+                      items: { type: string }
+                      example: ["10.0.0.0/24", "2001:db8::/32"]
+                    type:
+                      type: string
+                      enum: [auto, ipv4, ipv6]
+                      default: auto
+                      description: Force all items to a specific IP version. `auto` detects per-item.
+                - type: object
+                  required: [items]
+                  properties:
+                    items:
+                      type: array
+                      minItems: 1
+                      maxItems: 50
+                      items:
+                        type: object
+                        required: [op, params]
+                        properties:
+                          op:
+                            type: string
+                            enum: [range6, supernet6, zone-id, derive, slaac-privacy, rdns6, mapped6]
+                          params:
+                            type: object
+                            description: Per-op parameters; shape matches the corresponding standalone endpoint's request body.
+                  example:
+                    items:
+                      - op: range6
+                        params: { start: "2001:db8::", end: "2001:db8::ff" }
+                      - op: supernet6
+                        params: { action: find, cidrs: ["2001:db8:0::/48", "2001:db8:1::/48"] }
+                      - op: zone-id
+                        params: { input: "fe80::1%eth0" }
+                      - op: derive
+                        params: { mac: "00:11:22:33:44:55" }
+                      - op: slaac-privacy
+                        params: { prefix: "2001:db8::/64", seed: "deadbeefcafef00d" }
+                      - op: rdns6
+                        params: { address: "2001:db8::1", prefix: 64 }
+                      - op: mapped6
+                        params: { input: "192.0.2.1" }
       responses:
         "200":
           description: Per-item calculation results
@@ -1909,13 +1953,18 @@ paths:
                         properties:
                           results:
                             type: array
+                            description: |
+                              In legacy `cidrs[]` mode, each entry is `{input, ok, data?, error?}`.
+                              In multi-op `items[]` mode, each entry is
+                              `{op, ok, error?, ...result}` where `...result` matches the
+                              corresponding standalone endpoint's success body.
                             items:
                               type: object
-                              required: [input, ok]
                               properties:
-                                input: { type: string }
+                                input: { type: string, description: "Present in legacy cidrs[] mode." }
+                                op:    { type: string, description: "Present in multi-op items[] mode." }
                                 ok:    { type: boolean }
-                                data:  { description: "Present when ok is true. Shape matches /ipv4 or /ipv6 response data." }
+                                data:  { description: "Legacy cidrs[] mode — present when ok is true. Shape matches /ipv4 or /ipv6 response data." }
                                 error: { type: string, description: "Present when ok is false." }
               example:
                 ok: true

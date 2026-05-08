@@ -39,6 +39,7 @@ require $base . 'functions-tree-presets.php';
 require $base . 'functions-lookup.php';
 require $base . 'functions-diff.php';
 require $base . 'functions-apikeys.php';
+require $base . 'functions-bulk.php';
 require $base . 'functions-admin-auth.php';
 
 header('Content-Type: application/json; charset=utf-8');
