@@ -914,6 +914,19 @@
         .help-bubble:hover .help-bubble-text,
         .help-bubble:focus-within .help-bubble-text { visibility: visible; opacity: 100%; }
 
+        /* v3.4.0 (T11) — visible keyboard focus ring for the help-bubble icon
+         * itself. The icon is focusable (tabindex="0", role="button") via
+         * help_bubble(); without an explicit :focus-visible style, sighted
+         * keyboard users get no indication of focus on the icon. The parent
+         * :focus-within rule above already reveals the tooltip on focus —
+         * this rule adds the matching focus ring so the focus location is
+         * visible even before the tooltip animates in. */
+        .help-bubble-icon:focus-visible {
+            outline: 2px solid var(--color-accent);
+            outline-offset: 2px;
+            border-radius: 50%;
+        }
+
         /* #205: right-edge overflow fix — flip alignment when near viewport edge */
         .bubble-right-edge .help-bubble-text {
             left: auto;
@@ -1146,6 +1159,16 @@
         }
 
         .slaac-advanced > summary::-webkit-details-marker { display: none; }
+
+        /* v3.4.0 (T11) — visible keyboard focus ring for the Advanced
+         * disclosure summary. `list-style: none` removes the default marker
+         * but the browser's default summary focus ring is inconsistent across
+         * engines; this gives a predictable accent outline on keyboard focus. */
+        .slaac-advanced > summary:focus-visible {
+            outline: 2px solid var(--color-accent);
+            outline-offset: 2px;
+            border-radius: 4px;
+        }
 
         .slaac-advanced > summary::before {
             content: "\25B6"; /* right-pointing triangle */
