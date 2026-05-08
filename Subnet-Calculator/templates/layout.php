@@ -230,10 +230,10 @@ if ($i < 3) {
         if ($split_result !== null || $split_error !== null) { $open_tool_ipv4 = 'split'; }
         elseif (!empty($supernet)) { $open_tool_ipv4 = 'supernet'; }
         elseif (!empty($range)) { $open_tool_ipv4 = 'range'; }
-        elseif ($tree_result !== null || $tree_error !== null) { $open_tool_ipv4 = 'tree'; }
-        elseif ($wildcard_result !== null || $wildcard_error !== null) { $open_tool_ipv4 = 'wildcard'; }
-        elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'lookup'; }
-        elseif (($diff_result !== null || $diff_error !== null) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'diff'; }
+        elseif (!empty($tree)) { $open_tool_ipv4 = 'tree'; }
+        elseif (!empty($wildcard)) { $open_tool_ipv4 = 'wildcard'; }
+        elseif (!empty($lookup) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'lookup'; }
+        elseif (!empty($diff) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'diff'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv4 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv4) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split" aria-expanded="false">Split Subnet</button>
@@ -402,10 +402,10 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Build Tree</button>
                         </div>
                     </form>
-                    <?php if ($tree_error) : ?>
-                        <div class="error"><?= htmlspecialchars($tree_error) ?></div>
-                    <?php elseif ($tree_result !== null) : ?>
-                        <?php $_tree_label = 'Tree: ' . (string)($tree_result['cidr'] ?? $tree_parent); ?>
+                    <?php if (!empty($tree['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($tree['error']) ?></div>
+                    <?php elseif (isset($tree['result'])) : ?>
+                        <?php $_tree_label = 'Tree: ' . (string)($tree['result']['cidr'] ?? $tree_parent); ?>
                         <div class="tree-view"
                              data-history-source="tree"
                              data-history-active="1"
@@ -437,7 +437,7 @@ if ($i < 3) {
                                     echo '</div>';
                                 }
                             }
-                            render_tree_node($tree_result);
+                            render_tree_node($tree['result']);
                             ?>
                         </div>
                     <?php endif; ?>
@@ -465,23 +465,23 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Convert</button>
                         </div>
                     </form>
-                    <?php if ($wildcard_error) : ?>
-                        <div class="error wildcard-error"><?= htmlspecialchars($wildcard_error) ?></div>
-                    <?php elseif ($wildcard_result !== null) : ?>
+                    <?php if (!empty($wildcard['error'])) : ?>
+                        <div class="error wildcard-error"><?= htmlspecialchars($wildcard['error']) ?></div>
+                    <?php elseif (isset($wildcard['result'])) : ?>
                         <?php $_wildcard_label = 'Wildcard: ' . $wildcard_input; ?>
                         <div class="split-list split-list--mt"
                              data-history-source="wildcard"
                              data-history-active="1"
                              data-history-label="<?= htmlspecialchars($_wildcard_label) ?>">
                             <div class="split-item" tabindex="0" role="button"
-                                 data-copy="<?= htmlspecialchars($wildcard_result['cidr']) ?>">
-                                <span class="split-subnet-text" id="wildcard-result-cidr">CIDR: <?= htmlspecialchars($wildcard_result['cidr']) ?></span>
-                                <?= copy_button($wildcard_result['cidr'], 'Copy CIDR ' . $wildcard_result['cidr']) ?>
+                                 data-copy="<?= htmlspecialchars($wildcard['result']['cidr']) ?>">
+                                <span class="split-subnet-text" id="wildcard-result-cidr">CIDR: <?= htmlspecialchars($wildcard['result']['cidr']) ?></span>
+                                <?= copy_button($wildcard['result']['cidr'], 'Copy CIDR ' . $wildcard['result']['cidr']) ?>
                             </div>
                             <div class="split-item" tabindex="0" role="button"
-                                 data-copy="<?= htmlspecialchars($wildcard_result['wildcard']) ?>">
-                                <span class="split-subnet-text" id="wildcard-result-mask">Wildcard: <?= htmlspecialchars($wildcard_result['wildcard']) ?></span>
-                                <?= copy_button($wildcard_result['wildcard'], 'Copy wildcard ' . $wildcard_result['wildcard']) ?>
+                                 data-copy="<?= htmlspecialchars($wildcard['result']['wildcard']) ?>">
+                                <span class="split-subnet-text" id="wildcard-result-mask">Wildcard: <?= htmlspecialchars($wildcard['result']['wildcard']) ?></span>
+                                <?= copy_button($wildcard['result']['wildcard'], 'Copy wildcard ' . $wildcard['result']['wildcard']) ?>
                             </div>
                         </div>
                     <?php endif; ?>
@@ -507,9 +507,9 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Lookup</button>
                         </div>
                     </form>
-                    <?php if ($active_tab === 'ipv4' && $lookup_error) : ?>
-                        <div class="error"><?= htmlspecialchars($lookup_error) ?></div>
-                    <?php elseif ($active_tab === 'ipv4' && $lookup_result !== null) : ?>
+                    <?php if ($active_tab === 'ipv4' && !empty($lookup['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($lookup['error']) ?></div>
+                    <?php elseif ($active_tab === 'ipv4' && isset($lookup['result'])) : ?>
                         <?php
                         $_lookup_ips_count   = count(array_filter(array_map('trim', explode("\n", $lookup_ips_input))));
                         $_lookup_cidrs_count = count(array_filter(array_map('trim', explode("\n", $lookup_cidrs_input))));
@@ -536,7 +536,7 @@ if ($i < 3) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php foreach ($lookup_result as $row) : ?>
+                                        <?php foreach ($lookup['result'] as $row) : ?>
                                             <tr>
                                                 <td class="lookup-table__cell" data-label="IP"><code><?= htmlspecialchars($row['ip']) ?></code></td>
                                                 <td class="lookup-table__cell" data-label="Deepest match">
@@ -558,7 +558,7 @@ if ($i < 3) {
                                     </tbody>
                                 </table>
                             </div>
-                            <div class="split-more"><?= count($lookup_result) ?> IP<?= count($lookup_result) !== 1 ? 's' : '' ?> looked up</div>
+                            <div class="split-more"><?= count($lookup['result']) ?> IP<?= count($lookup['result']) !== 1 ? 's' : '' ?> looked up</div>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -583,10 +583,10 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Diff</button>
                         </div>
                     </form>
-                    <?php if ($active_tab === 'ipv4' && $diff_error) : ?>
-                        <div class="error"><?= htmlspecialchars($diff_error) ?></div>
-                    <?php elseif ($active_tab === 'ipv4' && $diff_result !== null) : ?>
-                        <?php include __DIR__ . '/_diff_result.php'; ?>
+                    <?php if ($active_tab === 'ipv4' && !empty($diff['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($diff['error']) ?></div>
+                    <?php elseif ($active_tab === 'ipv4' && isset($diff['result'])) : ?>
+                        <?php $diff_result = $diff['result']; include __DIR__ . '/_diff_result.php'; ?>
                     <?php endif; ?>
                 </div>
             </div>
@@ -750,8 +750,8 @@ if ($i < 3) {
         elseif (!empty($zoneid)) { $open_tool_ipv6 = 'zoneid'; }
         elseif (!empty($derive)) { $open_tool_ipv6 = 'derive'; }
         elseif (!empty($slaac)) { $open_tool_ipv6 = 'slaac'; }
-        elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
-        elseif (($diff_result !== null || $diff_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'diff'; }
+        elseif (!empty($lookup) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
+        elseif (!empty($diff) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'diff'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv6 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv6) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split6" aria-expanded="false">Split Subnet</button>
@@ -1158,9 +1158,9 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Lookup</button>
                         </div>
                     </form>
-                    <?php if ($active_tab === 'ipv6' && $lookup_error) : ?>
-                        <div class="error"><?= htmlspecialchars($lookup_error) ?></div>
-                    <?php elseif ($active_tab === 'ipv6' && $lookup_result !== null) : ?>
+                    <?php if ($active_tab === 'ipv6' && !empty($lookup['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($lookup['error']) ?></div>
+                    <?php elseif ($active_tab === 'ipv6' && isset($lookup['result'])) : ?>
                         <?php
                         $_lookup_ips_count6   = count(array_filter(array_map('trim', explode("\n", $lookup_ips_input))));
                         $_lookup_cidrs_count6 = count(array_filter(array_map('trim', explode("\n", $lookup_cidrs_input))));
@@ -1187,7 +1187,7 @@ if ($i < 3) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php foreach ($lookup_result as $row) : ?>
+                                        <?php foreach ($lookup['result'] as $row) : ?>
                                             <tr>
                                                 <td class="lookup-table__cell" data-label="IP"><code><?= htmlspecialchars($row['ip']) ?></code></td>
                                                 <td class="lookup-table__cell" data-label="Deepest match">
@@ -1209,7 +1209,7 @@ if ($i < 3) {
                                     </tbody>
                                 </table>
                             </div>
-                            <div class="split-more"><?= count($lookup_result) ?> IP<?= count($lookup_result) !== 1 ? 's' : '' ?> looked up</div>
+                            <div class="split-more"><?= count($lookup['result']) ?> IP<?= count($lookup['result']) !== 1 ? 's' : '' ?> looked up</div>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -1234,10 +1234,10 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Diff</button>
                         </div>
                     </form>
-                    <?php if ($active_tab === 'ipv6' && $diff_error) : ?>
-                        <div class="error"><?= htmlspecialchars($diff_error) ?></div>
-                    <?php elseif ($active_tab === 'ipv6' && $diff_result !== null) : ?>
-                        <?php include __DIR__ . '/_diff_result.php'; ?>
+                    <?php if ($active_tab === 'ipv6' && !empty($diff['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($diff['error']) ?></div>
+                    <?php elseif ($active_tab === 'ipv6' && isset($diff['result'])) : ?>
+                        <?php $diff_result = $diff['result']; include __DIR__ . '/_diff_result.php'; ?>
                     <?php endif; ?>
                 </div>
             </div>
@@ -1371,8 +1371,8 @@ if ($i < 3) {
         <?php
         $open_tool_vlsm = null;
         if ($session_save_id !== '' || $session_error !== null) { $open_tool_vlsm = 'session'; }
-        elseif ($overlap_result !== null || $overlap_error !== null) { $open_tool_vlsm = 'overlap'; }
-        elseif ($multi_overlap_result !== null || $multi_overlap_error !== null) { $open_tool_vlsm = 'multi'; }
+        elseif (!empty($overlap)) { $open_tool_vlsm = 'overlap'; }
+        elseif (!empty($multi_overlap)) { $open_tool_vlsm = 'multi'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_vlsm ? ' data-open-tool="' . htmlspecialchars($open_tool_vlsm) . '"' : '' ?>>
             <?php if ($session_enabled) : ?>
@@ -1449,9 +1449,9 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Check</button>
                         </div>
                     </form>
-                    <?php if ($overlap_error) : ?>
-                        <div class="error"><?= htmlspecialchars($overlap_error) ?></div>
-                    <?php elseif ($overlap_result !== null) : ?>
+                    <?php if (!empty($overlap['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($overlap['error']) ?></div>
+                    <?php elseif (isset($overlap['result'])) : ?>
                         <?php
                         $overlap_labels = [
                             'none'         => ['No overlap', 'overlap-none'],
@@ -1459,7 +1459,7 @@ if ($i < 3) {
                             'a_contains_b' => [$overlap_cidr_a . ' contains ' . $overlap_cidr_b, 'overlap-contains'],
                             'b_contains_a' => [$overlap_cidr_b . ' contains ' . $overlap_cidr_a, 'overlap-contains'],
                         ];
-                        [$label, $cls] = $overlap_labels[$overlap_result] ?? ['Unknown', ''];
+                        [$label, $cls] = $overlap_labels[$overlap['result']] ?? ['Unknown', ''];
                         ?>
                         <div class="overlap-result <?= htmlspecialchars($cls) ?>"><?= htmlspecialchars($label) ?></div>
                     <?php endif; ?>
@@ -1476,14 +1476,14 @@ if ($i < 3) {
                                   rows="4" autocomplete="off" spellcheck="false"><?= htmlspecialchars($multi_overlap_input) ?></textarea>
                         <button type="submit" class="splitter-btn">Check</button>
                     </form>
-                    <?php if ($multi_overlap_error) : ?>
-                        <div class="error"><?= htmlspecialchars($multi_overlap_error) ?></div>
-                    <?php elseif ($multi_overlap_result !== null) : ?>
-                        <?php if (count($multi_overlap_result) === 0) : ?>
+                    <?php if (!empty($multi_overlap['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($multi_overlap['error']) ?></div>
+                    <?php elseif (isset($multi_overlap['result'])) : ?>
+                        <?php if (count($multi_overlap['result']) === 0) : ?>
                             <div class="overlap-result overlap-none">No overlaps detected.</div>
                         <?php else : ?>
                             <ul class="multi-overlap-list">
-                                <?php foreach ($multi_overlap_result as $conflict) :
+                                <?php foreach ($multi_overlap['result'] as $conflict) :
                                     if ($conflict['relation'] === 'identical') {
                                         $rel_label = 'Identical';
                                     } elseif ($conflict['relation'] === 'a_contains_b') {
