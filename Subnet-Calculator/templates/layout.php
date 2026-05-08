@@ -227,7 +227,7 @@ if ($i < 3) {
 
         <?php
         $open_tool_ipv4 = null;
-        if ($split_result !== null || $split_error !== null) { $open_tool_ipv4 = 'split'; }
+        if (!empty($splitter)) { $open_tool_ipv4 = 'split'; }
         elseif (!empty($supernet)) { $open_tool_ipv4 = 'supernet'; }
         elseif (!empty($range)) { $open_tool_ipv4 = 'range'; }
         elseif (!empty($tree)) { $open_tool_ipv4 = 'tree'; }
@@ -264,26 +264,26 @@ if ($i < 3) {
                             <input type="text" name="split_prefix" class="splitter-input"
                                    placeholder="/25" value="<?= htmlspecialchars($input_split_prefix) ?>"
                                    autocomplete="off" spellcheck="false"
-                                   <?= $split_error ? 'aria-invalid="true" aria-describedby="split-error-ipv4"' : '' ?>>
+                                   <?= !empty($splitter['error']) ? 'aria-invalid="true" aria-describedby="split-error-ipv4"' : '' ?>>
                             <button type="submit" class="splitter-btn">Split</button>
                         </div>
                     </form>
-                    <?php if ($split_error) : ?>
-                        <div class="error" id="split-error-ipv4"><?= htmlspecialchars($split_error) ?></div>
-                    <?php elseif ($split_result && $split_result['showing'] > 0) : ?>
+                    <?php if (!empty($splitter['error'])) : ?>
+                        <div class="error" id="split-error-ipv4"><?= htmlspecialchars($splitter['error']) ?></div>
+                    <?php elseif (isset($splitter['result']) && $splitter['result']['showing'] > 0) : ?>
                         <div class="split-list" data-parent="<?= htmlspecialchars($result['cidr'] ?? '') ?>">
                             <button type="button" class="copy-all-btn" data-target="split">Copy All</button>
                             <button type="button" class="copy-all-btn copy-md-btn" data-target="split4">Copy as Markdown</button>
                             <button type="button" class="copy-all-btn copy-cisco-btn" data-target="split4">Copy as Cisco</button><?= help_bubble('copy-cisco-split4', 'Cisco output is generic IOS-style — one interface stanza per split subnet. Vendor-specific tweaks may be required.') ?>
                             <button type="button" class="ascii-export-btn">Export ASCII</button>
-                            <?php foreach ($split_result['subnets'] as $s) : ?>
+                            <?php foreach ($splitter['result']['subnets'] as $s) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
                                     <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
                                     <?= copy_button($s, 'Copy ' . $s) ?>
                                 </div>
                             <?php endforeach; ?>
-                            <?php if ($split_result['total'] > $split_result['showing']) : ?>
-                                <div class="split-more">+&nbsp;<?= format_number($split_result['total'] - $split_result['showing']) ?> more</div>
+                            <?php if ($splitter['result']['total'] > $splitter['result']['showing']) : ?>
+                                <div class="split-more">+&nbsp;<?= format_number($splitter['result']['total'] - $splitter['result']['showing']) ?> more</div>
                             <?php endif; ?>
                         </div>
                     <?php endif; ?>
@@ -743,7 +743,7 @@ if ($i < 3) {
 
         <?php
         $open_tool_ipv6 = null;
-        if ($split_result6 !== null || $split_error6 !== null) { $open_tool_ipv6 = 'split6'; }
+        if (!empty($splitter6)) { $open_tool_ipv6 = 'split6'; }
         elseif (!empty($ula)) { $open_tool_ipv6 = 'ula'; }
         elseif (!empty($range6)) { $open_tool_ipv6 = 'range6'; }
         elseif (!empty($supernet6)) { $open_tool_ipv6 = 'supernet6'; }
@@ -783,27 +783,27 @@ if ($i < 3) {
                             <input type="text" name="split_prefix6" class="splitter-input"
                                    placeholder="/65" value="<?= htmlspecialchars($input_split_prefix6) ?>"
                                    autocomplete="off" spellcheck="false"
-                                   <?= $split_error6 ? 'aria-invalid="true" aria-describedby="split-error-ipv6"' : '' ?>>
+                                   <?= !empty($splitter6['error']) ? 'aria-invalid="true" aria-describedby="split-error-ipv6"' : '' ?>>
                             <button type="submit" class="splitter-btn">Split</button>
                         </div>
                     </form>
-                    <?php if ($split_error6) : ?>
-                        <div class="error" id="split-error-ipv6"><?= htmlspecialchars($split_error6) ?></div>
-                    <?php elseif ($split_result6 && $split_result6['showing'] > 0) : ?>
+                    <?php if (!empty($splitter6['error'])) : ?>
+                        <div class="error" id="split-error-ipv6"><?= htmlspecialchars($splitter6['error']) ?></div>
+                    <?php elseif (isset($splitter6['result']) && $splitter6['result']['showing'] > 0) : ?>
                         <div class="split-list" data-parent="<?= htmlspecialchars($result6['network_cidr'] ?? '') ?>">
                             <button type="button" class="copy-all-btn" data-target="split">Copy All</button>
                             <button type="button" class="copy-all-btn copy-md-btn" data-target="split6">Copy as Markdown</button>
                             <button type="button" class="copy-all-btn copy-cisco-btn" data-target="split6">Copy as Cisco</button><?= help_bubble('copy-cisco-split6', 'Cisco output is generic IOS-style — one interface stanza per split IPv6 subnet using ipv6 address. Vendor-specific tweaks may be required.') ?>
                             <button type="button" class="ascii-export-btn">Export ASCII</button>
-                            <?php foreach ($split_result6['subnets'] as $s) : ?>
+                            <?php foreach ($splitter6['result']['subnets'] as $s) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
                                     <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
                                     <?= copy_button($s, 'Copy ' . $s) ?>
                                 </div>
                             <?php endforeach; ?>
                             <?php
-                                $total6   = $split_result6['total'];
-                                $showing6 = $split_result6['showing'];
+                                $total6   = $splitter6['result']['total'];
+                                $showing6 = $splitter6['result']['showing'];
                                 $has_more6 = is_numeric($total6) ? ($showing6 < (int)$total6) : true;
                                 $more_label6 = is_numeric($total6) ? format_number((int)$total6 - $showing6) . ' more' : $total6 . ' more';
                             ?>
@@ -1292,9 +1292,9 @@ if ($i < 3) {
                 <a href="?tab=vlsm" class="btn reset">Reset</a>
             </div>
         </form>
-        <?php if ($vlsm_error) : ?>
-            <div class="error"><?= htmlspecialchars($vlsm_error) ?></div>
-        <?php elseif ($vlsm_result !== null) : ?>
+        <?php if (!empty($vlsm['error'])) : ?>
+            <div class="error"><?= htmlspecialchars($vlsm['error']) ?></div>
+        <?php elseif (isset($vlsm['result'])) : ?>
             <div class="vlsm-results">
                 <p class="vlsm-sort-note">Results sorted largest-first for efficient allocation.<?= help_bubble('vlsm-sort', 'Subnets are allocated from largest to smallest so that larger blocks can be placed at aligned boundaries without wasting address space.') ?></p>
                 <table class="vlsm-table">
@@ -1308,7 +1308,7 @@ if ($i < 3) {
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($vlsm_result as $alloc) :
+                        <?php foreach ($vlsm['result'] as $alloc) :
                             [$alloc_net_ip, $alloc_pfx] = explode('/', $alloc['subnet']);
                             $alloc_detail = calculate_subnet($alloc_net_ip, (int)$alloc_pfx);
                             ?>
@@ -1335,7 +1335,7 @@ if ($i < 3) {
             <?php
             $vlsm_total_hosts_req = 0;
             $vlsm_total_allocated = 0;
-            foreach ($vlsm_result as $alloc) {
+            foreach ($vlsm['result'] as $alloc) {
                 $vlsm_total_hosts_req += $alloc['hosts_needed'];
                 [, $vlsm_alloc_pfx] = explode('/', $alloc['subnet']);
                 $vlsm_total_allocated += (int)pow(2, 32 - (int)$vlsm_alloc_pfx);
@@ -1554,9 +1554,9 @@ if ($i < 3) {
                 <a href="?tab=vlsm6" class="btn reset">Reset</a>
             </div>
         </form>
-        <?php if ($vlsm6_error) : ?>
-            <div class="error"><?= htmlspecialchars($vlsm6_error) ?></div>
-        <?php elseif ($vlsm6_result !== null) : ?>
+        <?php if (!empty($vlsm6['error'])) : ?>
+            <div class="error"><?= htmlspecialchars($vlsm6['error']) ?></div>
+        <?php elseif (isset($vlsm6['result'])) : ?>
             <div class="vlsm-results">
                 <p class="vlsm-sort-note">Results sorted largest-first for efficient allocation.<?= help_bubble('vlsm6-sort', 'Subnets are allocated from largest to smallest so that larger blocks can be placed at aligned boundaries without wasting address space.') ?></p>
                 <table class="vlsm-table vlsm6-table">
@@ -1569,7 +1569,7 @@ if ($i < 3) {
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($vlsm6_result as $alloc6) : ?>
+                        <?php foreach ($vlsm6['result'] as $alloc6) : ?>
                         <tr>
                             <td><?= htmlspecialchars($alloc6['name']) ?></td>
                             <td><?= htmlspecialchars((string)$alloc6['hosts_needed']) ?></td>
@@ -1593,7 +1593,7 @@ if ($i < 3) {
             $vlsm6_parent_total    = gmp_pow(gmp_init(2), 128 - $vlsm6_parent_cidr_int);
             $vlsm6_total_allocated = gmp_init(0);
             $vlsm6_total_hosts_req = gmp_init(0);
-            foreach ($vlsm6_result as $alloc6) {
+            foreach ($vlsm6['result'] as $alloc6) {
                 [, $vlsm6_alloc_pfx_str] = explode('/', $alloc6['subnet']);
                 $vlsm6_alloc_pfx = (int)$vlsm6_alloc_pfx_str;
                 $vlsm6_total_allocated = gmp_add(
