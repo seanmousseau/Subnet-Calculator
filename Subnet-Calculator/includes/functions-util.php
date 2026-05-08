@@ -185,3 +185,34 @@ function help_bubble(string $id, string $text): string
          . '<span class="help-bubble-text" role="tooltip" id="hb-' . $safe_id . '">' . $safe . '</span>'
          . '</span>';
 }
+
+// ─── Copy button ─────────────────────────────────────────────────────────────
+
+/**
+ * Render a single "copy to clipboard" SVG icon button.
+ *
+ * Produces the canonical `<button class="subnet-copy" data-copy="…"
+ * aria-label="…">` markup used throughout templates/layout.php (in
+ * split-item lists, derive/SLAAC result rows, wildcard results, etc.).
+ * The JS handler in app.js binds via `.subnet-copy` and reads the
+ * `data-copy` attribute, so existing JS continues to work unchanged.
+ *
+ * Returns pre-escaped HTML — safe to echo directly (do not re-escape).
+ *
+ * @param string $value The text to be copied to the clipboard.
+ * @param string $label The aria-label for the button (e.g. "Copy 10.0.0.1").
+ */
+function copy_button(string $value, string $label): string
+{
+    $safe_value = htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $safe_label = htmlspecialchars($label, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    return '<button type="button" class="subnet-copy"'
+         . ' data-copy="' . $safe_value . '"'
+         . ' aria-label="' . $safe_label . '">'
+         . '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+         . ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+         . '<rect x="9" y="9" width="13" height="13" rx="2"/>'
+         . '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'
+         . '</svg>'
+         . '</button>';
+}
