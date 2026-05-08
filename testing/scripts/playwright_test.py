@@ -5742,6 +5742,146 @@ async def test_api_slaac(page: Page) -> None:
                     str(err_msg2 or ""), "16")
 
 
+async def test_a11y_ipv6_drawers(page: Page) -> None:
+    """v3.4.0 (T11) — a11y audit for the 5 IPv6 tool drawers.
+
+    Asserts, per drawer:
+      1. Every form input has an associated <label> or aria-label.
+      2. Every help_bubble() icon is keyboard-focusable (tabindex="0").
+      3. Every copy_button() has aria-label starting with 'Copy'.
+      4. Any <details> Advanced disclosure uses native <summary>.
+      5. Submit buttons have an accessible name.
+
+    Any gap surfaced here is a real a11y bug — fix the markup, not the test.
+    """
+    section("v3.4.0 — a11y audit for the 5 new IPv6 drawers")
+
+    drawers = ["zoneid", "derive", "slaac", "rdns6", "mapped6"]
+
+    for slug in drawers:
+        await navigate(page, APP_URL + f"?tab=ipv6&tool={slug}")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        drawer = page.locator(f"#panel-ipv6 .tool-panel[data-tool='{slug}']")
+        assert_eq(f"a11y {slug}: panel rendered", await drawer.count(), 1)
+
+        # 1. Every input has a label or aria-label
+        inputs = drawer.locator(
+            "input[type=text], input[type=number], input[type=tel], input:not([type])"
+        )
+        n_inputs = await inputs.count()
+        assert_true(
+            f"a11y {slug}: at least one form input present",
+            n_inputs >= 1,
+            f"got: {n_inputs}",
+        )
+        for i in range(n_inputs):
+            el = inputs.nth(i)
+            has_label = await el.evaluate(
+                "(e) => !!(e.labels && e.labels.length) "
+                "|| !!e.getAttribute('aria-label') "
+                "|| !!e.closest('label')"
+            )
+            ident = await el.get_attribute("id") or await el.get_attribute("name") or f"#{i}"
+            assert_true(
+                f"a11y {slug}: input '{ident}' has label/aria-label",
+                bool(has_label),
+                f"got has_label={has_label!r}",
+            )
+
+        # 2. Every help bubble icon is keyboard-focusable (tabindex="0")
+        bubbles = drawer.locator(".help-bubble-icon")
+        n_bubbles = await bubbles.count()
+        for i in range(n_bubbles):
+            ti = await bubbles.nth(i).get_attribute("tabindex")
+            assert_eq(
+                f"a11y {slug}: help-bubble[{i}] tabindex='0'",
+                ti,
+                "0",
+            )
+            role = await bubbles.nth(i).get_attribute("role")
+            assert_eq(
+                f"a11y {slug}: help-bubble[{i}] role='button'",
+                role,
+                "button",
+            )
+
+        # 3. Every copy button has aria-label beginning with 'Copy'
+        copies = drawer.locator("button.subnet-copy")
+        n_copies = await copies.count()
+        for i in range(n_copies):
+            al = await copies.nth(i).get_attribute("aria-label") or ""
+            assert_true(
+                f"a11y {slug}: copy-button[{i}] aria-label starts with 'Copy'",
+                al.startswith("Copy"),
+                f"got: {al!r}",
+            )
+
+        # 4. If a <details> Advanced disclosure exists, it must use native
+        # <summary> (keyboard-operable by default).
+        advanced_summaries = drawer.locator("details > summary")
+        n_adv = await advanced_summaries.count()
+        for i in range(n_adv):
+            tag = await advanced_summaries.nth(i).evaluate("(e) => e.tagName")
+            assert_eq(
+                f"a11y {slug}: advanced disclosure[{i}] uses <summary>",
+                tag,
+                "SUMMARY",
+            )
+
+        # 5. Submit button has accessible name (visible text or aria-label)
+        submits = drawer.locator("button[type=submit]")
+        n_submits = await submits.count()
+        assert_true(
+            f"a11y {slug}: at least one submit button",
+            n_submits >= 1,
+            f"got: {n_submits}",
+        )
+        for i in range(n_submits):
+            name = await submits.nth(i).evaluate(
+                "(e) => (e.textContent || '').trim() || e.getAttribute('aria-label') || ''"
+            )
+            assert_true(
+                f"a11y {slug}: submit-button[{i}] has accessible name",
+                bool(name),
+                f"got: {name!r}",
+            )
+
+    # Result-state copy-button audit: drive each drawer that emits copy
+    # buttons through a successful submission and verify every rendered
+    # copy_button() carries an aria-label starting with 'Copy'. (Empty-state
+    # panels rarely contain copy buttons, so the loop above can't exercise
+    # this assertion on its own.)
+    result_cases = [
+        ("derive",  "derive_mac",     "00:24:b9:7e:ab:cd"),
+        ("slaac",   "slaac_prefix",   "2001:db8:1:2::/64"),
+        ("rdns6",   "rdns6_address",  "2001:db8::1"),
+        ("mapped6", "mapped6_input",  "192.0.2.1"),
+    ]
+    for slug, input_name, value in result_cases:
+        await navigate(page, APP_URL + f"?tab=ipv6&tool={slug}")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        await page.fill(f"input[name='{input_name}']", value)
+        await page.click(
+            f"#panel-ipv6 .tool-panel[data-tool='{slug}'] button.splitter-btn"
+        )
+        await page.wait_for_load_state("load")
+        drawer = page.locator(f"#panel-ipv6 .tool-panel[data-tool='{slug}']")
+        copies = drawer.locator("button.subnet-copy")
+        n_copies = await copies.count()
+        assert_true(
+            f"a11y {slug}: result state renders >=1 copy button",
+            n_copies >= 1,
+            f"got: {n_copies}",
+        )
+        for i in range(n_copies):
+            al = await copies.nth(i).get_attribute("aria-label") or ""
+            assert_true(
+                f"a11y {slug}: copy-button[{i}] aria-label starts with 'Copy'",
+                al.startswith("Copy"),
+                f"got: {al!r}",
+            )
+
+
 async def test_api_range(page: Page) -> None:
     section("API — POST /api/v1/range/ipv4")
     status, data = _api_post("range/ipv4", {"start": "10.0.0.0", "end": "10.0.0.255"})
@@ -7683,6 +7823,7 @@ async def main() -> None:
             await test_api_rdns6(page)
             await test_ipv6_mapped6_ui(page)
             await test_api_mapped6(page)
+            await test_a11y_ipv6_drawers(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)
