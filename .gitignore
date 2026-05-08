@@ -3,7 +3,8 @@ Subnet-Calculator/config-admin.php
 .worktrees/
 
 # Editor / tooling
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .idea/
 .DS_Store
 

@@ -1,0 +1,115 @@
+{
+    "chat.useClaudeHooks": true,
+
+    // intelephense — explicit project config so PHPStan L9 + intelephense agree.
+    // Without this, intelephense:
+    //   1. flags every gmp_* call as "Undefined function" (the runtime + CI both
+    //      have php-gmp loaded; PHPStan L9 passes; intelephense doesn't include
+    //      gmp in its default stubs unless we list it).
+    //   2. occasionally fails to resolve cross-file functions (e.g. copy_button,
+    //      help_bubble) defined in Subnet-Calculator/includes/.
+    "intelephense.stubs": [
+        "apache",
+        "bcmath",
+        "bz2",
+        "calendar",
+        "com_dotnet",
+        "Core",
+        "ctype",
+        "curl",
+        "date",
+        "dba",
+        "dom",
+        "enchant",
+        "exif",
+        "FFI",
+        "fileinfo",
+        "filter",
+        "fpm",
+        "ftp",
+        "gd",
+        "gettext",
+        "gmp",
+        "hash",
+        "iconv",
+        "imap",
+        "intl",
+        "json",
+        "ldap",
+        "libxml",
+        "mbstring",
+        "meta",
+        "mysqli",
+        "oci8",
+        "odbc",
+        "openssl",
+        "pcntl",
+        "pcre",
+        "PDO",
+        "pdo_ibm",
+        "pdo_mysql",
+        "pdo_pgsql",
+        "pdo_sqlite",
+        "pgsql",
+        "Phar",
+        "posix",
+        "pspell",
+        "random",
+        "readline",
+        "Reflection",
+        "session",
+        "shmop",
+        "SimpleXML",
+        "snmp",
+        "soap",
+        "sockets",
+        "sodium",
+        "SPL",
+        "sqlite3",
+        "standard",
+        "superglobals",
+        "sysvmsg",
+        "sysvsem",
+        "sysvshm",
+        "tidy",
+        "tokenizer",
+        "xml",
+        "xmlreader",
+        "xmlwriter",
+        "xsl",
+        "Zend OPcache",
+        "zip",
+        "zlib",
+        "phpunit"
+    ],
+
+    // Make sure intelephense indexes the project's PHP source roots so that
+    // cross-file function calls (require_once'd helpers in
+    // Subnet-Calculator/includes/) resolve without "Undefined function" noise.
+    "intelephense.environment.includePaths": [
+        "Subnet-Calculator/includes",
+        "Subnet-Calculator/api/v1",
+        "Subnet-Calculator/api/v1/handlers",
+        "vendor"
+    ],
+
+    // PHP version for diagnostics — match the runtime minimum (PHP 8.2 per
+    // .github/workflows/php.yml's matrix).
+    "intelephense.environment.phpVersion": "8.2.0",
+
+    // Don't index build artifacts / large fixtures / venv-style dirs.
+    "intelephense.files.exclude": [
+        "**/.git/**",
+        "**/node_modules/**",
+        "**/vendor/composer/**",
+        "**/releases/**",
+        "**/v3.3-audit/**",
+        "**/testing/snapshots/**"
+    ],
+
+    // Suppress `curl_close is deprecated` informational notices in
+    // request.php — this is pre-existing in Turnstile/hCaptcha/recaptcha verify
+    // helpers; the deprecation is informational only and there's no
+    // cross-version replacement that works on PHP 8.2.
+    "intelephense.diagnostics.deprecated": false
+}
