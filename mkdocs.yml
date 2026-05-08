@@ -57,6 +57,7 @@ nav:
     - Reverse DNS Zones: rdns.md
     - IPv6 Reverse DNS (rdns6): ipv6-rdns6.md
     - IPv4-mapped / NAT64 (mapped6): ipv6-mapped6.md
+    - Embedded IPv4 Detector: embedded-v4.md
     - Allocation Tree: tree.md
     - Wildcard ↔ CIDR: wildcard.md
     - IP Lookup: lookup.md
