@@ -545,6 +545,99 @@ async def test_ipv6_shareable_url(page: Page) -> None:
     assert_eq("GET auto-calc IPv6: prefix length", await result_value(page, "Prefix Length"), "/8")
 
 
+async def test_per_tool_routes_equivalence(page: Page) -> None:
+    # v3.4.0 — Apache rewrites /ipv[46]/<tool> and /ipv[46] to the existing
+    # ?tab=&tool= form. The two URL forms must render identical content so
+    # that bookmarks and iframe consumers using the legacy form stay valid.
+    section("v3.4.0 — per-tool URL routes: canonical vs legacy equivalence")
+
+    # Bare tab routes
+    await navigate(page, APP_URL + "ipv4")
+    canonical_ipv4 = await page.locator("#main-content").inner_html()
+    await navigate(page, APP_URL + "?tab=ipv4")
+    legacy_ipv4 = await page.locator("#main-content").inner_html()
+    assert_true("/ipv4 vs ?tab=ipv4 render identical content",
+                canonical_ipv4 == legacy_ipv4)
+
+    await navigate(page, APP_URL + "ipv6")
+    canonical_ipv6 = await page.locator("#main-content").inner_html()
+    await navigate(page, APP_URL + "?tab=ipv6")
+    legacy_ipv6 = await page.locator("#main-content").inner_html()
+    assert_true("/ipv6 vs ?tab=ipv6 render identical content",
+                canonical_ipv6 == legacy_ipv6)
+
+    # Per-tool routes — derive opens the IPv6 derive drawer
+    await navigate(page, APP_URL + "ipv6/derive")
+    canonical_derive = await page.locator(
+        '#panel-ipv6 .tool-panel[data-tool="derive"]'
+    ).count()
+    assert_true("/ipv6/derive renders derive tool panel",
+                canonical_derive > 0)
+
+    # Drawer should be auto-opened on canonical route. JS reads
+    # data-open-tool from PHP and toggles aria-expanded after load — wait
+    # for it instead of asserting synchronously, otherwise the JS may not
+    # have run yet on slower CI.
+    try:
+        await page.wait_for_selector(
+            '#panel-ipv6 .tool-trigger[data-tool="derive"][aria-expanded="true"]',
+            timeout=3000,
+        )
+        drawer_open = True
+    except Exception:
+        drawer_open = False
+    assert_true("/ipv6/derive auto-opens the derive tool drawer",
+                drawer_open)
+
+    # Same drawer must auto-open via the legacy ?tab=&tool= form
+    await navigate(page, APP_URL + "?tab=ipv6&tool=derive")
+    try:
+        await page.wait_for_selector(
+            '#panel-ipv6 .tool-trigger[data-tool="derive"][aria-expanded="true"]',
+            timeout=3000,
+        )
+        legacy_drawer_open = True
+    except Exception:
+        legacy_drawer_open = False
+    assert_true("?tab=ipv6&tool=derive auto-opens the derive drawer (legacy form)",
+                legacy_drawer_open)
+
+
+async def test_legacy_query_param_url_no_redirect(_page: Page) -> None:
+    # v3.4.0 — legacy ?tab=&tool= URLs MUST NOT auto-redirect to the canonical
+    # form. iframe embedders and bookmarks rely on the legacy form continuing
+    # to work unchanged.
+    section("v3.4.0 — legacy ?tab=&tool= URL is not redirected")
+
+    resp = _SESSION.get(_APP_BASE + "?tab=ipv6&tool=derive",
+                        allow_redirects=False, timeout=10)
+    assert_eq("legacy URL returns 200 (no redirect)", resp.status_code, 200)
+    assert_true("legacy URL has no Location header",
+                "location" not in {k.lower() for k in resp.headers})
+
+    # Canonical form returns 200 directly (Apache mod_rewrite is internal,
+    # so the client never sees a redirect for this either).
+    resp2 = _SESSION.get(_APP_BASE + "ipv6/derive",
+                         allow_redirects=False, timeout=10)
+    assert_eq("canonical /ipv6/derive returns 200", resp2.status_code, 200)
+
+
+async def test_canonical_route_with_query_params(page: Page) -> None:
+    # v3.4.0 — Apache QSA must preserve query params on the rewritten path.
+    section("v3.4.0 — per-tool route preserves query string (QSA)")
+
+    await navigate(page, APP_URL + "ipv6/derive?derive_mac=00%3A24%3Ab9%3A7e%3Aab%3Acd")
+    # Page rendered + IPv6 panel exists
+    main_html = await page.locator("#main-content").count()
+    assert_true("canonical route + query string renders without 404",
+                main_html > 0)
+    derive_panel = await page.locator(
+        '#panel-ipv6 .tool-panel[data-tool="derive"]'
+    ).count()
+    assert_true("derive tool panel present on canonical route",
+                derive_panel > 0)
+
+
 async def test_iframe(page: Page) -> None:
     IFRAME_HARNESS = APP_URL + "iframe-test.html"
 
@@ -7149,6 +7242,9 @@ async def main() -> None:
             await test_ipv6_errors(page)
             await test_ipv6_splitter(page)
             await test_ipv6_shareable_url(page)
+            await test_per_tool_routes_equivalence(page)
+            await test_legacy_query_param_url_no_redirect(page)
+            await test_canonical_route_with_query_params(page)
             await test_iframe(page)
             await test_theme_toggle(page)
             await test_tab_switch(page)

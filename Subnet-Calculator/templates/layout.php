@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <?php // v3.4.0 — anchor relative URLs to the app root so /ipv6/derive
+          // and other per-tool routes resolve assets and nav links correctly. ?>
+    <base href="<?= htmlspecialchars($app_base_path) ?>">
     <meta name="description" content="<?= htmlspecialchars($page_description) ?>">
     <meta property="og:title"       content="<?= htmlspecialchars($page_title) ?>">
     <meta property="og:description" content="<?= htmlspecialchars($page_description) ?>">
@@ -234,6 +237,13 @@ if ($i < 3) {
         elseif (!empty($wildcard)) { $open_tool_ipv4 = 'wildcard'; }
         elseif (!empty($lookup) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'lookup'; }
         elseif (!empty($diff) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'diff'; }
+        // v3.4.0 — fallback: /ipv4/<tool> rewrites to ?tool=<tool>; honour it
+        // when no other GET trigger has already chosen a tool above.
+        $ipv4_tool_whitelist = ['split','supernet','range','tree','tree-editor','wildcard','lookup','diff'];
+        if ($open_tool_ipv4 === null && $active_tab === 'ipv4'
+            && in_array($requested_tool, $ipv4_tool_whitelist, true)) {
+            $open_tool_ipv4 = $requested_tool;
+        }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv4 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv4) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split" aria-expanded="false">Split Subnet</button>
@@ -752,6 +762,13 @@ if ($i < 3) {
         elseif (!empty($slaac)) { $open_tool_ipv6 = 'slaac'; }
         elseif (!empty($lookup) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
         elseif (!empty($diff) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'diff'; }
+        // v3.4.0 — fallback: /ipv6/<tool> rewrites to ?tool=<tool>; honour it
+        // when no other GET trigger has already chosen a tool above.
+        $ipv6_tool_whitelist = ['split6','ula','range6','supernet6','zoneid','derive','slaac','lookup','diff'];
+        if ($open_tool_ipv6 === null && $active_tab === 'ipv6'
+            && in_array($requested_tool, $ipv6_tool_whitelist, true)) {
+            $open_tool_ipv6 = $requested_tool;
+        }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv6 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv6) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split6" aria-expanded="false">Split Subnet</button>

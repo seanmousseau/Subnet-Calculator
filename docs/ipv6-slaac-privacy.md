@@ -132,8 +132,8 @@ The IPv6 tab hydrates from query parameters. Either parameter alone
 will trigger the calculation; the seed is optional.
 
 ```text
-?tab=ipv6&slaac_prefix=2001:db8:1:2::/64
-?tab=ipv6&slaac_prefix=2001:db8:1:2::/64&slaac_seed=a8d3f4e10c529837
+/ipv6/slaac?slaac_prefix=2001:db8:1:2::/64
+/ipv6/slaac?slaac_prefix=2001:db8:1:2::/64&slaac_seed=a8d3f4e10c529837
 ```
 
 A shareable URL **with** a seed makes the result reproducible &mdash;

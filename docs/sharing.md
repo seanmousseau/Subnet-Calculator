@@ -7,7 +7,7 @@ The **Share** bar appears below calculation results when `$show_share_bar = true
 Example:
 
 ```text
-https://example.com/subnet-calculator/?tab=ipv4&ip=192.168.1.0&mask=%2F24
+https://example.com/subnet-calculator/ipv4?ip=192.168.1.0&mask=%2F24
 ```
 
 Set `$canonical_url` in `config.php` to control the base URL used when building shareable links. If left empty the app auto-derives it from the current request.
