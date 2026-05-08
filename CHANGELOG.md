@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.1] - 2026-05-08
+
+**Patch.** CodeRabbit cleanup carried over from v3.4.0's tracking PR review.
+
+### Changed
+
+- Removed stale duplicate / by-reference docblocks from five `request.php`
+  helpers: `sc_run_lookup`, `sc_run_range6`, `sc_run_zoneid`, `sc_run_derive`,
+  `sc_run_slaac`. The post-T5 helpers return associative arrays (no by-ref
+  output params), so the docblocks they inherited from v3.3.0 were misleading.
+- Rewrote `sc_run_diff`'s docblock to describe the actual return shape rather
+  than the long-removed by-ref output params.
+
 ## [3.4.0] - 2026-05-08
 
 **IPv6 Polish, Architecture, Parity.** A 12-PR release closing v3.3.0

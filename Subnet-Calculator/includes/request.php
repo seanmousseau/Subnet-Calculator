@@ -96,13 +96,6 @@ function recaptcha_enterprise_verify(
 // ─── Lookup helper (shared by POST handler and GET shareable URL) ────────────
 
 /**
- * Run the IP lookup tool against the given raw textarea inputs and write the
- * outcome into $result_out / $error_out by reference. Used by both the POST
- * handler and the GET shareable-URL hydration path.
- *
- * @param list<array{ip: string, matches: list<string>, deepest: string|null}>|null $result_out
- */
-/**
  * Run lookup_ips() against the given raw textarea inputs and return an
  * associative array with keys: result, error. Empty-input early-returns
  * with [] so empty-state defaults apply. (v3.4.0 — flat → array)
@@ -143,16 +136,6 @@ function sc_run_lookup(
 // ─── Range6 helper (shared by POST handler and GET shareable URL) ───────────
 
 /**
- * Run range6_to_cidrs against the given inputs and write the outcome into
- * $result_out / $error_out / $warning_out by reference. Used by both the POST
- * handler and the GET shareable-URL hydration path. (v3.3.0)
- *
- * Mirrors the v2.11 sc_run_lookup / sc_run_diff pattern: ONE helper for both
- * methods, populates the same template globals regardless of entry point.
- *
- * @param list<string>|null $result_out
- */
-/**
  * Run range6_to_cidrs() and return an associative array with keys: result
  * (cidrs list), error, warning, count, total. Empty inputs return [].
  * (v3.4.0 — flat → array)
@@ -186,15 +169,6 @@ function sc_run_range6(string $start, string $end): array
 // ─── Zone-ID helper (shared by POST handler and GET shareable URL) ──────────
 
 /**
- * Run parse_zone_id() against the given input and write the outcome into the
- * by-reference outputs. Used by both the POST handler and the GET
- * shareable-URL hydration path. (v3.3.0)
- *
- * Mirrors the v2.11 sc_run_lookup / sc_run_diff and v3.3.0 sc_run_range6
- * pattern: ONE helper for both methods, populates the same template globals
- * regardless of entry point.
- */
-/**
  * Run parse_zone_id() against the given input and return an associative array
  * with keys: address, zone_id, is_link_local, warning, error. Empty input
  * returns an empty array. (v3.4.0 — flat globals → per-tool array)
@@ -221,11 +195,6 @@ function sc_run_zoneid(string $input): array
 
 // ─── Derive helper (shared by POST handler and GET shareable URL) ───────────
 
-/**
- * Run derive_from_mac() against the given input MAC and write the outcome
- * into the by-reference outputs. Used by both the POST handler and the GET
- * shareable-URL hydration path. (v3.3.0 Task 4)
- */
 /**
  * Run derive_from_mac() and return an associative array with keys:
  * mac_canonical, eui64, ul_bit_flipped, link_local, solicited_node,
@@ -259,17 +228,12 @@ function sc_run_derive(string $mac): array
 // ─── SLAAC privacy helper (shared by POST handler and GET shareable URL) ────
 
 /**
- * Run slaac_privacy_address() against the given prefix + optional seed and
- * write the outcome into the by-reference outputs. Used by both the POST
- * handler and the GET shareable-URL hydration path. (v3.3.0 Task 5)
- *
- * Empty seed strings are treated as "unseeded" so a shareable URL with an
- * empty `slaac_seed=` parameter still produces a fresh address.
- */
-/**
  * Run slaac_privacy_address() and return an associative array with keys:
  * prefix, address, interface_id, seed_used, seed_was_provided, warning,
  * error. Empty prefix returns []. (v3.4.0 — flat → array)
+ *
+ * Empty seed strings are treated as "unseeded" so a shareable URL with an
+ * empty `slaac_seed=` parameter still produces a fresh address.
  *
  * @return array{
  *     prefix?: string, address?: string, interface_id?: string,
@@ -399,9 +363,11 @@ function sc_run_mapped6(array $input): array
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
- * Run subnet_diff against the given raw textarea inputs and write the outcome
- * into $result_out / $error_out by reference. Used by both the POST handler
- * and the GET shareable-URL hydration path.
+ * Run subnet_diff() against the given raw textarea inputs and return an
+ * associative array with keys: result (with added/removed/unchanged/changed
+ * lists), error. Empty inputs early-return with [] so empty-state defaults
+ * apply. Shared by the POST handler and the GET shareable-URL hydration path.
+ * (v3.4.0 — flat → array)
  *
  * @return array{
  *     result?: array{
