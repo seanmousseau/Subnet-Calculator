@@ -26,6 +26,10 @@ declare(strict_types=1);
 // null until their drawers ship in T4–T7. The contract is pinned by
 // EmbeddedV4Test::test_detail_routes_per_scheme.
 
+// phpcs:disable PSR1.Files.SideEffects -- explicit dependency on decode_teredo().
+require_once __DIR__ . '/functions-teredo.php';
+// phpcs:enable PSR1.Files.SideEffects
+
 const EMBEDDEDV4_MAPPED_PREFIX_BIN     = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff";
 const EMBEDDEDV4_NAT64_WKP_PREFIX_BIN  = "\x00\x64\xff\x9b\x00\x00\x00\x00\x00\x00\x00\x00";
 const EMBEDDEDV4_6TO4_PREFIX_BIN       = "\x20\x02";
@@ -135,30 +139,31 @@ function detect_embedded_v4(string $ipv6): array
         ];
     }
 
-    // 4. Teredo: 2001:0::/32, RFC 4380. Server IPv4 in bytes 4–7;
-    //    obfuscated client IPv4 (XOR 0xFF) in bytes 12–15; flags+port in 8–11.
+    // 4. Teredo: 2001:0::/32, RFC 4380. Delegate to decode_teredo() so the
+    //    `extra` payload shape stays in lockstep with the dedicated decoder
+    //    (server_ipv4, client_ipv4, flags(int), cone(bool), port(int)).
+    //    The prefix check above already filters non-Teredo inputs; the
+    //    try/catch is defensive in case decode_teredo() rejects a degenerate
+    //    parse that still passed the prefix sniff.
     if (substr($bin, 0, 4) === EMBEDDEDV4_TEREDO_PREFIX_BIN) {
-        $serverV4 = @inet_ntop(substr($bin, 4, 4));
-        $clientObf = substr($bin, 12, 4);
-        $clientPlain = '';
-        for ($i = 0; $i < 4; $i++) {
-            $clientPlain .= chr(ord($clientObf[$i]) ^ 0xFF);
+        try {
+            $decoded = decode_teredo($ipv6);
+            return [
+                'scheme'       => 'teredo',
+                'ipv4'         => $decoded['client_ipv4'],
+                'deprecated'   => false,
+                'detail_route' => '/ipv6/teredo',
+                'extra'        => [
+                    'server_ipv4' => $decoded['server_ipv4'],
+                    'client_ipv4' => $decoded['client_ipv4'],
+                    'flags'       => $decoded['flags'],
+                    'cone'        => $decoded['cone'],
+                    'port'        => $decoded['port'],
+                ],
+            ];
+        } catch (InvalidArgumentException $e) {
+            // Fall through to the no-match return below.
         }
-        $clientV4 = @inet_ntop($clientPlain);
-        $flags    = bin2hex(substr($bin, 8, 2));
-        $portObf  = substr($bin, 10, 2);
-        $port     = ((ord($portObf[0]) ^ 0xFF) << 8) | (ord($portObf[1]) ^ 0xFF);
-        return [
-            'scheme'       => 'teredo',
-            'ipv4'         => $clientV4 === false ? null : $clientV4,
-            'deprecated'   => false,
-            'detail_route' => '/ipv6/teredo',
-            'extra'        => [
-                'server_ipv4' => $serverV4 === false ? null : $serverV4,
-                'flags'       => $flags,
-                'udp_port'    => $port,
-            ],
-        ];
     }
 
     // 5. ISATAP: IID matches `*:0000:5efe:V4ADDR` (locally-administered)

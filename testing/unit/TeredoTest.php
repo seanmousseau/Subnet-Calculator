@@ -124,4 +124,33 @@ final class TeredoTest extends TestCase
         $rebuilt = encode_teredo($r['server_ipv4'], $r['client_ipv4'], $r['port'], $r['flags']);
         $this->assertSame($original, $rebuilt);
     }
+
+    public function test_encode_decode_roundtrip_port_zero(): void
+    {
+        $addr = encode_teredo('65.54.227.120', '192.0.2.45', 0, 0x8000);
+        $r = decode_teredo($addr);
+        $this->assertSame(0, $r['port']);
+        $this->assertSame('65.54.227.120', $r['server_ipv4']);
+        $this->assertSame('192.0.2.45', $r['client_ipv4']);
+    }
+
+    public function test_encode_decode_roundtrip_client_zero(): void
+    {
+        $addr = encode_teredo('65.54.227.120', '0.0.0.0', 40000, 0x8000);
+        $r = decode_teredo($addr);
+        $this->assertSame('0.0.0.0', $r['client_ipv4']);
+        $this->assertSame('65.54.227.120', $r['server_ipv4']);
+        $this->assertSame(40000, $r['port']);
+    }
+
+    public function test_decode_2001_double_colon_1_succeeds(): void
+    {
+        // 2001::1 sits inside 2001:0::/32 — decode is intentionally permissive
+        // and treats it as a degenerate Teredo address. Server is all-zero and
+        // flags is 0 (non-cone). Pins this permissive behaviour as intentional.
+        $r = decode_teredo('2001::1');
+        $this->assertSame('0.0.0.0', $r['server_ipv4']);
+        $this->assertSame(0, $r['flags']);
+        $this->assertFalse($r['cone']);
+    }
 }

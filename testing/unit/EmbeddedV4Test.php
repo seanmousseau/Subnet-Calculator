@@ -37,7 +37,10 @@ final class EmbeddedV4Test extends TestCase
         $this->assertSame('teredo', $result['scheme']);
         $this->assertSame('192.0.2.45', $result['ipv4']);
         $this->assertSame('65.54.227.120', $result['extra']['server_ipv4']);
-        $this->assertSame(40000, $result['extra']['udp_port']);
+        $this->assertSame('192.0.2.45', $result['extra']['client_ipv4']);
+        $this->assertSame(40000, $result['extra']['port']);
+        $this->assertSame(0x8000, $result['extra']['flags']);
+        $this->assertTrue($result['extra']['cone']);
     }
 
     public function test_nat64_wkp_detected(): void

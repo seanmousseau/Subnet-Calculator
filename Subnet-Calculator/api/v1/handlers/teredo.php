@@ -58,6 +58,9 @@ if (!is_int($raw_port)) {
 if (!is_int($raw_flags)) {
     json_err('Field "flags" must be an integer (default 0x8000).', 400);
 }
+if ($raw_flags < 0 || $raw_flags > 0xFFFF) {
+    json_err('Field "flags" must be in 16-bit range (0..65535).', 400);
+}
 
 try {
     $addr = encode_teredo(trim($raw_server), trim($raw_client), $raw_port, $raw_flags);
