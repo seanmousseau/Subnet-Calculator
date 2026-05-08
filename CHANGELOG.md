@@ -21,6 +21,9 @@ as each ships.
 - **6to4 address tool (RFC 3056).** Bidirectional translation between
   public IPv4 and `2002::/16` 6to4 prefixes. Help text notes RFC 7526
   deprecated status. (#392)
+- **Teredo address decoder (RFC 4380).** Decode and encode `2001:0::/32`
+  Teredo addresses (server v4, flags incl. cone bit, XOR'd UDP port,
+  XOR'd client v4). Help text notes operational status. (#393)
 
 ## [3.4.1] - 2026-05-08
 
