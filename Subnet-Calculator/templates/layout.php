@@ -745,7 +745,7 @@ if ($i < 3) {
         $open_tool_ipv6 = null;
         if ($split_result6 !== null || $split_error6 !== null) { $open_tool_ipv6 = 'split6'; }
         elseif ($ula_result !== null || $ula_error !== null) { $open_tool_ipv6 = 'ula'; }
-        elseif ($range6_result !== null || $range6_error !== null) { $open_tool_ipv6 = 'range6'; }
+        elseif (!empty($range6)) { $open_tool_ipv6 = 'range6'; }
         elseif ($supernet6_result !== null || $supernet6_error !== null) { $open_tool_ipv6 = 'supernet6'; }
         elseif (!empty($zoneid)) { $open_tool_ipv6 = 'zoneid'; }
         elseif (!empty($derive)) { $open_tool_ipv6 = 'derive'; }
@@ -882,11 +882,11 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Convert</button>
                         </div>
                     </form>
-                    <?php if ($range6_error) : ?>
-                        <div class="error"><?= htmlspecialchars($range6_error) ?></div>
-                    <?php elseif ($range6_result !== null) : ?>
-                        <?php if ($range6_warning) : ?>
-                            <div class="warning"><?= htmlspecialchars($range6_warning) ?></div>
+                    <?php if (!empty($range6['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($range6['error']) ?></div>
+                    <?php elseif (isset($range6['result'])) : ?>
+                        <?php if (!empty($range6['warning'])) : ?>
+                            <div class="warning"><?= htmlspecialchars($range6['warning']) ?></div>
                         <?php endif; ?>
                         <?php $_range6_label = 'Range: ' . $range6_start . ' → ' . $range6_end; ?>
                         <div class="split-list split-list--mt"
@@ -894,13 +894,13 @@ if ($i < 3) {
                              data-history-active="1"
                              data-history-label="<?= htmlspecialchars($_range6_label) ?>">
                             <button type="button" class="copy-all-btn" data-target="range6">Copy All</button>
-                            <?php foreach ($range6_result as $r6_cidr) : ?>
+                            <?php foreach ($range6['result'] as $r6_cidr) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($r6_cidr) ?>">
                                     <span class="split-subnet-text"><?= htmlspecialchars($r6_cidr) ?></span>
                                     <?= copy_button($r6_cidr, 'Copy ' . $r6_cidr) ?>
                                 </div>
                             <?php endforeach; ?>
-                            <div class="split-more"><?= count($range6_result) ?> CIDR block<?= count($range6_result) !== 1 ? 's' : '' ?><?php if ($range6_total !== null) : ?> · <?= htmlspecialchars(is_string($range6_total) ? $range6_total : (string)$range6_total) ?> addresses<?php endif; ?></div>
+                            <div class="split-more"><?= count($range6['result']) ?> CIDR block<?= count($range6['result']) !== 1 ? 's' : '' ?><?php if (($range6['total'] ?? null) !== null) : ?> · <?= htmlspecialchars(is_string($range6['total']) ? $range6['total'] : (string)$range6['total']) ?> addresses<?php endif; ?></div>
                         </div>
                     <?php endif; ?>
                 </div>

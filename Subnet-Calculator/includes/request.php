@@ -151,34 +151,35 @@ function sc_run_lookup(
  *
  * @param list<string>|null $result_out
  */
-function sc_run_range6(
-    string $start,
-    string $end,
-    ?array &$result_out,
-    ?string &$error_out,
-    ?string &$warning_out,
-    ?int &$count_out,
-    int|string|null &$total_out
-): void {
+/**
+ * Run range6_to_cidrs() and return an associative array with keys: result
+ * (cidrs list), error, warning, count, total. Empty inputs return [].
+ * (v3.4.0 — flat → array)
+ *
+ * @return array{result?: list<string>, error?: string, warning?: string, count?: ?int, total?: int|string|null}
+ */
+function sc_run_range6(string $start, string $end): array
+{
     if ($start === '' && $end === '') {
-        return;
+        return [];
     }
     if ($start === '' || $end === '') {
-        $error_out = 'Start and end IPv6 addresses are required.';
-        return;
+        return ['error' => 'Start and end IPv6 addresses are required.'];
     }
     $r = range6_to_cidrs($start, $end);
     if (isset($r['error'])) {
-        $error_out = $r['error'];
-        return;
+        return ['error' => $r['error']];
     }
-    $result_out = $r['cidrs'] ?? [];
-    $count_out  = $r['count'] ?? null;
-    $total_out  = $r['total_addresses'] ?? null;
+    $out = [
+        'result' => $r['cidrs'] ?? [],
+        'count'  => $r['count'] ?? null,
+        'total'  => $r['total_addresses'] ?? null,
+    ];
     if (!empty($r['truncated'])) {
         $cap = (int)($r['cap'] ?? 256);
-        $warning_out = 'Result truncated at ' . $cap . ' CIDRs (configure via $range_max_cidrs).';
+        $out['warning'] = 'Result truncated at ' . $cap . ' CIDRs (configure via $range_max_cidrs).';
     }
+    return $out;
 }
 
 // ─── Zone-ID helper (shared by POST handler and GET shareable URL) ──────────
@@ -410,16 +411,10 @@ $range_result = null;
 $range_error  = null;
 
 // v3.3.0 — IPv6 range → CIDR (range6)
-$range6_start  = '';
-$range6_end    = '';
-/** @var list<string>|null $range6_result */
-$range6_result   = null;
-$range6_error    = null;
-$range6_warning  = null;
-/** @var int|null $range6_count */
-$range6_count    = null;
-/** @var int|string|null $range6_total */
-$range6_total    = null;
+$range6_start = '';
+$range6_end   = '';
+/** @var array{result?: list<string>, error?: string, warning?: string, count?: ?int, total?: int|string|null} */
+$range6 = [];
 
 $tree_parent   = '';
 $tree_children = '';
@@ -1020,15 +1015,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $active_tab   = 'ipv6';
         $range6_start = trim((string)($_POST['range6_start'] ?? ''));
         $range6_end   = trim((string)($_POST['range6_end']   ?? ''));
-        sc_run_range6(
-            $range6_start,
-            $range6_end,
-            $range6_result,
-            $range6_error,
-            $range6_warning,
-            $range6_count,
-            $range6_total,
-        );
+        $range6 = sc_run_range6($range6_start, $range6_end);
     }
 
     if ($is_wildcard && !$form_blocked) {
@@ -1231,15 +1218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($active_tab === 'ipv6' && (isset($_GET['range6_start']) || isset($_GET['range6_end']))) {
         $range6_start = trim((string)($_GET['range6_start'] ?? ''));
         $range6_end   = trim((string)($_GET['range6_end']   ?? ''));
-        sc_run_range6(
-            $range6_start,
-            $range6_end,
-            $range6_result,
-            $range6_error,
-            $range6_warning,
-            $range6_count,
-            $range6_total,
-        );
+        $range6 = sc_run_range6($range6_start, $range6_end);
     }
 
     // Supernet / summarise shareable GET URL
