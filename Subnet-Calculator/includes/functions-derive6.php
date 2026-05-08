@@ -195,6 +195,11 @@ function unicast_to_solicited_node(string $ipv6): string
  * address, the U/L flip outcome, and an optional warning when the input
  * appears to be a multicast MAC (LSB of first octet set).
  *
+ * `ul_bit_flipped` is True if the U/L bit was originally 0 in the input MAC
+ * and was therefore flipped to 1 to form the EUI-64 modified-IID. False if
+ * the U/L bit was already 1 in the input. The flip operation always runs
+ * unconditionally; this field reports whether the flip changed the value.
+ *
  * @return array{
  *     mac_canonical: string,
  *     eui64: string,
@@ -214,9 +219,11 @@ function derive_from_mac(string $mac): array
         . substr($hex, 8, 2) . ':' . substr($hex, 10, 2);
 
     $byte0 = hexdec(substr($hex, 0, 2));
-    // ul_bit_flipped reports whether the operation toggled the bit from
-    // 0 → 1 (the standard case). When the input already has U/L = 1 the
-    // flip goes 1 → 0, so we report false.
+    // ul_bit_flipped: True if the U/L bit was originally 0 in the input MAC
+    // and was therefore flipped to 1 to form the EUI-64 modified-IID. False
+    // if the U/L bit was already 1 in the input. The flip operation always
+    // runs unconditionally; this field reports whether the flip changed the
+    // value.
     $ul_bit_flipped = (($byte0 & 0x02) === 0);
 
     $eui64           = mac_to_eui64($canonical);

@@ -12,10 +12,15 @@ declare(strict_types=1);
  * its own size, and (c) does not extend past $end; emit that block as a CIDR,
  * advance the pointer, and repeat until the range is exhausted.
  *
- * v3.3.0: output cap added. Reads the global $range_max_cidrs (default 256) —
- * the same knob that caps range6_to_cidrs(). When the cap is reached the
- * partial result is returned with truncated=true; existing keys are preserved
- * so callers that don't check `truncated` still get a usable list.
+ * v3.3.0: output cap added — same knob that caps range6_to_cidrs(). When the
+ * cap is reached the partial result is returned with truncated=true; existing
+ * keys are preserved so callers that don't check `truncated` still get a
+ * usable list.
+ *
+ * v3.4.0: $cap is now an optional third parameter (DI-friendly). When omitted,
+ * the function falls back to $GLOBALS['range_max_cidrs'] (configured in
+ * config.php) and finally to the built-in default of 256. Callers (and tests)
+ * may pass an explicit cap to override per-call without mutating globals.
  *
  * @return array{
  *     cidrs?: list<string>,
@@ -26,7 +31,7 @@ declare(strict_types=1);
  *     error?: string,
  * }
  */
-function range_to_cidrs(string $start, string $end, ?int $max_cidrs = null): array
+function range_to_cidrs(string $start, string $end, ?int $cap = null): array
 {
     $start_long = ip2long($start);
     $end_long   = ip2long($end);
@@ -46,15 +51,15 @@ function range_to_cidrs(string $start, string $end, ?int $max_cidrs = null): arr
         return ['error' => 'Start address must be less than or equal to end address.'];
     }
 
-    // v3.3.0 — output cap. Explicit $max_cidrs argument wins (used by tests
-    // and any caller that wants to override per-call); otherwise fall back to
-    // the configured global $range_max_cidrs (default 256).
-    if ($max_cidrs !== null) {
-        $cap = max(1, min($max_cidrs, 100000));
-    } else {
-        global $range_max_cidrs;
-        $cap = isset($range_max_cidrs) ? max(1, min((int)$range_max_cidrs, 100000)) : 256;
+    // v3.4.0 — explicit $cap argument wins (DI-friendly); otherwise fall back
+    // to the configured global $range_max_cidrs (set in config.php), and
+    // finally to the built-in default of 256 if even that is unset (e.g. in
+    // unit tests where bootstrap loads config.php into a non-global scope).
+    if ($cap === null) {
+        $configured = $GLOBALS['range_max_cidrs'] ?? 256;
+        $cap = is_numeric($configured) ? (int)$configured : 256;
     }
+    $cap = max(1, min($cap, 100000));
 
     $cidrs = [];
     $cur   = $start_long;
