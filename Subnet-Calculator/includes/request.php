@@ -368,16 +368,14 @@ $vlsm6_requirements = [];
 
 $supernet_input  = '';
 $supernet_action = '';
-/** @var array{supernet?: string, summaries?: string[]}|null $supernet_result */
-$supernet_result = null;
-$supernet_error  = null;
+/** @var array{result?: array{supernet?: string, summaries?: string[]}, error?: string} */
+$supernet = [];
 
 // v3.3.0 — IPv6 supernet / summarise (supernet6)
 $supernet6_input  = '';
 $supernet6_action = '';
-/** @var array{supernet?: string, summaries?: string[]}|null $supernet6_result */
-$supernet6_result = null;
-$supernet6_error  = null;
+/** @var array{result?: array{supernet?: string, summaries?: string[]}, error?: string} */
+$supernet6 = [];
 
 // v3.3.0 — IPv6 zone-ID parser
 $zoneid_input = '';
@@ -396,19 +394,17 @@ $slaac_seed_input   = '';
 $slaac = [];
 
 $ula_global_id_input = '';
-/** @var array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}|null $ula_result */
-$ula_result = null;
-$ula_error  = null;
+/** @var array{result?: array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}, error?: string} */
+$ula = [];
 
 $session_save_id  = '';
 $session_load_id  = '';
 $session_error    = null;
 
-$range_start  = '';
-$range_end    = '';
-/** @var list<string>|null $range_result */
-$range_result = null;
-$range_error  = null;
+$range_start = '';
+$range_end   = '';
+/** @var array{result?: list<string>, error?: string} */
+$range = [];
 
 // v3.3.0 — IPv6 range → CIDR (range6)
 $range6_start = '';
@@ -808,15 +804,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $supernet_input  = trim((string)($_POST['supernet_input'] ?? ''));
         $lines = array_values(array_filter(array_map('trim', explode("\n", $supernet_input))));
         if (count($lines) < 1) {
-            $supernet_error = 'Enter at least one CIDR.';
+            $supernet = ['error' => 'Enter at least one CIDR.'];
         } elseif (count($lines) > 50) {
-            $supernet_error = 'Maximum 50 CIDRs per check.';
+            $supernet = ['error' => 'Maximum 50 CIDRs per check.'];
         } else {
             $sr = $supernet_action === 'find' ? supernet_find($lines) : summarise_cidrs($lines);
             if (isset($sr['error'])) {
-                $supernet_error = $sr['error'];
+                $supernet = ['error' => $sr['error']];
             } else {
-                $supernet_result = $sr;
+                $supernet = ['result' => $sr];
             }
         }
     }
@@ -829,15 +825,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $supernet6_input  = trim((string)($_POST['supernet6_input'] ?? ''));
         $lines6 = array_values(array_filter(array_map('trim', explode("\n", $supernet6_input))));
         if (count($lines6) < 1) {
-            $supernet6_error = 'Enter at least one CIDR.';
+            $supernet6 = ['error' => 'Enter at least one CIDR.'];
         } elseif (count($lines6) > 50) {
-            $supernet6_error = 'Maximum 50 CIDRs per check.';
+            $supernet6 = ['error' => 'Maximum 50 CIDRs per check.'];
         } else {
             $sr6 = $supernet6_action === 'find' ? supernet6_find($lines6) : summarise6_cidrs($lines6);
             if (isset($sr6['error'])) {
-                $supernet6_error = $sr6['error'];
+                $supernet6 = ['error' => $sr6['error']];
             } else {
-                $supernet6_result = $sr6;
+                $supernet6 = ['result' => $sr6];
             }
         }
     }
@@ -865,9 +861,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ula_global_id_input = trim((string)($_POST['ula_global_id'] ?? ''));
         $ur = generate_ula_prefix($ula_global_id_input);
         if (isset($ur['error'])) {
-            $ula_error = $ur['error'];
+            $ula = ['error' => $ur['error']];
         } else {
-            $ula_result = $ur;
+            $ula = ['result' => $ur];
         }
     }
 
@@ -1000,13 +996,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $range_start = trim((string)($_POST['range_start'] ?? ''));
         $range_end   = trim((string)($_POST['range_end']   ?? ''));
         if ($range_start === '' || $range_end === '') {
-            $range_error = 'Both start and end IP addresses are required.';
+            $range = ['error' => 'Both start and end IP addresses are required.'];
         } else {
             $rr = range_to_cidrs($range_start, $range_end);
             if (isset($rr['error'])) {
-                $range_error = $rr['error'];
+                $range = ['error' => $rr['error']];
             } else {
-                $range_result = $rr['cidrs'] ?? [];
+                $range = ['result' => $rr['cidrs'] ?? []];
             }
         }
     }
@@ -1231,9 +1227,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (count($lines) >= 1 && count($lines) <= 50) {
             $sr = $supernet_action === 'find' ? supernet_find($lines) : summarise_cidrs($lines);
             if (isset($sr['error'])) {
-                $supernet_error = $sr['error'];
+                $supernet = ['error' => $sr['error']];
             } else {
-                $supernet_result = $sr;
+                $supernet = ['result' => $sr];
             }
         }
     }
@@ -1267,9 +1263,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (count($lines6) >= 1 && count($lines6) <= 50) {
             $sr6 = $supernet6_action === 'find' ? supernet6_find($lines6) : summarise6_cidrs($lines6);
             if (isset($sr6['error'])) {
-                $supernet6_error = $sr6['error'];
+                $supernet6 = ['error' => $sr6['error']];
             } else {
-                $supernet6_result = $sr6;
+                $supernet6 = ['result' => $sr6];
             }
         }
     }

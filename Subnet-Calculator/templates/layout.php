@@ -228,8 +228,8 @@ if ($i < 3) {
         <?php
         $open_tool_ipv4 = null;
         if ($split_result !== null || $split_error !== null) { $open_tool_ipv4 = 'split'; }
-        elseif ($supernet_result !== null || $supernet_error !== null) { $open_tool_ipv4 = 'supernet'; }
-        elseif ($range_result !== null || $range_error !== null) { $open_tool_ipv4 = 'range'; }
+        elseif (!empty($supernet)) { $open_tool_ipv4 = 'supernet'; }
+        elseif (!empty($range)) { $open_tool_ipv4 = 'range'; }
         elseif ($tree_result !== null || $tree_error !== null) { $open_tool_ipv4 = 'tree'; }
         elseif ($wildcard_result !== null || $wildcard_error !== null) { $open_tool_ipv4 = 'wildcard'; }
         elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'lookup'; }
@@ -303,15 +303,15 @@ if ($i < 3) {
                             <button type="submit" name="supernet_action" value="summarise" class="splitter-btn">Summarise Routes</button><?= help_bubble('supernet-summarise', 'Computes the minimal set of non-overlapping CIDRs that exactly covers the listed networks. Unlike Find Supernet, this avoids including addresses outside the input ranges.') ?>
                         </div>
                     </form>
-                    <?php if ($supernet_error) : ?>
-                        <div class="error"><?= htmlspecialchars($supernet_error) ?></div>
-                    <?php elseif ($supernet_result !== null) : ?>
+                    <?php if (!empty($supernet['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($supernet['error']) ?></div>
+                    <?php elseif (isset($supernet['result'])) : ?>
                         <?php
                         $_supernet_inputs = count(array_filter(array_map('trim', explode("\n", $supernet_input))));
                         if ($supernet_action === 'find') {
                             $_supernet_label = 'Supernet: ' . $_supernet_inputs . ' CIDR' . ($_supernet_inputs !== 1 ? 's' : '');
                         } else {
-                            $_supernet_outs  = count($supernet_result['summaries'] ?? []);
+                            $_supernet_outs  = count($supernet['result']['summaries'] ?? []);
                             $_supernet_label = 'Summarise: ' . $_supernet_inputs . ' → ' . $_supernet_outs;
                         }
                         ?>
@@ -320,7 +320,7 @@ if ($i < 3) {
                                  data-history-source="supernet"
                                  data-history-active="1"
                                  data-history-label="<?= htmlspecialchars($_supernet_label) ?>">
-                                <?= htmlspecialchars($supernet_result['supernet'] ?? '') ?>
+                                <?= htmlspecialchars($supernet['result']['supernet'] ?? '') ?>
                             </div>
                         <?php else : ?>
                             <div class="split-list split-list--mt"
@@ -328,13 +328,13 @@ if ($i < 3) {
                                  data-history-active="1"
                                  data-history-label="<?= htmlspecialchars($_supernet_label) ?>">
                                 <button type="button" class="copy-all-btn" data-target="supernet">Copy All</button>
-                                <?php foreach ($supernet_result['summaries'] ?? [] as $s) : ?>
+                                <?php foreach ($supernet['result']['summaries'] ?? [] as $s) : ?>
                                     <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
                                         <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
                                         <?= copy_button($s, 'Copy ' . $s) ?>
                                     </div>
                                 <?php endforeach; ?>
-                                <?php $s_count = count($supernet_result['summaries'] ?? []);
+                                <?php $s_count = count($supernet['result']['summaries'] ?? []);
                                       $i_count = count(array_filter(explode("\n", $supernet_input))); ?>
                                 <div class="split-more"><?= $s_count ?> prefix<?= $s_count !== 1 ? 'es' : '' ?> from <?= $i_count ?> input<?= $i_count !== 1 ? 's' : '' ?></div>
                             </div>
@@ -363,22 +363,22 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Convert</button>
                         </div>
                     </form>
-                    <?php if ($range_error) : ?>
-                        <div class="error"><?= htmlspecialchars($range_error) ?></div>
-                    <?php elseif ($range_result !== null) : ?>
+                    <?php if (!empty($range['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($range['error']) ?></div>
+                    <?php elseif (isset($range['result'])) : ?>
                         <?php $_range_label = 'Range: ' . $range_start . ' → ' . $range_end; ?>
                         <div class="split-list split-list--mt"
                              data-history-source="range"
                              data-history-active="1"
                              data-history-label="<?= htmlspecialchars($_range_label) ?>">
                             <button type="button" class="copy-all-btn" data-target="range">Copy All</button>
-                            <?php foreach ($range_result as $r_cidr) : ?>
+                            <?php foreach ($range['result'] as $r_cidr) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($r_cidr) ?>">
                                     <span class="split-subnet-text"><?= htmlspecialchars($r_cidr) ?></span>
                                     <?= copy_button($r_cidr, 'Copy ' . $r_cidr) ?>
                                 </div>
                             <?php endforeach; ?>
-                            <div class="split-more"><?= count($range_result) ?> CIDR block<?= count($range_result) !== 1 ? 's' : '' ?></div>
+                            <div class="split-more"><?= count($range['result']) ?> CIDR block<?= count($range['result']) !== 1 ? 's' : '' ?></div>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -744,9 +744,9 @@ if ($i < 3) {
         <?php
         $open_tool_ipv6 = null;
         if ($split_result6 !== null || $split_error6 !== null) { $open_tool_ipv6 = 'split6'; }
-        elseif ($ula_result !== null || $ula_error !== null) { $open_tool_ipv6 = 'ula'; }
+        elseif (!empty($ula)) { $open_tool_ipv6 = 'ula'; }
         elseif (!empty($range6)) { $open_tool_ipv6 = 'range6'; }
-        elseif ($supernet6_result !== null || $supernet6_error !== null) { $open_tool_ipv6 = 'supernet6'; }
+        elseif (!empty($supernet6)) { $open_tool_ipv6 = 'supernet6'; }
         elseif (!empty($zoneid)) { $open_tool_ipv6 = 'zoneid'; }
         elseif (!empty($derive)) { $open_tool_ipv6 = 'derive'; }
         elseif (!empty($slaac)) { $open_tool_ipv6 = 'slaac'; }
@@ -833,23 +833,23 @@ if ($i < 3) {
                             </div>
                         </div>
                     </form>
-                    <?php if ($ula_error) : ?>
-                        <div class="error"><?= htmlspecialchars($ula_error) ?></div>
-                    <?php elseif ($ula_result !== null) : ?>
-                        <?php $_ula_label = 'ULA: ' . (string)($ula_result['prefix'] ?? ''); ?>
+                    <?php if (!empty($ula['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($ula['error']) ?></div>
+                    <?php elseif (isset($ula['result'])) : ?>
+                        <?php $_ula_label = 'ULA: ' . (string)($ula['result']['prefix'] ?? ''); ?>
                         <div class="ula-result"
                              data-history-source="ula"
                              data-history-active="1"
                              data-history-label="<?= htmlspecialchars($_ula_label) ?>">
-                            <div class="overlap-result overlap-contains"><?= htmlspecialchars($ula_result['prefix'] ?? '') ?></div>
+                            <div class="overlap-result overlap-contains"><?= htmlspecialchars($ula['result']['prefix'] ?? '') ?></div>
                             <div class="ula-meta">
-                                <span>Global ID: <code><?= htmlspecialchars($ula_result['global_id'] ?? '') ?></code></span>
-                                <span>Available /64s: <strong><?= format_number((int)($ula_result['available_64s'] ?? 0)) ?></strong></span>
+                                <span>Global ID: <code><?= htmlspecialchars($ula['result']['global_id'] ?? '') ?></code></span>
+                                <span>Available /64s: <strong><?= format_number((int)($ula['result']['available_64s'] ?? 0)) ?></strong></span>
                             </div>
-                            <?php if (!empty($ula_result['example_64s'])) : ?>
+                            <?php if (!empty($ula['result']['example_64s'])) : ?>
                             <div class="split-list split-list--mt">
                                 <button type="button" class="copy-all-btn" data-target="ula">Copy All</button>
-                                <?php foreach ($ula_result['example_64s'] as $ex64) : ?>
+                                <?php foreach ($ula['result']['example_64s'] as $ex64) : ?>
                                     <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($ex64) ?>">
                                         <span class="split-subnet-text"><?= htmlspecialchars($ex64) ?></span>
                                         <?= copy_button($ex64, 'Copy ' . $ex64) ?>
@@ -920,15 +920,15 @@ if ($i < 3) {
                             <button type="submit" name="supernet6_action" value="summarise" class="splitter-btn">Summarise Routes</button><?= help_bubble('supernet6-summarise', 'Computes the minimal set of non-overlapping IPv6 CIDRs that exactly covers the listed networks. Unlike Find Supernet, this avoids including addresses outside the input ranges.') ?>
                         </div>
                     </form>
-                    <?php if ($supernet6_error) : ?>
-                        <div class="error"><?= htmlspecialchars($supernet6_error) ?></div>
-                    <?php elseif ($supernet6_result !== null) : ?>
+                    <?php if (!empty($supernet6['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($supernet6['error']) ?></div>
+                    <?php elseif (isset($supernet6['result'])) : ?>
                         <?php
                         $_supernet6_inputs = count(array_filter(array_map('trim', explode("\n", $supernet6_input))));
                         if ($supernet6_action === 'find') {
                             $_supernet6_label = 'Supernet6: ' . $_supernet6_inputs . ' CIDR' . ($_supernet6_inputs !== 1 ? 's' : '');
                         } else {
-                            $_supernet6_outs  = count($supernet6_result['summaries'] ?? []);
+                            $_supernet6_outs  = count($supernet6['result']['summaries'] ?? []);
                             $_supernet6_label = 'Summarise6: ' . $_supernet6_inputs . ' → ' . $_supernet6_outs;
                         }
                         ?>
@@ -937,7 +937,7 @@ if ($i < 3) {
                                  data-history-source="supernet6"
                                  data-history-active="1"
                                  data-history-label="<?= htmlspecialchars($_supernet6_label) ?>">
-                                <?= htmlspecialchars($supernet6_result['supernet'] ?? '') ?>
+                                <?= htmlspecialchars($supernet6['result']['supernet'] ?? '') ?>
                             </div>
                         <?php else : ?>
                             <div class="split-list split-list--mt"
@@ -945,13 +945,13 @@ if ($i < 3) {
                                  data-history-active="1"
                                  data-history-label="<?= htmlspecialchars($_supernet6_label) ?>">
                                 <button type="button" class="copy-all-btn" data-target="supernet6">Copy All</button>
-                                <?php foreach ($supernet6_result['summaries'] ?? [] as $s6) : ?>
+                                <?php foreach ($supernet6['result']['summaries'] ?? [] as $s6) : ?>
                                     <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s6) ?>">
                                         <span class="split-subnet-text"><?= htmlspecialchars($s6) ?></span>
                                         <?= copy_button($s6, 'Copy ' . $s6) ?>
                                     </div>
                                 <?php endforeach; ?>
-                                <?php $s6_count = count($supernet6_result['summaries'] ?? []);
+                                <?php $s6_count = count($supernet6['result']['summaries'] ?? []);
                                       $i6_count = count(array_filter(explode("\n", $supernet6_input))); ?>
                                 <div class="split-more"><?= $s6_count ?> prefix<?= $s6_count !== 1 ? 'es' : '' ?> from <?= $i6_count ?> input<?= $i6_count !== 1 ? 's' : '' ?></div>
                             </div>
