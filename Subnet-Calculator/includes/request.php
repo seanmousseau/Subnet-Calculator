@@ -231,7 +231,10 @@ function sc_run_zoneid(string $input): array
  * mac_canonical, eui64, ul_bit_flipped, link_local, solicited_node,
  * warning, error. Empty input returns []. (v3.4.0 — flat → array)
  *
- * @return array{mac_canonical?: string, eui64?: string, ul_bit_flipped?: bool, link_local?: string, solicited_node?: string, warning?: ?string, error?: string}
+ * @return array{
+ *     mac_canonical?: string, eui64?: string, ul_bit_flipped?: bool,
+ *     link_local?: string, solicited_node?: string, warning?: ?string, error?: string
+ * }
  */
 function sc_run_derive(string $mac): array
 {
@@ -268,7 +271,10 @@ function sc_run_derive(string $mac): array
  * prefix, address, interface_id, seed_used, seed_was_provided, warning,
  * error. Empty prefix returns []. (v3.4.0 — flat → array)
  *
- * @return array{prefix?: string, address?: string, interface_id?: string, seed_used?: ?string, seed_was_provided?: bool, warning?: ?string, error?: string}
+ * @return array{
+ *     prefix?: string, address?: string, interface_id?: string,
+ *     seed_used?: ?string, seed_was_provided?: bool, warning?: ?string, error?: string
+ * }
  */
 function sc_run_slaac(string $prefix, string $seed): array
 {
@@ -300,7 +306,13 @@ function sc_run_slaac(string $prefix, string $seed): array
  * into $result_out / $error_out by reference. Used by both the POST handler
  * and the GET shareable-URL hydration path.
  *
- * @return array{result?: array{added: list<string>, removed: list<string>, unchanged: list<string>, changed: list<array{from: string, to: string, reason: string}>}, error?: string}
+ * @return array{
+ *     result?: array{
+ *         added: list<string>, removed: list<string>, unchanged: list<string>,
+ *         changed: list<array{from: string, to: string, reason: string}>
+ *     },
+ *     error?: string
+ * }
  */
 function sc_run_diff(
     string $before_input,
@@ -576,7 +588,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($new_pfx6 <= $current_pfx6) {
                     $splitter6 = ['error' => 'New prefix must be larger than /' . $current_pfx6 . '.'];
                 } else {
-                    $splitter6 = ['result' => split_subnet6($network_ipv6, $current_pfx6, $new_pfx6, $split_max_subnets)];
+                    $splitter6 = [
+                        'result' => split_subnet6($network_ipv6, $current_pfx6, $new_pfx6, $split_max_subnets),
+                    ];
                 }
             }
         }
