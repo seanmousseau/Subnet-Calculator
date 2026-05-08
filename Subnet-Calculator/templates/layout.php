@@ -279,9 +279,7 @@ if ($i < 3) {
                             <?php foreach ($split_result['subnets'] as $s) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
                                     <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
-                                    <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s) ?>" aria-label="Copy <?= htmlspecialchars($s) ?>">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                    </button>
+                                    <?= copy_button($s, 'Copy ' . $s) ?>
                                 </div>
                             <?php endforeach; ?>
                             <?php if ($split_result['total'] > $split_result['showing']) : ?>
@@ -333,9 +331,7 @@ if ($i < 3) {
                                 <?php foreach ($supernet_result['summaries'] ?? [] as $s) : ?>
                                     <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
                                         <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
-                                        <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s) ?>" aria-label="Copy <?= htmlspecialchars($s) ?>">
-                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                        </button>
+                                        <?= copy_button($s, 'Copy ' . $s) ?>
                                     </div>
                                 <?php endforeach; ?>
                                 <?php $s_count = count($supernet_result['summaries'] ?? []);
@@ -379,9 +375,7 @@ if ($i < 3) {
                             <?php foreach ($range_result as $r_cidr) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($r_cidr) ?>">
                                     <span class="split-subnet-text"><?= htmlspecialchars($r_cidr) ?></span>
-                                    <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($r_cidr) ?>" aria-label="Copy <?= htmlspecialchars($r_cidr) ?>">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                    </button>
+                                    <?= copy_button($r_cidr, 'Copy ' . $r_cidr) ?>
                                 </div>
                             <?php endforeach; ?>
                             <div class="split-more"><?= count($range_result) ?> CIDR block<?= count($range_result) !== 1 ? 's' : '' ?></div>
@@ -482,20 +476,12 @@ if ($i < 3) {
                             <div class="split-item" tabindex="0" role="button"
                                  data-copy="<?= htmlspecialchars($wildcard_result['cidr']) ?>">
                                 <span class="split-subnet-text" id="wildcard-result-cidr">CIDR: <?= htmlspecialchars($wildcard_result['cidr']) ?></span>
-                                <button type="button" class="subnet-copy"
-                                        data-copy="<?= htmlspecialchars($wildcard_result['cidr']) ?>"
-                                        aria-label="Copy CIDR <?= htmlspecialchars($wildcard_result['cidr']) ?>">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                </button>
+                                <?= copy_button($wildcard_result['cidr'], 'Copy CIDR ' . $wildcard_result['cidr']) ?>
                             </div>
                             <div class="split-item" tabindex="0" role="button"
                                  data-copy="<?= htmlspecialchars($wildcard_result['wildcard']) ?>">
                                 <span class="split-subnet-text" id="wildcard-result-mask">Wildcard: <?= htmlspecialchars($wildcard_result['wildcard']) ?></span>
-                                <button type="button" class="subnet-copy"
-                                        data-copy="<?= htmlspecialchars($wildcard_result['wildcard']) ?>"
-                                        aria-label="Copy wildcard <?= htmlspecialchars($wildcard_result['wildcard']) ?>">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                </button>
+                                <?= copy_button($wildcard_result['wildcard'], 'Copy wildcard ' . $wildcard_result['wildcard']) ?>
                             </div>
                         </div>
                     <?php endif; ?>
@@ -812,9 +798,7 @@ if ($i < 3) {
                             <?php foreach ($split_result6['subnets'] as $s) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
                                     <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
-                                    <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s) ?>" aria-label="Copy <?= htmlspecialchars($s) ?>">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                    </button>
+                                    <?= copy_button($s, 'Copy ' . $s) ?>
                                 </div>
                             <?php endforeach; ?>
                             <?php
@@ -868,9 +852,7 @@ if ($i < 3) {
                                 <?php foreach ($ula_result['example_64s'] as $ex64) : ?>
                                     <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($ex64) ?>">
                                         <span class="split-subnet-text"><?= htmlspecialchars($ex64) ?></span>
-                                        <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($ex64) ?>" aria-label="Copy <?= htmlspecialchars($ex64) ?>">
-                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                        </button>
+                                        <?= copy_button($ex64, 'Copy ' . $ex64) ?>
                                     </div>
                                 <?php endforeach; ?>
                             </div>
@@ -915,9 +897,7 @@ if ($i < 3) {
                             <?php foreach ($range6_result as $r6_cidr) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($r6_cidr) ?>">
                                     <span class="split-subnet-text"><?= htmlspecialchars($r6_cidr) ?></span>
-                                    <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($r6_cidr) ?>" aria-label="Copy <?= htmlspecialchars($r6_cidr) ?>">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                    </button>
+                                    <?= copy_button($r6_cidr, 'Copy ' . $r6_cidr) ?>
                                 </div>
                             <?php endforeach; ?>
                             <div class="split-more"><?= count($range6_result) ?> CIDR block<?= count($range6_result) !== 1 ? 's' : '' ?><?php if ($range6_total !== null) : ?> · <?= htmlspecialchars(is_string($range6_total) ? $range6_total : (string)$range6_total) ?> addresses<?php endif; ?></div>
@@ -968,9 +948,7 @@ if ($i < 3) {
                                 <?php foreach ($supernet6_result['summaries'] ?? [] as $s6) : ?>
                                     <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s6) ?>">
                                         <span class="split-subnet-text"><?= htmlspecialchars($s6) ?></span>
-                                        <button type="button" class="subnet-copy" data-copy="<?= htmlspecialchars($s6) ?>" aria-label="Copy <?= htmlspecialchars($s6) ?>">
-                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                        </button>
+                                        <?= copy_button($s6, 'Copy ' . $s6) ?>
                                     </div>
                                 <?php endforeach; ?>
                                 <?php $s6_count = count($supernet6_result['summaries'] ?? []);
@@ -1067,33 +1045,21 @@ if ($i < 3) {
                                 <dt class="derive-result__label">EUI-64<?= help_bubble('ipv6-derive-eui64', 'Modified EUI-64 interface identifier — the U/L (universal/local) bit in the first MAC byte is inverted, then the 16-bit value 0xFFFE is inserted between the OUI and the NIC half (RFC 4291 §2.5.1).') ?></dt>
                                 <dd class="derive-result__value">
                                     <code><?= htmlspecialchars((string)$derive_eui64) ?></code>
-                                    <button type="button" class="subnet-copy"
-                                            data-copy="<?= htmlspecialchars((string)$derive_eui64) ?>"
-                                            aria-label="Copy EUI-64 interface ID">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                    </button>
+                                    <?= copy_button((string)$derive_eui64, 'Copy EUI-64 interface ID') ?>
                                 </dd>
                             </div>
                             <div class="derive-result__row">
                                 <dt class="derive-result__label">Link-local<?= help_bubble('ipv6-derive-ll', 'Link-local address — the fe80::/64 prefix concatenated with the EUI-64 interface identifier. Always assigned automatically to every IPv6-enabled interface (RFC 4291 §2.5.6).') ?></dt>
                                 <dd class="derive-result__value">
                                     <code><?= htmlspecialchars((string)$derive_link_local) ?></code>
-                                    <button type="button" class="subnet-copy"
-                                            data-copy="<?= htmlspecialchars((string)$derive_link_local) ?>"
-                                            aria-label="Copy link-local address">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                    </button>
+                                    <?= copy_button((string)$derive_link_local, 'Copy link-local address') ?>
                                 </dd>
                             </div>
                             <div class="derive-result__row">
                                 <dt class="derive-result__label">Solicited-node<?= help_bubble('ipv6-derive-sn', 'Solicited-node multicast address — ff02::1:ff followed by the low 24 bits of the unicast address. Used by IPv6 Neighbor Discovery so a host only listens for resolution requests targeted at its own address (RFC 4291 §2.7.1).') ?></dt>
                                 <dd class="derive-result__value">
                                     <code><?= htmlspecialchars((string)$derive_solicited_node) ?></code>
-                                    <button type="button" class="subnet-copy"
-                                            data-copy="<?= htmlspecialchars((string)$derive_solicited_node) ?>"
-                                            aria-label="Copy solicited-node multicast address">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                    </button>
+                                    <?= copy_button((string)$derive_solicited_node, 'Copy solicited-node multicast address') ?>
                                 </dd>
                             </div>
                         </dl>
@@ -1151,33 +1117,21 @@ if ($i < 3) {
                                 <dt class="slaac-result__label">Address<?= help_bubble('ipv6-slaac-addr', 'The full 128-bit IPv6 address: the supplied /64 prefix concatenated with the random 64-bit privacy interface identifier. This is what would be assigned to the host as a temporary SLAAC address per RFC 8981.') ?></dt>
                                 <dd class="slaac-result__value">
                                     <code><?= htmlspecialchars((string)$slaac_address) ?></code>
-                                    <button type="button" class="subnet-copy"
-                                            data-copy="<?= htmlspecialchars((string)$slaac_address) ?>"
-                                            aria-label="Copy SLAAC privacy address">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                    </button>
+                                    <?= copy_button((string)$slaac_address, 'Copy SLAAC privacy address') ?>
                                 </dd>
                             </div>
                             <div class="slaac-result__row">
                                 <dt class="slaac-result__label">Interface ID<?= help_bubble('ipv6-slaac-iid', 'The 64-bit random interface identifier in colon-separated hextet form. The U/L bit (second-lowest bit of the first byte) is cleared per RFC 4291 §2.5.1 so the address cannot be mistaken for an EUI-64 derived from a hardware MAC.') ?></dt>
                                 <dd class="slaac-result__value">
                                     <code><?= htmlspecialchars((string)$slaac_interface_id) ?></code>
-                                    <button type="button" class="subnet-copy"
-                                            data-copy="<?= htmlspecialchars((string)$slaac_interface_id) ?>"
-                                            aria-label="Copy interface ID">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                    </button>
+                                    <?= copy_button((string)$slaac_interface_id, 'Copy interface ID') ?>
                                 </dd>
                             </div>
                             <div class="slaac-result__row">
                                 <dt class="slaac-result__label">Seed used<?= help_bubble('ipv6-slaac-seed-used', 'The 16-hex seed value that produced this address. If you supplied a seed it is echoed here; otherwise the random seed used internally is shown so you can reproduce the result later (e.g. by pasting it back into the Advanced field).') ?></dt>
                                 <dd class="slaac-result__value">
                                     <code><?= htmlspecialchars((string)$slaac_seed_used) ?></code>
-                                    <button type="button" class="subnet-copy"
-                                            data-copy="<?= htmlspecialchars((string)$slaac_seed_used) ?>"
-                                            aria-label="Copy seed">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                    </button>
+                                    <?= copy_button((string)$slaac_seed_used, 'Copy seed') ?>
                                 </dd>
                             </div>
                         </dl>
