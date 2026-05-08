@@ -20,9 +20,11 @@ declare(strict_types=1);
 // outside the mapped block. Pure ::1 and :: are explicitly excluded from
 // `compatible`, per RFC 4291 §2.5.5.1.
 //
-// `detail_route` is seeded to null in this PR — per-scheme drawers (T3–T7)
-// will replace those null values with the live `/ipv6/<tool>` URLs as they
-// land. The contract is pinned by EmbeddedV4Test::test_detail_route_seeded_null_for_now.
+// `detail_route` is filled in per-scheme as the v3.5.0 transition tools
+// land. As of T3 (#392), 6to4 deep-links to `/ipv6/6to4`; the other five
+// schemes (mapped, compatible, teredo, nat64-wkp, isatap) still return
+// null until their drawers ship in T4–T7. The contract is pinned by
+// EmbeddedV4Test::test_detail_routes_per_scheme.
 
 const EMBEDDEDV4_MAPPED_PREFIX_BIN     = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff";
 const EMBEDDEDV4_NAT64_WKP_PREFIX_BIN  = "\x00\x64\xff\x9b\x00\x00\x00\x00\x00\x00\x00\x00";
@@ -122,7 +124,11 @@ function detect_embedded_v4(string $ipv6): array
             'scheme'       => '6to4',
             'ipv4'         => $v4 === false ? null : $v4,
             'deprecated'   => false,
-            'detail_route' => null,
+            // v3.5.0 T3 (#392): per-scheme drawer for 6to4 ships in this PR.
+            // Mapped/teredo/nat64-wkp/isatap/compatible drawers land later in
+            // v3.5.0 — their detail_route stays null until then. Contract
+            // pinned by EmbeddedV4Test::test_detail_routes_per_scheme.
+            'detail_route' => '/ipv6/6to4',
             'extra'        => [
                 'sla_id' => bin2hex(substr($bin, 6, 2)),
             ],

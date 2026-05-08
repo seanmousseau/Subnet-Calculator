@@ -21,6 +21,7 @@ require __DIR__ . '/includes/functions-slaac6.php';
 require __DIR__ . '/includes/functions-rdns6.php';
 require __DIR__ . '/includes/functions-mapped6.php';
 require __DIR__ . '/includes/functions-embedded-v4.php';
+require __DIR__ . '/includes/functions-6to4.php';
 require __DIR__ . '/includes/functions-tree.php';
 require __DIR__ . '/includes/functions-tree-diff.php';
 require __DIR__ . '/includes/functions-lookup.php';

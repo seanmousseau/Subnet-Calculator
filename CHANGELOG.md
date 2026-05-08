@@ -18,6 +18,9 @@ as each ships.
   transition theme: detects IPv4-mapped, IPv4-compatible (deprecated),
   6to4, Teredo, NAT64 well-known, and ISATAP embeddings; extracts the
   embedded IPv4. Deep-links to per-scheme tools as they ship. (#390)
+- **6to4 address tool (RFC 3056).** Bidirectional translation between
+  public IPv4 and `2002::/16` 6to4 prefixes. Help text notes RFC 7526
+  deprecated status. (#392)
 
 ## [3.4.1] - 2026-05-08
 

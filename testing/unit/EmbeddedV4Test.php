@@ -85,13 +85,29 @@ final class EmbeddedV4Test extends TestCase
         $this->assertTrue(ipv6_in_prefix('64:ff9b::c000:201', '64:ff9b::', 96));
     }
 
-    public function test_detail_route_seeded_null_for_now(): void
+    public function test_detail_routes_per_scheme(): void
     {
-        // Per-scheme drawers land in T3–T7. Until then, every scheme returns
-        // detail_route=null. This test pins the contract so the eventual
-        // wiring touch is deliberate.
-        $r = detect_embedded_v4('::ffff:192.0.2.1');
-        $this->assertNull($r['detail_route']);
+        // Per-scheme drawers land incrementally across v3.5.0. As of T3
+        // (#392) only 6to4 has shipped; mapped/compatible/teredo/nat64-wkp/
+        // isatap detail_routes stay null until T4–T7. This test pins the
+        // contract so each future wiring touch is deliberate.
+        $sixToFour = detect_embedded_v4('2002:c000:0201::');
+        $this->assertSame('/ipv6/6to4', $sixToFour['detail_route']);
+
+        $mapped = detect_embedded_v4('::ffff:192.0.2.1');
+        $this->assertNull($mapped['detail_route']);
+
+        $compatible = detect_embedded_v4('::192.0.2.1');
+        $this->assertNull($compatible['detail_route']);
+
+        $teredo = detect_embedded_v4('2001:0:4136:e378:8000:63bf:3fff:fdd2');
+        $this->assertNull($teredo['detail_route']);
+
+        $nat64Wkp = detect_embedded_v4('64:ff9b::192.0.2.1');
+        $this->assertNull($nat64Wkp['detail_route']);
+
+        $isatap = detect_embedded_v4('2001:db8::200:5efe:c000:201');
+        $this->assertNull($isatap['detail_route']);
     }
 
     public function test_extra_present_for_all_branches(): void
