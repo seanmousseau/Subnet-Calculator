@@ -63,6 +63,8 @@ tags:
     description: VLSM session persistence
   - name: RDNS
     description: Reverse-DNS zone generation
+  - name: Mapped6
+    description: IPv4-mapped IPv6 and NAT64 conversion
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -350,6 +352,7 @@ paths:
                     - "POST /api/v1/ula"
                     - "POST /api/v1/rdns"
                     - "POST /api/v1/rdns6"
+                    - "POST /api/v1/mapped6"
                     - "POST /api/v1/bulk"
                     - "POST /api/v1/range/ipv4"
                     - "POST /api/v1/range6"
@@ -1732,6 +1735,109 @@ paths:
                   arpa: "0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa"
         "400":
           description: Invalid input (invalid address, prefix out of range, or non-nibble-aligned prefix)
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /mapped6:
+    post:
+      operationId: mappedNat64Convert
+      tags: [Mapped6]
+      summary: Convert between IPv4, IPv4-mapped IPv6, and NAT64 IPv6
+      description: |
+        Bidirectional conversion between an IPv4 dotted-quad, an
+        IPv4-mapped IPv6 address (`::ffff:0:0/96`, RFC 4291 §2.5.5.2),
+        and a NAT64 IPv6 address (RFC 6052). Accepts any of the three
+        forms as `input` and returns all four representations
+        (IPv4, IPv4-mapped, NAT64, NAT64 prefix used).
+
+        The default NAT64 prefix is the well-known `64:ff9b::/96`. An
+        operator-supplied custom NAT64 prefix is accepted via
+        `nat64_prefix` and must be in `/96` form — the other RFC 6052
+        prefix lengths (`/32`, `/40`, `/48`, `/56`, `/64`) are not
+        supported by this endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input]
+              properties:
+                input:
+                  type: string
+                  description: An IPv4 address, an IPv4-mapped IPv6 address, or a NAT64 IPv6 address within the supplied prefix.
+                  example: "192.0.2.1"
+                nat64_prefix:
+                  type: string
+                  description: NAT64 prefix in `/96` form. Defaults to `64:ff9b::/96`.
+                  default: "64:ff9b::/96"
+                  example: "64:ff9b::/96"
+            examples:
+              ipv4-in:
+                summary: IPv4 input
+                value: { input: "192.0.2.1" }
+              mapped-in:
+                summary: IPv4-mapped IPv6 input
+                value: { input: "::ffff:192.0.2.1" }
+              nat64-in:
+                summary: NAT64 IPv6 input (well-known prefix)
+                value: { input: "64:ff9b::c000:201" }
+              custom-prefix:
+                summary: Custom /96 NAT64 prefix
+                value: { input: "192.0.2.1", nat64_prefix: "2001:db8:1::/96" }
+      responses:
+        "200":
+          description: All four representations of the address
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [input, ipv4, ipv4_mapped, nat64, nat64_prefix]
+                        properties:
+                          input:        { type: string, example: "192.0.2.1" }
+                          ipv4:         { type: string, example: "192.0.2.1" }
+                          ipv4_mapped:  { type: string, example: "::ffff:192.0.2.1" }
+                          nat64:        { type: string, example: "64:ff9b::c000:201" }
+                          nat64_prefix: { type: string, example: "64:ff9b::/96" }
+              example:
+                ok: true
+                data:
+                  input: "192.0.2.1"
+                  ipv4: "192.0.2.1"
+                  ipv4_mapped: "::ffff:192.0.2.1"
+                  nat64: "64:ff9b::c000:201"
+                  nat64_prefix: "64:ff9b::/96"
+        "400":
+          description: Invalid input (unparseable address, not within supplied prefix, or non-/96 NAT64 prefix)
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }

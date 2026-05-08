@@ -331,6 +331,71 @@ function sc_run_rdns6(string $address, string $prefix_input): array
     ];
 }
 
+// ─── IPv4-mapped / NAT64 helper (shared by POST handler and GET shareable URL) ─
+
+/**
+ * Run mapped6 conversions against any of the three supported input forms
+ * (IPv4, IPv4-mapped IPv6, NAT64 IPv6 within the supplied /96 prefix) and
+ * return all four representations. Empty input returns []. (v3.4.0 Task 9)
+ *
+ * @param array<string,mixed> $input
+ *
+ * @return array{
+ *     input?: string,
+ *     ipv4?: string,
+ *     ipv4_mapped?: string,
+ *     nat64?: string,
+ *     nat64_prefix?: string,
+ *     error?: string|null
+ * }
+ */
+function sc_run_mapped6(array $input): array
+{
+    $raw    = trim((string)($input['input'] ?? ''));
+    $prefix = trim((string)($input['nat64_prefix'] ?? ''));
+    if ($prefix === '') {
+        $prefix = NAT64_DEFAULT_PREFIX;
+    }
+    if ($raw === '') {
+        return [];
+    }
+    try {
+        if (filter_var($raw, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
+            $v4     = $raw;
+            $mapped = ipv4_to_mapped($v4);
+            $nat64  = ipv4_to_nat64($v4, $prefix);
+        } elseif (is_ipv4_mapped($raw)) {
+            $v4     = mapped_to_ipv4($raw);
+            $mapped = $raw;
+            $nat64  = ipv4_to_nat64($v4, $prefix);
+        } elseif (is_nat64($raw, $prefix)) {
+            $v4     = nat64_to_ipv4($raw, $prefix);
+            $mapped = ipv4_to_mapped($v4);
+            $nat64  = $raw;
+        } else {
+            return [
+                'input'        => $raw,
+                'nat64_prefix' => $prefix,
+                'error'        => 'Input is not IPv4, IPv4-mapped IPv6, or NAT64 IPv6 within the supplied prefix.',
+            ];
+        }
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'input'        => $raw,
+            'nat64_prefix' => $prefix,
+            'error'        => $e->getMessage(),
+        ];
+    }
+    return [
+        'input'        => $raw,
+        'ipv4'         => $v4,
+        'ipv4_mapped'  => $mapped,
+        'nat64'        => $nat64,
+        'nat64_prefix' => $prefix,
+        'error'        => null,
+    ];
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -464,6 +529,12 @@ $rdns6_prefix_input  = '';
 /** @var array{address?: string, prefix?: int, arpa?: string, error?: string} */
 $rdns6 = [];
 
+// v3.4.0 Task 9 — IPv4-mapped / NAT64 (mapped6)
+$mapped6_input        = '';
+$mapped6_prefix_input = '';
+/** @var array{input?: string, ipv4?: string, ipv4_mapped?: string, nat64?: string, nat64_prefix?: string, error?: string|null} */
+$mapped6 = [];
+
 $ula_global_id_input = '';
 /** @var array{result?: array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}, error?: string} */
 $ula = [];
@@ -526,6 +597,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_derive        = isset($_POST['derive_mac']);
     $is_slaac         = isset($_POST['slaac_prefix']);
     $is_rdns6         = isset($_POST['rdns6_address']);
+    $is_mapped6       = isset($_POST['mapped6_input']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -533,7 +605,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
         || $is_vlsm6 || $is_supernet || $is_supernet6 || $is_ula || $is_session_save || $is_range
         || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid
-        || $is_derive || $is_slaac || $is_rdns6;
+        || $is_derive || $is_slaac || $is_rdns6 || $is_mapped6;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -934,6 +1006,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $rdns6 = sc_run_rdns6($rdns6_address_input, $rdns6_prefix_input);
     }
 
+    if ($is_mapped6 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $mapped6_input        = trim((string)($_POST['mapped6_input']        ?? ''));
+        $mapped6_prefix_input = trim((string)($_POST['mapped6_nat64_prefix'] ?? ''));
+        $mapped6 = sc_run_mapped6([
+            'input'        => $mapped6_input,
+            'nat64_prefix' => $mapped6_prefix_input,
+        ]);
+    }
+
     if ($is_ula && !$form_blocked) {
         $ula_global_id_input = trim((string)($_POST['ula_global_id'] ?? ''));
         $ur = generate_ula_prefix($ula_global_id_input);
@@ -1321,6 +1403,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $rdns6_address_input = trim((string)($_GET['rdns6_address'] ?? ''));
         $rdns6_prefix_input  = trim((string)($_GET['rdns6_prefix']  ?? ''));
         $rdns6 = sc_run_rdns6($rdns6_address_input, $rdns6_prefix_input);
+    }
+
+    // IPv4-mapped / NAT64 shareable GET URL (v3.4.0 Task 9)
+    if ($active_tab === 'ipv6' && isset($_GET['mapped6_input'])) {
+        $mapped6_input        = trim((string)($_GET['mapped6_input']        ?? ''));
+        $mapped6_prefix_input = trim((string)($_GET['mapped6_nat64_prefix'] ?? ''));
+        $mapped6 = sc_run_mapped6([
+            'input'        => $mapped6_input,
+            'nat64_prefix' => $mapped6_prefix_input,
+        ]);
     }
 
     // Supernet6 / summarise6 shareable GET URL (v3.3.0)

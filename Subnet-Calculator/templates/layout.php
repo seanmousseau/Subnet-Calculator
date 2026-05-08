@@ -763,9 +763,10 @@ if ($i < 3) {
         elseif (!empty($lookup) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
         elseif (!empty($diff) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'diff'; }
         elseif (!empty($rdns6)) { $open_tool_ipv6 = 'rdns6'; }
+        elseif (!empty($mapped6)) { $open_tool_ipv6 = 'mapped6'; }
         // v3.4.0 — fallback: /ipv6/<tool> rewrites to ?tool=<tool>; honour it
         // when no other GET trigger has already chosen a tool above.
-        $ipv6_tool_whitelist = ['split6','ula','range6','supernet6','zoneid','derive','slaac','lookup','diff','rdns6'];
+        $ipv6_tool_whitelist = ['split6','ula','range6','supernet6','zoneid','derive','slaac','lookup','diff','rdns6','mapped6'];
         if ($open_tool_ipv6 === null && $active_tab === 'ipv6'
             && in_array($requested_tool, $ipv6_tool_whitelist, true)) {
             $open_tool_ipv6 = $requested_tool;
@@ -782,6 +783,7 @@ if ($i < 3) {
             <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
             <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
             <button type="button" class="tool-trigger" data-tool="rdns6" aria-expanded="false">Reverse DNS</button>
+            <button type="button" class="tool-trigger" data-tool="mapped6" aria-expanded="false">IPv4-mapped / NAT64</button>
         </div>
 
         <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv6">
@@ -1309,6 +1311,75 @@ if ($i < 3) {
                                     <code><?= htmlspecialchars((string)$rdns6['arpa']) ?></code>
                                     <?= copy_button((string)$rdns6['arpa'], 'Copy ip6.arpa zone name') ?>
                                 </dd>
+                            </div>
+                        </dl>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="mapped6">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IPv4-mapped / NAT64 (mapped6)<?= help_bubble('ipv6-mapped6', 'Bidirectional convert between IPv4, IPv4-mapped IPv6 (::ffff:0:0/96, RFC 4291) and NAT64 IPv6 (64:ff9b::/96 default, RFC 6052). Accepts any of the three forms; renders all four representations. Custom NAT64 prefix supported via the Advanced disclosure (must be /96).') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="mapped6_input">Address<?= help_bubble('mapped6-input', 'Any one of: an IPv4 dotted-quad (192.0.2.1), an IPv4-mapped IPv6 (::ffff:192.0.2.1), or a NAT64 IPv6 within the supplied prefix (64:ff9b::c000:201).') ?></label>
+                                <input type="text" id="mapped6_input" name="mapped6_input"
+                                       value="<?= htmlspecialchars($mapped6_input ?? '') ?>"
+                                       placeholder="192.0.2.1"
+                                       autocomplete="off" spellcheck="false"
+                                       <?= !empty($mapped6['error']) ? 'aria-invalid="true" aria-describedby="mapped6-error"' : '' ?>>
+                            </div>
+                        </div>
+                        <details class="slaac-advanced"<?= ($mapped6_prefix_input ?? '') !== '' ? ' open' : '' ?>>
+                            <summary>Advanced — custom NAT64 prefix</summary>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="mapped6_nat64_prefix">NAT64 prefix <span class="label-footnote">(/96 only)</span><?= help_bubble('mapped6-nat64-prefix', 'Optional NAT64 prefix in /96 form. Defaults to the well-known 64:ff9b::/96 (RFC 6052). Operator-supplied custom prefixes such as 2001:db8:1::/96 are accepted. Non-/96 prefixes are rejected.') ?></label>
+                                    <input type="text" id="mapped6_nat64_prefix" name="mapped6_nat64_prefix"
+                                           value="<?= htmlspecialchars($mapped6_prefix_input ?? '') ?>"
+                                           placeholder="64:ff9b::/96"
+                                           autocomplete="off" spellcheck="false">
+                                </div>
+                            </div>
+                        </details>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Convert</button>
+                        </div>
+                    </form>
+                    <?php if (!empty($mapped6['error'])) : ?>
+                        <div class="error" id="mapped6-error"><?= htmlspecialchars((string)$mapped6['error']) ?></div>
+                    <?php elseif (isset($mapped6['ipv4'])) : ?>
+                        <?php $_mapped6_label = 'mapped6: ' . $mapped6['input']; ?>
+                        <dl class="zoneid-result"
+                            data-history-source="mapped6"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_mapped6_label) ?>">
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">IPv4</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)$mapped6['ipv4']) ?></code>
+                                    <?= copy_button((string)$mapped6['ipv4'], 'Copy IPv4 address') ?>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">IPv4-mapped IPv6</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)$mapped6['ipv4_mapped']) ?></code>
+                                    <?= copy_button((string)$mapped6['ipv4_mapped'], 'Copy IPv4-mapped IPv6') ?>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">NAT64 IPv6</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)$mapped6['nat64']) ?></code>
+                                    <?= copy_button((string)$mapped6['nat64'], 'Copy NAT64 IPv6') ?>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">NAT64 prefix</dt>
+                                <dd class="zoneid-result__value"><code><?= htmlspecialchars((string)$mapped6['nat64_prefix']) ?></code></dd>
                             </div>
                         </dl>
                     <?php endif; ?>
