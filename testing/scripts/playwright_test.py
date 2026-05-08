@@ -2709,6 +2709,100 @@ async def test_api_rdns(page: Page) -> None:
     assert_contains("api rdns: /25 zone has classless format", data5.get("data", {}).get("zone", ""), "/25")
 
 
+async def test_api_rdns6(page: Page) -> None:
+    section("API — POST /api/v1/rdns6")
+    # /64 zone delegation
+    status, data = _api_post("rdns6", {"address": "2001:db8::1", "prefix": 64})
+    assert_eq("api rdns6: HTTP 200", status, 200)
+    assert_eq("api rdns6: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api rdns6: address echoed", d.get("address"), "2001:db8::1")
+    assert_eq("api rdns6: prefix echoed", d.get("prefix"), 64)
+    assert_eq("api rdns6: arpa /64",
+              d.get("arpa"), "0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa")
+
+    # No prefix → full reverse name
+    status2, data2 = _api_post("rdns6", {"address": "2001:db8::1"})
+    assert_eq("api rdns6: HTTP 200 (no prefix)", status2, 200)
+    assert_eq("api rdns6: full reverse name",
+              data2.get("data", {}).get("arpa"),
+              "1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa")
+    assert_eq("api rdns6: prefix defaults to 128",
+              data2.get("data", {}).get("prefix"), 128)
+
+    # Non-nibble-aligned prefix → 400
+    status3, data3 = _api_post("rdns6", {"address": "2001:db8::", "prefix": 49})
+    assert_eq("api rdns6: /49 → 400", status3, 400)
+    assert_eq("api rdns6 err: ok=false", data3.get("ok"), False)
+
+    # Missing address → 400
+    status4, _ = _api_post("rdns6", {})
+    assert_eq("api rdns6: missing address → 400", status4, 400)
+
+    # Invalid address → 400
+    status5, _ = _api_post("rdns6", {"address": "not-an-address"})
+    assert_eq("api rdns6: invalid address → 400", status5, 400)
+
+
+async def test_ipv6_rdns6_ui(page: Page) -> None:
+    section("IPv6 reverse-DNS (rdns6) UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # T7 per-tool URL routing — /ipv6/rdns6 should auto-open the drawer.
+    # Test harness serves under /testing/sc/ so use the ?tool= equivalent that
+    # the rewrite produces (works regardless of base path).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=rdns6")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='rdns6']")
+    assert_eq("rdns6 UI: panel exists", await panel.count(), 1)
+
+    # Submit address + /64 prefix
+    await page.fill("#rdns6_address", "2001:db8::1")
+    await page.fill("#rdns6_prefix", "64")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='rdns6'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='rdns6']")
+    rows = panel.locator(".zoneid-result__row")
+    assert_eq("rdns6 UI: three result rows", await rows.count(), 3)
+    arpa_text = await rows.nth(2).locator(".zoneid-result__value code").text_content() or ""
+    assert_eq("rdns6 UI: arpa zone /64",
+              arpa_text.strip(),
+              "0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa")
+    assert_eq("rdns6 UI: no error band",
+              await panel.locator(".error").count(), 0)
+
+    # Click copy button
+    await rows.nth(2).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    clip = await page.evaluate("window.__lastClipboard")
+    assert_eq("rdns6 UI: copy ip6.arpa zone",
+              clip, "0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa")
+
+    # Error path — non-nibble-aligned
+    await navigate(page, APP_URL + "?tab=ipv6&tool=rdns6")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#rdns6_address", "2001:db8::")
+    await page.fill("#rdns6_prefix", "49")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='rdns6'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='rdns6']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("rdns6 UI: error band visible on /49",
+                len(err_text) > 0, f"got: {err_text!r}")
+    assert_eq("rdns6 UI: no result rows on error",
+              await panel.locator(".zoneid-result__row").count(), 0)
+
+
 async def test_api_bulk(page: Page) -> None:
     section("API — bulk calculation")
     # Two valid IPv4 CIDRs
@@ -7394,6 +7488,8 @@ async def main() -> None:
             await test_ipv6_slaac_copy_buttons(page)
             await test_ipv6_slaac_shareable_url(page)
             await test_api_slaac(page)
+            await test_ipv6_rdns6_ui(page)
+            await test_api_rdns6(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)

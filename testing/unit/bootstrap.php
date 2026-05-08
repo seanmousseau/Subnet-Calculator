@@ -17,6 +17,7 @@ require $base . 'functions-supernet6.php';
 require $base . 'functions-zone6.php';
 require $base . 'functions-derive6.php';
 require $base . 'functions-slaac6.php';
+require $base . 'functions-rdns6.php';
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require $base . 'functions-resolve.php';

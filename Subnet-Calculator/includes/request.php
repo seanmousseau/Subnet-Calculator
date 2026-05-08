@@ -299,6 +299,38 @@ function sc_run_slaac(string $prefix, string $seed): array
     ];
 }
 
+// ─── IPv6 reverse-DNS helper (shared by POST handler and GET shareable URL) ─
+
+/**
+ * Run ipv6_to_arpa() and return an associative array with keys:
+ * address, prefix, arpa, error. Empty input returns []. (v3.4.0 Task 8)
+ *
+ * @return array{address?: string, prefix?: int, arpa?: string, error?: string}
+ */
+function sc_run_rdns6(string $address, string $prefix_input): array
+{
+    if ($address === '') {
+        return [];
+    }
+    $prefix = null;
+    if ($prefix_input !== '') {
+        if (preg_match('/^-?\d+$/', $prefix_input) !== 1) {
+            return ['error' => 'Prefix must be an integer 0..128 (multiple of 4).'];
+        }
+        $prefix = (int) $prefix_input;
+    }
+    try {
+        $arpa = ipv6_to_arpa($address, $prefix);
+    } catch (\InvalidArgumentException $e) {
+        return ['error' => $e->getMessage()];
+    }
+    return [
+        'address' => $address,
+        'prefix'  => $prefix ?? 128,
+        'arpa'    => $arpa,
+    ];
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -426,6 +458,12 @@ $slaac_seed_input   = '';
 /** @var array{prefix?: string, address?: string, interface_id?: string, seed_used?: ?string, seed_was_provided?: bool, warning?: ?string, error?: string} */
 $slaac = [];
 
+// v3.4.0 Task 8 — IPv6 reverse-DNS (rdns6)
+$rdns6_address_input = '';
+$rdns6_prefix_input  = '';
+/** @var array{address?: string, prefix?: int, arpa?: string, error?: string} */
+$rdns6 = [];
+
 $ula_global_id_input = '';
 /** @var array{result?: array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}, error?: string} */
 $ula = [];
@@ -487,6 +525,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_zoneid        = isset($_POST['zoneid_input']);
     $is_derive        = isset($_POST['derive_mac']);
     $is_slaac         = isset($_POST['slaac_prefix']);
+    $is_rdns6         = isset($_POST['rdns6_address']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -494,7 +533,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
         || $is_vlsm6 || $is_supernet || $is_supernet6 || $is_ula || $is_session_save || $is_range
         || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid
-        || $is_derive || $is_slaac;
+        || $is_derive || $is_slaac || $is_rdns6;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -888,6 +927,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $slaac = sc_run_slaac($slaac_prefix_input, $slaac_seed_input);
     }
 
+    if ($is_rdns6 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $rdns6_address_input = trim((string)($_POST['rdns6_address'] ?? ''));
+        $rdns6_prefix_input  = trim((string)($_POST['rdns6_prefix']  ?? ''));
+        $rdns6 = sc_run_rdns6($rdns6_address_input, $rdns6_prefix_input);
+    }
+
     if ($is_ula && !$form_blocked) {
         $ula_global_id_input = trim((string)($_POST['ula_global_id'] ?? ''));
         $ur = generate_ula_prefix($ula_global_id_input);
@@ -1268,6 +1314,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $slaac_prefix_input = trim((string)($_GET['slaac_prefix'] ?? ''));
         $slaac_seed_input   = trim((string)($_GET['slaac_seed']   ?? ''));
         $slaac = sc_run_slaac($slaac_prefix_input, $slaac_seed_input);
+    }
+
+    // IPv6 reverse-DNS shareable GET URL (v3.4.0 Task 8)
+    if ($active_tab === 'ipv6' && isset($_GET['rdns6_address'])) {
+        $rdns6_address_input = trim((string)($_GET['rdns6_address'] ?? ''));
+        $rdns6_prefix_input  = trim((string)($_GET['rdns6_prefix']  ?? ''));
+        $rdns6 = sc_run_rdns6($rdns6_address_input, $rdns6_prefix_input);
     }
 
     // Supernet6 / summarise6 shareable GET URL (v3.3.0)
