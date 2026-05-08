@@ -126,7 +126,7 @@ function settings_schema(): array
             'type' => 'multiselect', 'default' => [],
             'values' => [
                 'ipv4', 'ipv6', 'vlsm', 'vlsm6', 'overlap', 'split',
-                'supernet', 'ula', 'rdns', 'rdns6', 'bulk', 'range', 'tree',
+                'supernet', 'ula', 'rdns', 'rdns6', 'mapped6', 'bulk', 'range', 'tree',
                 'tree-presets', 'lookup', 'diff', 'wildcard', 'sessions',
                 'changelog', 'schemas',
             ],

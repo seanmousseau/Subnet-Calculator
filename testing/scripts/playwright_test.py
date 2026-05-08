@@ -2803,6 +2803,138 @@ async def test_ipv6_rdns6_ui(page: Page) -> None:
               await panel.locator(".zoneid-result__row").count(), 0)
 
 
+async def test_api_mapped6(page: Page) -> None:
+    section("API — POST /api/v1/mapped6")
+    # IPv4 input → all four representations
+    status, data = _api_post("mapped6", {"input": "192.0.2.1"})
+    assert_eq("api mapped6: HTTP 200", status, 200)
+    assert_eq("api mapped6: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api mapped6: ipv4 echoed", d.get("ipv4"), "192.0.2.1")
+    assert_eq("api mapped6: ipv4_mapped", d.get("ipv4_mapped"), "::ffff:192.0.2.1")
+    assert_eq("api mapped6: nat64 default", d.get("nat64"), "64:ff9b::c000:201")
+    assert_eq("api mapped6: nat64_prefix default",
+              d.get("nat64_prefix"), "64:ff9b::/96")
+
+    # IPv4-mapped input → same outputs
+    status2, data2 = _api_post("mapped6", {"input": "::ffff:192.0.2.1"})
+    assert_eq("api mapped6 (mapped in): HTTP 200", status2, 200)
+    assert_eq("api mapped6 (mapped in): ipv4",
+              data2.get("data", {}).get("ipv4"), "192.0.2.1")
+    assert_eq("api mapped6 (mapped in): nat64",
+              data2.get("data", {}).get("nat64"), "64:ff9b::c000:201")
+
+    # NAT64 input (default prefix) → same outputs
+    status3, data3 = _api_post("mapped6", {"input": "64:ff9b::c000:201"})
+    assert_eq("api mapped6 (nat64 in): HTTP 200", status3, 200)
+    assert_eq("api mapped6 (nat64 in): ipv4",
+              data3.get("data", {}).get("ipv4"), "192.0.2.1")
+    assert_eq("api mapped6 (nat64 in): ipv4_mapped",
+              data3.get("data", {}).get("ipv4_mapped"), "::ffff:192.0.2.1")
+
+    # Custom /96 prefix
+    status4, data4 = _api_post("mapped6", {
+        "input": "192.0.2.1",
+        "nat64_prefix": "2001:db8:1::/96",
+    })
+    assert_eq("api mapped6 (custom /96): HTTP 200", status4, 200)
+    assert_eq("api mapped6 (custom /96): nat64",
+              data4.get("data", {}).get("nat64"), "2001:db8:1::c000:201")
+    assert_eq("api mapped6 (custom /96): nat64_prefix echoed",
+              data4.get("data", {}).get("nat64_prefix"), "2001:db8:1::/96")
+
+    # Non-/96 prefix → 400
+    status5, data5 = _api_post("mapped6", {
+        "input": "192.0.2.1",
+        "nat64_prefix": "2001:db8::/64",
+    })
+    assert_eq("api mapped6 (non-/96): HTTP 400", status5, 400)
+    assert_eq("api mapped6 (non-/96): ok=false", data5.get("ok"), False)
+
+    # Missing input → 400
+    status6, _ = _api_post("mapped6", {})
+    assert_eq("api mapped6: missing input → 400", status6, 400)
+
+    # Garbage input → 400
+    status7, _ = _api_post("mapped6", {"input": "not-an-address"})
+    assert_eq("api mapped6: invalid input → 400", status7, 400)
+
+
+async def test_ipv6_mapped6_ui(page: Page) -> None:
+    section("IPv6 IPv4-mapped / NAT64 (mapped6) UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # T7 per-tool URL routing — /ipv6/mapped6 should auto-open the drawer.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=mapped6")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='mapped6']")
+    assert_eq("mapped6 UI: panel exists", await panel.count(), 1)
+
+    # Submit IPv4 address
+    await page.fill("#mapped6_input", "192.0.2.1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='mapped6'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='mapped6']")
+    rows = panel.locator(".zoneid-result__row")
+    # 4 rows: IPv4 / IPv4-mapped / NAT64 / NAT64 prefix
+    assert_eq("mapped6 UI: four result rows", await rows.count(), 4)
+
+    ipv4_text   = (await rows.nth(0).locator(".zoneid-result__value code").text_content() or "").strip()
+    mapped_text = (await rows.nth(1).locator(".zoneid-result__value code").text_content() or "").strip()
+    nat64_text  = (await rows.nth(2).locator(".zoneid-result__value code").text_content() or "").strip()
+    prefix_text = (await rows.nth(3).locator(".zoneid-result__value code").text_content() or "").strip()
+    assert_eq("mapped6 UI: ipv4 row",        ipv4_text,   "192.0.2.1")
+    assert_eq("mapped6 UI: ipv4_mapped row", mapped_text, "::ffff:192.0.2.1")
+    assert_eq("mapped6 UI: nat64 row",       nat64_text,  "64:ff9b::c000:201")
+    assert_eq("mapped6 UI: nat64_prefix row", prefix_text, "64:ff9b::/96")
+    assert_eq("mapped6 UI: no error band",
+              await panel.locator(".error").count(), 0)
+
+    # Click each copy button (rows 0..2 — prefix row has no copy button)
+    await rows.nth(0).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    assert_eq("mapped6 UI: copy IPv4",
+              await page.evaluate("window.__lastClipboard"), "192.0.2.1")
+
+    await rows.nth(1).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    assert_eq("mapped6 UI: copy IPv4-mapped",
+              await page.evaluate("window.__lastClipboard"), "::ffff:192.0.2.1")
+
+    await rows.nth(2).locator(".subnet-copy").click()
+    await page.wait_for_timeout(50)
+    assert_eq("mapped6 UI: copy NAT64",
+              await page.evaluate("window.__lastClipboard"), "64:ff9b::c000:201")
+
+    # Error path — non-/96 NAT64 prefix
+    await navigate(page, APP_URL + "?tab=ipv6&tool=mapped6")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#mapped6_input", "192.0.2.1")
+    # Open the advanced disclosure and supply a non-/96 prefix
+    await page.evaluate(
+        "document.querySelector(\"#panel-ipv6 .tool-panel[data-tool='mapped6'] details.slaac-advanced\").open = true"
+    )
+    await page.fill("#mapped6_nat64_prefix", "2001:db8::/64")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='mapped6'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='mapped6']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("mapped6 UI: error band on non-/96",
+                len(err_text) > 0, f"got: {err_text!r}")
+    assert_eq("mapped6 UI: no result rows on error",
+              await panel.locator(".zoneid-result__row").count(), 0)
+
+
 async def test_api_bulk(page: Page) -> None:
     section("API — bulk calculation")
     # Two valid IPv4 CIDRs
@@ -7490,6 +7622,8 @@ async def main() -> None:
             await test_api_slaac(page)
             await test_ipv6_rdns6_ui(page)
             await test_api_rdns6(page)
+            await test_ipv6_mapped6_ui(page)
+            await test_api_mapped6(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)
