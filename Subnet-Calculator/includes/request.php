@@ -11,8 +11,8 @@ require_once __DIR__ . '/functions-tree-diff.php';
 function turnstile_verify(string $token, string $secret, string $remoteip): bool
 {
     if (!function_exists('curl_init')) {
-        error_log('sc Turnstile: curl extension not available — verification skipped');
-        return true;
+        error_log('sc Turnstile: curl extension not available — verification failed');
+        return false;
     }
     $ch = curl_init('https://challenges.cloudflare.com/turnstile/v0/siteverify');
     curl_setopt_array($ch, [
