@@ -224,31 +224,31 @@ function sc_run_zoneid(string $input): array
  * into the by-reference outputs. Used by both the POST handler and the GET
  * shareable-URL hydration path. (v3.3.0 Task 4)
  */
-function sc_run_derive(
-    string $mac,
-    ?string &$mac_canonical_out,
-    ?string &$eui64_out,
-    ?bool &$ul_bit_flipped_out,
-    ?string &$link_local_out,
-    ?string &$solicited_node_out,
-    ?string &$warning_out,
-    ?string &$error_out
-): void {
+/**
+ * Run derive_from_mac() and return an associative array with keys:
+ * mac_canonical, eui64, ul_bit_flipped, link_local, solicited_node,
+ * warning, error. Empty input returns []. (v3.4.0 — flat → array)
+ *
+ * @return array{mac_canonical?: string, eui64?: string, ul_bit_flipped?: bool, link_local?: string, solicited_node?: string, warning?: ?string, error?: string}
+ */
+function sc_run_derive(string $mac): array
+{
     if ($mac === '') {
-        return;
+        return [];
     }
     try {
         $r = derive_from_mac($mac);
     } catch (\InvalidArgumentException $e) {
-        $error_out = $e->getMessage();
-        return;
+        return ['error' => $e->getMessage()];
     }
-    $mac_canonical_out  = $r['mac_canonical'];
-    $eui64_out          = $r['eui64'];
-    $ul_bit_flipped_out = $r['ul_bit_flipped'];
-    $link_local_out     = $r['link_local'];
-    $solicited_node_out = $r['solicited_node'];
-    $warning_out        = $r['warning'];
+    return [
+        'mac_canonical'  => $r['mac_canonical'],
+        'eui64'          => $r['eui64'],
+        'ul_bit_flipped' => $r['ul_bit_flipped'],
+        'link_local'     => $r['link_local'],
+        'solicited_node' => $r['solicited_node'],
+        'warning'        => $r['warning'],
+    ];
 }
 
 // ─── SLAAC privacy helper (shared by POST handler and GET shareable URL) ────
@@ -261,35 +261,34 @@ function sc_run_derive(
  * Empty seed strings are treated as "unseeded" so a shareable URL with an
  * empty `slaac_seed=` parameter still produces a fresh address.
  */
-function sc_run_slaac(
-    string $prefix,
-    string $seed,
-    ?string &$prefix_out,
-    ?string &$address_out,
-    ?string &$interface_id_out,
-    ?string &$seed_used_out,
-    bool &$seed_was_provided_out,
-    ?string &$warning_out,
-    ?string &$error_out
-): void {
+/**
+ * Run slaac_privacy_address() and return an associative array with keys:
+ * prefix, address, interface_id, seed_used, seed_was_provided, warning,
+ * error. Empty prefix returns []. (v3.4.0 — flat → array)
+ *
+ * @return array{prefix?: string, address?: string, interface_id?: string, seed_used?: ?string, seed_was_provided?: bool, warning?: ?string, error?: string}
+ */
+function sc_run_slaac(string $prefix, string $seed): array
+{
     if ($prefix === '') {
-        return;
+        return [];
     }
     $seed_arg = ($seed === '') ? null : $seed;
     try {
         $r = slaac_privacy_address($prefix, $seed_arg);
     } catch (\InvalidArgumentException $e) {
-        $error_out = $e->getMessage();
-        return;
+        return ['error' => $e->getMessage()];
     }
-    $prefix_out            = $r['prefix'];
-    $address_out           = $r['address'];
-    $interface_id_out      = $r['interface_id'];
-    $seed_used_out         = $r['seed_used'];
-    $seed_was_provided_out = $r['seed_was_provided'];
-    // $warning_out reserved for future use (e.g. callers may surface "seed is
-    // a documentation/example value" hints). Currently always null.
-    $warning_out           = null;
+    return [
+        'prefix'            => $r['prefix'],
+        'address'           => $r['address'],
+        'interface_id'      => $r['interface_id'],
+        'seed_used'         => $r['seed_used'],
+        'seed_was_provided' => $r['seed_was_provided'],
+        // 'warning' reserved for future use (callers may surface "seed is a
+        // documentation/example value" hints). Currently always null.
+        'warning'           => null,
+    ];
 }
 
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
@@ -385,25 +384,15 @@ $zoneid_input = '';
 $zoneid = [];
 
 // v3.3.0 — MAC → IPv6 derivation tool (derive)
-$derive_input          = '';
-$derive_mac_canonical  = null;
-$derive_eui64          = null;
-$derive_ul_bit_flipped = null;
-$derive_link_local     = null;
-$derive_solicited_node = null;
-$derive_warning        = null;
-$derive_error          = null;
+$derive_input = '';
+/** @var array{mac_canonical?: string, eui64?: string, ul_bit_flipped?: bool, link_local?: string, solicited_node?: string, warning?: ?string, error?: string} */
+$derive = [];
 
 // v3.3.0 — SLAAC privacy address generator (RFC 8981)
-$slaac_prefix_input      = '';
-$slaac_seed_input        = '';
-$slaac_prefix            = null;
-$slaac_address           = null;
-$slaac_interface_id      = null;
-$slaac_seed_used         = null;
-$slaac_seed_was_provided = false;
-$slaac_warning           = null;
-$slaac_error             = null;
+$slaac_prefix_input = '';
+$slaac_seed_input   = '';
+/** @var array{prefix?: string, address?: string, interface_id?: string, seed_used?: ?string, seed_was_provided?: bool, warning?: ?string, error?: string} */
+$slaac = [];
 
 $ula_global_id_input = '';
 /** @var array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}|null $ula_result */
@@ -867,33 +856,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($is_derive && !$form_blocked) {
         $active_tab = 'ipv6';
         $derive_input = trim((string)($_POST['derive_mac'] ?? ''));
-        sc_run_derive(
-            $derive_input,
-            $derive_mac_canonical,
-            $derive_eui64,
-            $derive_ul_bit_flipped,
-            $derive_link_local,
-            $derive_solicited_node,
-            $derive_warning,
-            $derive_error
-        );
+        $derive = sc_run_derive($derive_input);
     }
 
     if ($is_slaac && !$form_blocked) {
         $active_tab = 'ipv6';
         $slaac_prefix_input = trim((string)($_POST['slaac_prefix'] ?? ''));
         $slaac_seed_input   = trim((string)($_POST['slaac_seed']   ?? ''));
-        sc_run_slaac(
-            $slaac_prefix_input,
-            $slaac_seed_input,
-            $slaac_prefix,
-            $slaac_address,
-            $slaac_interface_id,
-            $slaac_seed_used,
-            $slaac_seed_was_provided,
-            $slaac_warning,
-            $slaac_error
-        );
+        $slaac = sc_run_slaac($slaac_prefix_input, $slaac_seed_input);
     }
 
     if ($is_ula && !$form_blocked) {
@@ -1298,33 +1268,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // MAC-derivation tool shareable GET URL (v3.3.0 Task 4)
     if ($active_tab === 'ipv6' && isset($_GET['derive_mac'])) {
         $derive_input = trim((string)($_GET['derive_mac'] ?? ''));
-        sc_run_derive(
-            $derive_input,
-            $derive_mac_canonical,
-            $derive_eui64,
-            $derive_ul_bit_flipped,
-            $derive_link_local,
-            $derive_solicited_node,
-            $derive_warning,
-            $derive_error
-        );
+        $derive = sc_run_derive($derive_input);
     }
 
     // SLAAC privacy address shareable GET URL (v3.3.0 Task 5)
     if ($active_tab === 'ipv6' && isset($_GET['slaac_prefix'])) {
         $slaac_prefix_input = trim((string)($_GET['slaac_prefix'] ?? ''));
         $slaac_seed_input   = trim((string)($_GET['slaac_seed']   ?? ''));
-        sc_run_slaac(
-            $slaac_prefix_input,
-            $slaac_seed_input,
-            $slaac_prefix,
-            $slaac_address,
-            $slaac_interface_id,
-            $slaac_seed_used,
-            $slaac_seed_was_provided,
-            $slaac_warning,
-            $slaac_error
-        );
+        $slaac = sc_run_slaac($slaac_prefix_input, $slaac_seed_input);
     }
 
     // Supernet6 / summarise6 shareable GET URL (v3.3.0)

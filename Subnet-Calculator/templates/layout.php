@@ -748,8 +748,8 @@ if ($i < 3) {
         elseif ($range6_result !== null || $range6_error !== null) { $open_tool_ipv6 = 'range6'; }
         elseif ($supernet6_result !== null || $supernet6_error !== null) { $open_tool_ipv6 = 'supernet6'; }
         elseif (!empty($zoneid)) { $open_tool_ipv6 = 'zoneid'; }
-        elseif ($derive_eui64 !== null || $derive_error !== null) { $open_tool_ipv6 = 'derive'; }
-        elseif ($slaac_address !== null || $slaac_error !== null) { $open_tool_ipv6 = 'slaac'; }
+        elseif (!empty($derive)) { $open_tool_ipv6 = 'derive'; }
+        elseif (!empty($slaac)) { $open_tool_ipv6 = 'slaac'; }
         elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
         elseif (($diff_result !== null || $diff_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'diff'; }
         ?>
@@ -1020,17 +1020,17 @@ if ($i < 3) {
                                    placeholder="00:24:b9:7e:ab:cd"
                                    value="<?= htmlspecialchars($derive_input) ?>"
                                    autocomplete="off" spellcheck="false"
-                                   <?= $derive_error ? 'aria-invalid="true" aria-describedby="derive-error"' : '' ?>>
+                                   <?= !empty($derive['error']) ? 'aria-invalid="true" aria-describedby="derive-error"' : '' ?>>
                             <button type="submit" class="splitter-btn">Derive</button>
                         </div>
                     </form>
-                    <?php if ($derive_error) : ?>
-                        <div class="error" id="derive-error"><?= htmlspecialchars($derive_error) ?></div>
-                    <?php elseif ($derive_eui64 !== null) : ?>
-                        <?php if ($derive_warning) : ?>
-                            <div class="warning"><?= htmlspecialchars($derive_warning) ?></div>
+                    <?php if (!empty($derive['error'])) : ?>
+                        <div class="error" id="derive-error"><?= htmlspecialchars($derive['error']) ?></div>
+                    <?php elseif (isset($derive['eui64'])) : ?>
+                        <?php if (!empty($derive['warning'])) : ?>
+                            <div class="warning"><?= htmlspecialchars($derive['warning']) ?></div>
                         <?php endif; ?>
-                        <?php $_derive_label = 'Derive: ' . ($derive_mac_canonical ?? ''); ?>
+                        <?php $_derive_label = 'Derive: ' . ($derive['mac_canonical'] ?? ''); ?>
                         <dl class="derive-result"
                             data-history-source="derive"
                             data-history-active="1"
@@ -1038,28 +1038,28 @@ if ($i < 3) {
                             <div class="derive-result__row">
                                 <dt class="derive-result__label">MAC (canonical)</dt>
                                 <dd class="derive-result__value">
-                                    <code><?= htmlspecialchars((string)$derive_mac_canonical) ?></code>
+                                    <code><?= htmlspecialchars((string)($derive['mac_canonical'] ?? '')) ?></code>
                                 </dd>
                             </div>
                             <div class="derive-result__row">
                                 <dt class="derive-result__label">EUI-64<?= help_bubble('ipv6-derive-eui64', 'Modified EUI-64 interface identifier — the U/L (universal/local) bit in the first MAC byte is inverted, then the 16-bit value 0xFFFE is inserted between the OUI and the NIC half (RFC 4291 §2.5.1).') ?></dt>
                                 <dd class="derive-result__value">
-                                    <code><?= htmlspecialchars((string)$derive_eui64) ?></code>
-                                    <?= copy_button((string)$derive_eui64, 'Copy EUI-64 interface ID') ?>
+                                    <code><?= htmlspecialchars((string)($derive['eui64'] ?? '')) ?></code>
+                                    <?= copy_button((string)($derive['eui64'] ?? ''), 'Copy EUI-64 interface ID') ?>
                                 </dd>
                             </div>
                             <div class="derive-result__row">
                                 <dt class="derive-result__label">Link-local<?= help_bubble('ipv6-derive-ll', 'Link-local address — the fe80::/64 prefix concatenated with the EUI-64 interface identifier. Always assigned automatically to every IPv6-enabled interface (RFC 4291 §2.5.6).') ?></dt>
                                 <dd class="derive-result__value">
-                                    <code><?= htmlspecialchars((string)$derive_link_local) ?></code>
-                                    <?= copy_button((string)$derive_link_local, 'Copy link-local address') ?>
+                                    <code><?= htmlspecialchars((string)($derive['link_local'] ?? '')) ?></code>
+                                    <?= copy_button((string)($derive['link_local'] ?? ''), 'Copy link-local address') ?>
                                 </dd>
                             </div>
                             <div class="derive-result__row">
                                 <dt class="derive-result__label">Solicited-node<?= help_bubble('ipv6-derive-sn', 'Solicited-node multicast address — ff02::1:ff followed by the low 24 bits of the unicast address. Used by IPv6 Neighbor Discovery so a host only listens for resolution requests targeted at its own address (RFC 4291 §2.7.1).') ?></dt>
                                 <dd class="derive-result__value">
-                                    <code><?= htmlspecialchars((string)$derive_solicited_node) ?></code>
-                                    <?= copy_button((string)$derive_solicited_node, 'Copy solicited-node multicast address') ?>
+                                    <code><?= htmlspecialchars((string)($derive['solicited_node'] ?? '')) ?></code>
+                                    <?= copy_button((string)($derive['solicited_node'] ?? ''), 'Copy solicited-node multicast address') ?>
                                 </dd>
                             </div>
                         </dl>
@@ -1079,11 +1079,11 @@ if ($i < 3) {
                                    value="<?= htmlspecialchars($slaac_prefix_input) ?>"
                                    autocomplete="off" spellcheck="false"
                                    required
-                                   <?= $slaac_error ? 'aria-invalid="true" aria-describedby="slaac-error"' : '' ?>>
+                                   <?= !empty($slaac['error']) ? 'aria-invalid="true" aria-describedby="slaac-error"' : '' ?>>
                             <button type="submit" class="splitter-btn">Generate</button>
                             <button type="reset" class="splitter-btn-ghost">Reset</button>
                         </div>
-                        <details class="slaac-advanced"<?= $slaac_seed_was_provided ? ' open' : '' ?>>
+                        <details class="slaac-advanced"<?= !empty($slaac['seed_was_provided']) ? ' open' : '' ?>>
                             <summary>Advanced (seed for reproducibility)</summary>
                             <p class="slaac-advanced__hint">Optional 16-hex seed for reproducible output (RFC 8981 §3.3.1). Leave blank in production &mdash; every fresh generation should be cryptographically random.</p>
                             <label for="slaac_seed" class="sr-only">Seed (16 hex characters)</label>
@@ -1096,13 +1096,13 @@ if ($i < 3) {
                             <?= help_bubble('ipv6-slaac-seed', 'A 16-character hexadecimal seed (64 bits) makes the generated interface ID deterministic. Useful for reproducing examples in documentation or tests; never use a fixed seed in production because it defeats the privacy purpose of RFC 8981.') ?>
                         </details>
                     </form>
-                    <?php if ($slaac_error) : ?>
-                        <div class="error" id="slaac-error"><?= htmlspecialchars($slaac_error) ?></div>
-                    <?php elseif ($slaac_address !== null) : ?>
-                        <?php if ($slaac_warning) : ?>
-                            <div class="warning"><?= htmlspecialchars($slaac_warning) ?></div>
+                    <?php if (!empty($slaac['error'])) : ?>
+                        <div class="error" id="slaac-error"><?= htmlspecialchars($slaac['error']) ?></div>
+                    <?php elseif (isset($slaac['address'])) : ?>
+                        <?php if (!empty($slaac['warning'])) : ?>
+                            <div class="warning"><?= htmlspecialchars($slaac['warning']) ?></div>
                         <?php endif; ?>
-                        <?php $_slaac_label = 'SLAAC: ' . ($slaac_prefix ?? ''); ?>
+                        <?php $_slaac_label = 'SLAAC: ' . ($slaac['prefix'] ?? ''); ?>
                         <dl class="slaac-result"
                             data-history-source="slaac"
                             data-history-active="1"
@@ -1110,28 +1110,28 @@ if ($i < 3) {
                             <div class="slaac-result__row">
                                 <dt class="slaac-result__label">Prefix (canonical)</dt>
                                 <dd class="slaac-result__value">
-                                    <code><?= htmlspecialchars((string)$slaac_prefix) ?></code>
+                                    <code><?= htmlspecialchars((string)($slaac['prefix'] ?? '')) ?></code>
                                 </dd>
                             </div>
                             <div class="slaac-result__row">
                                 <dt class="slaac-result__label">Address<?= help_bubble('ipv6-slaac-addr', 'The full 128-bit IPv6 address: the supplied /64 prefix concatenated with the random 64-bit privacy interface identifier. This is what would be assigned to the host as a temporary SLAAC address per RFC 8981.') ?></dt>
                                 <dd class="slaac-result__value">
-                                    <code><?= htmlspecialchars((string)$slaac_address) ?></code>
-                                    <?= copy_button((string)$slaac_address, 'Copy SLAAC privacy address') ?>
+                                    <code><?= htmlspecialchars((string)($slaac['address'] ?? '')) ?></code>
+                                    <?= copy_button((string)($slaac['address'] ?? ''), 'Copy SLAAC privacy address') ?>
                                 </dd>
                             </div>
                             <div class="slaac-result__row">
                                 <dt class="slaac-result__label">Interface ID<?= help_bubble('ipv6-slaac-iid', 'The 64-bit random interface identifier in colon-separated hextet form. The U/L bit (second-lowest bit of the first byte) is cleared per RFC 4291 §2.5.1 so the address cannot be mistaken for an EUI-64 derived from a hardware MAC.') ?></dt>
                                 <dd class="slaac-result__value">
-                                    <code><?= htmlspecialchars((string)$slaac_interface_id) ?></code>
-                                    <?= copy_button((string)$slaac_interface_id, 'Copy interface ID') ?>
+                                    <code><?= htmlspecialchars((string)($slaac['interface_id'] ?? '')) ?></code>
+                                    <?= copy_button((string)($slaac['interface_id'] ?? ''), 'Copy interface ID') ?>
                                 </dd>
                             </div>
                             <div class="slaac-result__row">
                                 <dt class="slaac-result__label">Seed used<?= help_bubble('ipv6-slaac-seed-used', 'The 16-hex seed value that produced this address. If you supplied a seed it is echoed here; otherwise the random seed used internally is shown so you can reproduce the result later (e.g. by pasting it back into the Advanced field).') ?></dt>
                                 <dd class="slaac-result__value">
-                                    <code><?= htmlspecialchars((string)$slaac_seed_used) ?></code>
-                                    <?= copy_button((string)$slaac_seed_used, 'Copy seed') ?>
+                                    <code><?= htmlspecialchars((string)($slaac['seed_used'] ?? '')) ?></code>
+                                    <?= copy_button((string)($slaac['seed_used'] ?? ''), 'Copy seed') ?>
                                 </dd>
                             </div>
                         </dl>
