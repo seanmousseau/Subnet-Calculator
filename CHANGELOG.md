@@ -5,6 +5,77 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-05-08
+
+**IPv6 Polish, Architecture, Parity.** A 12-PR release closing v3.3.0
+carry-forward debt items, adding 4 architecture items (a11y audit, bulk
+expansion, IPv6 type-detection breakout, per-tool URL routes), and
+shipping 2 new IPv6 tools (rdns6 reverse-DNS, mapped6 IPv4-mapped /
+NAT64). All new tools come with REST API endpoints, shareable URLs,
+Playwright coverage, and a11y assertions across the 5 IPv6 drawers
+introduced in v3.3.0 and v3.4.0.
+
+### Added
+
+- **IPv6 reverse-DNS tool (`rdns6`).** New IPv6-tab drawer entry that
+  generates the `ip6.arpa` PTR zone for a given prefix. UI +
+  `POST /api/v1/rdns6` + shareable URL. (#382)
+- **IPv4-mapped / NAT64 IPv6 tool (`mapped6`).** Converts between an
+  IPv4 address and its `::ffff:0:0/96` IPv4-mapped IPv6 form, plus
+  NAT64 `64:ff9b::/96` synthesis (RFC 6052). UI +
+  `POST /api/v1/mapped6` + shareable URL. (#383)
+- **Per-tool URL routes** (`/ipv4/<tool>`, `/ipv6/<tool>`). Stable
+  pretty URLs for every tool drawer. The legacy `?tab=&tool=` query
+  form continues to be accepted indefinitely. (#381)
+- **Bulk endpoint coverage for v3.3.0 + v3.4.0 IPv6 endpoints.** A new
+  `items[]` request mode on `POST /api/v1/bulk` accepts heterogeneous
+  per-item operations and now covers `range6`, `supernet6`, `zone-id`,
+  `derive`, `slaac-privacy`, `rdns6`, and `mapped6`. The legacy
+  `cidrs[]` mode is unchanged. (#384)
+- **Playwright a11y assertions for the 5 new IPv6 drawers** (`zone-id`,
+  `derive`, `slaac-privacy`, `rdns6`, `mapped6`). +64 assertions
+  covering labels, help-bubble keyboard focus, copy-button accessible
+  names, and disclosure-summary focus visibility. (#385)
+
+### Changed
+
+- **IPv6 type detection extracted into `functions-type6.php`.** Pulled
+  out of `functions-ipv6.php` to mirror the v4 split. (#380)
+- **`functions-derive6.php` split into three files** —
+  `functions-zone6.php`, `functions-derive6.php`, `functions-slaac6.php`
+  — one per tool. (#378)
+- **`request.php` flat per-tool globals collapsed into per-tool arrays**
+  across 14 tools (zoneid, derive, slaac, range6, supernet, supernet6,
+  range, ula, lookup, diff, overlap, multi_overlap, tree, wildcard,
+  splitter, splitter6, vlsm, vlsm6). Reduces global namespace pollution
+  and clarifies tool boundaries. (#379)
+- **`range_to_cidrs()` accepts cap as optional parameter** (proper
+  dependency injection — fixes the v3.3.0 carry-forward where the
+  helper read a global). (#376)
+- **`copy_button()` template helper extracted** alongside
+  `help_bubble()`. Eliminated 15 inline duplicates across templates;
+  every copy button now carries `aria-label="Copy ..."` automatically.
+  (#377)
+- **`ul_bit_flipped` API field description clarified** in OpenAPI
+  spec. (#376)
+
+### Fixed
+
+- **EUI-64 example in v3.3.0 plan/spec corrected** from
+  `0226:b9ff:fe7e:abcd` to `0224:b9ff:fe7e:abcd` (U/L bit flip
+  worked-example arithmetic). (#376)
+
+### A11y
+
+- **`.help-bubble-icon:focus-visible` rule added.** Help icons are
+  focusable (`tabindex="0"`) but had no visible focus indicator.
+  Added a 2px accent outline on keyboard focus, alongside the existing
+  `:focus-within` tooltip reveal. (#385)
+- **`.slaac-advanced > summary:focus-visible` rule added.** The
+  custom-styled `<details>` disclosure had `list-style: none` (custom
+  triangle marker) which suppressed the default focus ring. Added an
+  explicit accent outline so keyboard users see focus. (#385)
+
 ## [3.3.0] - 2026-05-07
 
 **IPv6 Foundations.** Five new IPv6-native tools land on the IPv6 tab:
