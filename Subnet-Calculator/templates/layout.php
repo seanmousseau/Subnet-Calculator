@@ -747,7 +747,7 @@ if ($i < 3) {
         elseif ($ula_result !== null || $ula_error !== null) { $open_tool_ipv6 = 'ula'; }
         elseif ($range6_result !== null || $range6_error !== null) { $open_tool_ipv6 = 'range6'; }
         elseif ($supernet6_result !== null || $supernet6_error !== null) { $open_tool_ipv6 = 'supernet6'; }
-        elseif ($zoneid_address !== null || $zoneid_error !== null) { $open_tool_ipv6 = 'zoneid'; }
+        elseif (!empty($zoneid)) { $open_tool_ipv6 = 'zoneid'; }
         elseif ($derive_eui64 !== null || $derive_error !== null) { $open_tool_ipv6 = 'derive'; }
         elseif ($slaac_address !== null || $slaac_error !== null) { $open_tool_ipv6 = 'slaac'; }
         elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
@@ -971,30 +971,30 @@ if ($i < 3) {
                                    placeholder="fe80::1%eth0"
                                    value="<?= htmlspecialchars($zoneid_input) ?>"
                                    autocomplete="off" spellcheck="false"
-                                   <?= $zoneid_error ? 'aria-invalid="true" aria-describedby="zoneid-error"' : '' ?>>
+                                   <?= !empty($zoneid['error']) ? 'aria-invalid="true" aria-describedby="zoneid-error"' : '' ?>>
                             <button type="submit" class="splitter-btn">Parse</button>
                         </div>
                     </form>
-                    <?php if ($zoneid_error) : ?>
-                        <div class="error" id="zoneid-error"><?= htmlspecialchars($zoneid_error) ?></div>
-                    <?php elseif ($zoneid_address !== null) : ?>
-                        <?php if ($zoneid_warning) : ?>
-                            <div class="warning"><?= htmlspecialchars($zoneid_warning) ?></div>
+                    <?php if (!empty($zoneid['error'])) : ?>
+                        <div class="error" id="zoneid-error"><?= htmlspecialchars($zoneid['error']) ?></div>
+                    <?php elseif (isset($zoneid['address'])) : ?>
+                        <?php if (!empty($zoneid['warning'])) : ?>
+                            <div class="warning"><?= htmlspecialchars($zoneid['warning']) ?></div>
                         <?php endif; ?>
-                        <?php $_zoneid_label = 'Zone ID: ' . $zoneid_address . ($zoneid_zone_id !== null ? '%' . $zoneid_zone_id : ''); ?>
+                        <?php $_zoneid_label = 'Zone ID: ' . $zoneid['address'] . (($zoneid['zone_id'] ?? null) !== null ? '%' . $zoneid['zone_id'] : ''); ?>
                         <dl class="zoneid-result"
                             data-history-source="zoneid"
                             data-history-active="1"
                             data-history-label="<?= htmlspecialchars($_zoneid_label) ?>">
                             <div class="zoneid-result__row">
                                 <dt class="zoneid-result__label">Address</dt>
-                                <dd class="zoneid-result__value"><code><?= htmlspecialchars($zoneid_address) ?></code></dd>
+                                <dd class="zoneid-result__value"><code><?= htmlspecialchars($zoneid['address']) ?></code></dd>
                             </div>
                             <div class="zoneid-result__row">
                                 <dt class="zoneid-result__label">Zone ID</dt>
                                 <dd class="zoneid-result__value">
-                                    <?php if ($zoneid_zone_id !== null) : ?>
-                                        <code><?= htmlspecialchars($zoneid_zone_id) ?></code>
+                                    <?php if (($zoneid['zone_id'] ?? null) !== null) : ?>
+                                        <code><?= htmlspecialchars($zoneid['zone_id']) ?></code>
                                     <?php else : ?>
                                         <span class="zoneid-result__empty" aria-label="no zone identifier">&mdash;</span>
                                     <?php endif; ?>
@@ -1002,7 +1002,7 @@ if ($i < 3) {
                             </div>
                             <div class="zoneid-result__row">
                                 <dt class="zoneid-result__label">Link-local</dt>
-                                <dd class="zoneid-result__value"><?= $zoneid_is_link_local ? 'Yes' : 'No' ?></dd>
+                                <dd class="zoneid-result__value"><?= !empty($zoneid['is_link_local']) ? 'Yes' : 'No' ?></dd>
                             </div>
                         </dl>
                     <?php endif; ?>

@@ -192,27 +192,29 @@ function sc_run_range6(
  * pattern: ONE helper for both methods, populates the same template globals
  * regardless of entry point.
  */
-function sc_run_zoneid(
-    string $input,
-    ?string &$address_out,
-    ?string &$zone_id_out,
-    ?bool &$is_link_local_out,
-    ?string &$warning_out,
-    ?string &$error_out
-): void {
+/**
+ * Run parse_zone_id() against the given input and return an associative array
+ * with keys: address, zone_id, is_link_local, warning, error. Empty input
+ * returns an empty array. (v3.4.0 — flat globals → per-tool array)
+ *
+ * @return array{address?: string, zone_id?: ?string, is_link_local?: bool, warning?: ?string, error?: string}
+ */
+function sc_run_zoneid(string $input): array
+{
     if ($input === '') {
-        return;
+        return [];
     }
     try {
         $r = parse_zone_id($input);
     } catch (\InvalidArgumentException $e) {
-        $error_out = $e->getMessage();
-        return;
+        return ['error' => $e->getMessage()];
     }
-    $address_out       = $r['address'];
-    $zone_id_out       = $r['zone_id'];
-    $is_link_local_out = $r['is_link_local'];
-    $warning_out       = $r['warning'];
+    return [
+        'address'       => $r['address'],
+        'zone_id'       => $r['zone_id'],
+        'is_link_local' => $r['is_link_local'],
+        'warning'       => $r['warning'],
+    ];
 }
 
 // ─── Derive helper (shared by POST handler and GET shareable URL) ───────────
@@ -378,12 +380,9 @@ $supernet6_result = null;
 $supernet6_error  = null;
 
 // v3.3.0 — IPv6 zone-ID parser
-$zoneid_input         = '';
-$zoneid_address       = null;
-$zoneid_zone_id       = null;
-$zoneid_is_link_local = null;
-$zoneid_warning       = null;
-$zoneid_error         = null;
+$zoneid_input = '';
+/** @var array{address?: string, zone_id?: ?string, is_link_local?: bool, warning?: ?string, error?: string} */
+$zoneid = [];
 
 // v3.3.0 — MAC → IPv6 derivation tool (derive)
 $derive_input          = '';
@@ -862,14 +861,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($is_zoneid && !$form_blocked) {
         $active_tab = 'ipv6';
         $zoneid_input = trim((string)($_POST['zoneid_input'] ?? ''));
-        sc_run_zoneid(
-            $zoneid_input,
-            $zoneid_address,
-            $zoneid_zone_id,
-            $zoneid_is_link_local,
-            $zoneid_warning,
-            $zoneid_error
-        );
+        $zoneid = sc_run_zoneid($zoneid_input);
     }
 
     if ($is_derive && !$form_blocked) {
@@ -1300,14 +1292,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Zone-ID parser shareable GET URL (v3.3.0)
     if ($active_tab === 'ipv6' && isset($_GET['zoneid_input'])) {
         $zoneid_input = trim((string)($_GET['zoneid_input'] ?? ''));
-        sc_run_zoneid(
-            $zoneid_input,
-            $zoneid_address,
-            $zoneid_zone_id,
-            $zoneid_is_link_local,
-            $zoneid_warning,
-            $zoneid_error
-        );
+        $zoneid = sc_run_zoneid($zoneid_input);
     }
 
     // MAC-derivation tool shareable GET URL (v3.3.0 Task 4)
