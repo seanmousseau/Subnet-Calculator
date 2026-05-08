@@ -227,13 +227,13 @@ if ($i < 3) {
 
         <?php
         $open_tool_ipv4 = null;
-        if ($split_result !== null || $split_error !== null) { $open_tool_ipv4 = 'split'; }
-        elseif ($supernet_result !== null || $supernet_error !== null) { $open_tool_ipv4 = 'supernet'; }
-        elseif ($range_result !== null || $range_error !== null) { $open_tool_ipv4 = 'range'; }
-        elseif ($tree_result !== null || $tree_error !== null) { $open_tool_ipv4 = 'tree'; }
-        elseif ($wildcard_result !== null || $wildcard_error !== null) { $open_tool_ipv4 = 'wildcard'; }
-        elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'lookup'; }
-        elseif (($diff_result !== null || $diff_error !== null) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'diff'; }
+        if (!empty($splitter)) { $open_tool_ipv4 = 'split'; }
+        elseif (!empty($supernet)) { $open_tool_ipv4 = 'supernet'; }
+        elseif (!empty($range)) { $open_tool_ipv4 = 'range'; }
+        elseif (!empty($tree)) { $open_tool_ipv4 = 'tree'; }
+        elseif (!empty($wildcard)) { $open_tool_ipv4 = 'wildcard'; }
+        elseif (!empty($lookup) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'lookup'; }
+        elseif (!empty($diff) && $active_tab === 'ipv4') { $open_tool_ipv4 = 'diff'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv4 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv4) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split" aria-expanded="false">Split Subnet</button>
@@ -264,26 +264,26 @@ if ($i < 3) {
                             <input type="text" name="split_prefix" class="splitter-input"
                                    placeholder="/25" value="<?= htmlspecialchars($input_split_prefix) ?>"
                                    autocomplete="off" spellcheck="false"
-                                   <?= $split_error ? 'aria-invalid="true" aria-describedby="split-error-ipv4"' : '' ?>>
+                                   <?= !empty($splitter['error']) ? 'aria-invalid="true" aria-describedby="split-error-ipv4"' : '' ?>>
                             <button type="submit" class="splitter-btn">Split</button>
                         </div>
                     </form>
-                    <?php if ($split_error) : ?>
-                        <div class="error" id="split-error-ipv4"><?= htmlspecialchars($split_error) ?></div>
-                    <?php elseif ($split_result && $split_result['showing'] > 0) : ?>
+                    <?php if (!empty($splitter['error'])) : ?>
+                        <div class="error" id="split-error-ipv4"><?= htmlspecialchars($splitter['error']) ?></div>
+                    <?php elseif (isset($splitter['result']) && $splitter['result']['showing'] > 0) : ?>
                         <div class="split-list" data-parent="<?= htmlspecialchars($result['cidr'] ?? '') ?>">
                             <button type="button" class="copy-all-btn" data-target="split">Copy All</button>
                             <button type="button" class="copy-all-btn copy-md-btn" data-target="split4">Copy as Markdown</button>
                             <button type="button" class="copy-all-btn copy-cisco-btn" data-target="split4">Copy as Cisco</button><?= help_bubble('copy-cisco-split4', 'Cisco output is generic IOS-style — one interface stanza per split subnet. Vendor-specific tweaks may be required.') ?>
                             <button type="button" class="ascii-export-btn">Export ASCII</button>
-                            <?php foreach ($split_result['subnets'] as $s) : ?>
+                            <?php foreach ($splitter['result']['subnets'] as $s) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
                                     <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
                                     <?= copy_button($s, 'Copy ' . $s) ?>
                                 </div>
                             <?php endforeach; ?>
-                            <?php if ($split_result['total'] > $split_result['showing']) : ?>
-                                <div class="split-more">+&nbsp;<?= format_number($split_result['total'] - $split_result['showing']) ?> more</div>
+                            <?php if ($splitter['result']['total'] > $splitter['result']['showing']) : ?>
+                                <div class="split-more">+&nbsp;<?= format_number($splitter['result']['total'] - $splitter['result']['showing']) ?> more</div>
                             <?php endif; ?>
                         </div>
                     <?php endif; ?>
@@ -303,15 +303,15 @@ if ($i < 3) {
                             <button type="submit" name="supernet_action" value="summarise" class="splitter-btn">Summarise Routes</button><?= help_bubble('supernet-summarise', 'Computes the minimal set of non-overlapping CIDRs that exactly covers the listed networks. Unlike Find Supernet, this avoids including addresses outside the input ranges.') ?>
                         </div>
                     </form>
-                    <?php if ($supernet_error) : ?>
-                        <div class="error"><?= htmlspecialchars($supernet_error) ?></div>
-                    <?php elseif ($supernet_result !== null) : ?>
+                    <?php if (!empty($supernet['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($supernet['error']) ?></div>
+                    <?php elseif (isset($supernet['result'])) : ?>
                         <?php
                         $_supernet_inputs = count(array_filter(array_map('trim', explode("\n", $supernet_input))));
                         if ($supernet_action === 'find') {
                             $_supernet_label = 'Supernet: ' . $_supernet_inputs . ' CIDR' . ($_supernet_inputs !== 1 ? 's' : '');
                         } else {
-                            $_supernet_outs  = count($supernet_result['summaries'] ?? []);
+                            $_supernet_outs  = count($supernet['result']['summaries'] ?? []);
                             $_supernet_label = 'Summarise: ' . $_supernet_inputs . ' → ' . $_supernet_outs;
                         }
                         ?>
@@ -320,7 +320,7 @@ if ($i < 3) {
                                  data-history-source="supernet"
                                  data-history-active="1"
                                  data-history-label="<?= htmlspecialchars($_supernet_label) ?>">
-                                <?= htmlspecialchars($supernet_result['supernet'] ?? '') ?>
+                                <?= htmlspecialchars($supernet['result']['supernet'] ?? '') ?>
                             </div>
                         <?php else : ?>
                             <div class="split-list split-list--mt"
@@ -328,13 +328,13 @@ if ($i < 3) {
                                  data-history-active="1"
                                  data-history-label="<?= htmlspecialchars($_supernet_label) ?>">
                                 <button type="button" class="copy-all-btn" data-target="supernet">Copy All</button>
-                                <?php foreach ($supernet_result['summaries'] ?? [] as $s) : ?>
+                                <?php foreach ($supernet['result']['summaries'] ?? [] as $s) : ?>
                                     <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
                                         <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
                                         <?= copy_button($s, 'Copy ' . $s) ?>
                                     </div>
                                 <?php endforeach; ?>
-                                <?php $s_count = count($supernet_result['summaries'] ?? []);
+                                <?php $s_count = count($supernet['result']['summaries'] ?? []);
                                       $i_count = count(array_filter(explode("\n", $supernet_input))); ?>
                                 <div class="split-more"><?= $s_count ?> prefix<?= $s_count !== 1 ? 'es' : '' ?> from <?= $i_count ?> input<?= $i_count !== 1 ? 's' : '' ?></div>
                             </div>
@@ -363,22 +363,22 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Convert</button>
                         </div>
                     </form>
-                    <?php if ($range_error) : ?>
-                        <div class="error"><?= htmlspecialchars($range_error) ?></div>
-                    <?php elseif ($range_result !== null) : ?>
+                    <?php if (!empty($range['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($range['error']) ?></div>
+                    <?php elseif (isset($range['result'])) : ?>
                         <?php $_range_label = 'Range: ' . $range_start . ' → ' . $range_end; ?>
                         <div class="split-list split-list--mt"
                              data-history-source="range"
                              data-history-active="1"
                              data-history-label="<?= htmlspecialchars($_range_label) ?>">
                             <button type="button" class="copy-all-btn" data-target="range">Copy All</button>
-                            <?php foreach ($range_result as $r_cidr) : ?>
+                            <?php foreach ($range['result'] as $r_cidr) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($r_cidr) ?>">
                                     <span class="split-subnet-text"><?= htmlspecialchars($r_cidr) ?></span>
                                     <?= copy_button($r_cidr, 'Copy ' . $r_cidr) ?>
                                 </div>
                             <?php endforeach; ?>
-                            <div class="split-more"><?= count($range_result) ?> CIDR block<?= count($range_result) !== 1 ? 's' : '' ?></div>
+                            <div class="split-more"><?= count($range['result']) ?> CIDR block<?= count($range['result']) !== 1 ? 's' : '' ?></div>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -402,10 +402,10 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Build Tree</button>
                         </div>
                     </form>
-                    <?php if ($tree_error) : ?>
-                        <div class="error"><?= htmlspecialchars($tree_error) ?></div>
-                    <?php elseif ($tree_result !== null) : ?>
-                        <?php $_tree_label = 'Tree: ' . (string)($tree_result['cidr'] ?? $tree_parent); ?>
+                    <?php if (!empty($tree['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($tree['error']) ?></div>
+                    <?php elseif (isset($tree['result'])) : ?>
+                        <?php $_tree_label = 'Tree: ' . (string)($tree['result']['cidr'] ?? $tree_parent); ?>
                         <div class="tree-view"
                              data-history-source="tree"
                              data-history-active="1"
@@ -437,7 +437,7 @@ if ($i < 3) {
                                     echo '</div>';
                                 }
                             }
-                            render_tree_node($tree_result);
+                            render_tree_node($tree['result']);
                             ?>
                         </div>
                     <?php endif; ?>
@@ -465,23 +465,23 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Convert</button>
                         </div>
                     </form>
-                    <?php if ($wildcard_error) : ?>
-                        <div class="error wildcard-error"><?= htmlspecialchars($wildcard_error) ?></div>
-                    <?php elseif ($wildcard_result !== null) : ?>
+                    <?php if (!empty($wildcard['error'])) : ?>
+                        <div class="error wildcard-error"><?= htmlspecialchars($wildcard['error']) ?></div>
+                    <?php elseif (isset($wildcard['result'])) : ?>
                         <?php $_wildcard_label = 'Wildcard: ' . $wildcard_input; ?>
                         <div class="split-list split-list--mt"
                              data-history-source="wildcard"
                              data-history-active="1"
                              data-history-label="<?= htmlspecialchars($_wildcard_label) ?>">
                             <div class="split-item" tabindex="0" role="button"
-                                 data-copy="<?= htmlspecialchars($wildcard_result['cidr']) ?>">
-                                <span class="split-subnet-text" id="wildcard-result-cidr">CIDR: <?= htmlspecialchars($wildcard_result['cidr']) ?></span>
-                                <?= copy_button($wildcard_result['cidr'], 'Copy CIDR ' . $wildcard_result['cidr']) ?>
+                                 data-copy="<?= htmlspecialchars($wildcard['result']['cidr']) ?>">
+                                <span class="split-subnet-text" id="wildcard-result-cidr">CIDR: <?= htmlspecialchars($wildcard['result']['cidr']) ?></span>
+                                <?= copy_button($wildcard['result']['cidr'], 'Copy CIDR ' . $wildcard['result']['cidr']) ?>
                             </div>
                             <div class="split-item" tabindex="0" role="button"
-                                 data-copy="<?= htmlspecialchars($wildcard_result['wildcard']) ?>">
-                                <span class="split-subnet-text" id="wildcard-result-mask">Wildcard: <?= htmlspecialchars($wildcard_result['wildcard']) ?></span>
-                                <?= copy_button($wildcard_result['wildcard'], 'Copy wildcard ' . $wildcard_result['wildcard']) ?>
+                                 data-copy="<?= htmlspecialchars($wildcard['result']['wildcard']) ?>">
+                                <span class="split-subnet-text" id="wildcard-result-mask">Wildcard: <?= htmlspecialchars($wildcard['result']['wildcard']) ?></span>
+                                <?= copy_button($wildcard['result']['wildcard'], 'Copy wildcard ' . $wildcard['result']['wildcard']) ?>
                             </div>
                         </div>
                     <?php endif; ?>
@@ -507,9 +507,9 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Lookup</button>
                         </div>
                     </form>
-                    <?php if ($active_tab === 'ipv4' && $lookup_error) : ?>
-                        <div class="error"><?= htmlspecialchars($lookup_error) ?></div>
-                    <?php elseif ($active_tab === 'ipv4' && $lookup_result !== null) : ?>
+                    <?php if ($active_tab === 'ipv4' && !empty($lookup['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($lookup['error']) ?></div>
+                    <?php elseif ($active_tab === 'ipv4' && isset($lookup['result'])) : ?>
                         <?php
                         $_lookup_ips_count   = count(array_filter(array_map('trim', explode("\n", $lookup_ips_input))));
                         $_lookup_cidrs_count = count(array_filter(array_map('trim', explode("\n", $lookup_cidrs_input))));
@@ -536,7 +536,7 @@ if ($i < 3) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php foreach ($lookup_result as $row) : ?>
+                                        <?php foreach ($lookup['result'] as $row) : ?>
                                             <tr>
                                                 <td class="lookup-table__cell" data-label="IP"><code><?= htmlspecialchars($row['ip']) ?></code></td>
                                                 <td class="lookup-table__cell" data-label="Deepest match">
@@ -558,7 +558,7 @@ if ($i < 3) {
                                     </tbody>
                                 </table>
                             </div>
-                            <div class="split-more"><?= count($lookup_result) ?> IP<?= count($lookup_result) !== 1 ? 's' : '' ?> looked up</div>
+                            <div class="split-more"><?= count($lookup['result']) ?> IP<?= count($lookup['result']) !== 1 ? 's' : '' ?> looked up</div>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -583,10 +583,10 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Diff</button>
                         </div>
                     </form>
-                    <?php if ($active_tab === 'ipv4' && $diff_error) : ?>
-                        <div class="error"><?= htmlspecialchars($diff_error) ?></div>
-                    <?php elseif ($active_tab === 'ipv4' && $diff_result !== null) : ?>
-                        <?php include __DIR__ . '/_diff_result.php'; ?>
+                    <?php if ($active_tab === 'ipv4' && !empty($diff['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($diff['error']) ?></div>
+                    <?php elseif ($active_tab === 'ipv4' && isset($diff['result'])) : ?>
+                        <?php $diff_result = $diff['result']; include __DIR__ . '/_diff_result.php'; ?>
                     <?php endif; ?>
                 </div>
             </div>
@@ -743,15 +743,15 @@ if ($i < 3) {
 
         <?php
         $open_tool_ipv6 = null;
-        if ($split_result6 !== null || $split_error6 !== null) { $open_tool_ipv6 = 'split6'; }
-        elseif ($ula_result !== null || $ula_error !== null) { $open_tool_ipv6 = 'ula'; }
-        elseif ($range6_result !== null || $range6_error !== null) { $open_tool_ipv6 = 'range6'; }
-        elseif ($supernet6_result !== null || $supernet6_error !== null) { $open_tool_ipv6 = 'supernet6'; }
-        elseif ($zoneid_address !== null || $zoneid_error !== null) { $open_tool_ipv6 = 'zoneid'; }
-        elseif ($derive_eui64 !== null || $derive_error !== null) { $open_tool_ipv6 = 'derive'; }
-        elseif ($slaac_address !== null || $slaac_error !== null) { $open_tool_ipv6 = 'slaac'; }
-        elseif (($lookup_result !== null || $lookup_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
-        elseif (($diff_result !== null || $diff_error !== null) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'diff'; }
+        if (!empty($splitter6)) { $open_tool_ipv6 = 'split6'; }
+        elseif (!empty($ula)) { $open_tool_ipv6 = 'ula'; }
+        elseif (!empty($range6)) { $open_tool_ipv6 = 'range6'; }
+        elseif (!empty($supernet6)) { $open_tool_ipv6 = 'supernet6'; }
+        elseif (!empty($zoneid)) { $open_tool_ipv6 = 'zoneid'; }
+        elseif (!empty($derive)) { $open_tool_ipv6 = 'derive'; }
+        elseif (!empty($slaac)) { $open_tool_ipv6 = 'slaac'; }
+        elseif (!empty($lookup) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'lookup'; }
+        elseif (!empty($diff) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'diff'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv6 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv6) . '"' : '' ?>>
             <button type="button" class="tool-trigger" data-tool="split6" aria-expanded="false">Split Subnet</button>
@@ -783,27 +783,27 @@ if ($i < 3) {
                             <input type="text" name="split_prefix6" class="splitter-input"
                                    placeholder="/65" value="<?= htmlspecialchars($input_split_prefix6) ?>"
                                    autocomplete="off" spellcheck="false"
-                                   <?= $split_error6 ? 'aria-invalid="true" aria-describedby="split-error-ipv6"' : '' ?>>
+                                   <?= !empty($splitter6['error']) ? 'aria-invalid="true" aria-describedby="split-error-ipv6"' : '' ?>>
                             <button type="submit" class="splitter-btn">Split</button>
                         </div>
                     </form>
-                    <?php if ($split_error6) : ?>
-                        <div class="error" id="split-error-ipv6"><?= htmlspecialchars($split_error6) ?></div>
-                    <?php elseif ($split_result6 && $split_result6['showing'] > 0) : ?>
+                    <?php if (!empty($splitter6['error'])) : ?>
+                        <div class="error" id="split-error-ipv6"><?= htmlspecialchars($splitter6['error']) ?></div>
+                    <?php elseif (isset($splitter6['result']) && $splitter6['result']['showing'] > 0) : ?>
                         <div class="split-list" data-parent="<?= htmlspecialchars($result6['network_cidr'] ?? '') ?>">
                             <button type="button" class="copy-all-btn" data-target="split">Copy All</button>
                             <button type="button" class="copy-all-btn copy-md-btn" data-target="split6">Copy as Markdown</button>
                             <button type="button" class="copy-all-btn copy-cisco-btn" data-target="split6">Copy as Cisco</button><?= help_bubble('copy-cisco-split6', 'Cisco output is generic IOS-style — one interface stanza per split IPv6 subnet using ipv6 address. Vendor-specific tweaks may be required.') ?>
                             <button type="button" class="ascii-export-btn">Export ASCII</button>
-                            <?php foreach ($split_result6['subnets'] as $s) : ?>
+                            <?php foreach ($splitter6['result']['subnets'] as $s) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s) ?>">
                                     <span class="split-subnet-text"><?= htmlspecialchars($s) ?></span>
                                     <?= copy_button($s, 'Copy ' . $s) ?>
                                 </div>
                             <?php endforeach; ?>
                             <?php
-                                $total6   = $split_result6['total'];
-                                $showing6 = $split_result6['showing'];
+                                $total6   = $splitter6['result']['total'];
+                                $showing6 = $splitter6['result']['showing'];
                                 $has_more6 = is_numeric($total6) ? ($showing6 < (int)$total6) : true;
                                 $more_label6 = is_numeric($total6) ? format_number((int)$total6 - $showing6) . ' more' : $total6 . ' more';
                             ?>
@@ -833,23 +833,23 @@ if ($i < 3) {
                             </div>
                         </div>
                     </form>
-                    <?php if ($ula_error) : ?>
-                        <div class="error"><?= htmlspecialchars($ula_error) ?></div>
-                    <?php elseif ($ula_result !== null) : ?>
-                        <?php $_ula_label = 'ULA: ' . (string)($ula_result['prefix'] ?? ''); ?>
+                    <?php if (!empty($ula['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($ula['error']) ?></div>
+                    <?php elseif (isset($ula['result'])) : ?>
+                        <?php $_ula_label = 'ULA: ' . (string)($ula['result']['prefix'] ?? ''); ?>
                         <div class="ula-result"
                              data-history-source="ula"
                              data-history-active="1"
                              data-history-label="<?= htmlspecialchars($_ula_label) ?>">
-                            <div class="overlap-result overlap-contains"><?= htmlspecialchars($ula_result['prefix'] ?? '') ?></div>
+                            <div class="overlap-result overlap-contains"><?= htmlspecialchars($ula['result']['prefix'] ?? '') ?></div>
                             <div class="ula-meta">
-                                <span>Global ID: <code><?= htmlspecialchars($ula_result['global_id'] ?? '') ?></code></span>
-                                <span>Available /64s: <strong><?= format_number((int)($ula_result['available_64s'] ?? 0)) ?></strong></span>
+                                <span>Global ID: <code><?= htmlspecialchars($ula['result']['global_id'] ?? '') ?></code></span>
+                                <span>Available /64s: <strong><?= format_number((int)($ula['result']['available_64s'] ?? 0)) ?></strong></span>
                             </div>
-                            <?php if (!empty($ula_result['example_64s'])) : ?>
+                            <?php if (!empty($ula['result']['example_64s'])) : ?>
                             <div class="split-list split-list--mt">
                                 <button type="button" class="copy-all-btn" data-target="ula">Copy All</button>
-                                <?php foreach ($ula_result['example_64s'] as $ex64) : ?>
+                                <?php foreach ($ula['result']['example_64s'] as $ex64) : ?>
                                     <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($ex64) ?>">
                                         <span class="split-subnet-text"><?= htmlspecialchars($ex64) ?></span>
                                         <?= copy_button($ex64, 'Copy ' . $ex64) ?>
@@ -882,11 +882,11 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Convert</button>
                         </div>
                     </form>
-                    <?php if ($range6_error) : ?>
-                        <div class="error"><?= htmlspecialchars($range6_error) ?></div>
-                    <?php elseif ($range6_result !== null) : ?>
-                        <?php if ($range6_warning) : ?>
-                            <div class="warning"><?= htmlspecialchars($range6_warning) ?></div>
+                    <?php if (!empty($range6['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($range6['error']) ?></div>
+                    <?php elseif (isset($range6['result'])) : ?>
+                        <?php if (!empty($range6['warning'])) : ?>
+                            <div class="warning"><?= htmlspecialchars($range6['warning']) ?></div>
                         <?php endif; ?>
                         <?php $_range6_label = 'Range: ' . $range6_start . ' → ' . $range6_end; ?>
                         <div class="split-list split-list--mt"
@@ -894,13 +894,13 @@ if ($i < 3) {
                              data-history-active="1"
                              data-history-label="<?= htmlspecialchars($_range6_label) ?>">
                             <button type="button" class="copy-all-btn" data-target="range6">Copy All</button>
-                            <?php foreach ($range6_result as $r6_cidr) : ?>
+                            <?php foreach ($range6['result'] as $r6_cidr) : ?>
                                 <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($r6_cidr) ?>">
                                     <span class="split-subnet-text"><?= htmlspecialchars($r6_cidr) ?></span>
                                     <?= copy_button($r6_cidr, 'Copy ' . $r6_cidr) ?>
                                 </div>
                             <?php endforeach; ?>
-                            <div class="split-more"><?= count($range6_result) ?> CIDR block<?= count($range6_result) !== 1 ? 's' : '' ?><?php if ($range6_total !== null) : ?> · <?= htmlspecialchars(is_string($range6_total) ? $range6_total : (string)$range6_total) ?> addresses<?php endif; ?></div>
+                            <div class="split-more"><?= count($range6['result']) ?> CIDR block<?= count($range6['result']) !== 1 ? 's' : '' ?><?php if (($range6['total'] ?? null) !== null) : ?> · <?= htmlspecialchars(is_string($range6['total']) ? $range6['total'] : (string)$range6['total']) ?> addresses<?php endif; ?></div>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -920,15 +920,15 @@ if ($i < 3) {
                             <button type="submit" name="supernet6_action" value="summarise" class="splitter-btn">Summarise Routes</button><?= help_bubble('supernet6-summarise', 'Computes the minimal set of non-overlapping IPv6 CIDRs that exactly covers the listed networks. Unlike Find Supernet, this avoids including addresses outside the input ranges.') ?>
                         </div>
                     </form>
-                    <?php if ($supernet6_error) : ?>
-                        <div class="error"><?= htmlspecialchars($supernet6_error) ?></div>
-                    <?php elseif ($supernet6_result !== null) : ?>
+                    <?php if (!empty($supernet6['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($supernet6['error']) ?></div>
+                    <?php elseif (isset($supernet6['result'])) : ?>
                         <?php
                         $_supernet6_inputs = count(array_filter(array_map('trim', explode("\n", $supernet6_input))));
                         if ($supernet6_action === 'find') {
                             $_supernet6_label = 'Supernet6: ' . $_supernet6_inputs . ' CIDR' . ($_supernet6_inputs !== 1 ? 's' : '');
                         } else {
-                            $_supernet6_outs  = count($supernet6_result['summaries'] ?? []);
+                            $_supernet6_outs  = count($supernet6['result']['summaries'] ?? []);
                             $_supernet6_label = 'Summarise6: ' . $_supernet6_inputs . ' → ' . $_supernet6_outs;
                         }
                         ?>
@@ -937,7 +937,7 @@ if ($i < 3) {
                                  data-history-source="supernet6"
                                  data-history-active="1"
                                  data-history-label="<?= htmlspecialchars($_supernet6_label) ?>">
-                                <?= htmlspecialchars($supernet6_result['supernet'] ?? '') ?>
+                                <?= htmlspecialchars($supernet6['result']['supernet'] ?? '') ?>
                             </div>
                         <?php else : ?>
                             <div class="split-list split-list--mt"
@@ -945,13 +945,13 @@ if ($i < 3) {
                                  data-history-active="1"
                                  data-history-label="<?= htmlspecialchars($_supernet6_label) ?>">
                                 <button type="button" class="copy-all-btn" data-target="supernet6">Copy All</button>
-                                <?php foreach ($supernet6_result['summaries'] ?? [] as $s6) : ?>
+                                <?php foreach ($supernet6['result']['summaries'] ?? [] as $s6) : ?>
                                     <div class="split-item" tabindex="0" role="button" data-copy="<?= htmlspecialchars($s6) ?>">
                                         <span class="split-subnet-text"><?= htmlspecialchars($s6) ?></span>
                                         <?= copy_button($s6, 'Copy ' . $s6) ?>
                                     </div>
                                 <?php endforeach; ?>
-                                <?php $s6_count = count($supernet6_result['summaries'] ?? []);
+                                <?php $s6_count = count($supernet6['result']['summaries'] ?? []);
                                       $i6_count = count(array_filter(explode("\n", $supernet6_input))); ?>
                                 <div class="split-more"><?= $s6_count ?> prefix<?= $s6_count !== 1 ? 'es' : '' ?> from <?= $i6_count ?> input<?= $i6_count !== 1 ? 's' : '' ?></div>
                             </div>
@@ -971,30 +971,30 @@ if ($i < 3) {
                                    placeholder="fe80::1%eth0"
                                    value="<?= htmlspecialchars($zoneid_input) ?>"
                                    autocomplete="off" spellcheck="false"
-                                   <?= $zoneid_error ? 'aria-invalid="true" aria-describedby="zoneid-error"' : '' ?>>
+                                   <?= !empty($zoneid['error']) ? 'aria-invalid="true" aria-describedby="zoneid-error"' : '' ?>>
                             <button type="submit" class="splitter-btn">Parse</button>
                         </div>
                     </form>
-                    <?php if ($zoneid_error) : ?>
-                        <div class="error" id="zoneid-error"><?= htmlspecialchars($zoneid_error) ?></div>
-                    <?php elseif ($zoneid_address !== null) : ?>
-                        <?php if ($zoneid_warning) : ?>
-                            <div class="warning"><?= htmlspecialchars($zoneid_warning) ?></div>
+                    <?php if (!empty($zoneid['error'])) : ?>
+                        <div class="error" id="zoneid-error"><?= htmlspecialchars($zoneid['error']) ?></div>
+                    <?php elseif (isset($zoneid['address'])) : ?>
+                        <?php if (!empty($zoneid['warning'])) : ?>
+                            <div class="warning"><?= htmlspecialchars($zoneid['warning']) ?></div>
                         <?php endif; ?>
-                        <?php $_zoneid_label = 'Zone ID: ' . $zoneid_address . ($zoneid_zone_id !== null ? '%' . $zoneid_zone_id : ''); ?>
+                        <?php $_zoneid_label = 'Zone ID: ' . $zoneid['address'] . (($zoneid['zone_id'] ?? null) !== null ? '%' . $zoneid['zone_id'] : ''); ?>
                         <dl class="zoneid-result"
                             data-history-source="zoneid"
                             data-history-active="1"
                             data-history-label="<?= htmlspecialchars($_zoneid_label) ?>">
                             <div class="zoneid-result__row">
                                 <dt class="zoneid-result__label">Address</dt>
-                                <dd class="zoneid-result__value"><code><?= htmlspecialchars($zoneid_address) ?></code></dd>
+                                <dd class="zoneid-result__value"><code><?= htmlspecialchars($zoneid['address']) ?></code></dd>
                             </div>
                             <div class="zoneid-result__row">
                                 <dt class="zoneid-result__label">Zone ID</dt>
                                 <dd class="zoneid-result__value">
-                                    <?php if ($zoneid_zone_id !== null) : ?>
-                                        <code><?= htmlspecialchars($zoneid_zone_id) ?></code>
+                                    <?php if (($zoneid['zone_id'] ?? null) !== null) : ?>
+                                        <code><?= htmlspecialchars($zoneid['zone_id']) ?></code>
                                     <?php else : ?>
                                         <span class="zoneid-result__empty" aria-label="no zone identifier">&mdash;</span>
                                     <?php endif; ?>
@@ -1002,7 +1002,7 @@ if ($i < 3) {
                             </div>
                             <div class="zoneid-result__row">
                                 <dt class="zoneid-result__label">Link-local</dt>
-                                <dd class="zoneid-result__value"><?= $zoneid_is_link_local ? 'Yes' : 'No' ?></dd>
+                                <dd class="zoneid-result__value"><?= !empty($zoneid['is_link_local']) ? 'Yes' : 'No' ?></dd>
                             </div>
                         </dl>
                     <?php endif; ?>
@@ -1020,17 +1020,17 @@ if ($i < 3) {
                                    placeholder="00:24:b9:7e:ab:cd"
                                    value="<?= htmlspecialchars($derive_input) ?>"
                                    autocomplete="off" spellcheck="false"
-                                   <?= $derive_error ? 'aria-invalid="true" aria-describedby="derive-error"' : '' ?>>
+                                   <?= !empty($derive['error']) ? 'aria-invalid="true" aria-describedby="derive-error"' : '' ?>>
                             <button type="submit" class="splitter-btn">Derive</button>
                         </div>
                     </form>
-                    <?php if ($derive_error) : ?>
-                        <div class="error" id="derive-error"><?= htmlspecialchars($derive_error) ?></div>
-                    <?php elseif ($derive_eui64 !== null) : ?>
-                        <?php if ($derive_warning) : ?>
-                            <div class="warning"><?= htmlspecialchars($derive_warning) ?></div>
+                    <?php if (!empty($derive['error'])) : ?>
+                        <div class="error" id="derive-error"><?= htmlspecialchars($derive['error']) ?></div>
+                    <?php elseif (isset($derive['eui64'])) : ?>
+                        <?php if (!empty($derive['warning'])) : ?>
+                            <div class="warning"><?= htmlspecialchars($derive['warning']) ?></div>
                         <?php endif; ?>
-                        <?php $_derive_label = 'Derive: ' . ($derive_mac_canonical ?? ''); ?>
+                        <?php $_derive_label = 'Derive: ' . ($derive['mac_canonical'] ?? ''); ?>
                         <dl class="derive-result"
                             data-history-source="derive"
                             data-history-active="1"
@@ -1038,28 +1038,28 @@ if ($i < 3) {
                             <div class="derive-result__row">
                                 <dt class="derive-result__label">MAC (canonical)</dt>
                                 <dd class="derive-result__value">
-                                    <code><?= htmlspecialchars((string)$derive_mac_canonical) ?></code>
+                                    <code><?= htmlspecialchars((string)($derive['mac_canonical'] ?? '')) ?></code>
                                 </dd>
                             </div>
                             <div class="derive-result__row">
                                 <dt class="derive-result__label">EUI-64<?= help_bubble('ipv6-derive-eui64', 'Modified EUI-64 interface identifier — the U/L (universal/local) bit in the first MAC byte is inverted, then the 16-bit value 0xFFFE is inserted between the OUI and the NIC half (RFC 4291 §2.5.1).') ?></dt>
                                 <dd class="derive-result__value">
-                                    <code><?= htmlspecialchars((string)$derive_eui64) ?></code>
-                                    <?= copy_button((string)$derive_eui64, 'Copy EUI-64 interface ID') ?>
+                                    <code><?= htmlspecialchars((string)($derive['eui64'] ?? '')) ?></code>
+                                    <?= copy_button((string)($derive['eui64'] ?? ''), 'Copy EUI-64 interface ID') ?>
                                 </dd>
                             </div>
                             <div class="derive-result__row">
                                 <dt class="derive-result__label">Link-local<?= help_bubble('ipv6-derive-ll', 'Link-local address — the fe80::/64 prefix concatenated with the EUI-64 interface identifier. Always assigned automatically to every IPv6-enabled interface (RFC 4291 §2.5.6).') ?></dt>
                                 <dd class="derive-result__value">
-                                    <code><?= htmlspecialchars((string)$derive_link_local) ?></code>
-                                    <?= copy_button((string)$derive_link_local, 'Copy link-local address') ?>
+                                    <code><?= htmlspecialchars((string)($derive['link_local'] ?? '')) ?></code>
+                                    <?= copy_button((string)($derive['link_local'] ?? ''), 'Copy link-local address') ?>
                                 </dd>
                             </div>
                             <div class="derive-result__row">
                                 <dt class="derive-result__label">Solicited-node<?= help_bubble('ipv6-derive-sn', 'Solicited-node multicast address — ff02::1:ff followed by the low 24 bits of the unicast address. Used by IPv6 Neighbor Discovery so a host only listens for resolution requests targeted at its own address (RFC 4291 §2.7.1).') ?></dt>
                                 <dd class="derive-result__value">
-                                    <code><?= htmlspecialchars((string)$derive_solicited_node) ?></code>
-                                    <?= copy_button((string)$derive_solicited_node, 'Copy solicited-node multicast address') ?>
+                                    <code><?= htmlspecialchars((string)($derive['solicited_node'] ?? '')) ?></code>
+                                    <?= copy_button((string)($derive['solicited_node'] ?? ''), 'Copy solicited-node multicast address') ?>
                                 </dd>
                             </div>
                         </dl>
@@ -1079,11 +1079,11 @@ if ($i < 3) {
                                    value="<?= htmlspecialchars($slaac_prefix_input) ?>"
                                    autocomplete="off" spellcheck="false"
                                    required
-                                   <?= $slaac_error ? 'aria-invalid="true" aria-describedby="slaac-error"' : '' ?>>
+                                   <?= !empty($slaac['error']) ? 'aria-invalid="true" aria-describedby="slaac-error"' : '' ?>>
                             <button type="submit" class="splitter-btn">Generate</button>
                             <button type="reset" class="splitter-btn-ghost">Reset</button>
                         </div>
-                        <details class="slaac-advanced"<?= $slaac_seed_was_provided ? ' open' : '' ?>>
+                        <details class="slaac-advanced"<?= !empty($slaac['seed_was_provided']) ? ' open' : '' ?>>
                             <summary>Advanced (seed for reproducibility)</summary>
                             <p class="slaac-advanced__hint">Optional 16-hex seed for reproducible output (RFC 8981 §3.3.1). Leave blank in production &mdash; every fresh generation should be cryptographically random.</p>
                             <label for="slaac_seed" class="sr-only">Seed (16 hex characters)</label>
@@ -1096,13 +1096,13 @@ if ($i < 3) {
                             <?= help_bubble('ipv6-slaac-seed', 'A 16-character hexadecimal seed (64 bits) makes the generated interface ID deterministic. Useful for reproducing examples in documentation or tests; never use a fixed seed in production because it defeats the privacy purpose of RFC 8981.') ?>
                         </details>
                     </form>
-                    <?php if ($slaac_error) : ?>
-                        <div class="error" id="slaac-error"><?= htmlspecialchars($slaac_error) ?></div>
-                    <?php elseif ($slaac_address !== null) : ?>
-                        <?php if ($slaac_warning) : ?>
-                            <div class="warning"><?= htmlspecialchars($slaac_warning) ?></div>
+                    <?php if (!empty($slaac['error'])) : ?>
+                        <div class="error" id="slaac-error"><?= htmlspecialchars($slaac['error']) ?></div>
+                    <?php elseif (isset($slaac['address'])) : ?>
+                        <?php if (!empty($slaac['warning'])) : ?>
+                            <div class="warning"><?= htmlspecialchars($slaac['warning']) ?></div>
                         <?php endif; ?>
-                        <?php $_slaac_label = 'SLAAC: ' . ($slaac_prefix ?? ''); ?>
+                        <?php $_slaac_label = 'SLAAC: ' . ($slaac['prefix'] ?? ''); ?>
                         <dl class="slaac-result"
                             data-history-source="slaac"
                             data-history-active="1"
@@ -1110,28 +1110,28 @@ if ($i < 3) {
                             <div class="slaac-result__row">
                                 <dt class="slaac-result__label">Prefix (canonical)</dt>
                                 <dd class="slaac-result__value">
-                                    <code><?= htmlspecialchars((string)$slaac_prefix) ?></code>
+                                    <code><?= htmlspecialchars((string)($slaac['prefix'] ?? '')) ?></code>
                                 </dd>
                             </div>
                             <div class="slaac-result__row">
                                 <dt class="slaac-result__label">Address<?= help_bubble('ipv6-slaac-addr', 'The full 128-bit IPv6 address: the supplied /64 prefix concatenated with the random 64-bit privacy interface identifier. This is what would be assigned to the host as a temporary SLAAC address per RFC 8981.') ?></dt>
                                 <dd class="slaac-result__value">
-                                    <code><?= htmlspecialchars((string)$slaac_address) ?></code>
-                                    <?= copy_button((string)$slaac_address, 'Copy SLAAC privacy address') ?>
+                                    <code><?= htmlspecialchars((string)($slaac['address'] ?? '')) ?></code>
+                                    <?= copy_button((string)($slaac['address'] ?? ''), 'Copy SLAAC privacy address') ?>
                                 </dd>
                             </div>
                             <div class="slaac-result__row">
                                 <dt class="slaac-result__label">Interface ID<?= help_bubble('ipv6-slaac-iid', 'The 64-bit random interface identifier in colon-separated hextet form. The U/L bit (second-lowest bit of the first byte) is cleared per RFC 4291 §2.5.1 so the address cannot be mistaken for an EUI-64 derived from a hardware MAC.') ?></dt>
                                 <dd class="slaac-result__value">
-                                    <code><?= htmlspecialchars((string)$slaac_interface_id) ?></code>
-                                    <?= copy_button((string)$slaac_interface_id, 'Copy interface ID') ?>
+                                    <code><?= htmlspecialchars((string)($slaac['interface_id'] ?? '')) ?></code>
+                                    <?= copy_button((string)($slaac['interface_id'] ?? ''), 'Copy interface ID') ?>
                                 </dd>
                             </div>
                             <div class="slaac-result__row">
                                 <dt class="slaac-result__label">Seed used<?= help_bubble('ipv6-slaac-seed-used', 'The 16-hex seed value that produced this address. If you supplied a seed it is echoed here; otherwise the random seed used internally is shown so you can reproduce the result later (e.g. by pasting it back into the Advanced field).') ?></dt>
                                 <dd class="slaac-result__value">
-                                    <code><?= htmlspecialchars((string)$slaac_seed_used) ?></code>
-                                    <?= copy_button((string)$slaac_seed_used, 'Copy seed') ?>
+                                    <code><?= htmlspecialchars((string)($slaac['seed_used'] ?? '')) ?></code>
+                                    <?= copy_button((string)($slaac['seed_used'] ?? ''), 'Copy seed') ?>
                                 </dd>
                             </div>
                         </dl>
@@ -1158,9 +1158,9 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Lookup</button>
                         </div>
                     </form>
-                    <?php if ($active_tab === 'ipv6' && $lookup_error) : ?>
-                        <div class="error"><?= htmlspecialchars($lookup_error) ?></div>
-                    <?php elseif ($active_tab === 'ipv6' && $lookup_result !== null) : ?>
+                    <?php if ($active_tab === 'ipv6' && !empty($lookup['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($lookup['error']) ?></div>
+                    <?php elseif ($active_tab === 'ipv6' && isset($lookup['result'])) : ?>
                         <?php
                         $_lookup_ips_count6   = count(array_filter(array_map('trim', explode("\n", $lookup_ips_input))));
                         $_lookup_cidrs_count6 = count(array_filter(array_map('trim', explode("\n", $lookup_cidrs_input))));
@@ -1187,7 +1187,7 @@ if ($i < 3) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php foreach ($lookup_result as $row) : ?>
+                                        <?php foreach ($lookup['result'] as $row) : ?>
                                             <tr>
                                                 <td class="lookup-table__cell" data-label="IP"><code><?= htmlspecialchars($row['ip']) ?></code></td>
                                                 <td class="lookup-table__cell" data-label="Deepest match">
@@ -1209,7 +1209,7 @@ if ($i < 3) {
                                     </tbody>
                                 </table>
                             </div>
-                            <div class="split-more"><?= count($lookup_result) ?> IP<?= count($lookup_result) !== 1 ? 's' : '' ?> looked up</div>
+                            <div class="split-more"><?= count($lookup['result']) ?> IP<?= count($lookup['result']) !== 1 ? 's' : '' ?> looked up</div>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -1234,10 +1234,10 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Diff</button>
                         </div>
                     </form>
-                    <?php if ($active_tab === 'ipv6' && $diff_error) : ?>
-                        <div class="error"><?= htmlspecialchars($diff_error) ?></div>
-                    <?php elseif ($active_tab === 'ipv6' && $diff_result !== null) : ?>
-                        <?php include __DIR__ . '/_diff_result.php'; ?>
+                    <?php if ($active_tab === 'ipv6' && !empty($diff['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($diff['error']) ?></div>
+                    <?php elseif ($active_tab === 'ipv6' && isset($diff['result'])) : ?>
+                        <?php $diff_result = $diff['result']; include __DIR__ . '/_diff_result.php'; ?>
                     <?php endif; ?>
                 </div>
             </div>
@@ -1292,9 +1292,9 @@ if ($i < 3) {
                 <a href="?tab=vlsm" class="btn reset">Reset</a>
             </div>
         </form>
-        <?php if ($vlsm_error) : ?>
-            <div class="error"><?= htmlspecialchars($vlsm_error) ?></div>
-        <?php elseif ($vlsm_result !== null) : ?>
+        <?php if (!empty($vlsm['error'])) : ?>
+            <div class="error"><?= htmlspecialchars($vlsm['error']) ?></div>
+        <?php elseif (isset($vlsm['result'])) : ?>
             <div class="vlsm-results">
                 <p class="vlsm-sort-note">Results sorted largest-first for efficient allocation.<?= help_bubble('vlsm-sort', 'Subnets are allocated from largest to smallest so that larger blocks can be placed at aligned boundaries without wasting address space.') ?></p>
                 <table class="vlsm-table">
@@ -1308,7 +1308,7 @@ if ($i < 3) {
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($vlsm_result as $alloc) :
+                        <?php foreach ($vlsm['result'] as $alloc) :
                             [$alloc_net_ip, $alloc_pfx] = explode('/', $alloc['subnet']);
                             $alloc_detail = calculate_subnet($alloc_net_ip, (int)$alloc_pfx);
                             ?>
@@ -1335,7 +1335,7 @@ if ($i < 3) {
             <?php
             $vlsm_total_hosts_req = 0;
             $vlsm_total_allocated = 0;
-            foreach ($vlsm_result as $alloc) {
+            foreach ($vlsm['result'] as $alloc) {
                 $vlsm_total_hosts_req += $alloc['hosts_needed'];
                 [, $vlsm_alloc_pfx] = explode('/', $alloc['subnet']);
                 $vlsm_total_allocated += (int)pow(2, 32 - (int)$vlsm_alloc_pfx);
@@ -1371,8 +1371,8 @@ if ($i < 3) {
         <?php
         $open_tool_vlsm = null;
         if ($session_save_id !== '' || $session_error !== null) { $open_tool_vlsm = 'session'; }
-        elseif ($overlap_result !== null || $overlap_error !== null) { $open_tool_vlsm = 'overlap'; }
-        elseif ($multi_overlap_result !== null || $multi_overlap_error !== null) { $open_tool_vlsm = 'multi'; }
+        elseif (!empty($overlap)) { $open_tool_vlsm = 'overlap'; }
+        elseif (!empty($multi_overlap)) { $open_tool_vlsm = 'multi'; }
         ?>
         <div class="tool-toolbar"<?= $open_tool_vlsm ? ' data-open-tool="' . htmlspecialchars($open_tool_vlsm) . '"' : '' ?>>
             <?php if ($session_enabled) : ?>
@@ -1449,9 +1449,9 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Check</button>
                         </div>
                     </form>
-                    <?php if ($overlap_error) : ?>
-                        <div class="error"><?= htmlspecialchars($overlap_error) ?></div>
-                    <?php elseif ($overlap_result !== null) : ?>
+                    <?php if (!empty($overlap['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($overlap['error']) ?></div>
+                    <?php elseif (isset($overlap['result'])) : ?>
                         <?php
                         $overlap_labels = [
                             'none'         => ['No overlap', 'overlap-none'],
@@ -1459,7 +1459,7 @@ if ($i < 3) {
                             'a_contains_b' => [$overlap_cidr_a . ' contains ' . $overlap_cidr_b, 'overlap-contains'],
                             'b_contains_a' => [$overlap_cidr_b . ' contains ' . $overlap_cidr_a, 'overlap-contains'],
                         ];
-                        [$label, $cls] = $overlap_labels[$overlap_result] ?? ['Unknown', ''];
+                        [$label, $cls] = $overlap_labels[$overlap['result']] ?? ['Unknown', ''];
                         ?>
                         <div class="overlap-result <?= htmlspecialchars($cls) ?>"><?= htmlspecialchars($label) ?></div>
                     <?php endif; ?>
@@ -1476,14 +1476,14 @@ if ($i < 3) {
                                   rows="4" autocomplete="off" spellcheck="false"><?= htmlspecialchars($multi_overlap_input) ?></textarea>
                         <button type="submit" class="splitter-btn">Check</button>
                     </form>
-                    <?php if ($multi_overlap_error) : ?>
-                        <div class="error"><?= htmlspecialchars($multi_overlap_error) ?></div>
-                    <?php elseif ($multi_overlap_result !== null) : ?>
-                        <?php if (count($multi_overlap_result) === 0) : ?>
+                    <?php if (!empty($multi_overlap['error'])) : ?>
+                        <div class="error"><?= htmlspecialchars($multi_overlap['error']) ?></div>
+                    <?php elseif (isset($multi_overlap['result'])) : ?>
+                        <?php if (count($multi_overlap['result']) === 0) : ?>
                             <div class="overlap-result overlap-none">No overlaps detected.</div>
                         <?php else : ?>
                             <ul class="multi-overlap-list">
-                                <?php foreach ($multi_overlap_result as $conflict) :
+                                <?php foreach ($multi_overlap['result'] as $conflict) :
                                     if ($conflict['relation'] === 'identical') {
                                         $rel_label = 'Identical';
                                     } elseif ($conflict['relation'] === 'a_contains_b') {
@@ -1554,9 +1554,9 @@ if ($i < 3) {
                 <a href="?tab=vlsm6" class="btn reset">Reset</a>
             </div>
         </form>
-        <?php if ($vlsm6_error) : ?>
-            <div class="error"><?= htmlspecialchars($vlsm6_error) ?></div>
-        <?php elseif ($vlsm6_result !== null) : ?>
+        <?php if (!empty($vlsm6['error'])) : ?>
+            <div class="error"><?= htmlspecialchars($vlsm6['error']) ?></div>
+        <?php elseif (isset($vlsm6['result'])) : ?>
             <div class="vlsm-results">
                 <p class="vlsm-sort-note">Results sorted largest-first for efficient allocation.<?= help_bubble('vlsm6-sort', 'Subnets are allocated from largest to smallest so that larger blocks can be placed at aligned boundaries without wasting address space.') ?></p>
                 <table class="vlsm-table vlsm6-table">
@@ -1569,7 +1569,7 @@ if ($i < 3) {
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($vlsm6_result as $alloc6) : ?>
+                        <?php foreach ($vlsm6['result'] as $alloc6) : ?>
                         <tr>
                             <td><?= htmlspecialchars($alloc6['name']) ?></td>
                             <td><?= htmlspecialchars((string)$alloc6['hosts_needed']) ?></td>
@@ -1593,7 +1593,7 @@ if ($i < 3) {
             $vlsm6_parent_total    = gmp_pow(gmp_init(2), 128 - $vlsm6_parent_cidr_int);
             $vlsm6_total_allocated = gmp_init(0);
             $vlsm6_total_hosts_req = gmp_init(0);
-            foreach ($vlsm6_result as $alloc6) {
+            foreach ($vlsm6['result'] as $alloc6) {
                 [, $vlsm6_alloc_pfx_str] = explode('/', $alloc6['subnet']);
                 $vlsm6_alloc_pfx = (int)$vlsm6_alloc_pfx_str;
                 $vlsm6_total_allocated = gmp_add(

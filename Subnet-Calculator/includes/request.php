@@ -102,14 +102,19 @@ function recaptcha_enterprise_verify(
  *
  * @param list<array{ip: string, matches: list<string>, deepest: string|null}>|null $result_out
  */
+/**
+ * Run lookup_ips() against the given raw textarea inputs and return an
+ * associative array with keys: result, error. Empty-input early-returns
+ * with [] so empty-state defaults apply. (v3.4.0 — flat → array)
+ *
+ * @return array{result?: list<array{ip: string, matches: list<string>, deepest: string|null}>, error?: string}
+ */
 function sc_run_lookup(
     string $cidrs_input,
     string $ips_input,
-    ?array &$result_out,
-    ?string &$error_out,
     int $max_cidrs = 100,
     int $max_ips = 1000
-): void {
+): array {
     // Enforce absolute safety ceilings (hard caps documented in OpenAPI spec).
     $max_cidrs = max(1, min($max_cidrs, 1000));
     $max_ips   = max(1, min($max_ips, 10000));
@@ -117,25 +122,21 @@ function sc_run_lookup(
     $cidr_lines = array_values(array_filter(array_map('trim', explode("\n", $cidrs_input))));
     $ip_lines   = array_values(array_filter(array_map('trim', explode("\n", $ips_input))));
     if ($cidr_lines === []) {
-        $error_out = 'At least one CIDR is required.';
-        return;
+        return ['error' => 'At least one CIDR is required.'];
     }
     if ($ip_lines === []) {
-        $error_out = 'At least one IP is required.';
-        return;
+        return ['error' => 'At least one IP is required.'];
     }
     if (count($cidr_lines) > $max_cidrs) {
-        $error_out = 'Too many CIDRs (max ' . $max_cidrs . ').';
-        return;
+        return ['error' => 'Too many CIDRs (max ' . $max_cidrs . ').'];
     }
     if (count($ip_lines) > $max_ips) {
-        $error_out = 'Too many IPs (max ' . $max_ips . ').';
-        return;
+        return ['error' => 'Too many IPs (max ' . $max_ips . ').'];
     }
     try {
-        $result_out = lookup_ips($cidr_lines, $ip_lines);
+        return ['result' => lookup_ips($cidr_lines, $ip_lines)];
     } catch (\InvalidArgumentException $e) {
-        $error_out = $e->getMessage();
+        return ['error' => $e->getMessage()];
     }
 }
 
@@ -151,34 +152,35 @@ function sc_run_lookup(
  *
  * @param list<string>|null $result_out
  */
-function sc_run_range6(
-    string $start,
-    string $end,
-    ?array &$result_out,
-    ?string &$error_out,
-    ?string &$warning_out,
-    ?int &$count_out,
-    int|string|null &$total_out
-): void {
+/**
+ * Run range6_to_cidrs() and return an associative array with keys: result
+ * (cidrs list), error, warning, count, total. Empty inputs return [].
+ * (v3.4.0 — flat → array)
+ *
+ * @return array{result?: list<string>, error?: string, warning?: string, count?: ?int, total?: int|string|null}
+ */
+function sc_run_range6(string $start, string $end): array
+{
     if ($start === '' && $end === '') {
-        return;
+        return [];
     }
     if ($start === '' || $end === '') {
-        $error_out = 'Start and end IPv6 addresses are required.';
-        return;
+        return ['error' => 'Start and end IPv6 addresses are required.'];
     }
     $r = range6_to_cidrs($start, $end);
     if (isset($r['error'])) {
-        $error_out = $r['error'];
-        return;
+        return ['error' => $r['error']];
     }
-    $result_out = $r['cidrs'] ?? [];
-    $count_out  = $r['count'] ?? null;
-    $total_out  = $r['total_addresses'] ?? null;
+    $out = [
+        'result' => $r['cidrs'] ?? [],
+        'count'  => $r['count'] ?? null,
+        'total'  => $r['total_addresses'] ?? null,
+    ];
     if (!empty($r['truncated'])) {
         $cap = (int)($r['cap'] ?? 256);
-        $warning_out = 'Result truncated at ' . $cap . ' CIDRs (configure via $range_max_cidrs).';
+        $out['warning'] = 'Result truncated at ' . $cap . ' CIDRs (configure via $range_max_cidrs).';
     }
+    return $out;
 }
 
 // ─── Zone-ID helper (shared by POST handler and GET shareable URL) ──────────
@@ -192,27 +194,29 @@ function sc_run_range6(
  * pattern: ONE helper for both methods, populates the same template globals
  * regardless of entry point.
  */
-function sc_run_zoneid(
-    string $input,
-    ?string &$address_out,
-    ?string &$zone_id_out,
-    ?bool &$is_link_local_out,
-    ?string &$warning_out,
-    ?string &$error_out
-): void {
+/**
+ * Run parse_zone_id() against the given input and return an associative array
+ * with keys: address, zone_id, is_link_local, warning, error. Empty input
+ * returns an empty array. (v3.4.0 — flat globals → per-tool array)
+ *
+ * @return array{address?: string, zone_id?: ?string, is_link_local?: bool, warning?: ?string, error?: string}
+ */
+function sc_run_zoneid(string $input): array
+{
     if ($input === '') {
-        return;
+        return [];
     }
     try {
         $r = parse_zone_id($input);
     } catch (\InvalidArgumentException $e) {
-        $error_out = $e->getMessage();
-        return;
+        return ['error' => $e->getMessage()];
     }
-    $address_out       = $r['address'];
-    $zone_id_out       = $r['zone_id'];
-    $is_link_local_out = $r['is_link_local'];
-    $warning_out       = $r['warning'];
+    return [
+        'address'       => $r['address'],
+        'zone_id'       => $r['zone_id'],
+        'is_link_local' => $r['is_link_local'],
+        'warning'       => $r['warning'],
+    ];
 }
 
 // ─── Derive helper (shared by POST handler and GET shareable URL) ───────────
@@ -222,31 +226,34 @@ function sc_run_zoneid(
  * into the by-reference outputs. Used by both the POST handler and the GET
  * shareable-URL hydration path. (v3.3.0 Task 4)
  */
-function sc_run_derive(
-    string $mac,
-    ?string &$mac_canonical_out,
-    ?string &$eui64_out,
-    ?bool &$ul_bit_flipped_out,
-    ?string &$link_local_out,
-    ?string &$solicited_node_out,
-    ?string &$warning_out,
-    ?string &$error_out
-): void {
+/**
+ * Run derive_from_mac() and return an associative array with keys:
+ * mac_canonical, eui64, ul_bit_flipped, link_local, solicited_node,
+ * warning, error. Empty input returns []. (v3.4.0 — flat → array)
+ *
+ * @return array{
+ *     mac_canonical?: string, eui64?: string, ul_bit_flipped?: bool,
+ *     link_local?: string, solicited_node?: string, warning?: ?string, error?: string
+ * }
+ */
+function sc_run_derive(string $mac): array
+{
     if ($mac === '') {
-        return;
+        return [];
     }
     try {
         $r = derive_from_mac($mac);
     } catch (\InvalidArgumentException $e) {
-        $error_out = $e->getMessage();
-        return;
+        return ['error' => $e->getMessage()];
     }
-    $mac_canonical_out  = $r['mac_canonical'];
-    $eui64_out          = $r['eui64'];
-    $ul_bit_flipped_out = $r['ul_bit_flipped'];
-    $link_local_out     = $r['link_local'];
-    $solicited_node_out = $r['solicited_node'];
-    $warning_out        = $r['warning'];
+    return [
+        'mac_canonical'  => $r['mac_canonical'],
+        'eui64'          => $r['eui64'],
+        'ul_bit_flipped' => $r['ul_bit_flipped'],
+        'link_local'     => $r['link_local'],
+        'solicited_node' => $r['solicited_node'],
+        'warning'        => $r['warning'],
+    ];
 }
 
 // ─── SLAAC privacy helper (shared by POST handler and GET shareable URL) ────
@@ -259,35 +266,37 @@ function sc_run_derive(
  * Empty seed strings are treated as "unseeded" so a shareable URL with an
  * empty `slaac_seed=` parameter still produces a fresh address.
  */
-function sc_run_slaac(
-    string $prefix,
-    string $seed,
-    ?string &$prefix_out,
-    ?string &$address_out,
-    ?string &$interface_id_out,
-    ?string &$seed_used_out,
-    bool &$seed_was_provided_out,
-    ?string &$warning_out,
-    ?string &$error_out
-): void {
+/**
+ * Run slaac_privacy_address() and return an associative array with keys:
+ * prefix, address, interface_id, seed_used, seed_was_provided, warning,
+ * error. Empty prefix returns []. (v3.4.0 — flat → array)
+ *
+ * @return array{
+ *     prefix?: string, address?: string, interface_id?: string,
+ *     seed_used?: ?string, seed_was_provided?: bool, warning?: ?string, error?: string
+ * }
+ */
+function sc_run_slaac(string $prefix, string $seed): array
+{
     if ($prefix === '') {
-        return;
+        return [];
     }
     $seed_arg = ($seed === '') ? null : $seed;
     try {
         $r = slaac_privacy_address($prefix, $seed_arg);
     } catch (\InvalidArgumentException $e) {
-        $error_out = $e->getMessage();
-        return;
+        return ['error' => $e->getMessage()];
     }
-    $prefix_out            = $r['prefix'];
-    $address_out           = $r['address'];
-    $interface_id_out      = $r['interface_id'];
-    $seed_used_out         = $r['seed_used'];
-    $seed_was_provided_out = $r['seed_was_provided'];
-    // $warning_out reserved for future use (e.g. callers may surface "seed is
-    // a documentation/example value" hints). Currently always null.
-    $warning_out           = null;
+    return [
+        'prefix'            => $r['prefix'],
+        'address'           => $r['address'],
+        'interface_id'      => $r['interface_id'],
+        'seed_used'         => $r['seed_used'],
+        'seed_was_provided' => $r['seed_was_provided'],
+        // 'warning' reserved for future use (callers may surface "seed is a
+        // documentation/example value" hints). Currently always null.
+        'warning'           => null,
+    ];
 }
 
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
@@ -297,34 +306,34 @@ function sc_run_slaac(
  * into $result_out / $error_out by reference. Used by both the POST handler
  * and the GET shareable-URL hydration path.
  *
- * @param array{added: list<string>, removed: list<string>, unchanged: list<string>,
- *               changed: list<array{from: string, to: string, reason: string}>}|null $result_out
+ * @return array{
+ *     result?: array{
+ *         added: list<string>, removed: list<string>, unchanged: list<string>,
+ *         changed: list<array{from: string, to: string, reason: string}>
+ *     },
+ *     error?: string
+ * }
  */
 function sc_run_diff(
     string $before_input,
     string $after_input,
-    ?array &$result_out,
-    ?string &$error_out,
     int $max_entries = 1000
-): void {
+): array {
     $before_lines = array_values(array_filter(array_map('trim', explode("\n", $before_input))));
     $after_lines  = array_values(array_filter(array_map('trim', explode("\n", $after_input))));
     if ($before_lines === [] && $after_lines === []) {
-        $error_out = 'At least one CIDR is required in either Before or After.';
-        return;
+        return ['error' => 'At least one CIDR is required in either Before or After.'];
     }
     if (count($before_lines) > $max_entries) {
-        $error_out = 'Too many CIDRs in Before (max ' . $max_entries . ').';
-        return;
+        return ['error' => 'Too many CIDRs in Before (max ' . $max_entries . ').'];
     }
     if (count($after_lines) > $max_entries) {
-        $error_out = 'Too many CIDRs in After (max ' . $max_entries . ').';
-        return;
+        return ['error' => 'Too many CIDRs in After (max ' . $max_entries . ').'];
     }
     try {
-        $result_out = subnet_diff($before_lines, $after_lines);
+        return ['result' => subnet_diff($before_lines, $after_lines)];
     } catch (\InvalidArgumentException $e) {
-        $error_out = $e->getMessage();
+        return ['error' => $e->getMessage()];
     }
 }
 
@@ -339,122 +348,97 @@ $input_ip = $input_mask = '';
 $result6 = $error6 = null;
 $input_ipv6 = $input_prefix = '';
 
-$split_result  = $split_error  = null;
-$split_result6 = $split_error6 = null;
 $input_split_prefix  = '';
 $input_split_prefix6 = '';
+/** @var array{result?: list<string>, error?: string} */
+$splitter = [];
+/** @var array{result?: list<string>, error?: string} */
+$splitter6 = [];
 
-$overlap_result = $overlap_error = null;
 $overlap_cidr_a = $overlap_cidr_b = '';
+/** @var array{result?: string, error?: string} */
+$overlap = [];
 
-$multi_overlap_input  = '';
-/** @var array<array{a: string, b: string, relation: string}>|null $multi_overlap_result */
-$multi_overlap_result = null;
-$multi_overlap_error  = null;
+$multi_overlap_input = '';
+/** @var array{result?: array<array{a: string, b: string, relation: string}>, error?: string} */
+$multi_overlap = [];
 
-$vlsm_result = $vlsm_error = null;
 $vlsm_network = $vlsm_cidr_input = '';
 /** @var array<array{name: string, hosts: int}> $vlsm_requirements */
 $vlsm_requirements = [];
+/** @var array{result?: list<array{name: string, hosts_needed: int, subnet: string, usable: int}>, error?: string} */
+$vlsm = [];
 
-/** @var list<array{name: string, hosts_needed: int|string, subnet: string, usable: int|string}>|null $vlsm6_result */
-$vlsm6_result = null;
-$vlsm6_error  = null;
 $vlsm6_network = $vlsm6_cidr_input = '';
 /** @var array<array{name: string, hosts: int|string}> $vlsm6_requirements */
 $vlsm6_requirements = [];
+/** @var array{result?: list<array{name: string, hosts_needed: int|string, subnet: string, usable: int|string}>, error?: string} */
+$vlsm6 = [];
 
 $supernet_input  = '';
 $supernet_action = '';
-/** @var array{supernet?: string, summaries?: string[]}|null $supernet_result */
-$supernet_result = null;
-$supernet_error  = null;
+/** @var array{result?: array{supernet?: string, summaries?: string[]}, error?: string} */
+$supernet = [];
 
 // v3.3.0 — IPv6 supernet / summarise (supernet6)
 $supernet6_input  = '';
 $supernet6_action = '';
-/** @var array{supernet?: string, summaries?: string[]}|null $supernet6_result */
-$supernet6_result = null;
-$supernet6_error  = null;
+/** @var array{result?: array{supernet?: string, summaries?: string[]}, error?: string} */
+$supernet6 = [];
 
 // v3.3.0 — IPv6 zone-ID parser
-$zoneid_input         = '';
-$zoneid_address       = null;
-$zoneid_zone_id       = null;
-$zoneid_is_link_local = null;
-$zoneid_warning       = null;
-$zoneid_error         = null;
+$zoneid_input = '';
+/** @var array{address?: string, zone_id?: ?string, is_link_local?: bool, warning?: ?string, error?: string} */
+$zoneid = [];
 
 // v3.3.0 — MAC → IPv6 derivation tool (derive)
-$derive_input          = '';
-$derive_mac_canonical  = null;
-$derive_eui64          = null;
-$derive_ul_bit_flipped = null;
-$derive_link_local     = null;
-$derive_solicited_node = null;
-$derive_warning        = null;
-$derive_error          = null;
+$derive_input = '';
+/** @var array{mac_canonical?: string, eui64?: string, ul_bit_flipped?: bool, link_local?: string, solicited_node?: string, warning?: ?string, error?: string} */
+$derive = [];
 
 // v3.3.0 — SLAAC privacy address generator (RFC 8981)
-$slaac_prefix_input      = '';
-$slaac_seed_input        = '';
-$slaac_prefix            = null;
-$slaac_address           = null;
-$slaac_interface_id      = null;
-$slaac_seed_used         = null;
-$slaac_seed_was_provided = false;
-$slaac_warning           = null;
-$slaac_error             = null;
+$slaac_prefix_input = '';
+$slaac_seed_input   = '';
+/** @var array{prefix?: string, address?: string, interface_id?: string, seed_used?: ?string, seed_was_provided?: bool, warning?: ?string, error?: string} */
+$slaac = [];
 
 $ula_global_id_input = '';
-/** @var array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}|null $ula_result */
-$ula_result = null;
-$ula_error  = null;
+/** @var array{result?: array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}, error?: string} */
+$ula = [];
 
 $session_save_id  = '';
 $session_load_id  = '';
 $session_error    = null;
 
-$range_start  = '';
-$range_end    = '';
-/** @var list<string>|null $range_result */
-$range_result = null;
-$range_error  = null;
+$range_start = '';
+$range_end   = '';
+/** @var array{result?: list<string>, error?: string} */
+$range = [];
 
 // v3.3.0 — IPv6 range → CIDR (range6)
-$range6_start  = '';
-$range6_end    = '';
-/** @var list<string>|null $range6_result */
-$range6_result   = null;
-$range6_error    = null;
-$range6_warning  = null;
-/** @var int|null $range6_count */
-$range6_count    = null;
-/** @var int|string|null $range6_total */
-$range6_total    = null;
+$range6_start = '';
+$range6_end   = '';
+/** @var array{result?: list<string>, error?: string, warning?: string, count?: ?int, total?: int|string|null} */
+$range6 = [];
 
 $tree_parent   = '';
 $tree_children = '';
-/** @var array<string, mixed>|null $tree_result */
-$tree_result = null;
-$tree_error  = null;
+/** @var array{result?: array<string, mixed>, error?: string} */
+$tree = [];
 
-$wildcard_input  = '';
-/** @var array{cidr: string, wildcard: string}|null $wildcard_result */
-$wildcard_result = null;
-$wildcard_error  = null;
+$wildcard_input = '';
+/** @var array{result?: array{cidr: string, wildcard: string}, error?: string} */
+$wildcard = [];
 
 $lookup_cidrs_input = '';
 $lookup_ips_input   = '';
-/** @var list<array{ip: string, matches: list<string>, deepest: string|null}>|null $lookup_result */
-$lookup_result = null;
-$lookup_error  = null;
+/** @var array{result?: list<array{ip: string, matches: list<string>, deepest: string|null}>, error?: string} */
+$lookup = [];
 
 $diff_before_input = '';
 $diff_after_input  = '';
-/** @var array{added: list<string>, removed: list<string>, unchanged: list<string>, changed: list<array{from: string, to: string, reason: string}>}|null $diff_result */
-$diff_result = null;
-$diff_error  = null;
+/** @var array{result?: array{added: list<string>, removed: list<string>, unchanged: list<string>, changed: list<array{from: string, to: string, reason: string}>}, error?: string} */
+$diff = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $post_tab   = $_POST['tab'] ?? $default_tab;
@@ -570,15 +554,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $input_split_prefix = trim((string)$_POST['split_prefix']);
             $sp = ltrim($input_split_prefix, '/');
             if (!ctype_digit($sp) || (int)$sp < 1 || (int)$sp > 32) {
-                $split_error = 'New prefix must be between 1 and 32.';
+                $splitter = ['error' => 'New prefix must be between 1 and 32.'];
             } else {
                 $new_pfx      = (int)$sp;
                 $current_cidr = (int)ltrim($result['netmask_cidr'], '/');
                 $network_ip   = explode('/', $result['network_cidr'])[0];
                 if ($new_pfx <= $current_cidr) {
-                    $split_error = 'New prefix must be larger than /' . $current_cidr . '.';
+                    $splitter = ['error' => 'New prefix must be larger than /' . $current_cidr . '.'];
                 } else {
-                    $split_result = split_subnet($network_ip, $current_cidr, $new_pfx, $split_max_subnets);
+                    $splitter = ['result' => split_subnet($network_ip, $current_cidr, $new_pfx, $split_max_subnets)];
                 }
             }
         }
@@ -596,15 +580,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $input_split_prefix6 = trim((string)$_POST['split_prefix6']);
             $sp6 = ltrim($input_split_prefix6, '/');
             if (!ctype_digit($sp6) || (int)$sp6 < 1 || (int)$sp6 > 128) {
-                $split_error6 = 'New prefix must be between 1 and 128.';
+                $splitter6 = ['error' => 'New prefix must be between 1 and 128.'];
             } else {
                 $new_pfx6     = (int)$sp6;
                 $current_pfx6 = (int)ltrim($result6['prefix'], '/');
                 $network_ipv6 = explode('/', $result6['network_cidr'])[0];
                 if ($new_pfx6 <= $current_pfx6) {
-                    $split_error6 = 'New prefix must be larger than /' . $current_pfx6 . '.';
+                    $splitter6 = ['error' => 'New prefix must be larger than /' . $current_pfx6 . '.'];
                 } else {
-                    $split_result6 = split_subnet6($network_ipv6, $current_pfx6, $new_pfx6, $split_max_subnets);
+                    $splitter6 = [
+                        'result' => split_subnet6($network_ipv6, $current_pfx6, $new_pfx6, $split_max_subnets),
+                    ];
                 }
             }
         }
@@ -616,10 +602,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $a_is_v6 = strpos($overlap_cidr_a, ':') !== false;
         $b_is_v6 = strpos($overlap_cidr_b, ':') !== false;
         if ($a_is_v6 !== $b_is_v6) {
-            $overlap_error = 'Cannot compare IPv4 and IPv6 addresses.';
+            $overlap = ['error' => 'Cannot compare IPv4 and IPv6 addresses.'];
         } elseif ($a_is_v6) {
             if (!extension_loaded('gmp')) {
-                $overlap_error = 'IPv6 overlap check requires the PHP GMP extension.';
+                $overlap = ['error' => 'IPv6 overlap check requires the PHP GMP extension.'];
             } else {
                 [$a_ip, $a_pfx] = array_pad(explode('/', $overlap_cidr_a, 2), 2, '');
                 [$b_ip, $b_pfx] = array_pad(explode('/', $overlap_cidr_b, 2), 2, '');
@@ -628,17 +614,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $b_ip  = trim($b_ip);
                 $b_pfx = trim($b_pfx);
                 if (!is_valid_ipv6($a_ip) || !ctype_digit($a_pfx) || (int)$a_pfx > 128) {
-                    $overlap_error = 'First subnet: Invalid IPv6 CIDR.';
+                    $overlap = ['error' => 'First subnet: Invalid IPv6 CIDR.'];
                 } elseif (!is_valid_ipv6($b_ip) || !ctype_digit($b_pfx) || (int)$b_pfx > 128) {
-                    $overlap_error = 'Second subnet: Invalid IPv6 CIDR.';
+                    $overlap = ['error' => 'Second subnet: Invalid IPv6 CIDR.'];
                 } else {
                     try {
                         $r6a = calculate_subnet6($a_ip, (int)$a_pfx);
                         $r6b = calculate_subnet6($b_ip, (int)$b_pfx);
-                        $overlap_result = cidrs_overlap6($r6a['network_cidr'], $r6b['network_cidr']);
+                        $overlap = ['result' => cidrs_overlap6($r6a['network_cidr'], $r6b['network_cidr'])];
                     } catch (\Exception $e) {
                         error_log('sc IPv6 overlap error: ' . $e->getMessage());
-                        $overlap_error = 'An error occurred during calculation. Please check your input.';
+                        $overlap = ['error' => 'An error occurred during calculation. Please check your input.'];
                     }
                 }
             }
@@ -646,11 +632,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ra = resolve_ipv4_input($overlap_cidr_a, '');
             $rb = resolve_ipv4_input($overlap_cidr_b, '');
             if (!$ra['result']) {
-                $overlap_error = 'First subnet: ' . ($ra['error'] ?? 'Invalid CIDR.');
+                $overlap = ['error' => 'First subnet: ' . ($ra['error'] ?? 'Invalid CIDR.')];
             } elseif (!$rb['result']) {
-                $overlap_error = 'Second subnet: ' . ($rb['error'] ?? 'Invalid CIDR.');
+                $overlap = ['error' => 'Second subnet: ' . ($rb['error'] ?? 'Invalid CIDR.')];
             } else {
-                $overlap_result = cidrs_overlap($ra['result']['network_cidr'], $rb['result']['network_cidr']);
+                $overlap = ['result' => cidrs_overlap($ra['result']['network_cidr'], $rb['result']['network_cidr'])];
             }
         }
     }
@@ -660,9 +646,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $raw_lines = array_filter(array_map('trim', explode("\n", $multi_overlap_input)));
         $lines = array_values($raw_lines);
         if (count($lines) < 2) {
-            $multi_overlap_error = 'Enter at least two CIDRs (one per line).';
+            $multi_overlap = ['error' => 'Enter at least two CIDRs (one per line).'];
         } elseif (count($lines) > 50) {
-            $multi_overlap_error = 'Maximum 50 CIDRs per check.';
+            $multi_overlap = ['error' => 'Maximum 50 CIDRs per check.'];
         } else {
             $normalised = [];
             $multi_err  = null;
@@ -697,7 +683,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             if ($multi_err !== null) {
-                $multi_overlap_error = $multi_err;
+                $multi_overlap = ['error' => $multi_err];
             } else {
                 $has_v4 = false;
                 $has_v6 = false;
@@ -709,7 +695,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
                 if ($has_v4 && $has_v6) {
-                    $multi_overlap_error = 'Cannot mix IPv4 and IPv6 CIDRs.';
+                    $multi_overlap = ['error' => 'Cannot mix IPv4 and IPv6 CIDRs.'];
                 } else {
                     $conflicts = [];
                     $n_count = count($normalised);
@@ -727,7 +713,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
                     }
-                    $multi_overlap_result = $conflicts;
+                    $multi_overlap = ['result' => $conflicts];
                 }
             }
         }
@@ -738,12 +724,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $vlsm_cidr_input = trim((string)($_POST['vlsm_cidr']   ?? ''));
         $rv = resolve_ipv4_input($vlsm_network, $vlsm_cidr_input);
         if (!$rv['result']) {
-            $vlsm_error = 'Parent network: ' . ($rv['error'] ?? 'Invalid input.');
+            $vlsm['error'] = 'Parent network: ' . ($rv['error'] ?? 'Invalid input.');
         } else {
             $names  = $_POST['vlsm_name']  ?? [];
             $hosts  = $_POST['vlsm_hosts'] ?? [];
             if (!is_array($names) || !is_array($hosts) || count($names) === 0) {
-                $vlsm_error = 'Add at least one requirement.';
+                $vlsm['error'] = 'Add at least one requirement.';
             } else {
                 $reqs = [];
                 foreach ($names as $i => $name) {
@@ -755,16 +741,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $reqs[] = ['name' => $name, 'hosts' => (int)$hval];
                 }
                 if ($reqs === []) {
-                    $vlsm_error = 'Add at least one valid requirement.';
+                    $vlsm['error'] = 'Add at least one valid requirement.';
                 } else {
                     $vlsm_cidr_int   = (int)ltrim($rv['result']['netmask_cidr'], '/');
                     $vlsm_network_ip = explode('/', $rv['result']['network_cidr'])[0];
                     $vlsm_requirements = $reqs;
                     $vr = vlsm_allocate($vlsm_network_ip, $vlsm_cidr_int, $reqs);
                     if (isset($vr['error'])) {
-                        $vlsm_error = $vr['error'];
+                        $vlsm['error'] = $vr['error'];
                     } else {
-                        $vlsm_result = $vr['allocations'] ?? [];
+                        $vlsm['result'] = $vr['allocations'] ?? [];
                     }
                 }
             }
@@ -775,12 +761,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $vlsm6_cidr_input = trim((string)($_POST['vlsm6_cidr']    ?? ''));
         $rv6 = resolve_ipv6_input($vlsm6_network, $vlsm6_cidr_input);
         if (!$rv6['result6']) {
-            $vlsm6_error = 'Parent network: ' . ($rv6['error6'] ?? 'Invalid input.');
+            $vlsm6['error'] = 'Parent network: ' . ($rv6['error6'] ?? 'Invalid input.');
         } else {
             $names6 = $_POST['vlsm6_name']  ?? [];
             $hosts6 = $_POST['vlsm6_hosts'] ?? [];
             if (!is_array($names6) || !is_array($hosts6) || count($names6) === 0) {
-                $vlsm6_error = 'Add at least one requirement.';
+                $vlsm6['error'] = 'Add at least one requirement.';
             } else {
                 $reqs6 = [];
                 $name6_too_long = false;
@@ -800,18 +786,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $reqs6[] = ['name' => $name6, 'hosts' => $hval6];
                 }
                 if ($name6_too_long) {
-                    $vlsm6_error = 'Each requirement name must be 100 characters or fewer.';
+                    $vlsm6['error'] = 'Each requirement name must be 100 characters or fewer.';
                 } elseif ($reqs6 === []) {
-                    $vlsm6_error = 'Add at least one valid requirement.';
+                    $vlsm6['error'] = 'Add at least one valid requirement.';
                 } else {
                     $vlsm6_cidr_int   = (int)ltrim($rv6['result6']['prefix'], '/');
                     $vlsm6_network_ip = explode('/', $rv6['result6']['network_cidr'])[0];
                     $vlsm6_requirements = $reqs6;
                     $vr6 = vlsm6_allocate($vlsm6_network_ip, $vlsm6_cidr_int, $reqs6);
                     if (isset($vr6['error'])) {
-                        $vlsm6_error = $vr6['error'];
+                        $vlsm6['error'] = $vr6['error'];
                     } else {
-                        $vlsm6_result = $vr6['allocations'] ?? [];
+                        $vlsm6['result'] = $vr6['allocations'] ?? [];
                     }
                 }
             }
@@ -825,15 +811,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $supernet_input  = trim((string)($_POST['supernet_input'] ?? ''));
         $lines = array_values(array_filter(array_map('trim', explode("\n", $supernet_input))));
         if (count($lines) < 1) {
-            $supernet_error = 'Enter at least one CIDR.';
+            $supernet = ['error' => 'Enter at least one CIDR.'];
         } elseif (count($lines) > 50) {
-            $supernet_error = 'Maximum 50 CIDRs per check.';
+            $supernet = ['error' => 'Maximum 50 CIDRs per check.'];
         } else {
             $sr = $supernet_action === 'find' ? supernet_find($lines) : summarise_cidrs($lines);
             if (isset($sr['error'])) {
-                $supernet_error = $sr['error'];
+                $supernet = ['error' => $sr['error']];
             } else {
-                $supernet_result = $sr;
+                $supernet = ['result' => $sr];
             }
         }
     }
@@ -846,15 +832,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $supernet6_input  = trim((string)($_POST['supernet6_input'] ?? ''));
         $lines6 = array_values(array_filter(array_map('trim', explode("\n", $supernet6_input))));
         if (count($lines6) < 1) {
-            $supernet6_error = 'Enter at least one CIDR.';
+            $supernet6 = ['error' => 'Enter at least one CIDR.'];
         } elseif (count($lines6) > 50) {
-            $supernet6_error = 'Maximum 50 CIDRs per check.';
+            $supernet6 = ['error' => 'Maximum 50 CIDRs per check.'];
         } else {
             $sr6 = $supernet6_action === 'find' ? supernet6_find($lines6) : summarise6_cidrs($lines6);
             if (isset($sr6['error'])) {
-                $supernet6_error = $sr6['error'];
+                $supernet6 = ['error' => $sr6['error']];
             } else {
-                $supernet6_result = $sr6;
+                $supernet6 = ['result' => $sr6];
             }
         }
     }
@@ -862,55 +848,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($is_zoneid && !$form_blocked) {
         $active_tab = 'ipv6';
         $zoneid_input = trim((string)($_POST['zoneid_input'] ?? ''));
-        sc_run_zoneid(
-            $zoneid_input,
-            $zoneid_address,
-            $zoneid_zone_id,
-            $zoneid_is_link_local,
-            $zoneid_warning,
-            $zoneid_error
-        );
+        $zoneid = sc_run_zoneid($zoneid_input);
     }
 
     if ($is_derive && !$form_blocked) {
         $active_tab = 'ipv6';
         $derive_input = trim((string)($_POST['derive_mac'] ?? ''));
-        sc_run_derive(
-            $derive_input,
-            $derive_mac_canonical,
-            $derive_eui64,
-            $derive_ul_bit_flipped,
-            $derive_link_local,
-            $derive_solicited_node,
-            $derive_warning,
-            $derive_error
-        );
+        $derive = sc_run_derive($derive_input);
     }
 
     if ($is_slaac && !$form_blocked) {
         $active_tab = 'ipv6';
         $slaac_prefix_input = trim((string)($_POST['slaac_prefix'] ?? ''));
         $slaac_seed_input   = trim((string)($_POST['slaac_seed']   ?? ''));
-        sc_run_slaac(
-            $slaac_prefix_input,
-            $slaac_seed_input,
-            $slaac_prefix,
-            $slaac_address,
-            $slaac_interface_id,
-            $slaac_seed_used,
-            $slaac_seed_was_provided,
-            $slaac_warning,
-            $slaac_error
-        );
+        $slaac = sc_run_slaac($slaac_prefix_input, $slaac_seed_input);
     }
 
     if ($is_ula && !$form_blocked) {
         $ula_global_id_input = trim((string)($_POST['ula_global_id'] ?? ''));
         $ur = generate_ula_prefix($ula_global_id_input);
         if (isset($ur['error'])) {
-            $ula_error = $ur['error'];
+            $ula = ['error' => $ur['error']];
         } else {
-            $ula_result = $ur;
+            $ula = ['result' => $ur];
         }
     }
 
@@ -958,7 +918,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (isset($vr6['error'])) {
                         $session_error = $vr6['error'];
                     } else {
-                        $vlsm6_result = $vr6['allocations'] ?? [];
+                        $vlsm6['result'] = $vr6['allocations'] ?? [];
                         try {
                             $db_path = $session_db_path !== '' ? $session_db_path
                                 : dirname(__DIR__) . '/data/sessions.sqlite';
@@ -1014,7 +974,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (isset($vr['error'])) {
                         $session_error = $vr['error'];
                     } else {
-                        $vlsm_result = $vr['allocations'] ?? [];
+                        $vlsm['result'] = $vr['allocations'] ?? [];
                         try {
                             $db_path = $session_db_path !== '' ? $session_db_path
                                 : dirname(__DIR__) . '/data/sessions.sqlite';
@@ -1043,13 +1003,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $range_start = trim((string)($_POST['range_start'] ?? ''));
         $range_end   = trim((string)($_POST['range_end']   ?? ''));
         if ($range_start === '' || $range_end === '') {
-            $range_error = 'Both start and end IP addresses are required.';
+            $range = ['error' => 'Both start and end IP addresses are required.'];
         } else {
             $rr = range_to_cidrs($range_start, $range_end);
             if (isset($rr['error'])) {
-                $range_error = $rr['error'];
+                $range = ['error' => $rr['error']];
             } else {
-                $range_result = $rr['cidrs'] ?? [];
+                $range = ['result' => $rr['cidrs'] ?? []];
             }
         }
     }
@@ -1058,36 +1018,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $active_tab   = 'ipv6';
         $range6_start = trim((string)($_POST['range6_start'] ?? ''));
         $range6_end   = trim((string)($_POST['range6_end']   ?? ''));
-        sc_run_range6(
-            $range6_start,
-            $range6_end,
-            $range6_result,
-            $range6_error,
-            $range6_warning,
-            $range6_count,
-            $range6_total,
-        );
+        $range6 = sc_run_range6($range6_start, $range6_end);
     }
 
     if ($is_wildcard && !$form_blocked) {
         $wildcard_input = trim((string)($_POST['wildcard_input'] ?? ''));
         if ($wildcard_input === '') {
-            $wildcard_error = 'A CIDR prefix or wildcard mask is required.';
+            $wildcard = ['error' => 'A CIDR prefix or wildcard mask is required.'];
         } else {
             try {
                 if (str_contains($wildcard_input, '.')) {
-                    $wildcard_result = [
+                    $wildcard = ['result' => [
                         'cidr'     => wildcard_to_cidr($wildcard_input),
                         'wildcard' => $wildcard_input,
-                    ];
+                    ]];
                 } else {
-                    $wildcard_result = [
+                    $wildcard = ['result' => [
                         'cidr'     => '/' . ltrim($wildcard_input, '/'),
                         'wildcard' => cidr_to_wildcard($wildcard_input),
-                    ];
+                    ]];
                 }
             } catch (\InvalidArgumentException $e) {
-                $wildcard_error = $e->getMessage();
+                $wildcard = ['error' => $e->getMessage()];
             }
         }
     }
@@ -1095,11 +1047,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($is_lookup && !$form_blocked) {
         $lookup_cidrs_input = (string)($_POST['lookup_cidrs'] ?? '');
         $lookup_ips_input   = (string)($_POST['lookup_ips']   ?? '');
-        sc_run_lookup(
+        $lookup = sc_run_lookup(
             $lookup_cidrs_input,
             $lookup_ips_input,
-            $lookup_result,
-            $lookup_error,
             isset($lookup_max_cidrs) ? (int)$lookup_max_cidrs : 100,
             isset($lookup_max_ips)   ? (int)$lookup_max_ips   : 1000,
         );
@@ -1108,12 +1058,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($is_diff && !$form_blocked) {
         $diff_before_input = (string)($_POST['diff_before'] ?? '');
         $diff_after_input  = (string)($_POST['diff_after']  ?? '');
-        sc_run_diff(
-            $diff_before_input,
-            $diff_after_input,
-            $diff_result,
-            $diff_error,
-        );
+        $diff = sc_run_diff($diff_before_input, $diff_after_input);
     }
 
     if ($is_tree && !$form_blocked) {
@@ -1121,15 +1066,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tree_children = trim((string)($_POST['tree_children'] ?? ''));
         $child_lines   = array_values(array_filter(array_map('trim', explode("\n", $tree_children))));
         if ($tree_parent === '') {
-            $tree_error = 'Parent CIDR is required.';
+            $tree = ['error' => 'Parent CIDR is required.'];
         } elseif (count($child_lines) > 100) {
-            $tree_error = 'Maximum 100 child CIDRs per request.';
+            $tree = ['error' => 'Maximum 100 child CIDRs per request.'];
         } else {
             $tr = build_subnet_tree($tree_parent, $child_lines);
             if (isset($tr['error'])) {
-                $tree_error = $tr['error'];
+                $tree = ['error' => $tr['error']];
             } else {
-                $tree_result = $tr['tree'] ?? [];
+                $tree = ['result' => $tr['tree'] ?? []];
             }
         }
     }
@@ -1185,9 +1130,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     $vlsm6_network_ip = explode('/', $rv6['result6']['network_cidr'])[0];
                                     $vr6 = vlsm6_allocate($vlsm6_network_ip, $vlsm6_cidr_int, $vlsm6_requirements);
                                     if (isset($vr6['error'])) {
-                                        $vlsm6_error = $vr6['error'];
+                                        $vlsm6['error'] = $vr6['error'];
                                     } else {
-                                        $vlsm6_result = $vr6['allocations'] ?? [];
+                                        $vlsm6['result'] = $vr6['allocations'] ?? [];
                                     }
                                 }
                             }
@@ -1213,9 +1158,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     $vlsm_network_ip = explode('/', $rv['result']['network_cidr'])[0];
                                     $vr = vlsm_allocate($vlsm_network_ip, $vlsm_cidr_int, $vlsm_requirements);
                                     if (isset($vr['error'])) {
-                                        $vlsm_error = $vr['error'];
+                                        $vlsm['error'] = $vr['error'];
                                     } else {
-                                        $vlsm_result = $vr['allocations'] ?? [];
+                                        $vlsm['result'] = $vr['allocations'] ?? [];
                                     }
                                 }
                             }
@@ -1240,11 +1185,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ) {
         $lookup_cidrs_input = (string)($_GET['lookup_cidrs'] ?? '');
         $lookup_ips_input   = (string)($_GET['lookup_ips']   ?? '');
-        sc_run_lookup(
+        $lookup = sc_run_lookup(
             $lookup_cidrs_input,
             $lookup_ips_input,
-            $lookup_result,
-            $lookup_error,
             isset($lookup_max_cidrs) ? (int)$lookup_max_cidrs : 100,
             isset($lookup_max_ips)   ? (int)$lookup_max_ips   : 1000,
         );
@@ -1257,27 +1200,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ) {
         $diff_before_input = (string)($_GET['diff_before'] ?? '');
         $diff_after_input  = (string)($_GET['diff_after']  ?? '');
-        sc_run_diff(
-            $diff_before_input,
-            $diff_after_input,
-            $diff_result,
-            $diff_error,
-        );
+        $diff = sc_run_diff($diff_before_input, $diff_after_input);
     }
 
     // IPv6 range → CIDR shareable GET URL (v3.3.0)
     if ($active_tab === 'ipv6' && (isset($_GET['range6_start']) || isset($_GET['range6_end']))) {
         $range6_start = trim((string)($_GET['range6_start'] ?? ''));
         $range6_end   = trim((string)($_GET['range6_end']   ?? ''));
-        sc_run_range6(
-            $range6_start,
-            $range6_end,
-            $range6_result,
-            $range6_error,
-            $range6_warning,
-            $range6_count,
-            $range6_total,
-        );
+        $range6 = sc_run_range6($range6_start, $range6_end);
     }
 
     // Supernet / summarise shareable GET URL
@@ -1290,9 +1220,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (count($lines) >= 1 && count($lines) <= 50) {
             $sr = $supernet_action === 'find' ? supernet_find($lines) : summarise_cidrs($lines);
             if (isset($sr['error'])) {
-                $supernet_error = $sr['error'];
+                $supernet = ['error' => $sr['error']];
             } else {
-                $supernet_result = $sr;
+                $supernet = ['result' => $sr];
             }
         }
     }
@@ -1300,46 +1230,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Zone-ID parser shareable GET URL (v3.3.0)
     if ($active_tab === 'ipv6' && isset($_GET['zoneid_input'])) {
         $zoneid_input = trim((string)($_GET['zoneid_input'] ?? ''));
-        sc_run_zoneid(
-            $zoneid_input,
-            $zoneid_address,
-            $zoneid_zone_id,
-            $zoneid_is_link_local,
-            $zoneid_warning,
-            $zoneid_error
-        );
+        $zoneid = sc_run_zoneid($zoneid_input);
     }
 
     // MAC-derivation tool shareable GET URL (v3.3.0 Task 4)
     if ($active_tab === 'ipv6' && isset($_GET['derive_mac'])) {
         $derive_input = trim((string)($_GET['derive_mac'] ?? ''));
-        sc_run_derive(
-            $derive_input,
-            $derive_mac_canonical,
-            $derive_eui64,
-            $derive_ul_bit_flipped,
-            $derive_link_local,
-            $derive_solicited_node,
-            $derive_warning,
-            $derive_error
-        );
+        $derive = sc_run_derive($derive_input);
     }
 
     // SLAAC privacy address shareable GET URL (v3.3.0 Task 5)
     if ($active_tab === 'ipv6' && isset($_GET['slaac_prefix'])) {
         $slaac_prefix_input = trim((string)($_GET['slaac_prefix'] ?? ''));
         $slaac_seed_input   = trim((string)($_GET['slaac_seed']   ?? ''));
-        sc_run_slaac(
-            $slaac_prefix_input,
-            $slaac_seed_input,
-            $slaac_prefix,
-            $slaac_address,
-            $slaac_interface_id,
-            $slaac_seed_used,
-            $slaac_seed_was_provided,
-            $slaac_warning,
-            $slaac_error
-        );
+        $slaac = sc_run_slaac($slaac_prefix_input, $slaac_seed_input);
     }
 
     // Supernet6 / summarise6 shareable GET URL (v3.3.0)
@@ -1352,9 +1256,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (count($lines6) >= 1 && count($lines6) <= 50) {
             $sr6 = $supernet6_action === 'find' ? supernet6_find($lines6) : summarise6_cidrs($lines6);
             if (isset($sr6['error'])) {
-                $supernet6_error = $sr6['error'];
+                $supernet6 = ['error' => $sr6['error']];
             } else {
-                $supernet6_result = $sr6;
+                $supernet6 = ['result' => $sr6];
             }
         }
     }
@@ -1385,7 +1289,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($get_vlsm6_network !== '') {
             $rv6 = resolve_ipv6_input($get_vlsm6_network, $get_vlsm6_cidr);
             if (!$rv6['result6']) {
-                $vlsm6_error = 'Parent network: ' . ($rv6['error6'] ?? 'Invalid input.');
+                $vlsm6['error'] = 'Parent network: ' . ($rv6['error6'] ?? 'Invalid input.');
             } else {
                 $vlsm6_network    = $rv6['ip'];
                 $vlsm6_cidr_input = ltrim($rv6['result6']['prefix'], '/');
@@ -1409,16 +1313,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
                     if ($name6_too_long) {
-                        $vlsm6_error = 'Each requirement name must be 100 characters or fewer.';
+                        $vlsm6['error'] = 'Each requirement name must be 100 characters or fewer.';
                     } elseif ($reqs6 !== []) {
                         $vlsm6_requirements = $reqs6;
                         $vlsm6_cidr_int     = (int)ltrim((string)$rv6['result6']['prefix'], '/');
                         $vlsm6_network_ip   = explode('/', (string)$rv6['result6']['network_cidr'])[0];
                         $vr6 = vlsm6_allocate($vlsm6_network_ip, $vlsm6_cidr_int, $reqs6);
                         if (isset($vr6['error'])) {
-                            $vlsm6_error = $vr6['error'];
+                            $vlsm6['error'] = $vr6['error'];
                         } else {
-                            $vlsm6_result = $vr6['allocations'] ?? [];
+                            $vlsm6['result'] = $vr6['allocations'] ?? [];
                         }
                     }
                 }
@@ -1430,7 +1334,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($get_vlsm_network !== '') {
             $rv = resolve_ipv4_input($get_vlsm_network, $get_vlsm_cidr);
             if (!$rv['result']) {
-                $vlsm_error = 'Parent network: ' . ($rv['error'] ?? 'Invalid input.');
+                $vlsm['error'] = 'Parent network: ' . ($rv['error'] ?? 'Invalid input.');
             } else {
                 $vlsm_network    = $rv['ip'];
                 $vlsm_cidr_input = ltrim($rv['result']['netmask_cidr'], '/');
@@ -1451,9 +1355,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $vlsm_network_ip   = explode('/', $rv['result']['network_cidr'])[0];
                         $vr = vlsm_allocate($vlsm_network_ip, $vlsm_cidr_int, $reqs);
                         if (isset($vr['error'])) {
-                            $vlsm_error = $vr['error'];
+                            $vlsm['error'] = $vr['error'];
                         } else {
-                            $vlsm_result = $vr['allocations'] ?? [];
+                            $vlsm['result'] = $vr['allocations'] ?? [];
                         }
                     }
                 }
@@ -1470,7 +1374,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $current_cidr = (int)ltrim($result['netmask_cidr'], '/');
             $network_ip   = explode('/', $result['network_cidr'])[0];
             if ($new_pfx > $current_cidr) {
-                $split_result = split_subnet($network_ip, $current_cidr, $new_pfx, $split_max_subnets);
+                $splitter = ['result' => split_subnet($network_ip, $current_cidr, $new_pfx, $split_max_subnets)];
             }
         }
     } elseif ($result6 && isset($_GET['split_prefix6'])) {
@@ -1481,7 +1385,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $current_pfx6 = (int)ltrim($result6['prefix'], '/');
             $network_ipv6 = explode('/', $result6['network_cidr'])[0];
             if ($new_pfx6 > $current_pfx6) {
-                $split_result6 = split_subnet6($network_ipv6, $current_pfx6, $new_pfx6, $split_max_subnets);
+                $splitter6 = ['result' => split_subnet6($network_ipv6, $current_pfx6, $new_pfx6, $split_max_subnets)];
             }
         }
     }
@@ -1500,16 +1404,16 @@ if (
 // Build shareable URL
 $share_url = '';
 if ($result) {
-    $sp = $split_result ? ['split_prefix' => ltrim($input_split_prefix, '/')] : [];
+    $sp = isset($splitter['result']) ? ['split_prefix' => ltrim($input_split_prefix, '/')] : [];
     $share_url = '?' . http_build_query(
         ['tab' => 'ipv4', 'ip' => $input_ip, 'mask' => ltrim($result['netmask_cidr'], '/')] + $sp
     );
 } elseif ($result6) {
-    $sp6 = $split_result6 ? ['split_prefix6' => ltrim($input_split_prefix6, '/')] : [];
+    $sp6 = isset($splitter6['result']) ? ['split_prefix6' => ltrim($input_split_prefix6, '/')] : [];
     $share_url = '?' . http_build_query(
         ['tab' => 'ipv6', 'ipv6' => $input_ipv6, 'prefix' => ltrim($result6['prefix'], '/')] + $sp6
     );
-} elseif ($vlsm_result !== null && $vlsm_network !== '') {
+} elseif (isset($vlsm['result']) && $vlsm_network !== '') {
     $vlsm_names = array_map(fn($r) => $r['name'], $vlsm_requirements);
     $vlsm_qhosts = array_map(fn($r) => $r['hosts'], $vlsm_requirements);
     $share_url = '?' . http_build_query([
@@ -1519,7 +1423,7 @@ if ($result) {
         'vlsm_name'    => $vlsm_names,
         'vlsm_hosts'   => $vlsm_qhosts,
     ]);
-} elseif ($vlsm6_result !== null && $vlsm6_network !== '') {
+} elseif (isset($vlsm6['result']) && $vlsm6_network !== '') {
     $vlsm6_names  = array_map(fn($r) => $r['name'], $vlsm6_requirements);
     $vlsm6_qhosts = array_map(fn($r) => $r['hosts'], $vlsm6_requirements);
     $share_url = '?' . http_build_query([
