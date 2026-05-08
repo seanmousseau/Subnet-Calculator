@@ -78,14 +78,48 @@ document.querySelectorAll('.results').forEach(results => {
 
 // ── Share URL: show full URL and copy it ─────────────────────────────────────
 const _base = window.location.origin + window.location.pathname;
+
+// v3.4.0 — convert legacy ?tab=&tool= share queries into canonical
+// /ipv[46]/<tool> paths. Legacy URLs continue to be accepted by the
+// server (no redirect), but canonical form is what we now emit. The
+// helper accepts a query string starting with "?" and returns a full
+// absolute URL anchored at the current document path. When tab is
+// vlsm/vlsm6 (no per-tool routes) or tab is missing, it returns the
+// legacy form unchanged so we don't accidentally break those tabs.
+function buildShareUrl(qs) {
+    if (typeof qs !== 'string' || qs.charAt(0) !== '?') return _base + (qs || '');
+    // Strip any prior /ipv[46](/<tool>)? path segment so we don't double them.
+    const cleanBase = _base.replace(/\/(ipv[46])(\/[a-z0-9-]+)?\/?$/, '/');
+    let params;
+    try {
+        params = new URLSearchParams(qs.slice(1));
+    } catch (_e) {
+        return _base + qs;
+    }
+    const tab = params.get('tab');
+    if (tab !== 'ipv4' && tab !== 'ipv6') {
+        // vlsm / vlsm6 / unknown → leave the legacy form intact.
+        return _base + qs;
+    }
+    const tool = params.get('tool');
+    params.delete('tab');
+    let path = cleanBase.replace(/\/?$/, '') + '/' + tab;
+    if (tool && /^[a-z0-9-]{1,32}$/.test(tool)) {
+        path += '/' + tool;
+        params.delete('tool');
+    }
+    const remaining = params.toString();
+    return path + (remaining ? '?' + remaining : '');
+}
+
 document.querySelectorAll('.share-url').forEach(el => {
     // Override server-provided absolute URL with window.location for reverse-proxy accuracy
     const btn = el.closest('.share-bar')?.querySelector('.share-copy');
-    if (btn) el.textContent = _base + btn.dataset.copy;
+    if (btn) el.textContent = buildShareUrl(btn.dataset.copy);
 });
 document.querySelectorAll('.share-copy').forEach(btn => {
     btn.addEventListener('click', () => {
-        copyText(_base + btn.dataset.copy, 'Link copied!');
+        copyText(buildShareUrl(btn.dataset.copy), 'Link copied!');
     });
 });
 

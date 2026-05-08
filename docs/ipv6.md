@@ -75,7 +75,7 @@ Response shape:
 ### Shareable URL
 
 ```text
-?tab=ipv6&tool=range6&range6_start=2001:db8::&range6_end=2001:db8::ffff
+/ipv6/range6?range6_start=2001:db8::&range6_end=2001:db8::ffff
 ```
 
 ## Supernet & Summarise (v3.3.0)
@@ -111,7 +111,7 @@ curl -sX POST https://example.org/api/v1/supernet6 \
 ### Shareable URL
 
 ```text
-?tab=ipv6&tool=supernet6&supernet6_action=find&supernet6_input=2001:db8::/64%0A2001:db8:0:1::/64
+/ipv6/supernet6?supernet6_action=find&supernet6_input=2001:db8::/64%0A2001:db8:0:1::/64
 ```
 
 ## REST API

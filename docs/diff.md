@@ -56,7 +56,7 @@ Either side may be empty (but not both). Malformed CIDRs are rejected up front w
 Diff inputs can be passed via GET parameters, which auto-opens the tool drawer and renders the result groups on page load — handy for change-review tickets, runbooks, and chat shares. The textareas accept URL-encoded newlines (`%0A`):
 
 ```text
-/?tab=ipv4&diff_before=10.0.0.0%2F24%0A192.168.0.0%2F24&diff_after=10.0.0.0%2F23%0A192.168.1.0%2F24
+/ipv4/diff?diff_before=10.0.0.0%2F24%0A192.168.0.0%2F24&diff_after=10.0.0.0%2F23%0A192.168.1.0%2F24
 ```
 
 The `tab` parameter selects which panel (`ipv4` or `ipv6`) hosts the diff drawer; the payload itself is family-agnostic.

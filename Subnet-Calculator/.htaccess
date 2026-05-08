@@ -60,6 +60,19 @@
     # Block session database directory and API internals
     RewriteRule ^data/ - [F,L]
     RewriteRule ^api/v1/handlers/ - [F,L]
+
+    # v3.4.0: per-tool URL routes — back-compat with ?tab=&tool=
+    # /ipv4/<tool> and /ipv6/<tool> rewrite to index.php?tab=&tool=
+    # The !-f / !-d guards prevent clobbering real assets that match the pattern.
+    # QSA preserves shareable query params (e.g. ?address=…). L stops further rewrite.
+    # Legacy ?tab=&tool= URLs continue to be accepted as input with no redirect
+    # (iframe and bookmark back-compat).
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(ipv4|ipv6)/([a-z0-9-]+)/?$ index.php?tab=$1&tool=$2 [QSA,L]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(ipv4|ipv6)/?$ index.php?tab=$1 [QSA,L]
 </IfModule>
 
 # Block SQLite database files and API internals regardless of location

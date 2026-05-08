@@ -342,6 +342,30 @@ function sc_run_diff(
 $get_tab    = $_GET['tab'] ?? $default_tab;
 $active_tab = in_array($get_tab, ['ipv4', 'ipv6', 'vlsm', 'vlsm6'], true) ? $get_tab : 'ipv4';
 
+// v3.4.0 (#382) — per-tool URL routes. Apache rewrites /ipv4/<tool> and
+// /ipv6/<tool> to index.php?tab=…&tool=…; we accept ?tool= as a fallback
+// signal to auto-open the matching tool drawer when no other GET param
+// (e.g. derive_mac, supernet_action) implies a tool. Legacy
+// ?tab=&tool= URLs work the same way as the rewritten path. Whitelist
+// keeps any garbage out of the template's data-open-tool attribute.
+$get_tool       = (string)($_GET['tool'] ?? '');
+$requested_tool = preg_match('/^[a-z0-9-]{1,32}$/', $get_tool) === 1 ? $get_tool : '';
+
+// v3.4.0 — when the URL is /ipv4/<tool> or /ipv6/<tool>, the browser sees
+// the longer path and resolves all relative URLs (assets/app.js,
+// assets/app.css, ?tab=ipv6 nav links, share-bar copy targets, …) against
+// it, breaking everything. Compute the real app base path by stripping
+// the /ipv[46](/<tool>)? suffix from REQUEST_URI; the template emits a
+// <base href> so relative URLs resolve to the app root regardless of
+// which canonical URL the user landed on.
+$_req_path = strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
+$app_base_path = preg_replace(
+    '#/(ipv4|ipv6)(/[a-z0-9-]+)?/?$#',
+    '/',
+    (string)$_req_path
+);
+unset($_req_path);
+
 $result = $error = null;
 $input_ip = $input_mask = '';
 

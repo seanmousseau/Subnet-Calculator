@@ -60,7 +60,7 @@ The tool supports the standard shareable-URL pattern. The colon
 separators must be URL-encoded as `%3A`:
 
 ```text
-?tab=ipv6&derive_mac=00%3A24%3Ab9%3A7e%3Aab%3Acd
+/ipv6/derive?derive_mac=00%3A24%3Ab9%3A7e%3Aab%3Acd
 ```
 
 The drawer auto-opens and all four rows hydrate from the URL.
