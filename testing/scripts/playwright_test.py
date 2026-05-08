@@ -2935,6 +2935,145 @@ async def test_ipv6_mapped6_ui(page: Page) -> None:
               await panel.locator(".zoneid-result__row").count(), 0)
 
 
+async def test_api_embedded_v4(page: Page) -> None:
+    section("API — POST /api/v1/embedded-v4")
+    # IPv4-mapped → scheme=mapped, ipv4 extracted
+    status, data = _api_post("embedded-v4", {"input": "::ffff:192.0.2.1"})
+    assert_eq("api embedded-v4 (mapped): HTTP 200", status, 200)
+    assert_eq("api embedded-v4 (mapped): ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api embedded-v4 (mapped): scheme", d.get("scheme"), "mapped")
+    assert_eq("api embedded-v4 (mapped): ipv4", d.get("ipv4"), "192.0.2.1")
+    assert_eq("api embedded-v4 (mapped): deprecated=False", d.get("deprecated"), False)
+    assert_eq("api embedded-v4 (mapped): detail_route is null",
+              d.get("detail_route"), None)
+
+    # IPv4-compatible → deprecated
+    status2, data2 = _api_post("embedded-v4", {"input": "::192.0.2.1"})
+    assert_eq("api embedded-v4 (compat): HTTP 200", status2, 200)
+    assert_eq("api embedded-v4 (compat): scheme",
+              data2.get("data", {}).get("scheme"), "compatible")
+    assert_eq("api embedded-v4 (compat): deprecated=True",
+              data2.get("data", {}).get("deprecated"), True)
+
+    # 6to4
+    status3, data3 = _api_post("embedded-v4", {"input": "2002:c000:0201::"})
+    assert_eq("api embedded-v4 (6to4): HTTP 200", status3, 200)
+    assert_eq("api embedded-v4 (6to4): scheme",
+              data3.get("data", {}).get("scheme"), "6to4")
+    assert_eq("api embedded-v4 (6to4): ipv4",
+              data3.get("data", {}).get("ipv4"), "192.0.2.1")
+
+    # Teredo
+    status4, data4 = _api_post("embedded-v4",
+                               {"input": "2001:0:4136:e378:8000:63bf:3fff:fdd2"})
+    assert_eq("api embedded-v4 (teredo): HTTP 200", status4, 200)
+    assert_eq("api embedded-v4 (teredo): scheme",
+              data4.get("data", {}).get("scheme"), "teredo")
+
+    # NAT64 well-known
+    status5, data5 = _api_post("embedded-v4", {"input": "64:ff9b::192.0.2.1"})
+    assert_eq("api embedded-v4 (nat64-wkp): HTTP 200", status5, 200)
+    assert_eq("api embedded-v4 (nat64-wkp): scheme",
+              data5.get("data", {}).get("scheme"), "nat64-wkp")
+    assert_eq("api embedded-v4 (nat64-wkp): ipv4",
+              data5.get("data", {}).get("ipv4"), "192.0.2.1")
+
+    # ISATAP
+    status6, data6 = _api_post("embedded-v4",
+                               {"input": "2001:db8::200:5efe:c000:201"})
+    assert_eq("api embedded-v4 (isatap): HTTP 200", status6, 200)
+    assert_eq("api embedded-v4 (isatap): scheme",
+              data6.get("data", {}).get("scheme"), "isatap")
+    assert_eq("api embedded-v4 (isatap): ipv4",
+              data6.get("data", {}).get("ipv4"), "192.0.2.1")
+
+    # No embedding
+    status7, data7 = _api_post("embedded-v4", {"input": "2001:db8::1"})
+    assert_eq("api embedded-v4 (none): HTTP 200", status7, 200)
+    assert_eq("api embedded-v4 (none): scheme is null",
+              data7.get("data", {}).get("scheme"), None)
+    assert_eq("api embedded-v4 (none): ipv4 is null",
+              data7.get("data", {}).get("ipv4"), None)
+
+    # Loopback / unspecified must NOT be misdetected as compatible (RFC 4291 §2.5.5.1)
+    status8, data8 = _api_post("embedded-v4", {"input": "::1"})
+    assert_eq("api embedded-v4 (loopback): scheme is null",
+              data8.get("data", {}).get("scheme"), None)
+
+    # Missing input → 400
+    status9, _ = _api_post("embedded-v4", {})
+    assert_eq("api embedded-v4: missing input → 400", status9, 400)
+
+    # Garbage input → 400
+    status10, _ = _api_post("embedded-v4", {"input": "not-an-address"})
+    assert_eq("api embedded-v4: invalid input → 400", status10, 400)
+
+
+async def test_ipv6_embedded_v4_ui(page: Page) -> None:
+    section("IPv6 embedded-v4 detector UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # T7 per-tool URL routing — /ipv6/embedded-v4 should auto-open the drawer.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=embedded-v4")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-v4']")
+    assert_eq("embedded-v4 UI: panel exists", await panel.count(), 1)
+
+    # Submit IPv4-mapped address
+    await page.fill("#embedded_v4_input", "::ffff:192.0.2.1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='embedded-v4'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-v4']")
+    rows = panel.locator(".zoneid-result__row")
+    # Scheme + Embedded IPv4 + Open-in-tool = 3 rows (no extras for mapped)
+    assert_true("embedded-v4 UI: at least scheme + ipv4 rows",
+                await rows.count() >= 2)
+
+    # Copy embedded IPv4
+    await rows.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("embedded-v4 UI: copy IPv4",
+              await page.evaluate("window.__lastClipboard"), "192.0.2.1")
+
+    # Open-in-tool button is rendered but disabled (per-scheme drawers land in T3–T7)
+    open_btn = panel.locator("button.splitter-btn[disabled]")
+    assert_true("embedded-v4 UI: open-in-tool button is disabled",
+                await open_btn.count() >= 1)
+
+    # No embedding → result card with "No embedded IPv4 detected"
+    await navigate(page, APP_URL + "?tab=ipv6&tool=embedded-v4")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#embedded_v4_input", "2001:db8::1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='embedded-v4'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-v4']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("embedded-v4 UI: empty-state message rendered",
+                "no embedded ipv4" in body_text, f"body: {body_text!r}")
+
+    # Error path — invalid IPv6 literal
+    await navigate(page, APP_URL + "?tab=ipv6&tool=embedded-v4")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#embedded_v4_input", "not-an-address")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='embedded-v4'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-v4']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("embedded-v4 UI: error band on invalid input",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+
 async def test_api_bulk(page: Page) -> None:
     section("API — bulk calculation")
     # Two valid IPv4 CIDRs
@@ -7823,6 +7962,8 @@ async def main() -> None:
             await test_api_rdns6(page)
             await test_ipv6_mapped6_ui(page)
             await test_api_mapped6(page)
+            await test_ipv6_embedded_v4_ui(page)
+            await test_api_embedded_v4(page)
             await test_a11y_ipv6_drawers(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)

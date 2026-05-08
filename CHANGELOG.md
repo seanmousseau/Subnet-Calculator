@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-MM-DD
+
+**IPv6 Prefix Planning + Transition.** Combines the prefix-planning
+items originally roadmapped for v3.4.0 with the originally-planned
+v3.5.0 transition theme. PRs land incrementally; this section accretes
+as each ships.
+
+### Added
+
+- **IPv6 embedded-v4 detector.** Front-door tool for the v3.5.0
+  transition theme: detects IPv4-mapped, IPv4-compatible (deprecated),
+  6to4, Teredo, NAT64 well-known, and ISATAP embeddings; extracts the
+  embedded IPv4. Deep-links to per-scheme tools as they ship. (#390)
+
 ## [3.4.1] - 2026-05-08
 
 **Patch.** CodeRabbit cleanup carried over from v3.4.0's tracking PR review.

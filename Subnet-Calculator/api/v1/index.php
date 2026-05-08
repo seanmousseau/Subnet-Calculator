@@ -28,6 +28,7 @@ require $base . 'functions-derive6.php';
 require $base . 'functions-slaac6.php';
 require $base . 'functions-rdns6.php';
 require $base . 'functions-mapped6.php';
+require $base . 'functions-embedded-v4.php';
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require_once $base . 'functions-resolve.php';
@@ -114,6 +115,7 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/rdns',
             'POST /api/v1/rdns6',
             'POST /api/v1/mapped6',
+            'POST /api/v1/embedded-v4',
             'POST /api/v1/bulk',
             'POST /api/v1/sessions',
             'GET  /api/v1/sessions/{id}',
@@ -240,6 +242,9 @@ switch ($route_key) {
         break;
     case 'POST /mapped6':
         require __DIR__ . '/handlers/mapped6.php';
+        break;
+    case 'POST /embedded-v4':
+        require __DIR__ . '/handlers/embedded-v4.php';
         break;
     case 'POST /bulk':
         require __DIR__ . '/handlers/bulk.php';

@@ -65,6 +65,8 @@ tags:
     description: Reverse-DNS zone generation
   - name: Mapped6
     description: IPv4-mapped IPv6 and NAT64 conversion
+  - name: EmbeddedV4
+    description: IPv6 embedded-IPv4 detector (front door for v3.5.0 transition tools)
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -353,6 +355,7 @@ paths:
                     - "POST /api/v1/rdns"
                     - "POST /api/v1/rdns6"
                     - "POST /api/v1/mapped6"
+                    - "POST /api/v1/embedded-v4"
                     - "POST /api/v1/bulk"
                     - "POST /api/v1/range/ipv4"
                     - "POST /api/v1/range6"
@@ -1838,6 +1841,130 @@ paths:
                   nat64_prefix: "64:ff9b::/96"
         "400":
           description: Invalid input (unparseable address, not within supplied prefix, or non-/96 NAT64 prefix)
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /embedded-v4:
+    post:
+      operationId: embeddedV4Detect
+      tags: [EmbeddedV4]
+      summary: Detect embedded-IPv4 scheme inside an IPv6 address
+      description: |
+        Front-door detector for the IPv6 transition tools (v3.5.0).
+        Identifies whether the supplied IPv6 address embeds an IPv4 via
+        any of the supported schemes:
+
+        - `mapped`     — IPv4-mapped (`::ffff:0:0/96`, RFC 4291 §2.5.5.2)
+        - `compatible` — IPv4-compatible (`::/96`, RFC 4291 §2.5.5.1, **deprecated**)
+        - `6to4`       — RFC 3056 (`2002::/16`)
+        - `teredo`     — RFC 4380 (`2001:0::/32`)
+        - `nat64-wkp`  — NAT64 well-known prefix (`64:ff9b::/96`, RFC 6052)
+        - `isatap`     — RFC 5214 IID `*0000:5efe:V4` or `*0200:5efe:V4`
+
+        When no embedded IPv4 is detected, `scheme` and `ipv4` are `null`.
+        `detail_route` deep-links to the per-scheme tool drawer when
+        available; v3.5.0 PRs T3–T7 wire it as those drawers ship.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input]
+              properties:
+                input:
+                  type: string
+                  description: An IPv6 address literal.
+                  example: "::ffff:192.0.2.1"
+            examples:
+              mapped:
+                summary: IPv4-mapped IPv6
+                value: { input: "::ffff:192.0.2.1" }
+              six-to-four:
+                summary: 6to4
+                value: { input: "2002:c000:0201::" }
+              teredo:
+                summary: Teredo (RFC 4380 §4 example)
+                value: { input: "2001:0:4136:e378:8000:63bf:3fff:fdd2" }
+              nat64-wkp:
+                summary: NAT64 well-known prefix
+                value: { input: "64:ff9b::192.0.2.1" }
+              isatap:
+                summary: ISATAP
+                value: { input: "2001:db8::200:5efe:c000:201" }
+      responses:
+        "200":
+          description: Detection result (or null scheme when no embedded IPv4 was found)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [input, scheme, ipv4, deprecated, detail_route, extra]
+                        properties:
+                          input:
+                            type: string
+                            example: "::ffff:192.0.2.1"
+                          scheme:
+                            type: string
+                            nullable: true
+                            enum: [mapped, compatible, 6to4, teredo, nat64-wkp, isatap]
+                            example: "mapped"
+                          ipv4:
+                            type: string
+                            nullable: true
+                            example: "192.0.2.1"
+                          deprecated:
+                            type: boolean
+                            example: false
+                          detail_route:
+                            type: string
+                            nullable: true
+                            description: Relative URL of the per-scheme tool drawer; null until that drawer ships.
+                            example: null
+                          extra:
+                            type: object
+                            description: Scheme-specific extras (e.g. Teredo flags + UDP port, 6to4 SLA ID, ISATAP u-bit).
+                            additionalProperties: true
+              example:
+                ok: true
+                data:
+                  input: "::ffff:192.0.2.1"
+                  scheme: "mapped"
+                  ipv4: "192.0.2.1"
+                  deprecated: false
+                  detail_route: null
+                  extra: {}
+        "400":
+          description: Missing or unparseable IPv6 input
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }

@@ -360,6 +360,48 @@ function sc_run_mapped6(array $input): array
     ];
 }
 
+// ─── Embedded-IPv4 detector helper (shared by POST handler and GET shareable URL) ─
+
+/**
+ * Run detect_embedded_v4() against the supplied IPv6 address and return an
+ * associative array with keys: input, scheme, ipv4, deprecated, detail_route,
+ * extra, error. Empty input early-returns []. (v3.5.0 Task 2)
+ *
+ * @return array{
+ *     input?: string,
+ *     scheme?: ?string,
+ *     ipv4?: ?string,
+ *     deprecated?: bool,
+ *     detail_route?: ?string,
+ *     extra?: array<string,mixed>,
+ *     error?: string|null
+ * }
+ */
+function sc_run_embedded_v4(string $address): array
+{
+    $raw = trim($address);
+    if ($raw === '') {
+        return [];
+    }
+    try {
+        $detection = detect_embedded_v4($raw);
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'input' => $raw,
+            'error' => $e->getMessage(),
+        ];
+    }
+    return [
+        'input'        => $raw,
+        'scheme'       => $detection['scheme'],
+        'ipv4'         => $detection['ipv4'],
+        'deprecated'   => $detection['deprecated'],
+        'detail_route' => $detection['detail_route'],
+        'extra'        => $detection['extra'],
+        'error'        => null,
+    ];
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -501,6 +543,11 @@ $mapped6_prefix_input = '';
 /** @var array{input?: string, ipv4?: string, ipv4_mapped?: string, nat64?: string, nat64_prefix?: string, error?: string|null} */
 $mapped6 = [];
 
+// v3.5.0 Task 2 — IPv6 embedded-v4 detector (front door)
+$embedded_v4_input = '';
+/** @var array{input?: string, scheme?: ?string, ipv4?: ?string, deprecated?: bool, detail_route?: ?string, extra?: array<string,mixed>, error?: string|null} */
+$embedded_v4 = [];
+
 $ula_global_id_input = '';
 /** @var array{result?: array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}, error?: string} */
 $ula = [];
@@ -564,6 +611,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_slaac         = isset($_POST['slaac_prefix']);
     $is_rdns6         = isset($_POST['rdns6_address']);
     $is_mapped6       = isset($_POST['mapped6_input']);
+    $is_embedded_v4   = isset($_POST['embedded_v4_input']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -571,7 +619,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
         || $is_vlsm6 || $is_supernet || $is_supernet6 || $is_ula || $is_session_save || $is_range
         || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid
-        || $is_derive || $is_slaac || $is_rdns6 || $is_mapped6;
+        || $is_derive || $is_slaac || $is_rdns6 || $is_mapped6 || $is_embedded_v4;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -982,6 +1030,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
     }
 
+    if ($is_embedded_v4 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $embedded_v4_input = trim((string)($_POST['embedded_v4_input'] ?? ''));
+        $embedded_v4 = sc_run_embedded_v4($embedded_v4_input);
+    }
+
     if ($is_ula && !$form_blocked) {
         $ula_global_id_input = trim((string)($_POST['ula_global_id'] ?? ''));
         $ur = generate_ula_prefix($ula_global_id_input);
@@ -1379,6 +1433,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'input'        => $mapped6_input,
             'nat64_prefix' => $mapped6_prefix_input,
         ]);
+    }
+
+    // Embedded-v4 detector shareable GET URL (v3.5.0 Task 2)
+    if ($active_tab === 'ipv6' && isset($_GET['embedded_v4_input'])) {
+        $embedded_v4_input = trim((string)($_GET['embedded_v4_input'] ?? ''));
+        $embedded_v4 = sc_run_embedded_v4($embedded_v4_input);
     }
 
     // Supernet6 / summarise6 shareable GET URL (v3.3.0)

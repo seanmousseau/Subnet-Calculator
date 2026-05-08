@@ -19,6 +19,7 @@ require $base . 'functions-derive6.php';
 require $base . 'functions-slaac6.php';
 require $base . 'functions-rdns6.php';
 require $base . 'functions-mapped6.php';
+require $base . 'functions-embedded-v4.php';
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require $base . 'functions-resolve.php';
