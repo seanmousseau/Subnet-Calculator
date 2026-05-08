@@ -3226,6 +3226,162 @@ async def test_ipv6_6to4_ui(page: Page) -> None:
                 await open_link.count() >= 1)
 
 
+async def test_api_teredo(page: Page) -> None:
+    section("API — POST /api/v1/teredo")
+
+    # Decode mode — RFC 4380 §4 worked example.
+    status, data = _api_post("teredo", {
+        "mode": "decode",
+        "ipv6": "2001:0:4136:e378:8000:63bf:3fff:fdd2",
+    })
+    assert_eq("api teredo decode: HTTP 200", status, 200)
+    assert_eq("api teredo decode: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api teredo decode: mode", d.get("mode"), "decode")
+    assert_eq("api teredo decode: server_ipv4", d.get("server_ipv4"), "65.54.227.120")
+    assert_eq("api teredo decode: client_ipv4", d.get("client_ipv4"), "192.0.2.45")
+    assert_eq("api teredo decode: port", d.get("port"), 40000)
+    assert_eq("api teredo decode: flags", d.get("flags"), 0x8000)
+    assert_eq("api teredo decode: cone", d.get("cone"), True)
+
+    # Encode mode — round-trip.
+    status2, data2 = _api_post("teredo", {
+        "mode": "encode",
+        "server_ipv4": "65.54.227.120",
+        "client_ipv4": "192.0.2.45",
+        "port": 40000,
+        "flags": 0x8000,
+    })
+    assert_eq("api teredo encode: HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api teredo encode: ipv6",
+              d2.get("ipv6"), "2001:0:4136:e378:8000:63bf:3fff:fdd2")
+    assert_eq("api teredo encode: cone", d2.get("cone"), True)
+
+    # Decode rejects non-Teredo addresses.
+    status3, _ = _api_post("teredo", {"mode": "decode", "ipv6": "2001:db8::1"})
+    assert_eq("api teredo decode: non-Teredo → 400", status3, 400)
+
+    # Decode rejects garbage.
+    status4, _ = _api_post("teredo", {"mode": "decode", "ipv6": "not-an-address"})
+    assert_eq("api teredo decode: garbage → 400", status4, 400)
+
+    # Encode rejects bad IPv4.
+    status5, _ = _api_post("teredo", {
+        "mode": "encode",
+        "server_ipv4": "not-an-ip",
+        "client_ipv4": "192.0.2.45",
+        "port": 40000,
+    })
+    assert_eq("api teredo encode: invalid server IPv4 → 400", status5, 400)
+
+    # Encode rejects out-of-range port.
+    status6, _ = _api_post("teredo", {
+        "mode": "encode",
+        "server_ipv4": "65.54.227.120",
+        "client_ipv4": "192.0.2.45",
+        "port": 70000,
+    })
+    assert_eq("api teredo encode: port out of range → 400", status6, 400)
+
+    # Missing required field on decode.
+    status7, _ = _api_post("teredo", {"mode": "decode"})
+    assert_eq("api teredo decode: missing ipv6 → 400", status7, 400)
+
+    # Missing required fields on encode.
+    status8, _ = _api_post("teredo", {"mode": "encode"})
+    assert_eq("api teredo encode: missing parts → 400", status8, 400)
+
+    # Invalid mode.
+    status9, _ = _api_post("teredo", {"mode": "bogus", "ipv6": "2001:0::1"})
+    assert_eq("api teredo: invalid mode → 400", status9, 400)
+
+    # embedded-v4 detector now deep-links Teredo to /ipv6/teredo (T4 contract).
+    status10, data10 = _api_post("embedded-v4",
+                                 {"input": "2001:0:4136:e378:8000:63bf:3fff:fdd2"})
+    assert_eq("api embedded-v4 (teredo): HTTP 200", status10, 200)
+    assert_eq("api embedded-v4 (teredo): detail_route is /ipv6/teredo",
+              data10.get("data", {}).get("detail_route"), "/ipv6/teredo")
+
+
+async def test_ipv6_teredo_ui(page: Page) -> None:
+    section("IPv6 Teredo tool UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # /ipv6/teredo should auto-open the drawer (per-tool URL routing).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=teredo")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='teredo']")
+    assert_eq("teredo UI: panel exists", await panel.count(), 1)
+
+    # Decode — Teredo IPv6 → parts.
+    await page.select_option("#teredo_mode", "decode")
+    await page.fill("#teredo_input", "2001:0:4136:e378:8000:63bf:3fff:fdd2")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='teredo'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='teredo']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("teredo UI decode: server v4 rendered",
+                "65.54.227.120" in body_text, f"body: {body_text!r}")
+    assert_true("teredo UI decode: client v4 rendered",
+                "192.0.2.45" in body_text, f"body: {body_text!r}")
+    assert_true("teredo UI decode: port rendered",
+                "40000" in body_text, f"body: {body_text!r}")
+    assert_true("teredo UI decode: flags rendered",
+                "0x8000" in body_text, f"body: {body_text!r}")
+
+    # Copy server IPv4.
+    await panel.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("teredo UI decode: copy server IPv4",
+              await page.evaluate("window.__lastClipboard"),
+              "65.54.227.120")
+
+    # Error path — non-Teredo address.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=teredo")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#teredo_mode", "decode")
+    await page.fill("#teredo_input", "2001:db8::1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='teredo'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='teredo']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("teredo UI: error band on non-Teredo address",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+    # Shareable GET URL hydrates without re-submission.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=teredo&teredo_mode=decode&teredo_input=2001:0:4136:e378:8000:63bf:3fff:fdd2")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='teredo']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("teredo UI shareable URL: server v4 hydrated",
+                "65.54.227.120" in body_text, f"body: {body_text!r}")
+    assert_true("teredo UI shareable URL: client v4 hydrated",
+                "192.0.2.45" in body_text, f"body: {body_text!r}")
+
+    # embedded-v4 detector now deep-links Teredo to /ipv6/teredo. Render
+    # the embedded-v4 drawer with a Teredo input and verify the
+    # Open-in-tool button is enabled (anchor element).
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=embedded-v4&embedded_v4_input=2001:0:4136:e378:8000:63bf:3fff:fdd2")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    ev4_panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-v4']")
+    open_link = ev4_panel.locator("a.splitter-btn[href='/ipv6/teredo']")
+    assert_true("embedded-v4 → teredo deep-link: anchor present",
+                await open_link.count() >= 1)
+
+
 async def test_api_bulk(page: Page) -> None:
     section("API — bulk calculation")
     # Two valid IPv4 CIDRs
@@ -8118,6 +8274,8 @@ async def main() -> None:
             await test_api_embedded_v4(page)
             await test_ipv6_6to4_ui(page)
             await test_api_6to4(page)
+            await test_ipv6_teredo_ui(page)
+            await test_api_teredo(page)
             await test_a11y_ipv6_drawers(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)

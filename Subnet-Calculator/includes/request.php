@@ -456,6 +456,133 @@ function sc_run_6to4(string $input, string $mode): array
     }
 }
 
+// ─── Teredo helper (shared by POST handler and GET shareable URL) ──────────
+
+/**
+ * Run the Teredo tool against the supplied input. Mode is either 'decode'
+ * (Teredo IPv6 → server v4 + client v4 + port + flags) or 'encode'
+ * (server v4 + client v4 + port + flags → Teredo IPv6). Empty input
+ * returns []. (v3.5.0 Task 4)
+ *
+ * @return array{
+ *     mode?: 'encode'|'decode',
+ *     input?: string,
+ *     ipv6?: string,
+ *     server_ipv4?: string,
+ *     client_ipv4?: string,
+ *     port?: int,
+ *     flags?: int,
+ *     cone?: bool,
+ *     error?: string|null
+ * }
+ */
+function sc_run_teredo(
+    string $mode,
+    string $ipv6_input,
+    string $server_input,
+    string $client_input,
+    string $port_input,
+    string $flags_input,
+    bool $cone_flag
+): array {
+    $mode = strtolower(trim($mode));
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        $mode = 'decode';
+    }
+
+    if ($mode === 'decode') {
+        $raw = trim($ipv6_input);
+        if ($raw === '') {
+            return [];
+        }
+        try {
+            $r = decode_teredo($raw);
+            return [
+                'mode'        => 'decode',
+                'input'       => $raw,
+                'ipv6'        => $raw,
+                'server_ipv4' => $r['server_ipv4'],
+                'client_ipv4' => $r['client_ipv4'],
+                'port'        => $r['port'],
+                'flags'       => $r['flags'],
+                'cone'        => $r['cone'],
+                'error'       => null,
+            ];
+        } catch (\InvalidArgumentException $e) {
+            return [
+                'mode'  => 'decode',
+                'input' => $raw,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    // Encode mode
+    $server = trim($server_input);
+    $client = trim($client_input);
+    $portRaw  = trim($port_input);
+    $flagsRaw = trim($flags_input);
+
+    // Empty-state: no parts supplied yet.
+    if ($server === '' && $client === '' && $portRaw === '') {
+        return [];
+    }
+
+    if ($portRaw === '' || !ctype_digit($portRaw)) {
+        return [
+            'mode'  => 'encode',
+            'error' => 'Port must be a non-negative integer between 0 and 65535.',
+        ];
+    }
+    $port = (int)$portRaw;
+
+    // Flags input optional. Accept decimal or 0xNNNN. Default to cone or
+    // non-cone based on the boolean toggle.
+    if ($flagsRaw === '') {
+        $flags = $cone_flag ? 0x8000 : 0x0000;
+    } else {
+        if (preg_match('/^0x[0-9a-f]{1,4}$/i', $flagsRaw)) {
+            $flags = (int)hexdec(substr($flagsRaw, 2));
+        } elseif (ctype_digit($flagsRaw)) {
+            $flags = (int)$flagsRaw;
+        } else {
+            return [
+                'mode'  => 'encode',
+                'error' => 'Flags must be a 16-bit integer (decimal or 0xNNNN).',
+            ];
+        }
+        if ($flags < 0 || $flags > 0xFFFF) {
+            return [
+                'mode'  => 'encode',
+                'error' => 'Flags must be in the 16-bit range (0..65535).',
+            ];
+        }
+    }
+
+    try {
+        $addr = encode_teredo($server, $client, $port, $flags);
+        return [
+            'mode'        => 'encode',
+            'server_ipv4' => $server,
+            'client_ipv4' => $client,
+            'port'        => $port,
+            'flags'       => $flags,
+            'cone'        => ($flags & 0x8000) !== 0,
+            'ipv6'        => $addr,
+            'error'       => null,
+        ];
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'mode'        => 'encode',
+            'server_ipv4' => $server,
+            'client_ipv4' => $client,
+            'port'        => $port,
+            'flags'       => $flags,
+            'error'       => $e->getMessage(),
+        ];
+    }
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -608,6 +735,17 @@ $sixtofour_mode  = 'encode';
 /** @var array{mode?: 'encode'|'decode', input?: string, prefix?: string, ipv4?: string, subnet_id?: int, interface_id?: string, error?: string|null} */
 $sixtofour = [];
 
+// v3.5.0 Task 4 — Teredo address decoder (RFC 4380)
+$teredo_mode         = 'decode';
+$teredo_input        = '';
+$teredo_server_input = '';
+$teredo_client_input = '';
+$teredo_port_input   = '';
+$teredo_flags_input  = '';
+$teredo_cone_flag    = true;
+/** @var array{mode?: 'encode'|'decode', input?: string, ipv6?: string, server_ipv4?: string, client_ipv4?: string, port?: int, flags?: int, cone?: bool, error?: string|null} */
+$teredo = [];
+
 $ula_global_id_input = '';
 /** @var array{result?: array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}, error?: string} */
 $ula = [];
@@ -673,6 +811,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_mapped6       = isset($_POST['mapped6_input']);
     $is_embedded_v4   = isset($_POST['embedded_v4_input']);
     $is_sixtofour     = isset($_POST['sixtofour_input']);
+    $is_teredo        = isset($_POST['teredo_mode'])
+        || isset($_POST['teredo_input'])
+        || isset($_POST['teredo_server'])
+        || isset($_POST['teredo_client'])
+        || isset($_POST['teredo_port']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -681,7 +824,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || $is_vlsm6 || $is_supernet || $is_supernet6 || $is_ula || $is_session_save || $is_range
         || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid
         || $is_derive || $is_slaac || $is_rdns6 || $is_mapped6 || $is_embedded_v4
-        || $is_sixtofour;
+        || $is_sixtofour || $is_teredo;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -1108,6 +1251,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sixtofour = sc_run_6to4($sixtofour_input, $sixtofour_mode);
     }
 
+    if ($is_teredo && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $teredo_mode         = (string)($_POST['teredo_mode'] ?? 'decode');
+        if ($teredo_mode !== 'encode' && $teredo_mode !== 'decode') {
+            $teredo_mode = 'decode';
+        }
+        $teredo_input        = trim((string)($_POST['teredo_input']  ?? ''));
+        $teredo_server_input = trim((string)($_POST['teredo_server'] ?? ''));
+        $teredo_client_input = trim((string)($_POST['teredo_client'] ?? ''));
+        $teredo_port_input   = trim((string)($_POST['teredo_port']   ?? ''));
+        $teredo_flags_input  = trim((string)($_POST['teredo_flags']  ?? ''));
+        $teredo_cone_flag    = isset($_POST['teredo_cone']);
+        $teredo = sc_run_teredo(
+            $teredo_mode,
+            $teredo_input,
+            $teredo_server_input,
+            $teredo_client_input,
+            $teredo_port_input,
+            $teredo_flags_input,
+            $teredo_cone_flag
+        );
+    }
+
     if ($is_ula && !$form_blocked) {
         $ula_global_id_input = trim((string)($_POST['ula_global_id'] ?? ''));
         $ur = generate_ula_prefix($ula_global_id_input);
@@ -1521,6 +1687,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $sixtofour_mode = 'encode';
         }
         $sixtofour = sc_run_6to4($sixtofour_input, $sixtofour_mode);
+    }
+
+    // Teredo shareable GET URL (v3.5.0 Task 4)
+    if (
+        $active_tab === 'ipv6'
+        && (isset($_GET['teredo_input']) || isset($_GET['teredo_server']))
+    ) {
+        $teredo_mode = (string)($_GET['teredo_mode'] ?? 'decode');
+        if ($teredo_mode !== 'encode' && $teredo_mode !== 'decode') {
+            $teredo_mode = 'decode';
+        }
+        $teredo_input        = trim((string)($_GET['teredo_input']  ?? ''));
+        $teredo_server_input = trim((string)($_GET['teredo_server'] ?? ''));
+        $teredo_client_input = trim((string)($_GET['teredo_client'] ?? ''));
+        $teredo_port_input   = trim((string)($_GET['teredo_port']   ?? ''));
+        $teredo_flags_input  = trim((string)($_GET['teredo_flags']  ?? ''));
+        $teredo_cone_flag    = isset($_GET['teredo_cone']);
+        $teredo = sc_run_teredo(
+            $teredo_mode,
+            $teredo_input,
+            $teredo_server_input,
+            $teredo_client_input,
+            $teredo_port_input,
+            $teredo_flags_input,
+            $teredo_cone_flag
+        );
     }
 
     // Supernet6 / summarise6 shareable GET URL (v3.3.0)

@@ -152,7 +152,7 @@ function detect_embedded_v4(string $ipv6): array
             'scheme'       => 'teredo',
             'ipv4'         => $clientV4 === false ? null : $clientV4,
             'deprecated'   => false,
-            'detail_route' => null,
+            'detail_route' => '/ipv6/teredo',
             'extra'        => [
                 'server_ipv4' => $serverV4 === false ? null : $serverV4,
                 'flags'       => $flags,
