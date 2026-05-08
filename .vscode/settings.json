@@ -111,5 +111,10 @@
     // request.php — this is pre-existing in Turnstile/hCaptcha/recaptcha verify
     // helpers; the deprecation is informational only and there's no
     // cross-version replacement that works on PHP 8.2.
-    "intelephense.diagnostics.deprecated": false
+    "intelephense.diagnostics.deprecated": false,
+
+    // Premium-only diagnostics — opt in for stronger static checks.
+    "intelephense.diagnostics.implicitVariables": true,
+    "intelephense.diagnostics.unusedSymbols": true,
+    "intelephense.diagnostics.unreachableCode": true
 }
