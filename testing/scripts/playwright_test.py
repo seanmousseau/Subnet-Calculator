@@ -3074,6 +3074,158 @@ async def test_ipv6_embedded_v4_ui(page: Page) -> None:
                 len(err_text) > 0, f"got: {err_text!r}")
 
 
+async def test_api_6to4(page: Page) -> None:
+    section("API — POST /api/v1/6to4")
+
+    # Encode mode — RFC 3056 §2 worked example.
+    status, data = _api_post("6to4", {"mode": "encode", "ipv4": "192.0.2.1"})
+    assert_eq("api 6to4 encode: HTTP 200", status, 200)
+    assert_eq("api 6to4 encode: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api 6to4 encode: mode", d.get("mode"), "encode")
+    assert_eq("api 6to4 encode: ipv4", d.get("ipv4"), "192.0.2.1")
+    assert_eq("api 6to4 encode: prefix", d.get("prefix"), "2002:c000:0201::/48")
+
+    # Decode mode — round-trip.
+    status2, data2 = _api_post("6to4", {"mode": "decode", "ipv6": "2002:c000:0201::1"})
+    assert_eq("api 6to4 decode: HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api 6to4 decode: mode", d2.get("mode"), "decode")
+    assert_eq("api 6to4 decode: ipv4", d2.get("ipv4"), "192.0.2.1")
+    assert_eq("api 6to4 decode: subnet_id", d2.get("subnet_id"), 0)
+    assert_eq("api 6to4 decode: interface_id",
+              d2.get("interface_id"), "0000:0000:0000:0001")
+
+    # Decode with non-trivial subnet ID + IID.
+    status3, data3 = _api_post("6to4",
+                               {"mode": "decode", "ipv6": "2002:cb00:7105:cafe:dead:beef:1234:5678"})
+    assert_eq("api 6to4 decode (full): HTTP 200", status3, 200)
+    d3 = data3.get("data", {})
+    assert_eq("api 6to4 decode (full): ipv4", d3.get("ipv4"), "203.0.113.5")
+    assert_eq("api 6to4 decode (full): subnet_id", d3.get("subnet_id"), 0xcafe)
+    assert_eq("api 6to4 decode (full): interface_id",
+              d3.get("interface_id"), "dead:beef:1234:5678")
+
+    # Encode rejects RFC 1918.
+    status4, _ = _api_post("6to4", {"mode": "encode", "ipv4": "10.0.0.1"})
+    assert_eq("api 6to4 encode: private IPv4 → 400", status4, 400)
+
+    # Encode rejects multicast.
+    status5, _ = _api_post("6to4", {"mode": "encode", "ipv4": "239.0.0.1"})
+    assert_eq("api 6to4 encode: multicast IPv4 → 400", status5, 400)
+
+    # Encode rejects garbage.
+    status6, _ = _api_post("6to4", {"mode": "encode", "ipv4": "not-an-address"})
+    assert_eq("api 6to4 encode: garbage → 400", status6, 400)
+
+    # Decode rejects non-2002 addresses.
+    status7, _ = _api_post("6to4", {"mode": "decode", "ipv6": "2001:db8::1"})
+    assert_eq("api 6to4 decode: non-2002 → 400", status7, 400)
+
+    # Missing required field.
+    status8, _ = _api_post("6to4", {"mode": "encode"})
+    assert_eq("api 6to4 encode: missing ipv4 → 400", status8, 400)
+    status9, _ = _api_post("6to4", {"mode": "decode"})
+    assert_eq("api 6to4 decode: missing ipv6 → 400", status9, 400)
+
+    # Invalid mode.
+    status10, _ = _api_post("6to4", {"mode": "bogus", "ipv4": "192.0.2.1"})
+    assert_eq("api 6to4: invalid mode → 400", status10, 400)
+
+    # embedded-v4 detector now deep-links 6to4 to /ipv6/6to4 (T3 contract).
+    status11, data11 = _api_post("embedded-v4", {"input": "2002:c000:0201::"})
+    assert_eq("api embedded-v4 (6to4): HTTP 200", status11, 200)
+    assert_eq("api embedded-v4 (6to4): detail_route is /ipv6/6to4",
+              data11.get("data", {}).get("detail_route"), "/ipv6/6to4")
+
+
+async def test_ipv6_6to4_ui(page: Page) -> None:
+    section("IPv6 6to4 tool UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # /ipv6/6to4 should auto-open the drawer (per-tool URL routing).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=6to4")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6to4']")
+    assert_eq("6to4 UI: panel exists", await panel.count(), 1)
+
+    # Encode — IPv4 → 6to4 prefix.
+    await page.select_option("#sixtofour_mode", "encode")
+    await page.fill("#sixtofour_input", "192.0.2.1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6to4'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6to4']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("6to4 UI encode: prefix rendered",
+                "2002:c000:0201::/48" in body_text, f"body: {body_text!r}")
+
+    # Copy the prefix.
+    await panel.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("6to4 UI encode: copy prefix",
+              await page.evaluate("window.__lastClipboard"),
+              "2002:c000:0201::/48")
+
+    # Decode — 6to4 IPv6 → IPv4 + subnet ID + IID.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=6to4")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#sixtofour_mode", "decode")
+    await page.fill("#sixtofour_input", "2002:cb00:7105:cafe:dead:beef:1234:5678")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6to4'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6to4']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("6to4 UI decode: embedded ipv4 rendered",
+                "203.0.113.5" in body_text, f"body: {body_text!r}")
+    assert_true("6to4 UI decode: subnet id rendered",
+                "cafe" in body_text, f"body: {body_text!r}")
+    assert_true("6to4 UI decode: interface id rendered",
+                "dead:beef:1234:5678" in body_text, f"body: {body_text!r}")
+
+    # Error path — private IPv4 in encode mode.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=6to4")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#sixtofour_mode", "encode")
+    await page.fill("#sixtofour_input", "10.0.0.1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6to4'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6to4']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("6to4 UI: error band on private IPv4",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+    # Shareable GET URL hydrates without re-submission.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=6to4&sixtofour_mode=encode&sixtofour_input=198.51.100.42")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6to4']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("6to4 UI shareable URL: prefix hydrated",
+                "2002:c633:642a::/48" in body_text, f"body: {body_text!r}")
+
+    # embedded-v4 detector now deep-links 6to4 to /ipv6/6to4. Render the
+    # embedded-v4 drawer with a 6to4 input and verify the Open-in-tool
+    # button is enabled (anchor element rather than disabled <button>).
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=embedded-v4&embedded_v4_input=2002:c000:0201::")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    ev4_panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-v4']")
+    open_link = ev4_panel.locator("a.splitter-btn[href='/ipv6/6to4']")
+    assert_true("embedded-v4 → 6to4 deep-link: anchor present",
+                await open_link.count() >= 1)
+
+
 async def test_api_bulk(page: Page) -> None:
     section("API — bulk calculation")
     # Two valid IPv4 CIDRs
@@ -7964,6 +8116,8 @@ async def main() -> None:
             await test_api_mapped6(page)
             await test_ipv6_embedded_v4_ui(page)
             await test_api_embedded_v4(page)
+            await test_ipv6_6to4_ui(page)
+            await test_api_6to4(page)
             await test_a11y_ipv6_drawers(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
