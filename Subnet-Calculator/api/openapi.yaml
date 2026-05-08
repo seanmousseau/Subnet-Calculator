@@ -349,6 +349,7 @@ paths:
                     - "POST /api/v1/slaac-privacy"
                     - "POST /api/v1/ula"
                     - "POST /api/v1/rdns"
+                    - "POST /api/v1/rdns6"
                     - "POST /api/v1/bulk"
                     - "POST /api/v1/range/ipv4"
                     - "POST /api/v1/range6"
@@ -1669,6 +1670,94 @@ paths:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
             X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /rdns6:
+    post:
+      operationId: ipv6ToArpa
+      tags: [RDNS]
+      summary: Generate an ip6.arpa zone name for an IPv6 address (RFC 3596)
+      description: |
+        Generates the ip6.arpa zone-delegation name for an IPv6 address
+        and an optional nibble-aligned prefix length. With no prefix (or
+        /128) returns the full reverse name (32 nibbles + ".ip6.arpa").
+        Prefix must be a multiple of 4 — RFC 3596's nibble-boundary
+        requirement for delegation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address]
+              properties:
+                address:
+                  type: string
+                  description: IPv6 address (compressed or expanded form).
+                  example: "2001:db8::1"
+                prefix:
+                  type: integer
+                  description: Optional prefix length, 0..128, multiple of 4.
+                  minimum: 0
+                  maximum: 128
+                  example: 64
+            examples:
+              full-128:
+                summary: Full reverse name (no prefix)
+                value: { address: "2001:db8::1" }
+              zone-64:
+                summary: /64 zone delegation
+                value: { address: "2001:db8::", prefix: 64 }
+      responses:
+        "200":
+          description: ip6.arpa name
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [address, prefix, arpa]
+                        properties:
+                          address: { type: string,  example: "2001:db8::" }
+                          prefix:  { type: integer, example: 64 }
+                          arpa:    { type: string,  example: "0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa" }
+              example:
+                ok: true
+                data:
+                  address: "2001:db8::"
+                  prefix: 64
+                  arpa: "0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa"
+        "400":
+          description: Invalid input (invalid address, prefix out of range, or non-nibble-aligned prefix)
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /bulk:
     post:

@@ -18,6 +18,7 @@ require __DIR__ . '/includes/functions-range6.php';
 require __DIR__ . '/includes/functions-zone6.php';
 require __DIR__ . '/includes/functions-derive6.php';
 require __DIR__ . '/includes/functions-slaac6.php';
+require __DIR__ . '/includes/functions-rdns6.php';
 require __DIR__ . '/includes/functions-tree.php';
 require __DIR__ . '/includes/functions-tree-diff.php';
 require __DIR__ . '/includes/functions-lookup.php';
