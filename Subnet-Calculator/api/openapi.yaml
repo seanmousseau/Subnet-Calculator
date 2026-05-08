@@ -1162,12 +1162,14 @@ paths:
         EUI-64 interface identifier per RFC 4291 §2.5.1 (with the U/L bit
         flipped), the IPv6 link-local address (`fe80::` + EUI-64), and the
         solicited-node multicast address (`ff02::1:ff` + low 24 bits) per
-        RFC 4291 §2.7.1. `ul_bit_flipped` reports whether the U/L flip went
-        0 → 1 (the standard case) — false when the input MAC already had
-        U/L set. `warning` is populated when the multicast bit (LSB of the
-        first octet) is set on input, indicating the source MAC is not a
-        valid unicast hardware address; outputs are still computed.
-        Added in v3.3.0.
+        RFC 4291 §2.7.1. `ul_bit_flipped` is True if the U/L bit was originally
+        0 in the input MAC and was therefore flipped to 1 to form the EUI-64
+        modified-IID. False if the U/L bit was already 1 in the input. The
+        flip operation always runs unconditionally; this field reports whether
+        the flip changed the value. `warning` is populated when the multicast
+        bit (LSB of the first octet) is set on input, indicating the source
+        MAC is not a valid unicast hardware address; outputs are still
+        computed. Added in v3.3.0.
       requestBody:
         required: true
         content:
@@ -1193,7 +1195,15 @@ paths:
                         properties:
                           mac_canonical:  { type: string,  example: "00:24:b9:7e:ab:cd" }
                           eui64:          { type: string,  example: "0224:b9ff:fe7e:abcd" }
-                          ul_bit_flipped: { type: boolean, example: true }
+                          ul_bit_flipped:
+                            type: boolean
+                            example: true
+                            description: |
+                              True if the U/L bit was originally 0 in the input MAC and was
+                              therefore flipped to 1 to form the EUI-64 modified-IID. False
+                              if the U/L bit was already 1 in the input. The flip operation
+                              always runs unconditionally; this field reports whether the
+                              flip changed the value.
                           link_local:     { type: string,  example: "fe80::224:b9ff:fe7e:abcd" }
                           solicited_node: { type: string,  example: "ff02::1:ff7e:abcd" }
                           warning:        { type: [string, "null"], example: null }
