@@ -3455,6 +3455,137 @@ async def test_ipv6_embedded_rp_ui(page: Page) -> None:
                 len(err_text) > 0, f"got: {err_text!r}")
 
 
+async def test_api_pmtu6(page: Page) -> None:
+    section("API — POST /api/v1/pmtu6")
+
+    # No-fragmentation case — 1500 MTU, 1000-byte payload.
+    status, data = _api_post("pmtu6", {"path_mtu": 1500, "payload_size": 1000})
+    assert_eq("api pmtu6 (fits): HTTP 200", status, 200)
+    assert_eq("api pmtu6 (fits): ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api pmtu6 (fits): fixed_header", d.get("fixed_header"), 40)
+    assert_eq("api pmtu6 (fits): effective_payload",
+              d.get("effective_payload"), 1460)
+    assert_eq("api pmtu6 (fits): needs_fragmentation",
+              d.get("needs_fragmentation"), False)
+    assert_eq("api pmtu6 (fits): fragment_count", d.get("fragment_count"), 1)
+    assert_eq("api pmtu6 (fits): meets_minimum", d.get("meets_minimum"), True)
+
+    # Fragmentation case — 1280 MTU, 3000-byte payload, 3 fragments.
+    status2, data2 = _api_post("pmtu6", {"path_mtu": 1280, "payload_size": 3000})
+    assert_eq("api pmtu6 (frag): HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api pmtu6 (frag): needs_fragmentation",
+              d2.get("needs_fragmentation"), True)
+    assert_eq("api pmtu6 (frag): fragment_count", d2.get("fragment_count"), 3)
+    frags = d2.get("fragments") or []
+    assert_eq("api pmtu6 (frag): first payload", frags[0].get("payload_bytes"), 1232)
+    assert_eq("api pmtu6 (frag): first m_bit", frags[0].get("m_bit"), 1)
+    assert_eq("api pmtu6 (frag): second offset", frags[1].get("offset"), 154)
+    assert_eq("api pmtu6 (frag): last m_bit", frags[2].get("m_bit"), 0)
+    assert_eq("api pmtu6 (frag): last payload", frags[2].get("payload_bytes"), 536)
+
+    # Below-minimum PMTU is flagged but still computed.
+    status3, data3 = _api_post("pmtu6", {"path_mtu": 1200, "payload_size": 100})
+    assert_eq("api pmtu6 (below-min): HTTP 200", status3, 200)
+    d3 = data3.get("data", {})
+    assert_eq("api pmtu6 (below-min): meets_minimum",
+              d3.get("meets_minimum"), False)
+    notes = d3.get("notes") or []
+    assert_true("api pmtu6 (below-min): minimum-link-MTU note rendered",
+                any("1280" in str(n) for n in notes))
+
+    # Extension headers are accumulated.
+    status4, data4 = _api_post("pmtu6", {
+        "path_mtu": 1500,
+        "payload_size": 100,
+        "extension_headers": [8, 8, 8],
+    })
+    assert_eq("api pmtu6 (ext): HTTP 200", status4, 200)
+    d4 = data4.get("data", {})
+    assert_eq("api pmtu6 (ext): extension_overhead",
+              d4.get("extension_overhead"), 24)
+    assert_eq("api pmtu6 (ext): total_overhead", d4.get("total_overhead"), 64)
+    assert_eq("api pmtu6 (ext): effective_payload",
+              d4.get("effective_payload"), 1436)
+
+    # Invalid path_mtu (zero) → 400.
+    status5, _ = _api_post("pmtu6", {"path_mtu": 0, "payload_size": 100})
+    assert_eq("api pmtu6: zero path_mtu → 400", status5, 400)
+
+    # Extension header not multiple of 8 → 400.
+    status6, _ = _api_post("pmtu6", {
+        "path_mtu": 1500,
+        "payload_size": 100,
+        "extension_headers": [7],
+    })
+    assert_eq("api pmtu6: bad ext header → 400", status6, 400)
+
+    # Missing fields → 400.
+    status7, _ = _api_post("pmtu6", {})
+    assert_eq("api pmtu6: missing fields → 400", status7, 400)
+
+
+async def test_ipv6_pmtu_ui(page: Page) -> None:
+    section("IPv6 PMTU helper UI")
+
+    # ?tool=pmtu should auto-open the drawer.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=pmtu")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='pmtu']")
+    assert_eq("pmtu UI: panel exists", await panel.count(), 1)
+
+    # No-fragmentation submit.
+    await page.fill("#pmtu6_path_mtu", "1500")
+    await page.fill("#pmtu6_payload_size", "1000")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='pmtu'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='pmtu']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("pmtu UI: effective_payload rendered (1460)",
+                "1460" in body_text)
+    assert_true("pmtu UI: no fragmentation rendered",
+                "no" in body_text)
+
+    # Fragmentation submit via shareable GET URL.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&tool=pmtu&pmtu6_path_mtu=1280&pmtu6_payload_size=3000",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='pmtu']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("pmtu UI: fragmentation count 3 rendered",
+                "3" in body_text)
+    assert_true("pmtu UI: fragment payload 1232 rendered",
+                "1232" in body_text)
+    assert_true("pmtu UI: fragment payload 536 rendered",
+                "536" in body_text)
+
+    # Below-minimum warning rendered.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&tool=pmtu&pmtu6_path_mtu=1200&pmtu6_payload_size=100",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='pmtu']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("pmtu UI: minimum-link-MTU warning rendered",
+                "1280" in body_text)
+
+    # Error path — invalid extension header.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&tool=pmtu&pmtu6_path_mtu=1500"
+        "&pmtu6_payload_size=100&pmtu6_extension_headers=7",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='pmtu']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("pmtu UI: error band on bad ext header",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+
 async def test_api_6to4(page: Page) -> None:
     section("API — POST /api/v1/6to4")
 
@@ -9772,6 +9903,8 @@ async def main() -> None:
             await test_api_ssm6(page)
             await test_ipv6_embedded_rp_ui(page)
             await test_api_embedded_rp6(page)
+            await test_ipv6_pmtu_ui(page)
+            await test_api_pmtu6(page)
             await test_a11y_ipv6_drawers(page)
             # v3.5.0 (T11) — bulk endpoint coverage + a11y for the 9 new drawers
             await test_api_bulk_covers_v350_endpoints(page)

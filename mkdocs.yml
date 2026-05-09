@@ -68,6 +68,7 @@ nav:
     - IPv6 Multicast Decoder: multicast6.md
     - IPv6 SSM (RFC 3306): ssm6.md
     - IPv6 Embedded-RP (RFC 3956): embedded-rp6.md
+    - IPv6 PMTU Helper: pmtu6.md
     - Allocation Tree: tree.md
     - Wildcard ↔ CIDR: wildcard.md
     - IP Lookup: lookup.md

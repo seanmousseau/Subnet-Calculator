@@ -46,6 +46,9 @@ require_once $base . 'functions-ssm6.php';
 // phpcs:disable PSR1.Files.SideEffects -- module include for build_embedded_rp_group()/decode_embedded_rp_group().
 require_once $base . 'functions-embedded-rp6.php';
 // phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for pmtu_compute().
+require_once $base . 'functions-pmtu6.php';
+// phpcs:enable PSR1.Files.SideEffects
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require $base . 'functions-resolve.php';

@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Embedded-RP multicast (RFC 3956).** Build and decode `FF7x::/12`
   multicast groups with embedded RP address and RIID. Composes with
   the multicast scope decoder via deep-link. (#397)
+- **IPv6 PMTU helper.** Computes effective payload size, fragmentation
+  breakdown (offsets, M-bit, per-fragment payload), and surfaces
+  RFC 8200 §5 minimum link MTU (1280) warnings. Supports extension
+  header overhead accounting. (#399)
 
 ## [3.5.1] - 2026-05-09
 

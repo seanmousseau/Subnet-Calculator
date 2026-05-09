@@ -776,6 +776,77 @@ function sc_run_embedded_rp6(
 }
 
 /**
+ * Run the IPv6 PMTU helper against the supplied inputs. Computes the
+ * fragmentation breakdown for `payload_size` bytes over a path with the
+ * given `path_mtu` and optional list of extension-header sizes.
+ * Empty inputs return []. (v3.6.0 Task 5, RFC 8200, #399)
+ *
+ * @return array{
+ *     path_mtu_input?: string,
+ *     payload_size_input?: string,
+ *     extension_headers_input?: string,
+ *     result?: array{
+ *         path_mtu: int,
+ *         meets_minimum: bool,
+ *         fixed_header: int,
+ *         extension_overhead: int,
+ *         total_overhead: int,
+ *         effective_payload: int,
+ *         payload_size: int,
+ *         needs_fragmentation: bool,
+ *         fragment_count: int,
+ *         fragments: list<array{offset: int, m_bit: int, payload_bytes: int}>,
+ *         notes: list<string>
+ *     },
+ *     error?: string|null
+ * }
+ */
+function sc_run_pmtu6(
+    string $path_mtu_input,
+    string $payload_size_input,
+    string $extension_headers_input
+): array {
+    $pm = trim($path_mtu_input);
+    $ps = trim($payload_size_input);
+    $eh = trim($extension_headers_input);
+    if ($pm === '' && $ps === '' && $eh === '') {
+        return [];
+    }
+    $base_echo = [
+        'path_mtu_input'          => $pm,
+        'payload_size_input'      => $ps,
+        'extension_headers_input' => $eh,
+    ];
+    if (!ctype_digit($pm) || (int)$pm <= 0) {
+        return $base_echo + ['error' => 'Path MTU must be a positive integer.'];
+    }
+    if (!ctype_digit($ps)) {
+        return $base_echo + ['error' => 'Payload size must be a non-negative integer.'];
+    }
+    $ext_list = [];
+    if ($eh !== '') {
+        $parts = array_map('trim', explode(',', $eh));
+        foreach ($parts as $part) {
+            if ($part === '') {
+                continue;
+            }
+            if (!ctype_digit($part)) {
+                return $base_echo + [
+                    'error' => 'Each extension-header size must be a positive integer multiple of 8 bytes.',
+                ];
+            }
+            $ext_list[] = (int)$part;
+        }
+    }
+    try {
+        $r = pmtu_compute((int)$pm, (int)$ps, $ext_list);
+        return $base_echo + ['result' => $r, 'error' => null];
+    } catch (\InvalidArgumentException $e) {
+        return $base_echo + ['error' => $e->getMessage()];
+    }
+}
+
+/**
  * Parse a user-supplied group_id. Accepts decimal or 0x-hex.
  * Returns null on parse failure or out-of-range value.
  *
@@ -1573,6 +1644,13 @@ $embedded_rp6_ipv6_input             = '';
 /** @var array{mode?: 'encode'|'decode', input?: string, address?: string, scope?: int, rp_prefix?: string, rp_prefix_length?: int, rp_address?: string, riid?: int, group_id?: int, rp_address_input?: string, rp_prefix_length_input?: string, riid_input?: string, scope_input?: string, group_id_input?: string, error?: string|null} */
 $embedded_rp6 = [];
 
+// v3.6.0 Task 5 — IPv6 PMTU + fragmentation helper (RFC 8200, #399)
+$pmtu6_path_mtu_input          = '';
+$pmtu6_payload_size_input      = '';
+$pmtu6_extension_headers_input = '';
+/** @var array{path_mtu_input?: string, payload_size_input?: string, extension_headers_input?: string, result?: array{path_mtu: int, meets_minimum: bool, fixed_header: int, extension_overhead: int, total_overhead: int, effective_payload: int, payload_size: int, needs_fragmentation: bool, fragment_count: int, fragments: list<array{offset: int, m_bit: int, payload_bytes: int}>, notes: list<string>}, error?: string|null} */
+$pmtu6 = [];
+
 // v3.5.0 Task 10 — RFC 3531 sparse-allocation guidance
 $rfc3531_parent_input           = '';
 $rfc3531_reservation_bits_input = '';
@@ -1680,6 +1758,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || isset($_POST['embedded_rp6_scope'])
         || isset($_POST['embedded_rp6_group_id'])
         || isset($_POST['embedded_rp6_ipv6']);
+    $is_pmtu6         = isset($_POST['pmtu6_path_mtu'])
+        || isset($_POST['pmtu6_payload_size'])
+        || isset($_POST['pmtu6_extension_headers']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -1694,7 +1775,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || $is_rfc3531
         || $is_multicast6
         || $is_ssm6
-        || $is_embedded_rp6;
+        || $is_embedded_rp6
+        || $is_pmtu6;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -2264,6 +2346,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $embedded_rp6_scope_input,
             $embedded_rp6_group_id_input,
             $embedded_rp6_ipv6_input
+        );
+    }
+
+    if ($is_pmtu6 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $pmtu6_path_mtu_input          = trim((string)($_POST['pmtu6_path_mtu']          ?? ''));
+        $pmtu6_payload_size_input      = trim((string)($_POST['pmtu6_payload_size']      ?? ''));
+        $pmtu6_extension_headers_input = trim((string)($_POST['pmtu6_extension_headers'] ?? ''));
+        $pmtu6 = sc_run_pmtu6(
+            $pmtu6_path_mtu_input,
+            $pmtu6_payload_size_input,
+            $pmtu6_extension_headers_input
         );
     }
 
@@ -2909,6 +3003,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $embedded_rp6_scope_input,
             $embedded_rp6_group_id_input,
             $embedded_rp6_ipv6_input
+        );
+    }
+
+    // PMTU helper shareable GET URL (v3.6.0 Task 5, RFC 8200, #399)
+    if (
+        $active_tab === 'ipv6'
+        && (
+            isset($_GET['pmtu6_path_mtu'])
+            || isset($_GET['pmtu6_payload_size'])
+            || isset($_GET['pmtu6_extension_headers'])
+        )
+    ) {
+        $pmtu6_path_mtu_input          = trim((string)($_GET['pmtu6_path_mtu']          ?? ''));
+        $pmtu6_payload_size_input      = trim((string)($_GET['pmtu6_payload_size']      ?? ''));
+        $pmtu6_extension_headers_input = trim((string)($_GET['pmtu6_extension_headers'] ?? ''));
+        $pmtu6 = sc_run_pmtu6(
+            $pmtu6_path_mtu_input,
+            $pmtu6_payload_size_input,
+            $pmtu6_extension_headers_input
         );
     }
 

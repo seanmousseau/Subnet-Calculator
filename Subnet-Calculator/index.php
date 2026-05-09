@@ -47,6 +47,9 @@ require_once __DIR__ . '/includes/functions-ssm6.php';
 // phpcs:disable PSR1.Files.SideEffects -- module include for build_embedded_rp_group()/decode_embedded_rp_group().
 require_once __DIR__ . '/includes/functions-embedded-rp6.php';
 // phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for pmtu_compute().
+require_once __DIR__ . '/includes/functions-pmtu6.php';
+// phpcs:enable PSR1.Files.SideEffects
 require __DIR__ . '/includes/functions-tree.php';
 require __DIR__ . '/includes/functions-tree-diff.php';
 require __DIR__ . '/includes/functions-lookup.php';
