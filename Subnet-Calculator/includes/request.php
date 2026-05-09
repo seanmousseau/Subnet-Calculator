@@ -583,6 +583,89 @@ function sc_run_teredo(
     }
 }
 
+// ─── ISATAP helper (shared by POST handler and GET shareable URL) ─────────
+
+/**
+ * Run the ISATAP tool against the supplied input. Mode is either 'encode'
+ * (IPv4 → ISATAP IID) or 'decode' (IID → IPv4). Empty input returns [].
+ * (v3.5.0 Task 5)
+ *
+ * @return array{
+ *     mode?: 'encode'|'decode',
+ *     input?: string,
+ *     ipv4?: string,
+ *     iid?: string,
+ *     globally_unique?: bool,
+ *     error?: string|null
+ * }
+ */
+function sc_run_isatap(
+    string $mode,
+    string $ipv4_input,
+    string $iid_input,
+    string $globally_unique_input
+): array {
+    $mode = strtolower(trim($mode));
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        $mode = 'encode';
+    }
+
+    if ($mode === 'encode') {
+        $raw = trim($ipv4_input);
+        if ($raw === '') {
+            return [];
+        }
+        $gu = null;
+        $guRaw = strtolower(trim($globally_unique_input));
+        if ($guRaw === 'true' || $guRaw === '1' || $guRaw === 'yes') {
+            $gu = true;
+        } elseif ($guRaw === 'false' || $guRaw === '0' || $guRaw === 'no') {
+            $gu = false;
+        }
+        try {
+            $iid = ipv4_to_isatap_iid($raw, $gu);
+            $decoded = decode_isatap_iid($iid);
+            return [
+                'mode'            => 'encode',
+                'input'           => $raw,
+                'ipv4'            => $raw,
+                'iid'             => $iid,
+                'globally_unique' => $decoded['globally_unique'],
+                'error'           => null,
+            ];
+        } catch (\InvalidArgumentException $e) {
+            return [
+                'mode'  => 'encode',
+                'input' => $raw,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    // decode mode
+    $raw = trim($iid_input);
+    if ($raw === '') {
+        return [];
+    }
+    try {
+        $r = decode_isatap_iid($raw);
+        return [
+            'mode'            => 'decode',
+            'input'           => $raw,
+            'iid'             => $raw,
+            'ipv4'            => $r['ipv4'],
+            'globally_unique' => $r['globally_unique'],
+            'error'           => null,
+        ];
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'mode'  => 'decode',
+            'input' => $raw,
+            'error' => $e->getMessage(),
+        ];
+    }
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -746,6 +829,14 @@ $teredo_cone_flag    = true;
 /** @var array{mode?: 'encode'|'decode', input?: string, ipv6?: string, server_ipv4?: string, client_ipv4?: string, port?: int, flags?: int, cone?: bool, error?: string|null} */
 $teredo = [];
 
+// v3.5.0 Task 5 — ISATAP interface-ID helper (RFC 5214)
+$isatap_mode             = 'encode';
+$isatap_ipv4_input       = '';
+$isatap_iid_input        = '';
+$isatap_globally_unique  = '';
+/** @var array{mode?: 'encode'|'decode', input?: string, ipv4?: string, iid?: string, globally_unique?: bool, error?: string|null} */
+$isatap = [];
+
 $ula_global_id_input = '';
 /** @var array{result?: array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}, error?: string} */
 $ula = [];
@@ -816,6 +907,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || isset($_POST['teredo_server'])
         || isset($_POST['teredo_client'])
         || isset($_POST['teredo_port']);
+    $is_isatap        = isset($_POST['isatap_mode'])
+        || isset($_POST['isatap_ipv4'])
+        || isset($_POST['isatap_iid']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -824,7 +918,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || $is_vlsm6 || $is_supernet || $is_supernet6 || $is_ula || $is_session_save || $is_range
         || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid
         || $is_derive || $is_slaac || $is_rdns6 || $is_mapped6 || $is_embedded_v4
-        || $is_sixtofour || $is_teredo;
+        || $is_sixtofour || $is_teredo || $is_isatap;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -1274,6 +1368,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
     }
 
+    if ($is_isatap && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $isatap_mode = (string)($_POST['isatap_mode'] ?? 'encode');
+        if ($isatap_mode !== 'encode' && $isatap_mode !== 'decode') {
+            $isatap_mode = 'encode';
+        }
+        $isatap_ipv4_input      = trim((string)($_POST['isatap_ipv4'] ?? ''));
+        $isatap_iid_input       = trim((string)($_POST['isatap_iid']  ?? ''));
+        $isatap_globally_unique = (string)($_POST['isatap_globally_unique'] ?? '');
+        $isatap = sc_run_isatap(
+            $isatap_mode,
+            $isatap_ipv4_input,
+            $isatap_iid_input,
+            $isatap_globally_unique
+        );
+    }
+
     if ($is_ula && !$form_blocked) {
         $ula_global_id_input = trim((string)($_POST['ula_global_id'] ?? ''));
         $ur = generate_ula_prefix($ula_global_id_input);
@@ -1712,6 +1823,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $teredo_port_input,
             $teredo_flags_input,
             $teredo_cone_flag
+        );
+    }
+
+    // ISATAP shareable GET URL (v3.5.0 Task 5)
+    if (
+        $active_tab === 'ipv6'
+        && (isset($_GET['isatap_ipv4']) || isset($_GET['isatap_iid']))
+    ) {
+        $isatap_mode = (string)($_GET['isatap_mode'] ?? 'encode');
+        if ($isatap_mode !== 'encode' && $isatap_mode !== 'decode') {
+            $isatap_mode = 'encode';
+        }
+        $isatap_ipv4_input      = trim((string)($_GET['isatap_ipv4'] ?? ''));
+        $isatap_iid_input       = trim((string)($_GET['isatap_iid']  ?? ''));
+        $isatap_globally_unique = (string)($_GET['isatap_globally_unique'] ?? '');
+        $isatap = sc_run_isatap(
+            $isatap_mode,
+            $isatap_ipv4_input,
+            $isatap_iid_input,
+            $isatap_globally_unique
         );
     }
 

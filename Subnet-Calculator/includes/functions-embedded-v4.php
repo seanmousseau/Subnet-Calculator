@@ -29,6 +29,9 @@ declare(strict_types=1);
 // phpcs:disable PSR1.Files.SideEffects -- explicit dependency on decode_teredo().
 require_once __DIR__ . '/functions-teredo.php';
 // phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- explicit dependency on decode_isatap_iid().
+require_once __DIR__ . '/functions-isatap.php';
+// phpcs:enable PSR1.Files.SideEffects
 
 const EMBEDDEDV4_MAPPED_PREFIX_BIN     = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff";
 const EMBEDDEDV4_NAT64_WKP_PREFIX_BIN  = "\x00\x64\xff\x9b\x00\x00\x00\x00\x00\x00\x00\x00";
@@ -169,18 +172,32 @@ function detect_embedded_v4(string $ipv6): array
     // 5. ISATAP: IID matches `*:0000:5efe:V4ADDR` (locally-administered)
     //    or `*:0200:5efe:V4ADDR` (globally-unique u-bit set). Bytes 8–11
     //    of the address hold the magic; V4 in bytes 12–15. Any /64 prefix.
+    //    Delegate to decode_isatap_iid() so the `extra` payload shape stays
+    //    in lockstep with the dedicated decoder (ipv4, globally_unique).
     $iidMagic = substr($bin, 8, 4);
     if ($iidMagic === "\x00\x00\x5e\xfe" || $iidMagic === "\x02\x00\x5e\xfe") {
-        $v4 = @inet_ntop(substr($bin, 12, 4));
-        return [
-            'scheme'       => 'isatap',
-            'ipv4'         => $v4 === false ? null : $v4,
-            'deprecated'   => false,
-            'detail_route' => null,
-            'extra'        => [
-                'globally_unique' => $iidMagic === "\x02\x00\x5e\xfe",
-            ],
-        ];
+        $iidParts = sprintf(
+            '%x:%x:%x:%x',
+            (ord($bin[8])  << 8) | ord($bin[9]),
+            (ord($bin[10]) << 8) | ord($bin[11]),
+            (ord($bin[12]) << 8) | ord($bin[13]),
+            (ord($bin[14]) << 8) | ord($bin[15])
+        );
+        try {
+            $decoded = decode_isatap_iid($iidParts);
+            return [
+                'scheme'       => 'isatap',
+                'ipv4'         => $decoded['ipv4'],
+                'deprecated'   => false,
+                'detail_route' => '/ipv6/isatap',
+                'extra'        => [
+                    'ipv4'            => $decoded['ipv4'],
+                    'globally_unique' => $decoded['globally_unique'],
+                ],
+            ];
+        } catch (InvalidArgumentException $e) {
+            // Fall through to no-match return below.
+        }
     }
 
     // 6. IPv4-compatible: ::/96, RFC 4291 §2.5.5.1 (DEPRECATED).

@@ -71,6 +71,8 @@ tags:
     description: 6to4 address tool (RFC 3056) — bidirectional IPv4 ↔ 2002::/16 translation
   - name: Teredo
     description: Teredo address decoder (RFC 4380) — bidirectional decoding/encoding of 2001:0::/32 addresses
+  - name: Isatap
+    description: ISATAP interface-ID helper (RFC 5214) — bidirectional encoding/decoding of the 64-bit ISATAP IID
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -362,6 +364,7 @@ paths:
                     - "POST /api/v1/embedded-v4"
                     - "POST /api/v1/6to4"
                     - "POST /api/v1/teredo"
+                    - "POST /api/v1/isatap"
                     - "POST /api/v1/bulk"
                     - "POST /api/v1/range/ipv4"
                     - "POST /api/v1/range6"
@@ -2270,6 +2273,143 @@ paths:
                   client_ipv4: "192.0.2.45"
         "400":
           description: Missing required field, unparseable input, or non-Teredo address
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /isatap:
+    post:
+      operationId: isatapConvert
+      tags: [Isatap]
+      summary: Encode an IPv4 into an ISATAP IID or decode an ISATAP IID back to IPv4 (RFC 5214)
+      description: |
+        Bidirectional conversion between an IPv4 address and the 64-bit
+        ISATAP interface ID that embeds it. Two modes:
+
+        - **`encode`** — input `ipv4` (any IPv4 literal) and optional
+          `globally_unique` (boolean). When `globally_unique` is omitted
+          the helper auto-detects from the IPv4: public address →
+          `true` (`0200:5efe:V4`); private/reserved → `false`
+          (`0000:5efe:V4`). Output is the colon-grouped IID with
+          leading zeros stripped per hexadectet (`inet_ntop`-style),
+          plus the resolved `globally_unique` flag.
+        - **`decode`** — input `iid` (four colon-separated hexadectets,
+          either canonical or zero-padded; magic must be `0000:5efe`
+          or `0200:5efe`). Output is the embedded `ipv4` and
+          `globally_unique` flag.
+
+        ISATAP saw limited deployment outside specific enterprise
+        transition scenarios. This endpoint is provided for analysis of
+        legacy traffic and address audits.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [mode, ipv4]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [encode]
+                    ipv4:
+                      type: string
+                      example: "192.0.2.1"
+                    globally_unique:
+                      type: boolean
+                      description: When omitted, auto-detected from the IPv4 (public → true, private/reserved → false).
+                - type: object
+                  required: [mode, iid]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [decode]
+                    iid:
+                      type: string
+                      description: ISATAP IID — four colon-separated hexadectets.
+                      example: "200:5efe:c000:201"
+            examples:
+              encode:
+                summary: Encode IPv4 → ISATAP IID
+                value: { mode: encode, ipv4: "192.0.2.1" }
+              decode:
+                summary: Decode ISATAP IID → IPv4
+                value: { mode: decode, iid: "200:5efe:c000:201" }
+      responses:
+        "200":
+          description: Conversion result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        oneOf:
+                          - type: object
+                            required: [mode, ipv4, iid, globally_unique]
+                            properties:
+                              mode:
+                                type: string
+                                enum: [encode]
+                              ipv4:
+                                type: string
+                                example: "192.0.2.1"
+                              iid:
+                                type: string
+                                example: "200:5efe:c000:201"
+                              globally_unique:
+                                type: boolean
+                                example: true
+                          - type: object
+                            required: [mode, iid, ipv4, globally_unique]
+                            properties:
+                              mode:
+                                type: string
+                                enum: [decode]
+                              iid:
+                                type: string
+                                example: "200:5efe:c000:201"
+                              ipv4:
+                                type: string
+                                example: "192.0.2.1"
+                              globally_unique:
+                                type: boolean
+                                example: true
+              example:
+                ok: true
+                data:
+                  mode: encode
+                  ipv4: "192.0.2.1"
+                  iid: "200:5efe:c000:201"
+                  globally_unique: true
+        "400":
+          description: Missing required field, unparseable input, or non-ISATAP IID
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
