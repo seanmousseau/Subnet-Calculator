@@ -41,6 +41,9 @@ require_once __DIR__ . '/includes/functions-rfc3531.php';
 // phpcs:disable PSR1.Files.SideEffects -- module include for decode_multicast()/multicast_well_known_registry().
 require_once __DIR__ . '/includes/functions-multicast6.php';
 // phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for build_ssm_group()/decode_ssm_group().
+require_once __DIR__ . '/includes/functions-ssm6.php';
+// phpcs:enable PSR1.Files.SideEffects
 require __DIR__ . '/includes/functions-tree.php';
 require __DIR__ . '/includes/functions-tree-diff.php';
 require __DIR__ . '/includes/functions-lookup.php';

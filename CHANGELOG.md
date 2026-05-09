@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per-scheme tools (SSM, embedded-RP) when applicable. Also migrates
   the ipv6_in_prefix() helper from functions-embedded-v4.php to
   functions-ipv6.php for shared use across IPv6 tools. (#396)
+- **SSM / unicast-prefix-based multicast (RFC 3306).** Build and decode
+  `FF3x::/12` group addresses with embedded unicast prefix. Composes
+  with the multicast scope decoder via deep-link. (#398)
 
 ## [3.5.1] - 2026-05-09
 

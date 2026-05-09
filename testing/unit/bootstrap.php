@@ -40,6 +40,9 @@ require_once $base . 'functions-rfc3531.php';
 // phpcs:disable PSR1.Files.SideEffects -- module include for decode_multicast()/multicast_well_known_registry().
 require_once $base . 'functions-multicast6.php';
 // phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for build_ssm_group()/decode_ssm_group().
+require_once $base . 'functions-ssm6.php';
+// phpcs:enable PSR1.Files.SideEffects
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require $base . 'functions-resolve.php';

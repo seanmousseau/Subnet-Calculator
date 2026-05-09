@@ -85,6 +85,8 @@ tags:
     description: RFC 3531 sparse-allocation guidance — centermost / leftmost / rightmost bit-reservation strategy for growth-friendly prefix assignment
   - name: Multicast6
     description: IPv6 multicast scope decoder (RFC 4291 §2.7) — front door for the v3.6.0 multicast tools (scope, flags, scheme, well-known group lookup, deep-link to SSM and embedded-RP)
+  - name: Ssm6
+    description: SSM / unicast-prefix-based IPv6 multicast (RFC 3306 / RFC 4607) — bidirectional encode/decode of FF3x::/12 group addresses with embedded unicast prefix and 32-bit group ID
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -380,6 +382,7 @@ paths:
                     - "POST /api/v1/6rd"
                     - "POST /api/v1/nat64"
                     - "POST /api/v1/multicast6"
+                    - "POST /api/v1/ssm6"
                     - "POST /api/v1/bulk"
                     - "POST /api/v1/range/ipv4"
                     - "POST /api/v1/range6"
@@ -3266,6 +3269,163 @@ paths:
                   well_known: { name: "All Nodes Address", rfc: "RFC 4291" }
         "400":
           description: Missing or non-multicast IPv6 input
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /ssm6:
+    post:
+      operationId: ssm6Build
+      tags: [Ssm6]
+      summary: Build or decode an SSM / unicast-prefix-based multicast group (RFC 3306)
+      description: |
+        Bidirectional tool for the FF3x::/12 unicast-prefix-based multicast
+        range. Encodes a unicast prefix + scope + 32-bit group ID into an
+        SSM group address, or reverses the process. The flag nibble is
+        fixed at 0x3 (P + T); embedded-RP groups (R+P+T = 0x7) are
+        deliberately rejected and routed to the embedded-RP tool. The
+        prefix length is restricted to 0..64 because only the upper
+        64 bits of the unicast prefix fit in the multicast address per
+        RFC 3306 §4.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [mode, unicast_prefix, scope, group_id]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [encode]
+                    unicast_prefix:
+                      type: string
+                      description: Source unicast prefix in `<ipv6>/<n>` form. Length 0..64. Host bits are masked.
+                      example: "2001:db8::/32"
+                    scope:
+                      type: integer
+                      minimum: 1
+                      maximum: 15
+                      example: 14
+                    group_id:
+                      type: integer
+                      minimum: 0
+                      maximum: 4294967295
+                      example: 305419896
+                - type: object
+                  required: [mode, ipv6]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [decode]
+                    ipv6:
+                      type: string
+                      description: An SSM / unicast-prefix-based multicast address in FF3x::/12.
+                      example: "FF3E:20:2001:db8::1234:5678"
+            examples:
+              encode-rfc-3306-example:
+                summary: RFC 3306 §6 worked example (encode)
+                value:
+                  mode: encode
+                  unicast_prefix: "2001:db8::/32"
+                  scope: 14
+                  group_id: 305419896
+              encode-zero-prefix:
+                summary: Zero-length unicast prefix (encode)
+                value:
+                  mode: encode
+                  unicast_prefix: "::/0"
+                  scope: 14
+                  group_id: 305419896
+              decode-round-trip:
+                summary: Round-trip decode of the §6 example
+                value: { mode: decode, ipv6: "ff3e:20:2001:db8::1234:5678" }
+      responses:
+        "200":
+          description: Built or decoded SSM multicast group
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required:
+                          - mode
+                          - address
+                          - scope
+                          - prefix_length
+                          - unicast_prefix
+                          - group_id
+                        properties:
+                          mode:
+                            type: string
+                            enum: [encode, decode]
+                            example: encode
+                          input:
+                            type: string
+                            description: Echoed input string (decode mode only).
+                            example: "FF3E:20:2001:db8::1234:5678"
+                          address:
+                            type: string
+                            description: Canonical compressed lowercase SSM group address.
+                            example: "ff3e:20:2001:db8::1234:5678"
+                          scope:
+                            type: integer
+                            minimum: 1
+                            maximum: 15
+                            example: 14
+                          prefix_length:
+                            type: integer
+                            minimum: 0
+                            maximum: 64
+                            example: 32
+                          unicast_prefix:
+                            type: string
+                            description: Canonical lowercase unicast prefix with host bits zeroed.
+                            example: "2001:db8::"
+                          group_id:
+                            type: integer
+                            minimum: 0
+                            maximum: 4294967295
+                            example: 305419896
+              example:
+                ok: true
+                data:
+                  mode: encode
+                  address: "ff3e:20:2001:db8::1234:5678"
+                  scope: 14
+                  prefix_length: 32
+                  unicast_prefix: "2001:db8::"
+                  group_id: 305419896
+        "400":
+          description: Missing field or invalid SSM input
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
