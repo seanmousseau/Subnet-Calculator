@@ -55,6 +55,9 @@ require_once $base . 'functions-ssm6.php';
 // phpcs:disable PSR1.Files.SideEffects -- module include for build_embedded_rp_group()/decode_embedded_rp_group().
 require_once $base . 'functions-embedded-rp6.php';
 // phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for pmtu_compute().
+require_once $base . 'functions-pmtu6.php';
+// phpcs:enable PSR1.Files.SideEffects
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require_once $base . 'functions-resolve.php';
@@ -153,6 +156,7 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/multicast6',
             'POST /api/v1/ssm6',
             'POST /api/v1/embedded-rp6',
+            'POST /api/v1/pmtu6',
             'POST /api/v1/bulk',
             'POST /api/v1/sessions',
             'GET  /api/v1/sessions/{id}',
@@ -315,6 +319,9 @@ switch ($route_key) {
         break;
     case 'POST /embedded-rp6':
         require __DIR__ . '/handlers/embedded-rp6.php';
+        break;
+    case 'POST /pmtu6':
+        require __DIR__ . '/handlers/pmtu6.php';
         break;
     case 'POST /bulk':
         require __DIR__ . '/handlers/bulk.php';

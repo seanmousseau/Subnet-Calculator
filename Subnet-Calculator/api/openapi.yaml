@@ -89,6 +89,8 @@ tags:
     description: SSM / unicast-prefix-based IPv6 multicast (RFC 3306 / RFC 4607) — bidirectional encode/decode of FF3x::/12 group addresses with embedded unicast prefix and 32-bit group ID
   - name: EmbeddedRp6
     description: Embedded-RP IPv6 multicast (RFC 3956) — bidirectional encode/decode of FF7x::/12 group addresses with the Rendezvous Point address and 4-bit RIID embedded directly in the group
+  - name: Pmtu6
+    description: IPv6 PMTU + fragmentation helper (RFC 8200) — compute effective payload, per-fragment breakdown, and surface the §5 minimum link MTU (1280) warning
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -386,6 +388,7 @@ paths:
                     - "POST /api/v1/multicast6"
                     - "POST /api/v1/ssm6"
                     - "POST /api/v1/embedded-rp6"
+                    - "POST /api/v1/pmtu6"
                     - "POST /api/v1/bulk"
                     - "POST /api/v1/range/ipv4"
                     - "POST /api/v1/range6"
@@ -3605,6 +3608,195 @@ paths:
                   group_id: 305419896
         "400":
           description: Missing field or invalid embedded-RP input
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /pmtu6:
+    post:
+      operationId: pmtu6Compute
+      tags: [Pmtu6]
+      summary: Compute IPv6 PMTU + fragmentation breakdown (RFC 8200)
+      description: |
+        Compute the effective per-packet payload and per-fragment
+        breakdown for sending `payload_size` bytes over a path with the
+        given path MTU and optional list of extension-header sizes.
+
+        The IPv6 fixed header is always 40 bytes (RFC 8200 §3); each
+        extension header must be a positive multiple of 8 bytes. When
+        the payload exceeds `effective_payload`, the helper computes
+        the per-fragment breakdown using an 8-byte-aligned per-fragment
+        max payload (the trailing fragment carries the remainder with
+        M=0). The 8-byte Fragment header (RFC 8200 §4.5) is accounted
+        for automatically and is NOT included in `extension_headers`.
+
+        Path MTUs below the IPv6 minimum link MTU (1280, RFC 8200 §5)
+        are flagged in `meets_minimum` and surfaced via `notes`, but
+        still computed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path_mtu, payload_size]
+              properties:
+                path_mtu:
+                  type: integer
+                  minimum: 1
+                  description: Path MTU in bytes (must be > 0).
+                  example: 1500
+                payload_size:
+                  type: integer
+                  minimum: 0
+                  description: Upper-layer payload size in bytes.
+                  example: 3000
+                extension_headers:
+                  type: array
+                  description: Optional list of extension-header sizes in bytes. Each must be a positive multiple of 8. The 8-byte Fragment header is added automatically when fragmentation occurs and must NOT appear here.
+                  items:
+                    type: integer
+                    minimum: 8
+                  example: [8, 8]
+            examples:
+              no-fragmentation:
+                summary: 1500 MTU, 1000-byte payload (fits in one packet)
+                value: { path_mtu: 1500, payload_size: 1000 }
+              fragmentation:
+                summary: 1280 MTU, 3000-byte payload (3 fragments)
+                value: { path_mtu: 1280, payload_size: 3000 }
+              extensions:
+                summary: HBH + routing extension headers
+                value: { path_mtu: 1500, payload_size: 100, extension_headers: [8, 8] }
+              below-minimum:
+                summary: PMTU below RFC 8200 §5 minimum (1280)
+                value: { path_mtu: 1200, payload_size: 100 }
+      responses:
+        "200":
+          description: PMTU + fragmentation breakdown
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required:
+                          - path_mtu
+                          - meets_minimum
+                          - fixed_header
+                          - extension_overhead
+                          - total_overhead
+                          - effective_payload
+                          - payload_size
+                          - needs_fragmentation
+                          - fragment_count
+                          - fragments
+                          - notes
+                        properties:
+                          path_mtu:
+                            type: integer
+                            example: 1280
+                          meets_minimum:
+                            type: boolean
+                            description: True when path_mtu >= 1280 (RFC 8200 §5).
+                            example: true
+                          fixed_header:
+                            type: integer
+                            description: Always 40 (RFC 8200 §3).
+                            example: 40
+                          extension_overhead:
+                            type: integer
+                            example: 0
+                          total_overhead:
+                            type: integer
+                            description: fixed_header + extension_overhead.
+                            example: 40
+                          effective_payload:
+                            type: integer
+                            description: path_mtu - total_overhead. Maximum payload that fits in one unfragmented packet.
+                            example: 1240
+                          payload_size:
+                            type: integer
+                            example: 3000
+                          needs_fragmentation:
+                            type: boolean
+                            example: true
+                          fragment_count:
+                            type: integer
+                            minimum: 1
+                            example: 3
+                          fragments:
+                            type: array
+                            description: Per-fragment breakdown. When fragmentation is not needed, exactly one virtual fragment is returned with offset=0 and m_bit=0.
+                            items:
+                              type: object
+                              required: [offset, m_bit, payload_bytes]
+                              properties:
+                                offset:
+                                  type: integer
+                                  description: Fragment offset in 8-byte units (RFC 8200 §4.5).
+                                  example: 0
+                                m_bit:
+                                  type: integer
+                                  enum: [0, 1]
+                                  description: More-fragments flag. 1 for all fragments except the last; 0 for the last (or the sole virtual fragment when no fragmentation is needed).
+                                  example: 1
+                                payload_bytes:
+                                  type: integer
+                                  example: 1232
+                          notes:
+                            type: array
+                            items: { type: string }
+                            example:
+                              - "End-host fragmentation only; routers do not fragment IPv6 per RFC 8200 §5."
+                              - "IPv6 fixed header is 40 bytes (RFC 8200 §3)."
+              example:
+                ok: true
+                data:
+                  path_mtu: 1280
+                  meets_minimum: true
+                  fixed_header: 40
+                  extension_overhead: 0
+                  total_overhead: 40
+                  effective_payload: 1240
+                  payload_size: 3000
+                  needs_fragmentation: true
+                  fragment_count: 3
+                  fragments:
+                    - { offset: 0,   m_bit: 1, payload_bytes: 1232 }
+                    - { offset: 154, m_bit: 1, payload_bytes: 1232 }
+                    - { offset: 308, m_bit: 0, payload_bytes: 536 }
+                  notes:
+                    - "End-host fragmentation only; routers do not fragment IPv6 per RFC 8200 §5."
+                    - "IPv6 fixed header is 40 bytes (RFC 8200 §3)."
+        "400":
+          description: Missing or invalid input
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
