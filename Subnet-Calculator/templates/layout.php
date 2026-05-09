@@ -2217,7 +2217,16 @@ if ($i < 3) {
                                 <dd class="zoneid-result__value">
                                     <code><?= htmlspecialchars((string)$_n['above']['prefix']) ?></code>
                                     <?= copy_button((string)$_n['above']['prefix'], 'Copy above prefix') ?>
-                                    <small>contains <?= htmlspecialchars((string)$_n['above']['contains_64s']) ?> /64s</small>
+                                    <?php $_c = (string)$_n['above']['contains_64s']; ?>
+                                    <small><?php
+                                        if ($_c === '1') {
+                                            echo 'is itself a /64';
+                                        } elseif ($_c === 'subset of /64') {
+                                            echo 'smaller than a /64';
+                                        } else {
+                                            echo 'contains ' . htmlspecialchars($_c, ENT_QUOTES, 'UTF-8') . ' /64s';
+                                        }
+                                    ?></small>
                                 </dd>
                             </div>
                             <div class="zoneid-result__row">
@@ -2225,7 +2234,16 @@ if ($i < 3) {
                                 <dd class="zoneid-result__value">
                                     <code><?= htmlspecialchars((string)$_n['below']['prefix']) ?></code>
                                     <?= copy_button((string)$_n['below']['prefix'], 'Copy below prefix') ?>
-                                    <small>contains <?= htmlspecialchars((string)$_n['below']['contains_64s']) ?> /64s</small>
+                                    <?php $_c = (string)$_n['below']['contains_64s']; ?>
+                                    <small><?php
+                                        if ($_c === '1') {
+                                            echo 'is itself a /64';
+                                        } elseif ($_c === 'subset of /64') {
+                                            echo 'smaller than a /64';
+                                        } else {
+                                            echo 'contains ' . htmlspecialchars($_c, ENT_QUOTES, 'UTF-8') . ' /64s';
+                                        }
+                                    ?></small>
                                 </dd>
                             </div>
                         </dl>
