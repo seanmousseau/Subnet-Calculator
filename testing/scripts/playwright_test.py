@@ -3643,6 +3643,149 @@ async def test_api_6rd(page: Page) -> None:
     assert_eq("api 6rd: invalid mode → 400", status12, 400)
 
 
+async def test_api_nat64(page: Page) -> None:
+    section("API — POST /api/v1/nat64")
+
+    # Encode at /96 well-known prefix. RFC 6052 §3.1 forbids non-globally-
+    # unique IPv4 (incl. TEST-NET) under the WKP, so use 8.8.8.8 here.
+    status, data = _api_post("nat64", {
+        "mode": "encode",
+        "nat64_prefix": "64:ff9b::",
+        "prefix_length": 96,
+        "ipv4": "8.8.8.8",
+    })
+    assert_eq("api nat64 encode wkp: HTTP 200", status, 200)
+    assert_eq("api nat64 encode wkp: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api nat64 encode wkp: ipv6", d.get("ipv6"), "64:ff9b::808:808")
+    assert_eq("api nat64 encode wkp: prefix_length", d.get("prefix_length"), 96)
+
+    # Encode at /32 — RFC 6052 §2.4 vector.
+    status2, data2 = _api_post("nat64", {
+        "mode": "encode",
+        "nat64_prefix": "2001:db8::",
+        "prefix_length": 32,
+        "ipv4": "192.0.2.33",
+    })
+    assert_eq("api nat64 encode /32: HTTP 200", status2, 200)
+    assert_eq("api nat64 encode /32: ipv6",
+              data2.get("data", {}).get("ipv6"), "2001:db8:c000:221::")
+
+    # Encode at /64 — RFC 6052 §2.4 vector.
+    status3, data3 = _api_post("nat64", {
+        "mode": "encode",
+        "nat64_prefix": "2001:db8:122:344::",
+        "prefix_length": 64,
+        "ipv4": "192.0.2.33",
+    })
+    assert_eq("api nat64 encode /64: HTTP 200", status3, 200)
+    assert_eq("api nat64 encode /64: ipv6",
+              data3.get("data", {}).get("ipv6"), "2001:db8:122:344:c0:2:2100:0")
+
+    # Decode at /32 round-trip.
+    status4, data4 = _api_post("nat64", {
+        "mode": "decode",
+        "nat64_prefix": "2001:db8::",
+        "prefix_length": 32,
+        "ipv6": "2001:db8:c000:221::",
+    })
+    assert_eq("api nat64 decode /32: HTTP 200", status4, 200)
+    assert_eq("api nat64 decode /32: ipv4",
+              data4.get("data", {}).get("ipv4"), "192.0.2.33")
+
+    # DNS64 mode — defaults to well-known /96. Use a globally-unique IPv4
+    # (RFC 6052 §3.1 forbids non-globally-unique sources under the WKP).
+    status5, data5 = _api_post("nat64", {
+        "mode": "dns64",
+        "a_record": "8.8.8.8",
+    })
+    assert_eq("api nat64 dns64: HTTP 200", status5, 200)
+    assert_eq("api nat64 dns64: ipv6",
+              data5.get("data", {}).get("ipv6"), "64:ff9b::808:808")
+
+    # RFC 6052 §3.1: WKP rejects RFC 1918 source.
+    status6, _ = _api_post("nat64", {
+        "mode": "encode",
+        "ipv4": "10.0.0.1",
+    })
+    assert_eq("api nat64 encode wkp + private → 400", status6, 400)
+
+    # Invalid prefix length.
+    status7, _ = _api_post("nat64", {
+        "mode": "encode",
+        "nat64_prefix": "2001:db8::",
+        "prefix_length": 80,
+        "ipv4": "192.0.2.33",
+    })
+    assert_eq("api nat64 encode invalid PL → 400", status7, 400)
+
+    # Decode rejects address outside the prefix.
+    status8, _ = _api_post("nat64", {
+        "mode": "decode",
+        "nat64_prefix": "2001:db8::",
+        "prefix_length": 32,
+        "ipv6": "2001:db9::1",
+    })
+    assert_eq("api nat64 decode out-of-prefix → 400", status8, 400)
+
+    # Missing required fields.
+    status9, _ = _api_post("nat64", {"mode": "encode"})
+    assert_eq("api nat64 encode missing ipv4 → 400", status9, 400)
+
+
+async def test_ipv6_nat64_ui(page: Page) -> None:
+    section("IPv6 NAT64 / DNS64 drawer UI (extends mapped6)")
+
+    # Per-tool URL routing auto-opens the mapped6 drawer.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=mapped6")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+
+    # Open the NAT64 disclosure inside the drawer.
+    await page.evaluate("document.querySelector('details.nat64-advanced').open = true;")
+    await page.wait_for_selector("#nat64_mode", state="attached")
+
+    # Run an encode at /32 — RFC 6052 §2.4 vector.
+    await page.select_option("#nat64_mode", "encode")
+    await page.select_option("#nat64_pl", "32")
+    await page.fill("#nat64_prefix", "2001:db8::")
+    await page.fill("#nat64_ipv4",   "192.0.2.33")
+    await page.click("button.nat64-submit")
+    await page.wait_for_load_state("load")
+    await page.wait_for_selector("dl[data-history-source='nat64']")
+
+    body_text = await page.inner_text("dl[data-history-source='nat64']")
+    assert "2001:db8:c000:221::" in body_text, \
+        f"expected NAT64 /32 result, got: {body_text!r}"
+    section_ok = "encode" in body_text
+    assert section_ok, f"expected mode=encode in NAT64 result, got: {body_text!r}"
+
+    # GET shareable URL: NAT64 dns64 mode round-trip.
+    await navigate(
+        page,
+        APP_URL
+        + "?tab=ipv6&tool=mapped6"
+        + "&nat64_mode=dns64"
+        + "&nat64_prefix=64:ff9b::"
+        + "&nat64_pl=96"
+        + "&nat64_a_record=8.8.8.8"
+    )
+    await page.wait_for_selector("dl[data-history-source='nat64']")
+    body_text2 = await page.inner_text("dl[data-history-source='nat64']")
+    assert "64:ff9b::808:808" in body_text2, \
+        f"expected DNS64 AAAA result via GET, got: {body_text2!r}"
+
+    # Existing mapped6 form still works (no regression).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=mapped6")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#mapped6_input", "192.0.2.1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='mapped6'] form:first-of-type button[type='submit']")
+    await page.wait_for_load_state("load")
+    rows = page.locator(
+        "#panel-ipv6 .tool-panel[data-tool='mapped6'] dl[data-history-source='mapped6'] .zoneid-result__row"
+    )
+    assert_eq("nat64 UI: existing mapped6 form still 4 rows", await rows.count(), 4)
+
+
 async def test_ipv6_6rd_ui(page: Page) -> None:
     section("IPv6 6rd tool UI")
 
@@ -8622,6 +8765,8 @@ async def main() -> None:
             await test_api_isatap(page)
             await test_ipv6_6rd_ui(page)
             await test_api_6rd(page)
+            await test_ipv6_nat64_ui(page)
+            await test_api_nat64(page)
             await test_a11y_ipv6_drawers(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)

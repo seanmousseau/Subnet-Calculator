@@ -75,6 +75,8 @@ tags:
     description: ISATAP interface-ID helper (RFC 5214) — bidirectional encoding/decoding of the 64-bit ISATAP IID
   - name: SixRd
     description: 6rd address tool (RFC 5969) — service-provider-configured IPv4 ↔ delegated IPv6 prefix translation
+  - name: Nat64
+    description: NAT64 / DNS64 helper (RFC 6052 / 6147) — prefix-length-aware IPv4 ↔ NAT64 IPv6 translation and DNS64 AAAA synthesis
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -368,6 +370,7 @@ paths:
                     - "POST /api/v1/teredo"
                     - "POST /api/v1/isatap"
                     - "POST /api/v1/6rd"
+                    - "POST /api/v1/nat64"
                     - "POST /api/v1/bulk"
                     - "POST /api/v1/range/ipv4"
                     - "POST /api/v1/range6"
@@ -2570,6 +2573,137 @@ paths:
                   prefix_length: 64
         "400":
           description: Missing required field, unparseable input, or address outside SP prefix
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /nat64:
+    post:
+      operationId: nat64Convert
+      tags: [Nat64]
+      summary: Embed/extract IPv4 in a NAT64 prefix or synthesise a DNS64 AAAA (RFC 6052 / 6147)
+      description: |
+        Prefix-length-aware NAT64 helper covering all six RFC 6052 §2.2
+        prefix lengths (`/32`, `/40`, `/48`, `/56`, `/64`, `/96`) and
+        DNS64 (RFC 6147) AAAA synthesis from an A record.
+
+        - **`encode`** — embed `ipv4` into the supplied
+          `nat64_prefix` (default `64:ff9b::`) at the supplied
+          `prefix_length` (default 96). Output is the NAT64 IPv6.
+        - **`decode`** — extract the embedded IPv4 from `ipv6`.
+        - **`dns64`** — alias for `encode` whose request field is
+          named `a_record` and whose semantic intent is DNS64.
+
+        The well-known prefix `64:ff9b::/96` rejects non-globally-unique
+        IPv4 sources (RFC 6052 §3.1).
+
+        The legacy `/api/v1/mapped6` endpoint (v3.4.0) is unchanged and
+        continues to handle the simpler /96-only IPv4 ↔ IPv4-mapped ↔
+        NAT64 conversion.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [mode, ipv4]
+                  properties:
+                    mode: { type: string, enum: [encode] }
+                    nat64_prefix:
+                      type: string
+                      example: "64:ff9b::"
+                    prefix_length:
+                      type: integer
+                      enum: [32, 40, 48, 56, 64, 96]
+                      default: 96
+                    ipv4: { type: string, example: "192.0.2.33" }
+                - type: object
+                  required: [mode, ipv6]
+                  properties:
+                    mode: { type: string, enum: [decode] }
+                    nat64_prefix:
+                      type: string
+                      example: "2001:db8::"
+                    prefix_length:
+                      type: integer
+                      enum: [32, 40, 48, 56, 64, 96]
+                      default: 96
+                    ipv6: { type: string, example: "2001:db8:c000:221::" }
+                - type: object
+                  required: [mode, a_record]
+                  properties:
+                    mode: { type: string, enum: [dns64] }
+                    nat64_prefix:
+                      type: string
+                      example: "64:ff9b::"
+                    prefix_length:
+                      type: integer
+                      enum: [32, 40, 48, 56, 64, 96]
+                      default: 96
+                    a_record: { type: string, example: "192.0.2.33" }
+            examples:
+              encodeWkp:
+                summary: Encode IPv4 into well-known /96 prefix
+                value: { mode: encode, nat64_prefix: "64:ff9b::", prefix_length: 96, ipv4: "192.0.2.33" }
+              encodeSlash32:
+                summary: Encode IPv4 into a /32 NAT64 prefix
+                value: { mode: encode, nat64_prefix: "2001:db8::", prefix_length: 32, ipv4: "192.0.2.33" }
+              decodeSlash32:
+                summary: Decode a /32 NAT64 IPv6 → IPv4
+                value: { mode: decode, nat64_prefix: "2001:db8::", prefix_length: 32, ipv6: "2001:db8:c000:221::" }
+              dns64:
+                summary: DNS64 AAAA synthesis
+                value: { mode: dns64, a_record: "192.0.2.33" }
+      responses:
+        "200":
+          description: Conversion / synthesis result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [mode, nat64_prefix, prefix_length]
+                        properties:
+                          mode:
+                            type: string
+                            enum: [encode, decode, dns64]
+                          nat64_prefix: { type: string, example: "64:ff9b::" }
+                          prefix_length:
+                            type: integer
+                            enum: [32, 40, 48, 56, 64, 96]
+                            example: 96
+                          ipv4: { type: string, example: "192.0.2.33" }
+                          ipv6: { type: string, example: "64:ff9b::c000:221" }
+        "400":
+          description: Missing required field, unparseable input, or RFC 6052 §3.1 violation
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }

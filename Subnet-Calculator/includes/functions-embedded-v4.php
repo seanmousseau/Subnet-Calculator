@@ -119,7 +119,10 @@ function detect_embedded_v4(string $ipv6): array
             'scheme'       => 'nat64-wkp',
             'ipv4'         => $v4 === false ? null : $v4,
             'deprecated'   => false,
-            'detail_route' => null,
+            // v3.5.0 T7 (#391): NAT64 / DNS64 helper extends the existing
+            // mapped6 drawer with prefix-length-aware modes; the well-known
+            // prefix detector now deep-links to that drawer.
+            'detail_route' => '/ipv6/mapped6',
             'extra'        => [],
         ];
     }

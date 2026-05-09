@@ -360,6 +360,100 @@ function sc_run_mapped6(array $input): array
     ];
 }
 
+// ─── NAT64 / DNS64 helper (RFC 6052 / 6147), v3.5.0 Task 7 ──────────────────
+
+/**
+ * Run a NAT64 (RFC 6052) embed/extract or DNS64 (RFC 6147) synthesis.
+ * Mirrors the request-shape of sc_run_6rd / sc_run_mapped6 so the same
+ * helper handles both POST and GET shareable URLs.
+ *
+ * @return array{
+ *     mode?: 'encode'|'decode'|'dns64',
+ *     nat64_prefix?: string,
+ *     prefix_length?: int,
+ *     ipv4?: string,
+ *     ipv6?: string,
+ *     error?: string|null
+ * }
+ */
+function sc_run_nat64(
+    string $mode,
+    string $nat64_prefix,
+    string $prefix_length_str,
+    string $ipv4_input,
+    string $ipv6_input,
+    string $a_record_input
+): array {
+    $mode = strtolower(trim($mode));
+    if ($mode !== 'encode' && $mode !== 'decode' && $mode !== 'dns64') {
+        $mode = 'encode';
+    }
+
+    $prefix = trim($nat64_prefix);
+    if ($prefix === '') {
+        $prefix = NAT64_WELL_KNOWN_PREFIX;
+    }
+
+    $plRaw = trim($prefix_length_str);
+    $pl    = $plRaw === '' ? 96 : (int) $plRaw;
+
+    // Empty inputs → no calculation (fresh form).
+    if ($mode === 'encode' && trim($ipv4_input) === '') {
+        return [];
+    }
+    if ($mode === 'decode' && trim($ipv6_input) === '') {
+        return [];
+    }
+    if ($mode === 'dns64' && trim($a_record_input) === '') {
+        return [];
+    }
+
+    try {
+        if ($mode === 'encode') {
+            $v4   = trim($ipv4_input);
+            $ipv6 = nat64_embed($v4, $prefix, $pl);
+            return [
+                'mode'          => 'encode',
+                'nat64_prefix'  => $prefix,
+                'prefix_length' => $pl,
+                'ipv4'          => $v4,
+                'ipv6'          => $ipv6,
+                'error'         => null,
+            ];
+        }
+        if ($mode === 'decode') {
+            $addr = trim($ipv6_input);
+            $v4   = nat64_extract($addr, $prefix, $pl);
+            return [
+                'mode'          => 'decode',
+                'nat64_prefix'  => $prefix,
+                'prefix_length' => $pl,
+                'ipv6'          => $addr,
+                'ipv4'          => $v4,
+                'error'         => null,
+            ];
+        }
+        // dns64
+        $v4   = trim($a_record_input);
+        $ipv6 = dns64_synthesize($v4, $prefix, $pl);
+        return [
+            'mode'          => 'dns64',
+            'nat64_prefix'  => $prefix,
+            'prefix_length' => $pl,
+            'ipv4'          => $v4,
+            'ipv6'          => $ipv6,
+            'error'         => null,
+        ];
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'mode'          => $mode,
+            'nat64_prefix'  => $prefix,
+            'prefix_length' => $pl,
+            'error'         => $e->getMessage(),
+        ];
+    }
+}
+
 // ─── Embedded-IPv4 detector helper (shared by POST handler and GET shareable URL) ─
 
 /**
@@ -914,6 +1008,16 @@ $mapped6_prefix_input = '';
 /** @var array{input?: string, ipv4?: string, ipv4_mapped?: string, nat64?: string, nat64_prefix?: string, error?: string|null} */
 $mapped6 = [];
 
+// v3.5.0 Task 7 — NAT64 / DNS64 (RFC 6052 / 6147), shares mapped6 drawer
+$nat64_mode             = 'encode';
+$nat64_prefix_input     = '';
+$nat64_pl_input         = '';
+$nat64_ipv4_input       = '';
+$nat64_ipv6_input       = '';
+$nat64_a_record_input   = '';
+/** @var array{mode?: 'encode'|'decode'|'dns64', nat64_prefix?: string, prefix_length?: int, ipv4?: string, ipv6?: string, error?: string|null} */
+$nat64 = [];
+
 // v3.5.0 Task 2 — IPv6 embedded-v4 detector (front door)
 $embedded_v4_input = '';
 /** @var array{input?: string, scheme?: ?string, ipv4?: ?string, deprecated?: bool, detail_route?: ?string, extra?: array<string,mixed>, error?: string|null} */
@@ -1030,6 +1134,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || isset($_POST['sixrd_sp_prefix'])
         || isset($_POST['sixrd_ipv4'])
         || isset($_POST['sixrd_ipv6']);
+    $is_nat64         = isset($_POST['nat64_mode'])
+        || isset($_POST['nat64_ipv4'])
+        || isset($_POST['nat64_ipv6'])
+        || isset($_POST['nat64_a_record']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -1038,7 +1146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || $is_vlsm6 || $is_supernet || $is_supernet6 || $is_ula || $is_session_save || $is_range
         || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid
         || $is_derive || $is_slaac || $is_rdns6 || $is_mapped6 || $is_embedded_v4
-        || $is_sixtofour || $is_teredo || $is_isatap || $is_sixrd;
+        || $is_sixtofour || $is_teredo || $is_isatap || $is_sixrd || $is_nat64;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -1524,6 +1632,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
     }
 
+    if ($is_nat64 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $nat64_mode = (string)($_POST['nat64_mode'] ?? 'encode');
+        if ($nat64_mode !== 'encode' && $nat64_mode !== 'decode' && $nat64_mode !== 'dns64') {
+            $nat64_mode = 'encode';
+        }
+        $nat64_prefix_input   = trim((string)($_POST['nat64_prefix']    ?? ''));
+        $nat64_pl_input       = trim((string)($_POST['nat64_pl']        ?? ''));
+        $nat64_ipv4_input     = trim((string)($_POST['nat64_ipv4']      ?? ''));
+        $nat64_ipv6_input     = trim((string)($_POST['nat64_ipv6']      ?? ''));
+        $nat64_a_record_input = trim((string)($_POST['nat64_a_record']  ?? ''));
+        $nat64 = sc_run_nat64(
+            $nat64_mode,
+            $nat64_prefix_input,
+            $nat64_pl_input,
+            $nat64_ipv4_input,
+            $nat64_ipv6_input,
+            $nat64_a_record_input
+        );
+    }
+
     if ($is_ula && !$form_blocked) {
         $ula_global_id_input = trim((string)($_POST['ula_global_id'] ?? ''));
         $ur = generate_ula_prefix($ula_global_id_input);
@@ -2004,6 +2133,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $sixrd_mask_len_input,
             $sixrd_ipv4_input,
             $sixrd_ipv6_input
+        );
+    }
+
+    // NAT64 / DNS64 shareable GET URL (v3.5.0 Task 7)
+    if (
+        $active_tab === 'ipv6'
+        && (
+            isset($_GET['nat64_mode'])
+            || isset($_GET['nat64_ipv4'])
+            || isset($_GET['nat64_ipv6'])
+            || isset($_GET['nat64_a_record'])
+        )
+    ) {
+        $nat64_mode = (string)($_GET['nat64_mode'] ?? 'encode');
+        if ($nat64_mode !== 'encode' && $nat64_mode !== 'decode' && $nat64_mode !== 'dns64') {
+            $nat64_mode = 'encode';
+        }
+        $nat64_prefix_input   = trim((string)($_GET['nat64_prefix']    ?? ''));
+        $nat64_pl_input       = trim((string)($_GET['nat64_pl']        ?? ''));
+        $nat64_ipv4_input     = trim((string)($_GET['nat64_ipv4']      ?? ''));
+        $nat64_ipv6_input     = trim((string)($_GET['nat64_ipv6']      ?? ''));
+        $nat64_a_record_input = trim((string)($_GET['nat64_a_record']  ?? ''));
+        $nat64 = sc_run_nat64(
+            $nat64_mode,
+            $nat64_prefix_input,
+            $nat64_pl_input,
+            $nat64_ipv4_input,
+            $nat64_ipv6_input,
+            $nat64_a_record_input
         );
     }
 

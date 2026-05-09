@@ -32,6 +32,11 @@ as each ships.
   configurable SP IPv6 prefix and IPv4 mask length. Bidirectional
   translation between customer IPv4 and customer-delegated IPv6
   prefix. (#395)
+- **NAT64 / DNS64 helper (RFC 6052 / 6146 / 6147).** Extends the v3.4.0
+  `mapped6` drawer with all six RFC 6052 prefix lengths
+  (`/32`, `/40`, `/48`, `/56`, `/64`, `/96`), custom NAT64 prefix
+  support, and DNS64 AAAA synthesis from A records. Existing `mapped6`
+  behaviour unchanged. (#391)
 
 ## [3.4.1] - 2026-05-08
 
