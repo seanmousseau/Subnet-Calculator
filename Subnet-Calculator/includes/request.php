@@ -663,6 +663,119 @@ function sc_run_ssm6(
 }
 
 /**
+ * Run the embedded-RP multicast tool against the supplied input. Mode is
+ * 'encode' (RP address + prefix length + RIID + scope + group ID →
+ * FF7x:: embedded-RP group) or 'decode' (FF7x:: group → parts). Empty
+ * input returns []. (v3.6.0 Task 4, RFC 3956, #397)
+ *
+ * @return array{
+ *     mode?: 'encode'|'decode',
+ *     input?: string,
+ *     address?: string,
+ *     scope?: int,
+ *     rp_prefix?: string,
+ *     rp_prefix_length?: int,
+ *     rp_address?: string,
+ *     riid?: int,
+ *     group_id?: int,
+ *     rp_address_input?: string,
+ *     rp_prefix_length_input?: string,
+ *     riid_input?: string,
+ *     scope_input?: string,
+ *     group_id_input?: string,
+ *     error?: string|null
+ * }
+ */
+function sc_run_embedded_rp6(
+    string $mode,
+    string $rp_address_input,
+    string $rp_prefix_length_input,
+    string $riid_input,
+    string $scope_input,
+    string $group_id_input,
+    string $ipv6_input
+): array {
+    $mode = strtolower(trim($mode));
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        $mode = 'encode';
+    }
+
+    if ($mode === 'encode') {
+        $rp = trim($rp_address_input);
+        $pl = trim($rp_prefix_length_input);
+        $ri = trim($riid_input);
+        $sc = trim($scope_input);
+        $gi = trim($group_id_input);
+        if ($rp === '' && $pl === '' && $ri === '' && $gi === '') {
+            return [];
+        }
+        $base_echo = [
+            'mode'                   => 'encode',
+            'rp_address_input'       => $rp,
+            'rp_prefix_length_input' => $pl,
+            'riid_input'             => $ri,
+            'scope_input'            => $sc,
+            'group_id_input'         => $gi,
+        ];
+        if (!ctype_digit($pl)) {
+            return $base_echo + ['error' => 'RP prefix length must be an integer 0..64.'];
+        }
+        if (!ctype_digit($ri)) {
+            return $base_echo + ['error' => 'RIID must be an integer 0..15.'];
+        }
+        if (!ctype_digit($sc)) {
+            return $base_echo + ['error' => 'Scope must be an integer 1..15.'];
+        }
+        $gi_int = sc_ssm6_parse_group_id($gi);
+        if ($gi_int === null) {
+            return $base_echo + ['error' => 'Group ID must be an integer 0..2^32-1 (decimal or 0xHEX).'];
+        }
+        try {
+            $r = build_embedded_rp_group($rp, (int)$pl, (int)$ri, (int)$sc, $gi_int);
+            return $base_echo + [
+                'address'          => $r['address'],
+                'scope'            => $r['scope'],
+                'rp_prefix'        => $r['rp_prefix'],
+                'rp_prefix_length' => $r['rp_prefix_length'],
+                'rp_address'       => $r['rp_address'],
+                'riid'             => $r['riid'],
+                'group_id'         => $r['group_id'],
+                'error'            => null,
+            ];
+        } catch (\InvalidArgumentException $e) {
+            return $base_echo + ['error' => $e->getMessage()];
+        }
+    }
+
+    // decode
+    $raw = trim($ipv6_input);
+    if ($raw === '') {
+        return [];
+    }
+    try {
+        $r = decode_embedded_rp_group($raw);
+        return [
+            'mode'             => 'decode',
+            'input'            => $raw,
+            'address'          => $r['address'],
+            'scope'            => $r['scope'],
+            'rp_prefix'        => $r['rp_prefix'],
+            'rp_prefix_length' => $r['rp_prefix_length'],
+            'rp_address'       => $r['rp_address'],
+            'riid'             => $r['riid'],
+            'group_id'         => $r['group_id'],
+            'error'            => null,
+        ];
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'mode'  => 'decode',
+            'input' => $raw,
+            'error' => $e->getMessage(),
+        ];
+    }
+}
+
+/**
  * Parse a user-supplied group_id. Accepts decimal or 0x-hex.
  * Returns null on parse failure or out-of-range value.
  *
@@ -1449,6 +1562,17 @@ $ssm6_ipv6_input           = '';
 /** @var array{mode?: 'encode'|'decode', input?: string, address?: string, scope?: int, prefix_length?: int, unicast_prefix?: string, group_id?: int, unicast_prefix_input?: string, scope_input?: string, group_id_input?: string, error?: string|null} */
 $ssm6 = [];
 
+// v3.6.0 Task 4 — Embedded-RP multicast (RFC 3956, #397)
+$embedded_rp6_mode                   = 'encode';
+$embedded_rp6_rp_address_input       = '';
+$embedded_rp6_rp_prefix_length_input = '';
+$embedded_rp6_riid_input             = '';
+$embedded_rp6_scope_input            = '14'; // default 0xE (global)
+$embedded_rp6_group_id_input         = '';
+$embedded_rp6_ipv6_input             = '';
+/** @var array{mode?: 'encode'|'decode', input?: string, address?: string, scope?: int, rp_prefix?: string, rp_prefix_length?: int, rp_address?: string, riid?: int, group_id?: int, rp_address_input?: string, rp_prefix_length_input?: string, riid_input?: string, scope_input?: string, group_id_input?: string, error?: string|null} */
+$embedded_rp6 = [];
+
 // v3.5.0 Task 10 — RFC 3531 sparse-allocation guidance
 $rfc3531_parent_input           = '';
 $rfc3531_reservation_bits_input = '';
@@ -1549,6 +1673,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || isset($_POST['ssm6_scope'])
         || isset($_POST['ssm6_group_id'])
         || isset($_POST['ssm6_ipv6']);
+    $is_embedded_rp6  = isset($_POST['embedded_rp6_mode'])
+        || isset($_POST['embedded_rp6_rp_address'])
+        || isset($_POST['embedded_rp6_rp_prefix_length'])
+        || isset($_POST['embedded_rp6_riid'])
+        || isset($_POST['embedded_rp6_scope'])
+        || isset($_POST['embedded_rp6_group_id'])
+        || isset($_POST['embedded_rp6_ipv6']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -1562,7 +1693,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || $is_nibble6
         || $is_rfc3531
         || $is_multicast6
-        || $is_ssm6;
+        || $is_ssm6
+        || $is_embedded_rp6;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -2109,6 +2241,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ssm6_scope_input,
             $ssm6_group_id_input,
             $ssm6_ipv6_input
+        );
+    }
+
+    if ($is_embedded_rp6 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $embedded_rp6_mode = (string)($_POST['embedded_rp6_mode'] ?? 'encode');
+        if ($embedded_rp6_mode !== 'encode' && $embedded_rp6_mode !== 'decode') {
+            $embedded_rp6_mode = 'encode';
+        }
+        $embedded_rp6_rp_address_input       = trim((string)($_POST['embedded_rp6_rp_address']       ?? ''));
+        $embedded_rp6_rp_prefix_length_input = trim((string)($_POST['embedded_rp6_rp_prefix_length'] ?? ''));
+        $embedded_rp6_riid_input             = trim((string)($_POST['embedded_rp6_riid']             ?? ''));
+        $embedded_rp6_scope_input            = trim((string)($_POST['embedded_rp6_scope']            ?? '14'));
+        $embedded_rp6_group_id_input         = trim((string)($_POST['embedded_rp6_group_id']         ?? ''));
+        $embedded_rp6_ipv6_input             = trim((string)($_POST['embedded_rp6_ipv6']             ?? ''));
+        $embedded_rp6 = sc_run_embedded_rp6(
+            $embedded_rp6_mode,
+            $embedded_rp6_rp_address_input,
+            $embedded_rp6_rp_prefix_length_input,
+            $embedded_rp6_riid_input,
+            $embedded_rp6_scope_input,
+            $embedded_rp6_group_id_input,
+            $embedded_rp6_ipv6_input
         );
     }
 
@@ -2721,6 +2876,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ssm6_scope_input,
             $ssm6_group_id_input,
             $ssm6_ipv6_input
+        );
+    }
+
+    // Embedded-RP multicast shareable GET URL (v3.6.0 Task 4, RFC 3956, #397)
+    if (
+        $active_tab === 'ipv6'
+        && (
+            isset($_GET['embedded_rp6_mode'])
+            || isset($_GET['embedded_rp6_rp_address'])
+            || isset($_GET['embedded_rp6_rp_prefix_length'])
+            || isset($_GET['embedded_rp6_riid'])
+            || isset($_GET['embedded_rp6_group_id'])
+            || isset($_GET['embedded_rp6_ipv6'])
+        )
+    ) {
+        $embedded_rp6_mode = (string)($_GET['embedded_rp6_mode'] ?? 'encode');
+        if ($embedded_rp6_mode !== 'encode' && $embedded_rp6_mode !== 'decode') {
+            $embedded_rp6_mode = 'encode';
+        }
+        $embedded_rp6_rp_address_input       = trim((string)($_GET['embedded_rp6_rp_address']       ?? ''));
+        $embedded_rp6_rp_prefix_length_input = trim((string)($_GET['embedded_rp6_rp_prefix_length'] ?? ''));
+        $embedded_rp6_riid_input             = trim((string)($_GET['embedded_rp6_riid']             ?? ''));
+        $embedded_rp6_scope_input            = trim((string)($_GET['embedded_rp6_scope']            ?? '14'));
+        $embedded_rp6_group_id_input         = trim((string)($_GET['embedded_rp6_group_id']         ?? ''));
+        $embedded_rp6_ipv6_input             = trim((string)($_GET['embedded_rp6_ipv6']             ?? ''));
+        $embedded_rp6 = sc_run_embedded_rp6(
+            $embedded_rp6_mode,
+            $embedded_rp6_rp_address_input,
+            $embedded_rp6_rp_prefix_length_input,
+            $embedded_rp6_riid_input,
+            $embedded_rp6_scope_input,
+            $embedded_rp6_group_id_input,
+            $embedded_rp6_ipv6_input
         );
     }
 

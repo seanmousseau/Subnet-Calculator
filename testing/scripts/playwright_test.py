@@ -3306,6 +3306,155 @@ async def test_ipv6_ssm_ui(page: Page) -> None:
                 len(err_text) > 0, f"got: {err_text!r}")
 
 
+async def test_api_embedded_rp6(page: Page) -> None:
+    section("API — POST /api/v1/embedded-rp6")
+    # Encode — RFC 3956 worked example.
+    status, data = _api_post("embedded-rp6", {
+        "mode": "encode",
+        "rp_address": "2001:db8:cafe::1",
+        "rp_prefix_length": 48,
+        "riid": 1,
+        "scope": 14,
+        "group_id": 0x12345678,
+    })
+    assert_eq("api embedded-rp6 encode: HTTP 200", status, 200)
+    assert_eq("api embedded-rp6 encode: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api embedded-rp6 encode: address",
+              d.get("address"), "ff7e:130:2001:db8:cafe:0:1234:5678")
+    assert_eq("api embedded-rp6 encode: rp_prefix_length",
+              d.get("rp_prefix_length"), 48)
+    assert_eq("api embedded-rp6 encode: riid", d.get("riid"), 1)
+    assert_eq("api embedded-rp6 encode: scope", d.get("scope"), 14)
+    assert_eq("api embedded-rp6 encode: group_id",
+              d.get("group_id"), 0x12345678)
+    assert_eq("api embedded-rp6 encode: rp_address",
+              d.get("rp_address"), "2001:db8:cafe::1")
+    assert_eq("api embedded-rp6 encode: rp_prefix",
+              d.get("rp_prefix"), "2001:db8:cafe::")
+
+    # Decode — round-trip.
+    status2, data2 = _api_post("embedded-rp6", {
+        "mode": "decode",
+        "ipv6": "ff7e:130:2001:db8:cafe:0:1234:5678",
+    })
+    assert_eq("api embedded-rp6 decode: HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api embedded-rp6 decode: scope", d2.get("scope"), 14)
+    assert_eq("api embedded-rp6 decode: rp_prefix_length",
+              d2.get("rp_prefix_length"), 48)
+    assert_eq("api embedded-rp6 decode: rp_prefix",
+              d2.get("rp_prefix"), "2001:db8:cafe::")
+    assert_eq("api embedded-rp6 decode: rp_address",
+              d2.get("rp_address"), "2001:db8:cafe::1")
+    assert_eq("api embedded-rp6 decode: riid", d2.get("riid"), 1)
+    assert_eq("api embedded-rp6 decode: group_id",
+              d2.get("group_id"), 0x12345678)
+
+    # Decode rejects SSM-only flags (FF3E:: has flags=0x3, not 0x7).
+    status3, _ = _api_post("embedded-rp6", {
+        "mode": "decode", "ipv6": "FF3E::1234:5678"})
+    assert_eq("api embedded-rp6 decode (FF3E::): non-embedded-RP → 400",
+              status3, 400)
+
+    # Decode rejects non-multicast input.
+    status4, _ = _api_post("embedded-rp6", {
+        "mode": "decode", "ipv6": "2001:db8::1"})
+    assert_eq("api embedded-rp6 decode (non-multicast): → 400", status4, 400)
+
+    # Encode rejects RIID > 15.
+    status5, _ = _api_post("embedded-rp6", {
+        "mode": "encode",
+        "rp_address": "2001:db8::1",
+        "rp_prefix_length": 48,
+        "riid": 16,
+        "scope": 14,
+        "group_id": 1,
+    })
+    assert_eq("api embedded-rp6 encode (riid=16): → 400", status5, 400)
+
+    # Encode rejects RP prefix length > 64.
+    status6, _ = _api_post("embedded-rp6", {
+        "mode": "encode",
+        "rp_address": "2001:db8::1",
+        "rp_prefix_length": 96,
+        "riid": 1,
+        "scope": 14,
+        "group_id": 1,
+    })
+    assert_eq("api embedded-rp6 encode (/96): → 400", status6, 400)
+
+    # Encode rejects out-of-range scope.
+    status7, _ = _api_post("embedded-rp6", {
+        "mode": "encode",
+        "rp_address": "2001:db8::1",
+        "rp_prefix_length": 48,
+        "riid": 1,
+        "scope": 0,
+        "group_id": 1,
+    })
+    assert_eq("api embedded-rp6 encode (scope 0): → 400", status7, 400)
+
+    # Missing mode-specific field.
+    status8, _ = _api_post("embedded-rp6", {"mode": "encode"})
+    assert_eq("api embedded-rp6 encode: missing field → 400", status8, 400)
+
+
+async def test_ipv6_embedded_rp_ui(page: Page) -> None:
+    section("IPv6 embedded-RP tool UI")
+
+    # Drawer opens via /ipv6/embedded-rp rewrite path used by multicast deep-link.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=embedded-rp")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-rp']")
+    assert_eq("embedded-rp UI: panel exists", await panel.count(), 1)
+
+    # Encode mode (default) — submit RFC 3956 worked example.
+    await page.fill("#embedded_rp6_rp_address", "2001:db8:cafe::1")
+    await page.fill("#embedded_rp6_rp_prefix_length", "48")
+    await page.fill("#embedded_rp6_riid", "1")
+    await page.fill("#embedded_rp6_scope", "14")
+    await page.fill("#embedded_rp6_group_id", "0x12345678")
+    await page.click(
+        "#panel-ipv6 .tool-panel[data-tool='embedded-rp'] button.splitter-btn"
+    )
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-rp']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("embedded-rp UI: built address rendered",
+                "ff7e:130:2001:db8:cafe:0:1234:5678" in body_text)
+    assert_true("embedded-rp UI: rp address rendered",
+                "2001:db8:cafe::1" in body_text)
+
+    # Decode mode — round-trip via shareable GET URL.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&tool=embedded-rp&embedded_rp6_mode=decode"
+        "&embedded_rp6_ipv6=ff7e:130:2001:db8:cafe:0:1234:5678",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-rp']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("embedded-rp UI: decode group_id rendered",
+                "0x12345678" in body_text or "305419896" in body_text)
+    assert_true("embedded-rp UI: decode rp prefix rendered",
+                "2001:db8:cafe::" in body_text)
+    assert_true("embedded-rp UI: decode rp address rendered",
+                "2001:db8:cafe::1" in body_text)
+
+    # Error path — SSM-only flags (FF3E::) must be rejected.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&tool=embedded-rp&embedded_rp6_mode=decode"
+        "&embedded_rp6_ipv6=FF3E::1234:5678",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-rp']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("embedded-rp UI: error band on non-embedded-RP input",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+
 async def test_api_6to4(page: Page) -> None:
     section("API — POST /api/v1/6to4")
 
@@ -9621,6 +9770,8 @@ async def main() -> None:
             await test_api_multicast6(page)
             await test_ipv6_ssm_ui(page)
             await test_api_ssm6(page)
+            await test_ipv6_embedded_rp_ui(page)
+            await test_api_embedded_rp6(page)
             await test_a11y_ipv6_drawers(page)
             # v3.5.0 (T11) — bulk endpoint coverage + a11y for the 9 new drawers
             await test_api_bulk_covers_v350_endpoints(page)
