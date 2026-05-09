@@ -44,6 +44,10 @@ as each ships.
 - **IPv6 nibble-boundary helper.** Show nibble-aligned neighbours
   (above and below) for any IPv6 prefix. Helps with reverse-zone
   delegation planning. (#388)
+- **RFC 3531 sparse-allocation guidance.** Bit-reservation strategy
+  tool (Centermost / Leftmost / Rightmost) producing the allocation
+  order and concrete child prefixes for growth-friendly prefix
+  assignment. Composes with the prefix-delegation planner. (#389)
 
 ## [3.4.1] - 2026-05-08
 
