@@ -37,6 +37,10 @@ as each ships.
   (`/32`, `/40`, `/48`, `/56`, `/64`, `/96`), custom NAT64 prefix
   support, and DNS64 AAAA synthesis from A records. Existing `mapped6`
   behaviour unchanged. (#391)
+- **IPv6 prefix-delegation planner.** Slice a delegated prefix (e.g. /48)
+  into nibble-aligned child prefixes (e.g. /56) with a usage table and
+  free-space report. GMP throughout — counts that overflow signed 64
+  print as `"2^N"`. (#387)
 
 ## [3.4.1] - 2026-05-08
 

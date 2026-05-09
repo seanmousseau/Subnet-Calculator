@@ -77,6 +77,8 @@ tags:
     description: 6rd address tool (RFC 5969) — service-provider-configured IPv4 ↔ delegated IPv6 prefix translation
   - name: Nat64
     description: NAT64 / DNS64 helper (RFC 6052 / 6147) — prefix-length-aware IPv4 ↔ NAT64 IPv6 translation and DNS64 AAAA synthesis
+  - name: PrefixPlan6
+    description: IPv6 prefix-delegation planner — slice a parent prefix into nibble-aligned child prefixes (operator math, not detection)
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -2704,6 +2706,141 @@ paths:
                           ipv6: { type: string, example: "64:ff9b::c000:221" }
         "400":
           description: Missing required field, unparseable input, or RFC 6052 §3.1 violation
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /prefix-plan6:
+    post:
+      operationId: prefixPlan6
+      tags: [PrefixPlan6]
+      summary: Slice a parent IPv6 prefix into child prefixes (operator math)
+      description: |
+        Plan an IPv6 prefix delegation. Given a parent prefix
+        (e.g. `2001:db8::/48`), a desired child prefix length
+        (e.g. `56`), and a count, returns the first `count` child
+        prefixes (optionally skipping the first `start_offset` blocks)
+        plus a free-space report.
+
+        Counts at delegation differences ≥ 64 overflow signed 64-bit
+        ints, so totals and free-remaining values are returned as
+        strings. Clean powers of two with exponent ≥ 63 are returned
+        in the `"2^N"` overflow form (consistent with
+        `/api/v1/vlsm6` and `/api/v1/range6`).
+
+        Each child carries a `contains_64s` field that surfaces the
+        block's relationship to the standard /64 LAN sizing:
+        a decimal count when the child is larger than a /64,
+        `"1"` for /64 itself, and `"subset of /64"` for anything
+        smaller.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parent_prefix, child_length, count]
+              properties:
+                parent_prefix:
+                  type: string
+                  example: "2001:db8::/48"
+                child_length:
+                  type: integer
+                  minimum: 1
+                  maximum: 128
+                  example: 56
+                count:
+                  type: integer
+                  minimum: 1
+                  example: 4
+                start_offset:
+                  type: integer
+                  minimum: 0
+                  default: 0
+                nibble_align:
+                  type: boolean
+                  default: true
+            examples:
+              slice48Into56s:
+                summary: Slice a /48 into the first four /56s
+                value: { parent_prefix: "2001:db8::/48", child_length: 56, count: 4 }
+              huge:
+                summary: Plan a /32 → /128 (overflow path)
+                value: { parent_prefix: "2001:db8::/32", child_length: 128, count: 1, nibble_align: false }
+      responses:
+        "200":
+          description: Prefix plan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [parent, children, free, normalized_child_length]
+                        properties:
+                          parent:
+                            type: object
+                            required: [prefix, length, total_children_str]
+                            properties:
+                              prefix: { type: string, example: "2001:db8::/48" }
+                              length: { type: integer, example: 48 }
+                              total_children_str:
+                                type: string
+                                description: Decimal string, or "2^N" overflow form when N ≥ 63.
+                                example: "256"
+                          children:
+                            type: array
+                            items:
+                              type: object
+                              required: [index, prefix, first, last, contains_64s]
+                              properties:
+                                index: { type: integer, example: 0 }
+                                prefix: { type: string, example: "2001:db8::/56" }
+                                first:  { type: string, example: "2001:db8::" }
+                                last:   { type: string, example: "2001:db8:0:ff:ffff:ffff:ffff:ffff" }
+                                contains_64s:
+                                  type: string
+                                  description: Decimal count, "1", or "subset of /64".
+                                  example: "256"
+                          free:
+                            type: object
+                            required: [remaining_str]
+                            properties:
+                              remaining_str:
+                                type: string
+                                example: "252"
+                          normalized_child_length:
+                            type: integer
+                            description: Snapped-up child length when nibble_align=true; else identical to request.
+                            example: 56
+        "400":
+          description: Missing required field, unparseable input, or out-of-range request
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }

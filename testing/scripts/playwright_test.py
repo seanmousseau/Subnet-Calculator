@@ -3867,6 +3867,159 @@ async def test_ipv6_6rd_ui(page: Page) -> None:
                 "2001:db8:c000:201::/64" in body_text, f"body: {body_text!r}")
 
 
+async def test_api_prefix_plan6(page: Page) -> None:
+    section("API — POST /api/v1/prefix-plan6")
+
+    # Slice /48 into the first four /56s.
+    status, data = _api_post("prefix-plan6", {
+        "parent_prefix": "2001:db8::/48",
+        "child_length": 56,
+        "count": 4,
+    })
+    assert_eq("api prefix-plan6 /48→/56: HTTP 200", status, 200)
+    assert_eq("api prefix-plan6 /48→/56: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    children = d.get("children", [])
+    assert_eq("api prefix-plan6 /48→/56: count=4", len(children), 4)
+    assert_eq("api prefix-plan6 /48→/56: first child prefix",
+              children[0].get("prefix") if children else None, "2001:db8::/56")
+    assert_eq("api prefix-plan6 /48→/56: second child prefix",
+              children[1].get("prefix") if len(children) > 1 else None, "2001:db8:0:100::/56")
+    assert_eq("api prefix-plan6 /48→/56: total_children_str",
+              d.get("parent", {}).get("total_children_str"), "256")
+    assert_eq("api prefix-plan6 /48→/56: free remaining",
+              d.get("free", {}).get("remaining_str"), "252")
+    assert_eq("api prefix-plan6 /48→/56: normalized_child_length",
+              d.get("normalized_child_length"), 56)
+    assert_eq("api prefix-plan6 /48→/56: contains_64s",
+              children[0].get("contains_64s") if children else None, "256")
+
+    # Nibble-align snaps /49 → /52.
+    status2, data2 = _api_post("prefix-plan6", {
+        "parent_prefix": "2001:db8::/48",
+        "child_length": 49,
+        "count": 1,
+        "nibble_align": True,
+    })
+    assert_eq("api prefix-plan6 nibble-align: HTTP 200", status2, 200)
+    assert_eq("api prefix-plan6 nibble-align: snaps to /52",
+              data2.get("data", {}).get("normalized_child_length"), 52)
+
+    # Overflow path — /32 → /128 ⇒ 2^96 children.
+    status3, data3 = _api_post("prefix-plan6", {
+        "parent_prefix": "2001:db8::/32",
+        "child_length": 128,
+        "count": 1,
+        "nibble_align": False,
+    })
+    assert_eq("api prefix-plan6 overflow: HTTP 200", status3, 200)
+    assert_eq("api prefix-plan6 overflow: total uses 2^N",
+              data3.get("data", {}).get("parent", {}).get("total_children_str"), "2^96")
+
+    # Start offset skips first N.
+    status4, data4 = _api_post("prefix-plan6", {
+        "parent_prefix": "2001:db8::/48",
+        "child_length": 56,
+        "count": 2,
+        "start_offset": 2,
+    })
+    assert_eq("api prefix-plan6 offset: HTTP 200", status4, 200)
+    kids = data4.get("data", {}).get("children", [])
+    assert_eq("api prefix-plan6 offset: first child index",
+              kids[0].get("index") if kids else None, 2)
+    assert_eq("api prefix-plan6 offset: first child prefix",
+              kids[0].get("prefix") if kids else None, "2001:db8:0:200::/56")
+
+    # Invalid: child_length ≤ parent_length.
+    status5, _ = _api_post("prefix-plan6", {
+        "parent_prefix": "2001:db8::/48",
+        "child_length": 32,
+        "count": 1,
+    })
+    assert_eq("api prefix-plan6 child<parent → 400", status5, 400)
+
+    # Invalid: missing required fields.
+    status6, _ = _api_post("prefix-plan6", {"parent_prefix": "2001:db8::/48"})
+    assert_eq("api prefix-plan6 missing fields → 400", status6, 400)
+
+    # Invalid: offset + count exceeds total. Disable nibble-align so /49 stays /49
+    # (only 2 children); with nibble-align on it would snap to /52 (16 children).
+    status7, _ = _api_post("prefix-plan6", {
+        "parent_prefix": "2001:db8::/48",
+        "child_length": 49,
+        "count": 2,
+        "start_offset": 1,
+        "nibble_align": False,
+    })
+    assert_eq("api prefix-plan6 offset+count overflow → 400", status7, 400)
+
+
+async def test_ipv6_prefix_plan_ui(page: Page) -> None:
+    section("IPv6 prefix-delegation planner UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # /ipv6/prefix-plan should auto-open the drawer (per-tool URL routing).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=prefix-plan")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='prefix-plan']")
+    assert_eq("prefix-plan UI: panel exists", await panel.count(), 1)
+
+    # Plan a /48 → /56 slice (first 4).
+    await page.fill("#prefix_plan6_parent", "2001:db8::/48")
+    await page.fill("#prefix_plan6_child_length", "56")
+    await page.fill("#prefix_plan6_count", "4")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='prefix-plan'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='prefix-plan']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("prefix-plan UI: first child rendered",
+                "2001:db8::/56" in body_text, f"body: {body_text!r}")
+    assert_true("prefix-plan UI: fourth child rendered",
+                "2001:db8:0:300::/56" in body_text, f"body: {body_text!r}")
+
+    # Copy a child prefix.
+    await panel.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("prefix-plan UI: copy child prefix",
+              await page.evaluate("window.__lastClipboard"),
+              "2001:db8::/56")
+
+    # Error path — child smaller than parent.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=prefix-plan")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#prefix_plan6_parent", "2001:db8::/48")
+    await page.fill("#prefix_plan6_child_length", "32")
+    await page.fill("#prefix_plan6_count", "1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='prefix-plan'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='prefix-plan']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("prefix-plan UI: error band when child ≤ parent",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+    # Shareable GET URL hydrates without re-submission.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=prefix-plan"
+                   "&prefix_plan6_parent=2001:db8::/48"
+                   "&prefix_plan6_child_length=56"
+                   "&prefix_plan6_count=2")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='prefix-plan']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("prefix-plan UI shareable URL: hydrated",
+                "2001:db8::/56" in body_text, f"body: {body_text!r}")
+
+
 async def test_api_bulk(page: Page) -> None:
     section("API — bulk calculation")
     # Two valid IPv4 CIDRs
@@ -8767,6 +8920,8 @@ async def main() -> None:
             await test_api_6rd(page)
             await test_ipv6_nat64_ui(page)
             await test_api_nat64(page)
+            await test_ipv6_prefix_plan_ui(page)
+            await test_api_prefix_plan6(page)
             await test_a11y_ipv6_drawers(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)

@@ -31,6 +31,9 @@ require_once $base . 'functions-6rd.php';
 // phpcs:disable PSR1.Files.SideEffects -- module include for nat64_embed()/nat64_extract()/dns64_synthesize().
 require_once $base . 'functions-nat64.php';
 // phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for plan_prefix_delegation().
+require_once $base . 'functions-prefix-plan6.php';
+// phpcs:enable PSR1.Files.SideEffects
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require $base . 'functions-resolve.php';
