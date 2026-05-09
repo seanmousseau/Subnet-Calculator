@@ -3646,17 +3646,18 @@ async def test_api_6rd(page: Page) -> None:
 async def test_api_nat64(page: Page) -> None:
     section("API — POST /api/v1/nat64")
 
-    # Encode at /96 well-known prefix.
+    # Encode at /96 well-known prefix. RFC 6052 §3.1 forbids non-globally-
+    # unique IPv4 (incl. TEST-NET) under the WKP, so use 8.8.8.8 here.
     status, data = _api_post("nat64", {
         "mode": "encode",
         "nat64_prefix": "64:ff9b::",
         "prefix_length": 96,
-        "ipv4": "192.0.2.33",
+        "ipv4": "8.8.8.8",
     })
     assert_eq("api nat64 encode wkp: HTTP 200", status, 200)
     assert_eq("api nat64 encode wkp: ok=true", data.get("ok"), True)
     d = data.get("data", {})
-    assert_eq("api nat64 encode wkp: ipv6", d.get("ipv6"), "64:ff9b::c000:221")
+    assert_eq("api nat64 encode wkp: ipv6", d.get("ipv6"), "64:ff9b::808:808")
     assert_eq("api nat64 encode wkp: prefix_length", d.get("prefix_length"), 96)
 
     # Encode at /32 — RFC 6052 §2.4 vector.
@@ -3692,14 +3693,15 @@ async def test_api_nat64(page: Page) -> None:
     assert_eq("api nat64 decode /32: ipv4",
               data4.get("data", {}).get("ipv4"), "192.0.2.33")
 
-    # DNS64 mode — defaults to well-known /96.
+    # DNS64 mode — defaults to well-known /96. Use a globally-unique IPv4
+    # (RFC 6052 §3.1 forbids non-globally-unique sources under the WKP).
     status5, data5 = _api_post("nat64", {
         "mode": "dns64",
-        "a_record": "192.0.2.33",
+        "a_record": "8.8.8.8",
     })
     assert_eq("api nat64 dns64: HTTP 200", status5, 200)
     assert_eq("api nat64 dns64: ipv6",
-              data5.get("data", {}).get("ipv6"), "64:ff9b::c000:221")
+              data5.get("data", {}).get("ipv6"), "64:ff9b::808:808")
 
     # RFC 6052 §3.1: WKP rejects RFC 1918 source.
     status6, _ = _api_post("nat64", {
@@ -3765,11 +3767,11 @@ async def test_ipv6_nat64_ui(page: Page) -> None:
         + "&nat64_mode=dns64"
         + "&nat64_prefix=64:ff9b::"
         + "&nat64_pl=96"
-        + "&nat64_a_record=192.0.2.33"
+        + "&nat64_a_record=8.8.8.8"
     )
     await page.wait_for_selector("dl[data-history-source='nat64']")
     body_text2 = await page.inner_text("dl[data-history-source='nat64']")
-    assert "64:ff9b::c000:221" in body_text2, \
+    assert "64:ff9b::808:808" in body_text2, \
         f"expected DNS64 AAAA result via GET, got: {body_text2!r}"
 
     # Existing mapped6 form still works (no regression).

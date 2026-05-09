@@ -195,9 +195,20 @@ function nat64_extract(string $ipv6, string $nat64_prefix, int $prefix_length): 
 }
 
 /**
- * DNS64 (RFC 6147) AAAA synthesis. Given an A record (IPv4) and a NAT64
- * prefix + length, return the synthetic AAAA. Defaults to the well-known
- * prefix 64:ff9b::/96.
+ * DNS64 synthesis per RFC 6147.
+ *
+ * Synthesises an AAAA record for the given A-record IPv4 under the given NAT64
+ * prefix. Defaults to the well-known prefix 64:ff9b::/96.
+ *
+ * NOTE: When using the well-known prefix, private IPv4 addresses are rejected
+ * per RFC 6052 §3.1. When using a Network-Specific Prefix (NSP), private IPv4
+ * synthesis is PERMITTED — it is the operator's responsibility to configure
+ * which destinations to synthesize via DNS64 ACLs (RFC 6147 §5.1.4).
+ *
+ * @param string $a_record_ipv4
+ * @param string $nat64_prefix    Defaults to '64:ff9b::'
+ * @param int    $prefix_length   Defaults to 96
+ * @return string                 Synthesised AAAA
  */
 function dns64_synthesize(
     string $a_record_ipv4,
@@ -288,26 +299,67 @@ function nat64_is_well_known(string $prefix): bool
 }
 
 /**
- * RFC 6052 §3.1 globally-unique check. Returns false for RFC 1918,
- * loopback, link-local, multicast, "this network" 0.0.0.0/8,
- * 100.64.0.0/10 (CGN), 192.0.0.0/24, documentation prefixes, broadcast,
- * and 240.0.0.0/4 reserved.
+ * Determine whether the supplied IPv4 is globally unique per RFC 6890.
+ *
+ * Returns false for:
+ *   - RFC 1918 private (10/8, 172.16/12, 192.168/16)
+ *   - Loopback (127/8)
+ *   - Link-local (169.254/16)
+ *   - Multicast (224/4)
+ *   - Reserved (240/4) and broadcast (255.255.255.255)
+ *   - 0.0.0.0/8 (this network)
+ *   - 100.64.0.0/10 (CGN, RFC 6598)
+ *   - 192.0.0.0/24 (IETF protocol assignments)
+ *   - 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 (TEST-NET-1/2/3)
+ *   - 198.18.0.0/15 (benchmarking, RFC 2544)
+ *
+ * Returns true for ordinary global unicast IPv4.
  *
  * @internal
  */
 function nat64_ipv4_is_globally_unique(string $ipv4): bool
 {
-    $bin = @inet_pton($ipv4);
-    if ($bin === false || strlen($bin) !== 4) {
+    // FILTER_FLAG_NO_PRIV_RANGE excludes RFC 1918; FILTER_FLAG_NO_RES_RANGE
+    // excludes loopback, link-local, multicast, 0.0.0.0/8, 240.0.0.0/4, etc.
+    // Neither flag covers CGN, TEST-NET, IETF protocol-assignment, or
+    // benchmarking ranges — these are checked explicitly below.
+    if (
+        filter_var(
+            $ipv4,
+            FILTER_VALIDATE_IP,
+            FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+        ) === false
+    ) {
         return false;
     }
-    // FILTER_FLAG_NO_PRIV_RANGE excludes RFC 1918 and the unique-local
-    // ranges; FILTER_FLAG_NO_RES_RANGE excludes loopback, link-local,
-    // multicast, 0.0.0.0/8, 240.0.0.0/4, etc.
-    $ok = filter_var(
-        $ipv4,
-        FILTER_VALIDATE_IP,
-        FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
-    );
-    return $ok !== false;
+    $packed = @inet_pton($ipv4);
+    if ($packed === false || strlen($packed) !== 4) {
+        return false;
+    }
+    $b = array_map('ord', str_split($packed));
+    // CGN 100.64.0.0/10 (RFC 6598)
+    if ($b[0] === 100 && ($b[1] & 0xC0) === 0x40) {
+        return false;
+    }
+    // 192.0.0.0/24 IETF Protocol Assignments (RFC 6890)
+    if ($b[0] === 192 && $b[1] === 0 && $b[2] === 0) {
+        return false;
+    }
+    // 192.0.2.0/24 TEST-NET-1 (RFC 5737)
+    if ($b[0] === 192 && $b[1] === 0 && $b[2] === 2) {
+        return false;
+    }
+    // 198.18.0.0/15 Benchmarking (RFC 2544)
+    if ($b[0] === 198 && ($b[1] & 0xFE) === 18) {
+        return false;
+    }
+    // 198.51.100.0/24 TEST-NET-2 (RFC 5737)
+    if ($b[0] === 198 && $b[1] === 51 && $b[2] === 100) {
+        return false;
+    }
+    // 203.0.113.0/24 TEST-NET-3 (RFC 5737)
+    if ($b[0] === 203 && $b[1] === 0 && $b[2] === 113) {
+        return false;
+    }
+    return true;
 }

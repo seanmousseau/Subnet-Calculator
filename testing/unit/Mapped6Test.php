@@ -96,9 +96,12 @@ final class Mapped6Test extends TestCase
 
     public function testNat64EmbedSlash96WellKnown(): void
     {
+        // 8.8.8.8 → 0x08080808 → 64:ff9b::808:808. Use a globally-unique IPv4
+        // because RFC 6052 §3.1 forbids embedding non-globally-unique IPv4
+        // (incl. TEST-NET) into the well-known prefix.
         $this->assertSame(
-            '64:ff9b::c000:221',
-            nat64_embed('192.0.2.33', '64:ff9b::', 96)
+            '64:ff9b::808:808',
+            nat64_embed('8.8.8.8', '64:ff9b::', 96)
         );
     }
 

@@ -33,8 +33,12 @@ final class Nat64Test extends TestCase
             '/64 → 2001:db8:122:344:c0:2:2100' => [
                 '192.0.2.33', '2001:db8:122:344::',   64, '2001:db8:122:344:c0:2:2100:0',
             ],
-            '/96 well-known → 64:ff9b::c000:221' => [
-                '192.0.2.33', '64:ff9b::',            96, '64:ff9b::c000:221',
+            // /96 row uses an NSP (2001:db8::/96 — documentation prefix)
+            // because RFC 6052 §3.1 forbids embedding TEST-NET-1 (192.0.2.33)
+            // into the well-known prefix. The /96 bit-layout is identical
+            // regardless of which prefix is used.
+            '/96 NSP → 2001:db8::c000:221' => [
+                '192.0.2.33', '2001:db8::',           96, '2001:db8::c000:221',
             ],
         ];
     }
@@ -99,7 +103,8 @@ final class Nat64Test extends TestCase
     public function testDns64SynthesizeDefaults(): void
     {
         // DNS64 (RFC 6147) synthesises AAAA via well-known /96 by default.
-        $this->assertSame('64:ff9b::c000:221', dns64_synthesize('192.0.2.33'));
+        // 8.8.8.8 → 0x08080808 → 64:ff9b::808:808.
+        $this->assertSame('64:ff9b::808:808', dns64_synthesize('8.8.8.8'));
     }
 
     public function testDns64SynthesizeCustom(): void
@@ -114,5 +119,23 @@ final class Nat64Test extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
         dns64_synthesize('192.168.1.1');
+    }
+
+    public function testGloballyUniqueExcludesCGN(): void
+    {
+        $this->assertFalse(nat64_ipv4_is_globally_unique('100.64.0.1'));
+    }
+
+    public function testGloballyUniqueExcludesTestNet(): void
+    {
+        $this->assertFalse(nat64_ipv4_is_globally_unique('192.0.2.33'));
+        $this->assertFalse(nat64_ipv4_is_globally_unique('198.51.100.1'));
+        $this->assertFalse(nat64_ipv4_is_globally_unique('203.0.113.1'));
+    }
+
+    public function testGloballyUniqueIncludesOrdinaryGlobal(): void
+    {
+        $this->assertTrue(nat64_ipv4_is_globally_unique('8.8.8.8'));
+        $this->assertTrue(nat64_ipv4_is_globally_unique('1.1.1.1'));
     }
 }

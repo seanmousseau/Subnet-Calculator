@@ -148,14 +148,18 @@ RFC 6052 *u-octet* — synthesised addresses keep it zero.
 | `2001:db8:122::`       | /48 | `2001:db8:122:c000:2:2100::`     |
 | `2001:db8:122:300::`   | /56 | `2001:db8:122:3c0:0:221::`       |
 | `2001:db8:122:344::`   | /64 | `2001:db8:122:344:c0:2:2100:0`   |
-| `64:ff9b::`            | /96 | `64:ff9b::c000:221`              |
+| `2001:db8::`           | /96 | `2001:db8::c000:221`             |
+
+The /96 row uses the documentation NSP `2001:db8::/96` because RFC 6052
+§3.1 forbids embedding non-globally-unique IPv4 (incl. TEST-NET-1
+`192.0.2.0/24`) under the well-known prefix `64:ff9b::/96`.
 
 ### `POST /api/v1/nat64`
 
 ```json
 { "mode": "encode", "nat64_prefix": "2001:db8::", "prefix_length": 32, "ipv4": "192.0.2.33" }
 { "mode": "decode", "nat64_prefix": "2001:db8::", "prefix_length": 32, "ipv6": "2001:db8:c000:221::" }
-{ "mode": "dns64", "a_record": "192.0.2.33" }
+{ "mode": "dns64", "a_record": "8.8.8.8" }
 ```
 
 `mode=dns64` is an alias for `encode` whose request field is named
@@ -172,5 +176,5 @@ sources (RFC 1918 private-use, loopback, link-local, multicast, CGN
 
 ```
 /?tab=ipv6&nat64_mode=encode&nat64_prefix=2001:db8::&nat64_pl=32&nat64_ipv4=192.0.2.33
-/?tab=ipv6&nat64_mode=dns64&nat64_a_record=192.0.2.33
+/?tab=ipv6&nat64_mode=dns64&nat64_a_record=8.8.8.8
 ```
