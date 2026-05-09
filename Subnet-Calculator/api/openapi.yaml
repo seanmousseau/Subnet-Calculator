@@ -79,6 +79,8 @@ tags:
     description: NAT64 / DNS64 helper (RFC 6052 / 6147) — prefix-length-aware IPv4 ↔ NAT64 IPv6 translation and DNS64 AAAA synthesis
   - name: PrefixPlan6
     description: IPv6 prefix-delegation planner — slice a parent prefix into nibble-aligned child prefixes (operator math, not detection)
+  - name: Nibble6
+    description: IPv6 nibble-boundary helper — surface the nibble-aligned neighbours (above and below) of any IPv6 prefix
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -2846,6 +2848,113 @@ paths:
                             example: 56
         "400":
           description: Missing required field, unparseable input, or out-of-range request
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /nibble6:
+    post:
+      operationId: nibble6
+      tags: [Nibble6]
+      summary: Surface the nibble-aligned neighbours of an IPv6 prefix
+      description: |
+        Given any IPv6 prefix (e.g. `2001:db8::/49`), return the
+        nibble-aligned neighbours: `above` (the nearest nibble boundary
+        at-or-shorter than the input length) and `below` (the nearest
+        nibble boundary at-or-longer than the input length, capped at
+        /128).
+
+        Both neighbour prefixes are emitted in canonical form: address
+        bits beyond the neighbour's prefix length are zeroed. Each
+        carries a `contains_64s` field with the same semantics as
+        `/api/v1/prefix-plan6` (decimal count, `"1"`, or `"subset of /64"`).
+
+        Useful for reverse-zone (`ip6.arpa`) delegation planning, where
+        non-nibble prefix lengths require explicit operator decisions
+        about which nibble boundary to delegate against.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prefix]
+              properties:
+                prefix:
+                  type: string
+                  example: "2001:db8::/49"
+            examples:
+              forty_nine:
+                summary: A /49 sits between /48 and /52
+                value: { prefix: "2001:db8::/49" }
+              already_aligned:
+                summary: A /48 is already nibble-aligned
+                value: { prefix: "2001:db8::/48" }
+      responses:
+        "200":
+          description: Nibble-aligned neighbours
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [input, above, below]
+                        properties:
+                          input:
+                            type: object
+                            required: [prefix, length]
+                            properties:
+                              prefix: { type: string, example: "2001:db8::/49" }
+                              length: { type: integer, example: 49 }
+                          above:
+                            type: object
+                            required: [length, prefix, contains_64s]
+                            properties:
+                              length: { type: integer, example: 48 }
+                              prefix: { type: string, example: "2001:db8::/48" }
+                              contains_64s:
+                                type: string
+                                description: Decimal count, "1", or "subset of /64".
+                                example: "65536"
+                          below:
+                            type: object
+                            required: [length, prefix, contains_64s]
+                            properties:
+                              length: { type: integer, example: 52 }
+                              prefix: { type: string, example: "2001:db8::/52" }
+                              contains_64s:
+                                type: string
+                                description: Decimal count, "1", or "subset of /64".
+                                example: "4096"
+        "400":
+          description: Missing required field or unparseable input
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }

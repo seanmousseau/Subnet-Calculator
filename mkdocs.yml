@@ -63,6 +63,7 @@ nav:
     - ISATAP Interface-ID Helper: isatap.md
     - 6rd Address Tool: 6rd.md
     - IPv6 Prefix-Delegation Planner: prefix-plan6.md
+    - IPv6 Nibble-Boundary Helper: nibble6.md
     - Allocation Tree: tree.md
     - Wildcard ↔ CIDR: wildcard.md
     - IP Lookup: lookup.md

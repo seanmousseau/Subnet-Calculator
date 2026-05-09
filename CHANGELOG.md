@@ -41,6 +41,9 @@ as each ships.
   into nibble-aligned child prefixes (e.g. /56) with a usage table and
   free-space report. GMP throughout — counts that overflow signed 64
   print as `"2^N"`. (#387)
+- **IPv6 nibble-boundary helper.** Show nibble-aligned neighbours
+  (above and below) for any IPv6 prefix. Helps with reverse-zone
+  delegation planning. (#388)
 
 ## [3.4.1] - 2026-05-08
 

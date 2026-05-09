@@ -221,6 +221,100 @@ function prefix_plan6_format_count(\GMP $count): string
 }
 
 /**
+ * Given an arbitrary IPv6 prefix, return the nibble-aligned neighbours.
+ *
+ * "above" = aligned and ≤ input length (less specific, a higher-up nibble
+ * boundary in the tree). "below" = aligned and ≥ input length (more
+ * specific, a lower nibble boundary). For an input `/49`: above=`/48`,
+ * below=`/52`.
+ *
+ * Edge cases:
+ *   • Input length is already nibble-aligned → above stays at the input
+ *     length; below moves to the next deeper nibble (input + 4), capped
+ *     at /128.
+ *   • Input length is /128 → both above and below collapse to /128
+ *     (no further refinement is possible).
+ *   • Input length 0..3 → above snaps down to /0; below = /4.
+ *   • Input length 125..127 → below caps at /128.
+ *
+ * Both neighbour prefixes are emitted in canonical form: address bits
+ * beyond the neighbour's prefix length are zeroed via GMP masking, then
+ * formatted with inet_ntop() (lowercase, compressed).
+ *
+ * `contains_64s` reuses prefix_plan6_contains_64s() so the field's
+ * formatting matches the prefix-delegation planner exactly.
+ *
+ * @return array{
+ *   input: array{prefix: string, length: int},
+ *   above: array{length: int, prefix: string, contains_64s: string},
+ *   below: array{length: int, prefix: string, contains_64s: string},
+ * }
+ *
+ * @throws InvalidArgumentException
+ */
+function nibble_neighbours(string $prefix): array
+{
+    [$bin, $length] = prefix_plan6_parse_parent($prefix);
+
+    // Snap-down to nearest nibble boundary at-or-below the input length.
+    $above_length = $length - ($length % 4);
+    // Snap-up to nearest nibble boundary at-or-above the input length,
+    // capped at 128. When the input is already aligned, advance to the
+    // next deeper nibble. /128 is its own floor.
+    if ($length >= 128) {
+        $below_length = 128;
+    } elseif (($length % 4) === 0) {
+        $below_length = min(128, $length + 4);
+    } else {
+        $below_length = $length + (4 - ($length % 4));
+        if ($below_length > 128) {
+            $below_length = 128;
+        }
+    }
+
+    $addr_int = gmp_init(bin2hex($bin), 16);
+
+    return [
+        'input' => [
+            'prefix' => prefix_plan6_format_address(
+                nibble6_mask_to_length($addr_int, $length)
+            ) . '/' . $length,
+            'length' => $length,
+        ],
+        'above' => [
+            'length'       => $above_length,
+            'prefix'       => prefix_plan6_format_address(
+                nibble6_mask_to_length($addr_int, $above_length)
+            ) . '/' . $above_length,
+            'contains_64s' => prefix_plan6_contains_64s($above_length),
+        ],
+        'below' => [
+            'length'       => $below_length,
+            'prefix'       => prefix_plan6_format_address(
+                nibble6_mask_to_length($addr_int, $below_length)
+            ) . '/' . $below_length,
+            'contains_64s' => prefix_plan6_contains_64s($below_length),
+        ],
+    ];
+}
+
+/**
+ * Mask a 128-bit GMP integer to the given prefix length (zero host bits).
+ * Length 0 returns 0; length 128 returns the address unchanged.
+ */
+function nibble6_mask_to_length(\GMP $addr_int, int $length): \GMP
+{
+    if ($length <= 0) {
+        return gmp_init(0);
+    }
+    if ($length >= 128) {
+        return $addr_int;
+    }
+    $mask = gmp_sub(gmp_pow(2, 128), gmp_pow(2, 128 - $length));
+    return gmp_and($addr_int, $mask);
+}
+
+/**
  * Translate a child prefix length into a description of how it relates to
  * the standard /64 LAN sizing. Three branches:
  *   • child_length < 64  → "2^(64-child_length)" or decimal — number of /64s contained.
