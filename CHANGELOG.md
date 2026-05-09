@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.2] - 2026-05-09
+
+**Patch.** Fixes a P1 functional bug in the IPv4 overlap checker
+discovered during a production manual regression on 2026-05-09.
+
+### Fixed
+
+- **`/api/v1/overlap` returned `"none"` for legitimate containment**
+  when the contained network had non-zero host bits within the
+  prefix-difference range (e.g. `10.0.0.0/24` vs `10.0.0.128/25` —
+  which is the OpenAPI spec's own worked example). The bug was a
+  one-character typo in `cidrs_overlap()` (`max` should have been
+  `min`), live since v1.2.0. Existing unit tests didn't catch it
+  because every test pair used `10.0.0.0/X` where both networks share
+  the `10.0.0.0` base. Affected the API endpoint, the Overlap-checker
+  UI, and the bulk-endpoint `overlap` op. (#421)
+
+### Tests
+
+- Added containment tests with non-zero host bits and different base
+  addresses that would have caught the original bug.
+
 ## [3.6.1] - 2026-05-09
 
 **Patch.** Code-quality cleanup carried over from v3.6.0's review trail.

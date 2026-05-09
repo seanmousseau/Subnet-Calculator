@@ -202,4 +202,24 @@ class IPv4Test extends TestCase
     {
         $this->assertSame('none', cidrs_overlap('192.168.0.0/24', '192.168.1.0/24'));
     }
+
+    public function testCidrsOverlapAContainsBWithNonZeroOffset(): void
+    {
+        // 10.0.0.0/24 vs 10.0.0.128/25 — second network has bit 7 set (was returning 'none' pre-v3.6.2)
+        $this->assertSame('a_contains_b', cidrs_overlap('10.0.0.0/24', '10.0.0.128/25'));
+        $this->assertSame('b_contains_a', cidrs_overlap('10.0.0.128/25', '10.0.0.0/24'));
+    }
+
+    public function testCidrsOverlapDifferentBaseAddresses(): void
+    {
+        // /22 containing /24 at offset 2.0
+        $this->assertSame('a_contains_b', cidrs_overlap('10.0.0.0/22', '10.0.2.0/24'));
+        $this->assertSame('b_contains_a', cidrs_overlap('10.0.2.0/24', '10.0.0.0/22'));
+    }
+
+    public function testCidrsOverlapNoneWithDifferentBases(): void
+    {
+        // /22 vs /24 in DIFFERENT /22 — should not overlap
+        $this->assertSame('none', cidrs_overlap('10.0.0.0/22', '10.0.4.0/24'));
+    }
 }

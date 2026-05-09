@@ -1,6 +1,6 @@
 // Subnet Calculator — Service Worker
 // Caches the app shell for offline access. Bump CACHE_NAME on each release.
-const CACHE_NAME   = 'sc-v3.6.1';
+const CACHE_NAME   = 'sc-v3.6.2';
 const CACHE_PREFIX = 'sc-v';
 
 // Scope-relative paths — work in both root and subdir installs
