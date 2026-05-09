@@ -37,6 +37,9 @@ require_once $base . 'functions-isatap.php';
 // phpcs:disable PSR1.Files.SideEffects -- module include for compute_6rd_delegation()/extract_6rd_ipv4().
 require_once $base . 'functions-6rd.php';
 // phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for nat64_embed()/nat64_extract()/dns64_synthesize().
+require_once $base . 'functions-nat64.php';
+// phpcs:enable PSR1.Files.SideEffects
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require_once $base . 'functions-resolve.php';
@@ -128,6 +131,7 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/teredo',
             'POST /api/v1/isatap',
             'POST /api/v1/6rd',
+            'POST /api/v1/nat64',
             'POST /api/v1/bulk',
             'POST /api/v1/sessions',
             'GET  /api/v1/sessions/{id}',
@@ -269,6 +273,9 @@ switch ($route_key) {
         break;
     case 'POST /6rd':
         require __DIR__ . '/handlers/6rd.php';
+        break;
+    case 'POST /nat64':
+        require __DIR__ . '/handlers/nat64.php';
         break;
     case 'POST /bulk':
         require __DIR__ . '/handlers/bulk.php';

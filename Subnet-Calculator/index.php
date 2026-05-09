@@ -29,6 +29,9 @@ require_once __DIR__ . '/includes/functions-isatap.php';
 // phpcs:disable PSR1.Files.SideEffects -- module include for compute_6rd_delegation()/extract_6rd_ipv4().
 require_once __DIR__ . '/includes/functions-6rd.php';
 // phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for nat64_embed()/nat64_extract()/dns64_synthesize().
+require_once __DIR__ . '/includes/functions-nat64.php';
+// phpcs:enable PSR1.Files.SideEffects
 require __DIR__ . '/includes/functions-tree.php';
 require __DIR__ . '/includes/functions-tree-diff.php';
 require __DIR__ . '/includes/functions-lookup.php';

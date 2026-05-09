@@ -90,10 +90,10 @@ final class EmbeddedV4Test extends TestCase
 
     public function test_detail_routes_per_scheme(): void
     {
-        // Per-scheme drawers land incrementally across v3.5.0. As of T5
-        // (#394) 6to4, Teredo, and ISATAP have shipped; mapped/compatible/
-        // nat64-wkp detail_routes stay null until T6–T7. This test pins
-        // the contract so each future wiring touch is deliberate.
+        // Per-scheme drawers land incrementally across v3.5.0. As of T7
+        // (#391) 6to4, Teredo, ISATAP, and NAT64 well-known prefix have
+        // shipped; mapped/compatible detail_routes stay null. This test
+        // pins the contract so each future wiring touch is deliberate.
         $sixToFour = detect_embedded_v4('2002:c000:0201::');
         $this->assertSame('/ipv6/6to4', $sixToFour['detail_route']);
 
@@ -107,7 +107,7 @@ final class EmbeddedV4Test extends TestCase
         $this->assertSame('/ipv6/teredo', $teredo['detail_route']);
 
         $nat64Wkp = detect_embedded_v4('64:ff9b::192.0.2.1');
-        $this->assertNull($nat64Wkp['detail_route']);
+        $this->assertSame('/ipv6/mapped6', $nat64Wkp['detail_route']);
 
         $isatap = detect_embedded_v4('2001:db8::200:5efe:c000:201');
         $this->assertSame('/ipv6/isatap', $isatap['detail_route']);
