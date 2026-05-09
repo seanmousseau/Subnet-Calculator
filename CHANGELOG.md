@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   breakdown (offsets, M-bit, per-fragment payload), and surfaces
   RFC 8200 §5 minimum link MTU (1280) warnings. Supports extension
   header overhead accounting. (#399)
+- **A11y assertions for the 4 new IPv6 multicast drawers** (`multicast`,
+  `ssm`, `embedded-rp`, `pmtu`).
+- **Bulk endpoint coverage for v3.6.0 endpoints.** `items[]` mode now
+  accepts `multicast6`, `ssm6`, `embedded-rp6`, `pmtu6`.
+- **Strengthened v3.5.0 a11y tests** with tab-order, focus-return-after-ESC,
+  and prefers-reduced-motion assertions across the 9 v3.5.0 drawers.
 
 ## [3.5.1] - 2026-05-09
 

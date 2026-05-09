@@ -39,6 +39,11 @@ const BULK_SUPPORTED_OPS = [
     'prefix-plan6',
     'nibble6',
     'rfc3531',
+    // v3.6.0
+    'multicast6',
+    'ssm6',
+    'embedded-rp6',
+    'pmtu6',
 ];
 
 /**
@@ -118,6 +123,14 @@ function bulk_dispatch_one($item): array
                 return _bulk_op_nibble6($params);
             case 'rfc3531':
                 return _bulk_op_rfc3531($params);
+            case 'multicast6':
+                return _bulk_op_multicast6($params);
+            case 'ssm6':
+                return _bulk_op_ssm6($params);
+            case 'embedded-rp6':
+                return _bulk_op_embedded_rp6($params);
+            case 'pmtu6':
+                return _bulk_op_pmtu6($params);
         }
     } catch (\InvalidArgumentException $e) {
         return ['op' => $op, 'ok' => false, 'error' => $e->getMessage()];
@@ -773,5 +786,219 @@ function _bulk_op_rfc3531(array $p): array
         'reservation_bits' => $r['reservation_bits'],
         'allocation_order' => $r['allocation_order'],
         'children'         => $r['children'],
+    ];
+}
+
+// ── v3.6.0 adapters ──────────────────────────────────────────────────────────
+
+/**
+ * @param array<string, mixed> $p
+ * @return array<string, mixed>
+ */
+function _bulk_op_multicast6(array $p): array
+{
+    $input = isset($p['ipv6']) && is_string($p['ipv6']) ? trim($p['ipv6']) : '';
+    if ($input === '') {
+        throw new \InvalidArgumentException('Field "ipv6" is required.');
+    }
+    $r = decode_multicast($input);
+    return [
+        'op'           => 'multicast6',
+        'ok'           => true,
+        'input'        => $input,
+        'address'      => $r['address'],
+        'scope'        => $r['scope'],
+        'scope_name'   => $r['scope_name'],
+        'flags'        => $r['flags'],
+        'transient'    => $r['transient'],
+        'prefix_based' => $r['prefix_based'],
+        'embedded_rp'  => $r['embedded_rp'],
+        'group_id'     => $r['group_id'],
+        'scheme'       => $r['scheme'],
+        'detail_route' => $r['detail_route'],
+        'well_known'   => $r['well_known'],
+    ];
+}
+
+/**
+ * @param array<string, mixed> $p
+ * @return array<string, mixed>
+ */
+function _bulk_op_ssm6(array $p): array
+{
+    $mode = isset($p['mode']) && is_string($p['mode']) ? strtolower(trim($p['mode'])) : 'encode';
+    if ($mode === '') {
+        $mode = 'encode';
+    }
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        throw new \InvalidArgumentException('Field "mode" must be "encode" or "decode".');
+    }
+
+    if ($mode === 'encode') {
+        $prefix = isset($p['unicast_prefix']) && is_string($p['unicast_prefix'])
+            ? trim($p['unicast_prefix']) : '';
+        if ($prefix === '') {
+            throw new \InvalidArgumentException('Field "unicast_prefix" is required when mode=encode.');
+        }
+        if (!isset($p['scope']) || !is_int($p['scope'])) {
+            throw new \InvalidArgumentException('Field "scope" (integer 1..15) is required when mode=encode.');
+        }
+        if (!isset($p['group_id']) || !is_int($p['group_id'])) {
+            throw new \InvalidArgumentException(
+                'Field "group_id" (32-bit unsigned integer) is required when mode=encode.'
+            );
+        }
+        if ($p['group_id'] < 0 || $p['group_id'] > 0xFFFFFFFF) {
+            throw new \InvalidArgumentException('Field "group_id" must be 0..2^32-1.');
+        }
+        $r = build_ssm_group($prefix, $p['scope'], $p['group_id']);
+        return [
+            'op'             => 'ssm6',
+            'ok'             => true,
+            'mode'           => 'encode',
+            'address'        => $r['address'],
+            'scope'          => $r['scope'],
+            'prefix_length'  => $r['prefix_length'],
+            'unicast_prefix' => $r['unicast_prefix'],
+            'group_id'       => $r['group_id'],
+        ];
+    }
+
+    $v6 = isset($p['ipv6']) && is_string($p['ipv6']) ? trim($p['ipv6']) : '';
+    if ($v6 === '') {
+        throw new \InvalidArgumentException('Field "ipv6" is required when mode=decode.');
+    }
+    $r = decode_ssm_group($v6);
+    return [
+        'op'             => 'ssm6',
+        'ok'             => true,
+        'mode'           => 'decode',
+        'input'          => $v6,
+        'address'        => $r['address'],
+        'scope'          => $r['scope'],
+        'prefix_length'  => $r['prefix_length'],
+        'unicast_prefix' => $r['unicast_prefix'],
+        'group_id'       => $r['group_id'],
+    ];
+}
+
+/**
+ * @param array<string, mixed> $p
+ * @return array<string, mixed>
+ */
+function _bulk_op_embedded_rp6(array $p): array
+{
+    $mode = isset($p['mode']) && is_string($p['mode']) ? strtolower(trim($p['mode'])) : 'encode';
+    if ($mode === '') {
+        $mode = 'encode';
+    }
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        throw new \InvalidArgumentException('Field "mode" must be "encode" or "decode".');
+    }
+
+    if ($mode === 'encode') {
+        $rp_addr = isset($p['rp_address']) && is_string($p['rp_address']) ? trim($p['rp_address']) : '';
+        if ($rp_addr === '') {
+            throw new \InvalidArgumentException('Field "rp_address" is required when mode=encode.');
+        }
+        if (!isset($p['rp_prefix_length']) || !is_int($p['rp_prefix_length'])) {
+            throw new \InvalidArgumentException(
+                'Field "rp_prefix_length" (integer 0..64) is required when mode=encode.'
+            );
+        }
+        if (!isset($p['riid']) || !is_int($p['riid'])) {
+            throw new \InvalidArgumentException('Field "riid" (integer 0..15) is required when mode=encode.');
+        }
+        if (!isset($p['scope']) || !is_int($p['scope'])) {
+            throw new \InvalidArgumentException('Field "scope" (integer 1..15) is required when mode=encode.');
+        }
+        if (!isset($p['group_id']) || !is_int($p['group_id'])) {
+            throw new \InvalidArgumentException(
+                'Field "group_id" (32-bit unsigned integer) is required when mode=encode.'
+            );
+        }
+        if ($p['group_id'] < 0 || $p['group_id'] > 0xFFFFFFFF) {
+            throw new \InvalidArgumentException('Field "group_id" must be 0..2^32-1.');
+        }
+        $r = build_embedded_rp_group(
+            $rp_addr,
+            $p['rp_prefix_length'],
+            $p['riid'],
+            $p['scope'],
+            $p['group_id']
+        );
+        return [
+            'op'               => 'embedded-rp6',
+            'ok'               => true,
+            'mode'             => 'encode',
+            'address'          => $r['address'],
+            'scope'            => $r['scope'],
+            'rp_prefix'        => $r['rp_prefix'],
+            'rp_prefix_length' => $r['rp_prefix_length'],
+            'rp_address'       => $r['rp_address'],
+            'riid'             => $r['riid'],
+            'group_id'         => $r['group_id'],
+        ];
+    }
+
+    $v6 = isset($p['ipv6']) && is_string($p['ipv6']) ? trim($p['ipv6']) : '';
+    if ($v6 === '') {
+        throw new \InvalidArgumentException('Field "ipv6" is required when mode=decode.');
+    }
+    $r = decode_embedded_rp_group($v6);
+    return [
+        'op'               => 'embedded-rp6',
+        'ok'               => true,
+        'mode'             => 'decode',
+        'input'            => $v6,
+        'address'          => $r['address'],
+        'scope'            => $r['scope'],
+        'rp_prefix'        => $r['rp_prefix'],
+        'rp_prefix_length' => $r['rp_prefix_length'],
+        'rp_address'       => $r['rp_address'],
+        'riid'             => $r['riid'],
+        'group_id'         => $r['group_id'],
+    ];
+}
+
+/**
+ * @param array<string, mixed> $p
+ * @return array<string, mixed>
+ */
+function _bulk_op_pmtu6(array $p): array
+{
+    if (!isset($p['path_mtu']) || !is_int($p['path_mtu'])) {
+        throw new \InvalidArgumentException('Field "path_mtu" (positive integer) is required.');
+    }
+    if (!isset($p['payload_size']) || !is_int($p['payload_size'])) {
+        throw new \InvalidArgumentException('Field "payload_size" (non-negative integer) is required.');
+    }
+    $ext = [];
+    if (array_key_exists('extension_headers', $p) && $p['extension_headers'] !== null) {
+        if (!is_array($p['extension_headers'])) {
+            throw new \InvalidArgumentException('Field "extension_headers" must be an array of integers.');
+        }
+        foreach ($p['extension_headers'] as $h) {
+            if (!is_int($h)) {
+                throw new \InvalidArgumentException('Field "extension_headers" must be an array of integers.');
+            }
+            $ext[] = $h;
+        }
+    }
+    $r = pmtu_compute($p['path_mtu'], $p['payload_size'], $ext);
+    return [
+        'op'                  => 'pmtu6',
+        'ok'                  => true,
+        'path_mtu'            => $r['path_mtu'],
+        'meets_minimum'       => $r['meets_minimum'],
+        'fixed_header'        => $r['fixed_header'],
+        'extension_overhead'  => $r['extension_overhead'],
+        'total_overhead'      => $r['total_overhead'],
+        'effective_payload'   => $r['effective_payload'],
+        'payload_size'        => $r['payload_size'],
+        'needs_fragmentation' => $r['needs_fragmentation'],
+        'fragment_count'      => $r['fragment_count'],
+        'fragments'           => $r['fragments'],
+        'notes'               => $r['notes'],
     ];
 }
