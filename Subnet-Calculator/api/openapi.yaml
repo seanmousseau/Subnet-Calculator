@@ -87,6 +87,8 @@ tags:
     description: IPv6 multicast scope decoder (RFC 4291 §2.7) — front door for the v3.6.0 multicast tools (scope, flags, scheme, well-known group lookup, deep-link to SSM and embedded-RP)
   - name: Ssm6
     description: SSM / unicast-prefix-based IPv6 multicast (RFC 3306 / RFC 4607) — bidirectional encode/decode of FF3x::/12 group addresses with embedded unicast prefix and 32-bit group ID
+  - name: EmbeddedRp6
+    description: Embedded-RP IPv6 multicast (RFC 3956) — bidirectional encode/decode of FF7x::/12 group addresses with the Rendezvous Point address and 4-bit RIID embedded directly in the group
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -383,6 +385,7 @@ paths:
                     - "POST /api/v1/nat64"
                     - "POST /api/v1/multicast6"
                     - "POST /api/v1/ssm6"
+                    - "POST /api/v1/embedded-rp6"
                     - "POST /api/v1/bulk"
                     - "POST /api/v1/range/ipv4"
                     - "POST /api/v1/range6"
@@ -3426,6 +3429,182 @@ paths:
                   group_id: 305419896
         "400":
           description: Missing field or invalid SSM input
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /embedded-rp6:
+    post:
+      operationId: embeddedRp6Build
+      tags: [EmbeddedRp6]
+      summary: Build or decode an embedded-RP multicast group (RFC 3956)
+      description: |
+        Bidirectional tool for the FF7x::/12 embedded-RP multicast range.
+        Encodes the Rendezvous Point address + RP prefix length + 4-bit
+        RIID + scope + 32-bit group ID into an embedded-RP group address,
+        or reverses the process. The flag nibble is fixed at 0x7
+        (R + P + T); SSM-only groups (P + T = 0x3) are deliberately
+        rejected and routed to the SSM tool. The RP prefix length is
+        restricted to 0..64 because only the upper 64 bits of the RP
+        prefix fit in the multicast address per RFC 3956 §4.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [mode, rp_address, rp_prefix_length, riid, scope, group_id]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [encode]
+                    rp_address:
+                      type: string
+                      description: Rendezvous Point IPv6 address. Only the upper bits selected by `rp_prefix_length` are encoded; the host suffix is replaced by `riid`.
+                      example: "2001:db8:cafe::1"
+                    rp_prefix_length:
+                      type: integer
+                      minimum: 0
+                      maximum: 64
+                      example: 48
+                    riid:
+                      type: integer
+                      minimum: 0
+                      maximum: 15
+                      description: 4-bit RP interface ID.
+                      example: 1
+                    scope:
+                      type: integer
+                      minimum: 1
+                      maximum: 15
+                      example: 14
+                    group_id:
+                      type: integer
+                      minimum: 0
+                      maximum: 4294967295
+                      example: 305419896
+                - type: object
+                  required: [mode, ipv6]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [decode]
+                    ipv6:
+                      type: string
+                      description: An embedded-RP multicast address in FF7x::/12.
+                      example: "ff7e:130:2001:db8:cafe:0:1234:5678"
+            examples:
+              encode-rfc-3956-example:
+                summary: RFC 3956 worked example (encode)
+                value:
+                  mode: encode
+                  rp_address: "2001:db8:cafe::1"
+                  rp_prefix_length: 48
+                  riid: 1
+                  scope: 14
+                  group_id: 305419896
+              decode-round-trip:
+                summary: Round-trip decode of the worked example
+                value: { mode: decode, ipv6: "ff7e:130:2001:db8:cafe:0:1234:5678" }
+      responses:
+        "200":
+          description: Built or decoded embedded-RP multicast group
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required:
+                          - mode
+                          - address
+                          - scope
+                          - rp_prefix
+                          - rp_prefix_length
+                          - rp_address
+                          - riid
+                          - group_id
+                        properties:
+                          mode:
+                            type: string
+                            enum: [encode, decode]
+                            example: encode
+                          input:
+                            type: string
+                            description: Echoed input string (decode mode only).
+                            example: "ff7e:130:2001:db8:cafe:0:1234:5678"
+                          address:
+                            type: string
+                            description: Canonical compressed lowercase embedded-RP group address.
+                            example: "ff7e:130:2001:db8:cafe:0:1234:5678"
+                          scope:
+                            type: integer
+                            minimum: 1
+                            maximum: 15
+                            example: 14
+                          rp_prefix:
+                            type: string
+                            description: Canonical lowercase RP prefix with host bits zeroed.
+                            example: "2001:db8:cafe::"
+                          rp_prefix_length:
+                            type: integer
+                            minimum: 0
+                            maximum: 64
+                            example: 48
+                          rp_address:
+                            type: string
+                            description: Canonical RP address reconstructed as `<rp_prefix>::<riid>`.
+                            example: "2001:db8:cafe::1"
+                          riid:
+                            type: integer
+                            minimum: 0
+                            maximum: 15
+                            example: 1
+                          group_id:
+                            type: integer
+                            minimum: 0
+                            maximum: 4294967295
+                            example: 305419896
+              example:
+                ok: true
+                data:
+                  mode: encode
+                  address: "ff7e:130:2001:db8:cafe:0:1234:5678"
+                  scope: 14
+                  rp_prefix: "2001:db8:cafe::"
+                  rp_prefix_length: 48
+                  rp_address: "2001:db8:cafe::1"
+                  riid: 1
+                  group_id: 305419896
+        "400":
+          description: Missing field or invalid embedded-RP input
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }

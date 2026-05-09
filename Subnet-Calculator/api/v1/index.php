@@ -52,6 +52,9 @@ require_once $base . 'functions-multicast6.php';
 // phpcs:disable PSR1.Files.SideEffects -- module include for build_ssm_group()/decode_ssm_group().
 require_once $base . 'functions-ssm6.php';
 // phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for build_embedded_rp_group()/decode_embedded_rp_group().
+require_once $base . 'functions-embedded-rp6.php';
+// phpcs:enable PSR1.Files.SideEffects
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require_once $base . 'functions-resolve.php';
@@ -149,6 +152,7 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/rfc3531',
             'POST /api/v1/multicast6',
             'POST /api/v1/ssm6',
+            'POST /api/v1/embedded-rp6',
             'POST /api/v1/bulk',
             'POST /api/v1/sessions',
             'GET  /api/v1/sessions/{id}',
@@ -308,6 +312,9 @@ switch ($route_key) {
         break;
     case 'POST /ssm6':
         require __DIR__ . '/handlers/ssm6.php';
+        break;
+    case 'POST /embedded-rp6':
+        require __DIR__ . '/handlers/embedded-rp6.php';
         break;
     case 'POST /bulk':
         require __DIR__ . '/handlers/bulk.php';

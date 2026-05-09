@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SSM / unicast-prefix-based multicast (RFC 3306).** Build and decode
   `FF3x::/12` group addresses with embedded unicast prefix. Composes
   with the multicast scope decoder via deep-link. (#398)
+- **Embedded-RP multicast (RFC 3956).** Build and decode `FF7x::/12`
+  multicast groups with embedded RP address and RIID. Composes with
+  the multicast scope decoder via deep-link. (#397)
 
 ## [3.5.1] - 2026-05-09
 
