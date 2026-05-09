@@ -31,6 +31,9 @@ require $base . 'functions-mapped6.php';
 require $base . 'functions-embedded-v4.php';
 require $base . 'functions-6to4.php';
 require_once $base . 'functions-teredo.php';
+// phpcs:disable PSR1.Files.SideEffects -- module include for ipv4_to_isatap_iid()/decode_isatap_iid().
+require_once $base . 'functions-isatap.php';
+// phpcs:enable PSR1.Files.SideEffects
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require_once $base . 'functions-resolve.php';
@@ -120,6 +123,7 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/embedded-v4',
             'POST /api/v1/6to4',
             'POST /api/v1/teredo',
+            'POST /api/v1/isatap',
             'POST /api/v1/bulk',
             'POST /api/v1/sessions',
             'GET  /api/v1/sessions/{id}',
@@ -255,6 +259,9 @@ switch ($route_key) {
         break;
     case 'POST /teredo':
         require __DIR__ . '/handlers/teredo.php';
+        break;
+    case 'POST /isatap':
+        require __DIR__ . '/handlers/isatap.php';
         break;
     case 'POST /bulk':
         require __DIR__ . '/handlers/bulk.php';

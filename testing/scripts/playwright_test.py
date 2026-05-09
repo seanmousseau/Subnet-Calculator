@@ -3382,6 +3382,161 @@ async def test_ipv6_teredo_ui(page: Page) -> None:
                 await open_link.count() >= 1)
 
 
+async def test_api_isatap(page: Page) -> None:
+    section("API — POST /api/v1/isatap")
+
+    # Encode mode — public IPv4 → globally-unique IID auto-detect.
+    status, data = _api_post("isatap", {"mode": "encode", "ipv4": "192.0.2.1"})
+    assert_eq("api isatap encode: HTTP 200", status, 200)
+    assert_eq("api isatap encode: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api isatap encode: mode", d.get("mode"), "encode")
+    assert_eq("api isatap encode: iid", d.get("iid"), "200:5efe:c000:201")
+    assert_eq("api isatap encode: globally_unique=true", d.get("globally_unique"), True)
+
+    # Encode mode — private IPv4 → locally-administered.
+    status2, data2 = _api_post("isatap", {"mode": "encode", "ipv4": "10.0.0.1"})
+    assert_eq("api isatap encode (private): HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api isatap encode (private): iid", d2.get("iid"), "0:5efe:a00:1")
+    assert_eq("api isatap encode (private): globally_unique=false",
+              d2.get("globally_unique"), False)
+
+    # Encode with explicit globally_unique=false override.
+    status3, data3 = _api_post("isatap", {
+        "mode": "encode", "ipv4": "192.0.2.1", "globally_unique": False,
+    })
+    assert_eq("api isatap encode (forced local): HTTP 200", status3, 200)
+    assert_eq("api isatap encode (forced local): iid",
+              data3.get("data", {}).get("iid"), "0:5efe:c000:201")
+
+    # Decode mode — round-trip.
+    status4, data4 = _api_post("isatap", {"mode": "decode", "iid": "200:5efe:c000:201"})
+    assert_eq("api isatap decode: HTTP 200", status4, 200)
+    d4 = data4.get("data", {})
+    assert_eq("api isatap decode: ipv4", d4.get("ipv4"), "192.0.2.1")
+    assert_eq("api isatap decode: globally_unique", d4.get("globally_unique"), True)
+
+    # Decode rejects non-ISATAP IID.
+    status5, _ = _api_post("isatap", {"mode": "decode", "iid": "feed:beef:cafe:1"})
+    assert_eq("api isatap decode: non-ISATAP → 400", status5, 400)
+
+    # Decode rejects garbage.
+    status6, _ = _api_post("isatap", {"mode": "decode", "iid": "not-an-iid"})
+    assert_eq("api isatap decode: garbage → 400", status6, 400)
+
+    # Encode rejects bad IPv4.
+    status7, _ = _api_post("isatap", {"mode": "encode", "ipv4": "not-an-ip"})
+    assert_eq("api isatap encode: invalid IPv4 → 400", status7, 400)
+
+    # Missing required fields.
+    status8, _ = _api_post("isatap", {"mode": "encode"})
+    assert_eq("api isatap encode: missing ipv4 → 400", status8, 400)
+    status9, _ = _api_post("isatap", {"mode": "decode"})
+    assert_eq("api isatap decode: missing iid → 400", status9, 400)
+
+    # Invalid mode.
+    status10, _ = _api_post("isatap", {"mode": "bogus", "ipv4": "192.0.2.1"})
+    assert_eq("api isatap: invalid mode → 400", status10, 400)
+
+    # embedded-v4 detector now deep-links ISATAP to /ipv6/isatap (T5 contract).
+    status11, data11 = _api_post("embedded-v4",
+                                 {"input": "2001:db8::200:5efe:c000:201"})
+    assert_eq("api embedded-v4 (isatap): HTTP 200", status11, 200)
+    ev4 = data11.get("data", {})
+    assert_eq("api embedded-v4 (isatap): detail_route is /ipv6/isatap",
+              ev4.get("detail_route"), "/ipv6/isatap")
+    assert_eq("api embedded-v4 (isatap): extra.ipv4 from decoder",
+              ev4.get("extra", {}).get("ipv4"), "192.0.2.1")
+    assert_eq("api embedded-v4 (isatap): extra.globally_unique from decoder",
+              ev4.get("extra", {}).get("globally_unique"), True)
+
+
+async def test_ipv6_isatap_ui(page: Page) -> None:
+    section("IPv6 ISATAP tool UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # /ipv6/isatap should auto-open the drawer (per-tool URL routing).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=isatap")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='isatap']")
+    assert_eq("isatap UI: panel exists", await panel.count(), 1)
+
+    # Encode — IPv4 → IID.
+    await page.select_option("#isatap_mode", "encode")
+    await page.fill("#isatap_ipv4", "192.0.2.1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='isatap'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='isatap']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("isatap UI encode: IID rendered",
+                "200:5efe:c000:201" in body_text, f"body: {body_text!r}")
+    assert_true("isatap UI encode: globally-unique badge",
+                "globally-unique" in body_text, f"body: {body_text!r}")
+
+    # Copy IID.
+    await panel.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("isatap UI encode: copy IID",
+              await page.evaluate("window.__lastClipboard"),
+              "::200:5efe:c000:201")
+
+    # Decode — IID → IPv4.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=isatap")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#isatap_mode", "decode")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='isatap'] button.splitter-btn")
+    # After mode change the form re-rendered server-side; need to refill iid.
+    await page.fill("#isatap_iid", "200:5efe:c000:201")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='isatap'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='isatap']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("isatap UI decode: ipv4 rendered",
+                "192.0.2.1" in body_text, f"body: {body_text!r}")
+
+    # Error path — non-ISATAP IID.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=isatap")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#isatap_mode", "decode")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='isatap'] button.splitter-btn")
+    await page.fill("#isatap_iid", "feed:beef:cafe:1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='isatap'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='isatap']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("isatap UI: error band on non-ISATAP IID",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+    # Shareable GET URL hydrates without re-submission.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=isatap&isatap_mode=encode&isatap_ipv4=192.0.2.1")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='isatap']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("isatap UI shareable URL: IID hydrated",
+                "200:5efe:c000:201" in body_text, f"body: {body_text!r}")
+
+    # embedded-v4 detector now deep-links ISATAP to /ipv6/isatap.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=embedded-v4&embedded_v4_input=2001:db8::200:5efe:c000:201")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    ev4_panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-v4']")
+    open_link = ev4_panel.locator("a.splitter-btn[href='/ipv6/isatap']")
+    assert_true("embedded-v4 → isatap deep-link: anchor present",
+                await open_link.count() >= 1)
+
+
 async def test_api_bulk(page: Page) -> None:
     section("API — bulk calculation")
     # Two valid IPv4 CIDRs
@@ -8276,6 +8431,8 @@ async def main() -> None:
             await test_api_6to4(page)
             await test_ipv6_teredo_ui(page)
             await test_api_teredo(page)
+            await test_ipv6_isatap_ui(page)
+            await test_api_isatap(page)
             await test_a11y_ipv6_drawers(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)

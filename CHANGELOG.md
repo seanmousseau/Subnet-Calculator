@@ -24,6 +24,10 @@ as each ships.
 - **Teredo address decoder (RFC 4380).** Decode and encode `2001:0::/32`
   Teredo addresses (server v4, flags incl. cone bit, XOR'd UDP port,
   XOR'd client v4). Help text notes operational status. (#393)
+- **ISATAP interface-ID helper (RFC 5214).** Build ISATAP IIDs from
+  IPv4 (`::0:5efe:V4ADDR` for non-global, `::200:5efe:V4ADDR` for
+  global) and decode them back. Auto-detects globally-unique vs
+  private from the IPv4 input. (#394)
 
 ## [3.4.1] - 2026-05-08
 
