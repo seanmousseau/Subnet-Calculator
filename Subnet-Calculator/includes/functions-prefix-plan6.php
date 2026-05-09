@@ -12,7 +12,7 @@ declare(strict_types=1);
 //
 // "contains_64s" surfaces the relationship between each child block
 // and the standard /64 LAN sizing:
-//   • child_length <= 64 → "<count>" of /64s contained (decimal or "2^N").
+//   • child_length < 64  → "2^(64-child_length)" or decimal — count of /64s contained.
 //   • child_length == 64 → "1" (the block is itself a /64).
 //   • child_length > 64  → "subset of /64" (the block is smaller than a /64).
 
@@ -75,6 +75,12 @@ function plan_prefix_delegation(
 
     if ($count < 1) {
         throw new InvalidArgumentException('Count must be at least 1: ' . $count);
+    }
+    $max_count = $GLOBALS['prefix_plan6_max_count'] ?? 256;
+    if ($count > $max_count) {
+        throw new InvalidArgumentException(
+            sprintf('count must not exceed %d: %d', $max_count, $count)
+        );
     }
     if ($start_offset < 0) {
         throw new InvalidArgumentException('Start offset must be ≥ 0: ' . $start_offset);
@@ -216,7 +222,10 @@ function prefix_plan6_format_count(\GMP $count): string
 
 /**
  * Translate a child prefix length into a description of how it relates to
- * the standard /64 LAN sizing.
+ * the standard /64 LAN sizing. Three branches:
+ *   • child_length < 64  → "2^(64-child_length)" or decimal — number of /64s contained.
+ *   • child_length == 64 → "1" — the block is itself a /64.
+ *   • child_length > 64  → "subset of /64" — the block is smaller than a /64.
  */
 function prefix_plan6_contains_64s(int $child_length): string
 {

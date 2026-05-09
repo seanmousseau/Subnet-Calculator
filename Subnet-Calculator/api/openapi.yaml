@@ -2775,6 +2775,11 @@ paths:
                 count:
                   type: integer
                   minimum: 1
+                  maximum: 256
+                  description: |
+                    Number of child prefixes to allocate. The default cap is 256;
+                    operators can raise it via the `$prefix_plan6_max_count`
+                    config token, up to a hard ceiling of 4096.
                   example: 4
                 start_offset:
                   type: integer

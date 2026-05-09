@@ -14,13 +14,17 @@ if (!is_string($raw_parent) || trim($raw_parent) === '') {
 }
 
 $raw_child_len = $body['child_length'] ?? null;
-if (!is_int($raw_child_len)) {
+if (!is_int($raw_child_len) || $raw_child_len < 1 || $raw_child_len > 128) {
     json_err('Field "child_length" (integer 1..128) is required.', 400);
 }
 
+$prefix_plan6_max = $GLOBALS['prefix_plan6_max_count'] ?? 256;
 $raw_count = $body['count'] ?? null;
-if (!is_int($raw_count)) {
-    json_err('Field "count" (positive integer) is required.', 400);
+if (!is_int($raw_count) || $raw_count < 1 || $raw_count > $prefix_plan6_max) {
+    json_err(
+        sprintf('Field "count" (integer 1..%d) is required.', $prefix_plan6_max),
+        400
+    );
 }
 
 $start_offset = 0;

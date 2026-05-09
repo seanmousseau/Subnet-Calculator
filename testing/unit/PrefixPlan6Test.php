@@ -171,4 +171,12 @@ final class PrefixPlan6Test extends TestCase
         $this->assertSame('2001:db8::/48', $r['parent']['prefix']);
         $this->assertSame(48, $r['parent']['length']);
     }
+
+    public function test_count_cap_rejects_excessive(): void
+    {
+        // Cap is loaded from $GLOBALS['prefix_plan6_max_count'] (default 256,
+        // hard ceiling 4096). 999999 is far above either bound and must throw.
+        $this->expectException(InvalidArgumentException::class);
+        plan_prefix_delegation('2001:db8::/48', 56, 999999);
+    }
 }
