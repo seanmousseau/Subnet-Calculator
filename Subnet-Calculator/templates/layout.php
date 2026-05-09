@@ -770,9 +770,10 @@ if ($i < 3) {
         elseif (!empty($isatap)) { $open_tool_ipv6 = 'isatap'; }
         elseif (!empty($sixrd)) { $open_tool_ipv6 = '6rd'; }
         elseif (!empty($prefix_plan6)) { $open_tool_ipv6 = 'prefix-plan'; }
+        elseif (!empty($nibble6)) { $open_tool_ipv6 = 'nibble'; }
         // v3.4.0 — fallback: /ipv6/<tool> rewrites to ?tool=<tool>; honour it
         // when no other GET trigger has already chosen a tool above.
-        $ipv6_tool_whitelist = ['split6','ula','range6','supernet6','zoneid','derive','slaac','lookup','diff','rdns6','mapped6','embedded-v4','6to4','teredo','isatap','6rd','prefix-plan'];
+        $ipv6_tool_whitelist = ['split6','ula','range6','supernet6','zoneid','derive','slaac','lookup','diff','rdns6','mapped6','embedded-v4','6to4','teredo','isatap','6rd','prefix-plan','nibble'];
         if ($open_tool_ipv6 === null && $active_tab === 'ipv6'
             && in_array($requested_tool, $ipv6_tool_whitelist, true)) {
             $open_tool_ipv6 = $requested_tool;
@@ -796,6 +797,7 @@ if ($i < 3) {
             <button type="button" class="tool-trigger" data-tool="isatap" aria-expanded="false">ISATAP</button>
             <button type="button" class="tool-trigger" data-tool="6rd" aria-expanded="false">6rd</button>
             <button type="button" class="tool-trigger" data-tool="prefix-plan" aria-expanded="false">Prefix Plan</button>
+            <button type="button" class="tool-trigger" data-tool="nibble" aria-expanded="false">Nibble Neighbours</button>
         </div>
 
         <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv6">
@@ -2174,6 +2176,60 @@ if ($i < 3) {
                             </tbody>
                         </table>
                         <p><small>Prefix-delegation planning is operator math, not auto-detection. The parent prefix and child length come from your delegation policy; nibble-aligned children print cleanly and align with DNS reverse zones.</small></p>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="tool-panel" data-tool="nibble">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IPv6 nibble-boundary helper<?= help_bubble('ipv6-nibble', 'For any IPv6 prefix, surface the nibble-aligned neighbours: above (≤ input length, less specific) and below (≥ input length, more specific). Useful for ip6.arpa reverse-zone delegation planning where non-nibble lengths require an explicit nibble-boundary decision.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="nibble6_prefix">IPv6 prefix<?= help_bubble('nibble-prefix', 'Any IPv6 prefix in CIDR form, e.g. 2001:db8::/49. Host bits beyond the prefix length are zeroed before the neighbours are computed.') ?></label>
+                                <input type="text" id="nibble6_prefix" name="nibble6_prefix"
+                                       value="<?= htmlspecialchars($nibble6_prefix_input ?? '') ?>"
+                                       placeholder="2001:db8::/49"
+                                       autocomplete="off" spellcheck="false"
+                                       <?= !empty($nibble6['error']) ? 'aria-invalid="true" aria-describedby="nibble6-error"' : '' ?>>
+                            </div>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Find neighbours</button>
+                        </div>
+                    </form>
+                    <?php if (!empty($nibble6['error'])) : ?>
+                        <div class="error" id="nibble6-error"><?= htmlspecialchars((string)$nibble6['error']) ?></div>
+                    <?php elseif (!empty($nibble6['result'])) : ?>
+                        <?php $_n = $nibble6['result']; ?>
+                        <dl class="zoneid-result"
+                            data-history-source="nibble6"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars('Nibble neighbours: ' . (string)$_n['input']['prefix']) ?>">
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Input prefix</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)$_n['input']['prefix']) ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Above (less specific)</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)$_n['above']['prefix']) ?></code>
+                                    <?= copy_button((string)$_n['above']['prefix'], 'Copy above prefix') ?>
+                                    <small>contains <?= htmlspecialchars((string)$_n['above']['contains_64s']) ?> /64s</small>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Below (more specific)</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)$_n['below']['prefix']) ?></code>
+                                    <?= copy_button((string)$_n['below']['prefix'], 'Copy below prefix') ?>
+                                    <small>contains <?= htmlspecialchars((string)$_n['below']['contains_64s']) ?> /64s</small>
+                                </dd>
+                            </div>
+                        </dl>
+                        <p><small>Nibble boundaries (multiples of 4) align with the per-nibble <code>ip6.arpa</code> reverse-DNS hierarchy. <em>Above</em> is the nearest nibble at-or-shorter than your input; <em>below</em> is the nearest nibble at-or-longer (capped at /128).</small></p>
                     <?php endif; ?>
                 </div>
             </div>

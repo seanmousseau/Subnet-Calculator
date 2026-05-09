@@ -136,6 +136,7 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/6rd',
             'POST /api/v1/nat64',
             'POST /api/v1/prefix-plan6',
+            'POST /api/v1/nibble6',
             'POST /api/v1/bulk',
             'POST /api/v1/sessions',
             'GET  /api/v1/sessions/{id}',
@@ -283,6 +284,9 @@ switch ($route_key) {
         break;
     case 'POST /prefix-plan6':
         require __DIR__ . '/handlers/prefix-plan6.php';
+        break;
+    case 'POST /nibble6':
+        require __DIR__ . '/handlers/nibble6.php';
         break;
     case 'POST /bulk':
         require __DIR__ . '/handlers/bulk.php';

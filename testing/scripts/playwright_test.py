@@ -4020,6 +4020,113 @@ async def test_ipv6_prefix_plan_ui(page: Page) -> None:
                 "2001:db8::/56" in body_text, f"body: {body_text!r}")
 
 
+async def test_api_nibble6(page: Page) -> None:
+    section("API — POST /api/v1/nibble6")
+
+    # /49 → above=/48, below=/52.
+    status, data = _api_post("nibble6", {"prefix": "2001:db8::/49"})
+    assert_eq("api nibble6 /49: HTTP 200", status, 200)
+    assert_eq("api nibble6 /49: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api nibble6 /49: input length",
+              d.get("input", {}).get("length"), 49)
+    assert_eq("api nibble6 /49: above length",
+              d.get("above", {}).get("length"), 48)
+    assert_eq("api nibble6 /49: below length",
+              d.get("below", {}).get("length"), 52)
+    assert_eq("api nibble6 /49: above prefix",
+              d.get("above", {}).get("prefix"), "2001:db8::/48")
+    assert_eq("api nibble6 /49: below prefix",
+              d.get("below", {}).get("prefix"), "2001:db8::/52")
+    assert_eq("api nibble6 /49: above contains_64s",
+              d.get("above", {}).get("contains_64s"), "65536")
+    assert_eq("api nibble6 /49: below contains_64s",
+              d.get("below", {}).get("contains_64s"), "4096")
+
+    # Already-aligned input — /48 stays /48 above, advances to /52 below.
+    status2, data2 = _api_post("nibble6", {"prefix": "2001:db8::/48"})
+    assert_eq("api nibble6 /48: HTTP 200", status2, 200)
+    assert_eq("api nibble6 /48: above stays at /48",
+              data2.get("data", {}).get("above", {}).get("prefix"), "2001:db8::/48")
+    assert_eq("api nibble6 /48: below = /52",
+              data2.get("data", {}).get("below", {}).get("prefix"), "2001:db8::/52")
+
+    # /128 — both collapse.
+    status3, data3 = _api_post("nibble6", {"prefix": "2001:db8::1/128"})
+    assert_eq("api nibble6 /128: HTTP 200", status3, 200)
+    assert_eq("api nibble6 /128: below caps at /128",
+              data3.get("data", {}).get("below", {}).get("length"), 128)
+
+    # Invalid: missing field.
+    status4, _ = _api_post("nibble6", {})
+    assert_eq("api nibble6 missing field → 400", status4, 400)
+
+    # Invalid: unparseable address.
+    status5, _ = _api_post("nibble6", {"prefix": "not-an-address/48"})
+    assert_eq("api nibble6 invalid address → 400", status5, 400)
+
+
+async def test_ipv6_nibble_ui(page: Page) -> None:
+    section("IPv6 nibble-boundary helper UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # /ipv6/nibble should auto-open the drawer (per-tool URL routing).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=nibble")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='nibble']")
+    assert_eq("nibble UI: panel exists", await panel.count(), 1)
+
+    # Compute neighbours of /49.
+    await page.fill("#nibble6_prefix", "2001:db8::/49")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='nibble'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='nibble']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("nibble UI: above /48 rendered",
+                "2001:db8::/48" in body_text, f"body: {body_text!r}")
+    assert_true("nibble UI: below /52 rendered",
+                "2001:db8::/52" in body_text, f"body: {body_text!r}")
+
+    # Copy the above prefix.
+    await panel.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("nibble UI: copy above prefix",
+              await page.evaluate("window.__lastClipboard"),
+              "2001:db8::/48")
+
+    # Error path — missing prefix length.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=nibble")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#nibble6_prefix", "2001:db8::")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='nibble'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='nibble']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("nibble UI: error band on missing length",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+    # Shareable GET URL hydrates without re-submission.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=nibble"
+                   "&nibble6_prefix=2001:db8::/49")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='nibble']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("nibble UI shareable URL: hydrated",
+                "2001:db8::/48" in body_text and "2001:db8::/52" in body_text,
+                f"body: {body_text!r}")
+
+
 async def test_api_bulk(page: Page) -> None:
     section("API — bulk calculation")
     # Two valid IPv4 CIDRs
@@ -8922,6 +9029,8 @@ async def main() -> None:
             await test_api_nat64(page)
             await test_ipv6_prefix_plan_ui(page)
             await test_api_prefix_plan6(page)
+            await test_ipv6_nibble_ui(page)
+            await test_api_nibble6(page)
             await test_a11y_ipv6_drawers(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)

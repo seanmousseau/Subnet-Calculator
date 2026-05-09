@@ -940,6 +940,39 @@ function sc_run_prefix_plan6(
     }
 }
 
+// ─── Nibble6 helper (shared by POST handler and GET shareable URL) ──────────
+
+/**
+ * Run nibble_neighbours() against a single user-supplied prefix and return
+ * an associative array mirroring sc_run_prefix_plan6(): empty on no input,
+ * `error` on failure, `result` on success. Shared by the POST handler and
+ * the GET shareable-URL hydration path. (v3.5.0 Task 9)
+ *
+ * @return array{
+ *     prefix_input?: string,
+ *     result?: array{
+ *         input: array{prefix: string, length: int},
+ *         above: array{length: int, prefix: string, contains_64s: string},
+ *         below: array{length: int, prefix: string, contains_64s: string},
+ *     },
+ *     error?: string|null
+ * }
+ */
+function sc_run_nibble6(string $prefix_input): array
+{
+    $prefix = trim($prefix_input);
+    if ($prefix === '') {
+        return [];
+    }
+    $base = ['prefix_input' => $prefix];
+    try {
+        $r = nibble_neighbours($prefix);
+        return $base + ['result' => $r, 'error' => null];
+    } catch (\InvalidArgumentException $e) {
+        return $base + ['error' => $e->getMessage()];
+    }
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -1130,6 +1163,11 @@ $sixrd_ipv6_input       = '';
 /** @var array{mode?: 'encode'|'decode', sp_ipv6_prefix?: string, sp_ipv4_mask_len?: int, ipv4?: string, ipv6?: string, prefix?: string, prefix_length?: int, error?: string|null} */
 $sixrd = [];
 
+// v3.5.0 Task 9 — IPv6 nibble-boundary helper
+$nibble6_prefix_input = '';
+/** @var array{prefix_input?: string, result?: array{input: array{prefix: string, length: int}, above: array{length: int, prefix: string, contains_64s: string}, below: array{length: int, prefix: string, contains_64s: string}}, error?: string|null} */
+$nibble6 = [];
+
 // v3.5.0 Task 8 — IPv6 prefix-delegation planner
 $prefix_plan6_parent_input        = '';
 $prefix_plan6_child_length_input  = '';
@@ -1223,6 +1261,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_prefix_plan6  = isset($_POST['prefix_plan6_parent'])
         || isset($_POST['prefix_plan6_child_length'])
         || isset($_POST['prefix_plan6_count']);
+    $is_nibble6       = isset($_POST['nibble6_prefix']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -1232,7 +1271,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid
         || $is_derive || $is_slaac || $is_rdns6 || $is_mapped6 || $is_embedded_v4
         || $is_sixtofour || $is_teredo || $is_isatap || $is_sixrd || $is_nat64
-        || $is_prefix_plan6;
+        || $is_prefix_plan6
+        || $is_nibble6;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -1737,6 +1777,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nat64_ipv6_input,
             $nat64_a_record_input
         );
+    }
+
+    if ($is_nibble6 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $nibble6_prefix_input = trim((string)($_POST['nibble6_prefix'] ?? ''));
+        $nibble6              = sc_run_nibble6($nibble6_prefix_input);
     }
 
     if ($is_prefix_plan6 && !$form_blocked) {
@@ -2292,6 +2338,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $prefix_plan6_start_offset_input,
             $prefix_plan6_nibble_align
         );
+    }
+
+    // Nibble-boundary helper shareable GET URL (v3.5.0 Task 9)
+    if ($active_tab === 'ipv6' && isset($_GET['nibble6_prefix'])) {
+        $nibble6_prefix_input = trim((string)($_GET['nibble6_prefix'] ?? ''));
+        $nibble6              = sc_run_nibble6($nibble6_prefix_input);
     }
 
     // Supernet6 / summarise6 shareable GET URL (v3.3.0)
