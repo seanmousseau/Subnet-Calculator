@@ -105,7 +105,7 @@ function cidrs_overlap(string $cidr_a, string $cidr_b): string
     $px_b  = (int)$px_b;
     $net_a = ip2long($ip_a) & 0xFFFFFFFF;
     $net_b = ip2long($ip_b) & 0xFFFFFFFF;
-    $test_px = max($px_a, $px_b);
+    $test_px = min($px_a, $px_b);
     $mask    = $test_px === 0 ? 0 : ((~0 << (32 - $test_px)) & 0xFFFFFFFF);
     if (($net_a & $mask) !== ($net_b & $mask)) {
         return 'none';
