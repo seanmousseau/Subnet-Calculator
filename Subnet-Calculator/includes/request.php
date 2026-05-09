@@ -867,6 +867,79 @@ function sc_run_6rd(
     }
 }
 
+// ─── Prefix-delegation planner helper (v3.5.0 Task 8) ──────────────────────
+
+/**
+ * Plan an IPv6 prefix-delegation slice. Empty/blank inputs early-return [].
+ * Shared by the POST handler and the GET shareable-URL hydration path.
+ *
+ * @return array{
+ *     parent_prefix?: string,
+ *     child_length_input?: string,
+ *     count_input?: string,
+ *     start_offset_input?: string,
+ *     nibble_align?: bool,
+ *     result?: array{
+ *         parent: array{prefix: string, length: int, total_children_str: string},
+ *         children: list<array{index: int, prefix: string, first: string, last: string, contains_64s: string}>,
+ *         free: array{remaining_str: string},
+ *         normalized_child_length: int,
+ *     },
+ *     error?: string|null
+ * }
+ */
+function sc_run_prefix_plan6(
+    string $parent_prefix_input,
+    string $child_length_input,
+    string $count_input,
+    string $start_offset_input,
+    bool $nibble_align
+): array {
+    $parent = trim($parent_prefix_input);
+    $clen   = trim($child_length_input);
+    $cnt    = trim($count_input);
+    $off    = trim($start_offset_input);
+
+    if ($parent === '' && $clen === '' && $cnt === '') {
+        return [];
+    }
+
+    $base = [
+        'parent_prefix'      => $parent,
+        'child_length_input' => $clen,
+        'count_input'        => $cnt,
+        'start_offset_input' => $off,
+        'nibble_align'       => $nibble_align,
+    ];
+
+    if ($parent === '' || $clen === '' || $cnt === '') {
+        return $base + ['error' => 'Parent prefix, child length, and count are all required.'];
+    }
+    if (!ctype_digit($clen)) {
+        return $base + ['error' => 'Child length must be an integer.'];
+    }
+    if (!ctype_digit($cnt)) {
+        return $base + ['error' => 'Count must be a positive integer.'];
+    }
+    if ($off !== '' && !ctype_digit($off)) {
+        return $base + ['error' => 'Start offset must be a non-negative integer.'];
+    }
+    $offset = $off === '' ? 0 : (int) $off;
+
+    try {
+        $r = plan_prefix_delegation(
+            $parent,
+            (int) $clen,
+            (int) $cnt,
+            $offset,
+            $nibble_align
+        );
+        return $base + ['result' => $r, 'error' => null];
+    } catch (\InvalidArgumentException $e) {
+        return $base + ['error' => $e->getMessage()];
+    }
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -1057,6 +1130,15 @@ $sixrd_ipv6_input       = '';
 /** @var array{mode?: 'encode'|'decode', sp_ipv6_prefix?: string, sp_ipv4_mask_len?: int, ipv4?: string, ipv6?: string, prefix?: string, prefix_length?: int, error?: string|null} */
 $sixrd = [];
 
+// v3.5.0 Task 8 — IPv6 prefix-delegation planner
+$prefix_plan6_parent_input        = '';
+$prefix_plan6_child_length_input  = '';
+$prefix_plan6_count_input         = '';
+$prefix_plan6_start_offset_input  = '';
+$prefix_plan6_nibble_align        = true;
+/** @var array{parent_prefix?: string, child_length_input?: string, count_input?: string, start_offset_input?: string, nibble_align?: bool, result?: array{parent: array{prefix: string, length: int, total_children_str: string}, children: list<array{index: int, prefix: string, first: string, last: string, contains_64s: string}>, free: array{remaining_str: string}, normalized_child_length: int}, error?: string|null} */
+$prefix_plan6 = [];
+
 $ula_global_id_input = '';
 /** @var array{result?: array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}, error?: string} */
 $ula = [];
@@ -1138,6 +1220,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || isset($_POST['nat64_ipv4'])
         || isset($_POST['nat64_ipv6'])
         || isset($_POST['nat64_a_record']);
+    $is_prefix_plan6  = isset($_POST['prefix_plan6_parent'])
+        || isset($_POST['prefix_plan6_child_length'])
+        || isset($_POST['prefix_plan6_count']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -1146,7 +1231,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || $is_vlsm6 || $is_supernet || $is_supernet6 || $is_ula || $is_session_save || $is_range
         || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid
         || $is_derive || $is_slaac || $is_rdns6 || $is_mapped6 || $is_embedded_v4
-        || $is_sixtofour || $is_teredo || $is_isatap || $is_sixrd || $is_nat64;
+        || $is_sixtofour || $is_teredo || $is_isatap || $is_sixrd || $is_nat64
+        || $is_prefix_plan6;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -1650,6 +1736,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nat64_ipv4_input,
             $nat64_ipv6_input,
             $nat64_a_record_input
+        );
+    }
+
+    if ($is_prefix_plan6 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $prefix_plan6_parent_input       = trim((string)($_POST['prefix_plan6_parent']       ?? ''));
+        $prefix_plan6_child_length_input = trim((string)($_POST['prefix_plan6_child_length'] ?? ''));
+        $prefix_plan6_count_input        = trim((string)($_POST['prefix_plan6_count']        ?? ''));
+        $prefix_plan6_start_offset_input = trim((string)($_POST['prefix_plan6_start_offset'] ?? ''));
+        $prefix_plan6_nibble_align       = isset($_POST['prefix_plan6_nibble_align']);
+        $prefix_plan6 = sc_run_prefix_plan6(
+            $prefix_plan6_parent_input,
+            $prefix_plan6_child_length_input,
+            $prefix_plan6_count_input,
+            $prefix_plan6_start_offset_input,
+            $prefix_plan6_nibble_align
         );
     }
 
@@ -2162,6 +2264,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nat64_ipv4_input,
             $nat64_ipv6_input,
             $nat64_a_record_input
+        );
+    }
+
+    // Prefix-delegation planner shareable GET URL (v3.5.0 Task 8)
+    if (
+        $active_tab === 'ipv6'
+        && (
+            isset($_GET['prefix_plan6_parent'])
+            || isset($_GET['prefix_plan6_child_length'])
+            || isset($_GET['prefix_plan6_count'])
+        )
+    ) {
+        $prefix_plan6_parent_input       = trim((string)($_GET['prefix_plan6_parent']       ?? ''));
+        $prefix_plan6_child_length_input = trim((string)($_GET['prefix_plan6_child_length'] ?? ''));
+        $prefix_plan6_count_input        = trim((string)($_GET['prefix_plan6_count']        ?? ''));
+        $prefix_plan6_start_offset_input = trim((string)($_GET['prefix_plan6_start_offset'] ?? ''));
+        // GET hydration accepts an explicit `=0` to mean "off"; presence with any
+        // truthy value or no value defaults to on. This mirrors how shareable
+        // URLs serialise checkbox state across the rest of the app.
+        $prefix_plan6_nibble_align = !isset($_GET['prefix_plan6_nibble_align'])
+            || (string)$_GET['prefix_plan6_nibble_align'] !== '0';
+        $prefix_plan6 = sc_run_prefix_plan6(
+            $prefix_plan6_parent_input,
+            $prefix_plan6_child_length_input,
+            $prefix_plan6_count_input,
+            $prefix_plan6_start_offset_input,
+            $prefix_plan6_nibble_align
         );
     }
 
