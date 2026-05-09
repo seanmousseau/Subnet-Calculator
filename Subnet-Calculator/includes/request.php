@@ -550,6 +550,151 @@ function sc_run_multicast6(string $address): array
     ];
 }
 
+// ─── SSM (RFC 3306) helper (shared by POST handler and GET shareable URL) ──
+
+/**
+ * Run the SSM / unicast-prefix-based multicast tool against the supplied
+ * inputs. Mode is either 'encode' (unicast prefix + scope + group_id →
+ * FF3x:: address) or 'decode' (FF3x:: address → unicast prefix + scope +
+ * group_id). Empty input returns []. (v3.6.0 Task 3, #398)
+ *
+ * @return array{
+ *     mode?: 'encode'|'decode',
+ *     input?: string,
+ *     address?: string,
+ *     scope?: int,
+ *     prefix_length?: int,
+ *     unicast_prefix?: string,
+ *     group_id?: int,
+ *     unicast_prefix_input?: string,
+ *     scope_input?: string,
+ *     group_id_input?: string,
+ *     error?: string|null
+ * }
+ */
+function sc_run_ssm6(
+    string $mode,
+    string $unicast_prefix_input,
+    string $scope_input,
+    string $group_id_input,
+    string $ipv6_input
+): array {
+    $mode = strtolower(trim($mode));
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        $mode = 'encode';
+    }
+
+    if ($mode === 'encode') {
+        $up = trim($unicast_prefix_input);
+        $sc = trim($scope_input);
+        $gi = trim($group_id_input);
+        if ($up === '' && $sc === '' && $gi === '') {
+            return [];
+        }
+        if (!ctype_digit($sc)) {
+            return [
+                'mode'                 => 'encode',
+                'unicast_prefix_input' => $up,
+                'scope_input'          => $sc,
+                'group_id_input'       => $gi,
+                'error'                => 'Scope must be an integer 1..15.',
+            ];
+        }
+        // group_id may be supplied in decimal or 0x-hex form for human convenience.
+        $gi_int = sc_ssm6_parse_group_id($gi);
+        if ($gi_int === null) {
+            return [
+                'mode'                 => 'encode',
+                'unicast_prefix_input' => $up,
+                'scope_input'          => $sc,
+                'group_id_input'       => $gi,
+                'error'                => 'Group ID must be an integer 0..2^32-1 (decimal or 0xHEX).',
+            ];
+        }
+        try {
+            $r = build_ssm_group($up, (int)$sc, $gi_int);
+            return [
+                'mode'                 => 'encode',
+                'unicast_prefix_input' => $up,
+                'scope_input'          => $sc,
+                'group_id_input'       => $gi,
+                'address'              => $r['address'],
+                'scope'                => $r['scope'],
+                'prefix_length'        => $r['prefix_length'],
+                'unicast_prefix'       => $r['unicast_prefix'],
+                'group_id'             => $r['group_id'],
+                'error'                => null,
+            ];
+        } catch (\InvalidArgumentException $e) {
+            return [
+                'mode'                 => 'encode',
+                'unicast_prefix_input' => $up,
+                'scope_input'          => $sc,
+                'group_id_input'       => $gi,
+                'error'                => $e->getMessage(),
+            ];
+        }
+    }
+
+    // decode
+    $raw = trim($ipv6_input);
+    if ($raw === '') {
+        return [];
+    }
+    try {
+        $r = decode_ssm_group($raw);
+        return [
+            'mode'           => 'decode',
+            'input'          => $raw,
+            'address'        => $r['address'],
+            'scope'          => $r['scope'],
+            'prefix_length'  => $r['prefix_length'],
+            'unicast_prefix' => $r['unicast_prefix'],
+            'group_id'       => $r['group_id'],
+            'error'          => null,
+        ];
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'mode'  => 'decode',
+            'input' => $raw,
+            'error' => $e->getMessage(),
+        ];
+    }
+}
+
+/**
+ * Parse a user-supplied group_id. Accepts decimal or 0x-hex.
+ * Returns null on parse failure or out-of-range value.
+ *
+ * @internal
+ */
+function sc_ssm6_parse_group_id(string $raw): ?int
+{
+    $s = strtolower(trim($raw));
+    if ($s === '') {
+        return null;
+    }
+    if (str_starts_with($s, '0x')) {
+        $hex = substr($s, 2);
+        if ($hex === '' || !ctype_xdigit($hex)) {
+            return null;
+        }
+        if (strlen($hex) > 8) {
+            return null;
+        }
+        return (int)hexdec($hex);
+    }
+    if (!ctype_digit($s)) {
+        return null;
+    }
+    // PHP_INT_MAX on 64-bit is comfortably above 2^32, so int cast is safe here.
+    $n = (int)$s;
+    if ($n < 0 || $n > 0xFFFFFFFF) {
+        return null;
+    }
+    return $n;
+}
+
 // ─── 6to4 helper (shared by POST handler and GET shareable URL) ─────────────
 
 /**
@@ -1295,6 +1440,15 @@ $multicast6_input = '';
 /** @var array{input?: string, address?: string, scope?: int, scope_name?: string, flags?: int, transient?: bool, prefix_based?: bool, embedded_rp?: bool, group_id?: string, scheme?: string, detail_route?: string|null, well_known?: array{name: string, rfc: string}|null, error?: string|null} */
 $multicast6 = [];
 
+// v3.6.0 Task 3 — SSM / unicast-prefix-based multicast (RFC 3306, #398)
+$ssm6_mode                 = 'encode';
+$ssm6_unicast_prefix_input = '';
+$ssm6_scope_input          = '14'; // default 0xE (global)
+$ssm6_group_id_input        = '';
+$ssm6_ipv6_input           = '';
+/** @var array{mode?: 'encode'|'decode', input?: string, address?: string, scope?: int, prefix_length?: int, unicast_prefix?: string, group_id?: int, unicast_prefix_input?: string, scope_input?: string, group_id_input?: string, error?: string|null} */
+$ssm6 = [];
+
 // v3.5.0 Task 10 — RFC 3531 sparse-allocation guidance
 $rfc3531_parent_input           = '';
 $rfc3531_reservation_bits_input = '';
@@ -1390,6 +1544,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_rfc3531       = isset($_POST['rfc3531_parent'])
         || isset($_POST['rfc3531_reservation_bits']);
     $is_multicast6    = isset($_POST['multicast6_input']);
+    $is_ssm6          = isset($_POST['ssm6_mode'])
+        || isset($_POST['ssm6_unicast_prefix'])
+        || isset($_POST['ssm6_scope'])
+        || isset($_POST['ssm6_group_id'])
+        || isset($_POST['ssm6_ipv6']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -1402,7 +1561,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || $is_prefix_plan6
         || $is_nibble6
         || $is_rfc3531
-        || $is_multicast6;
+        || $is_multicast6
+        || $is_ssm6;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -1931,6 +2091,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $active_tab = 'ipv6';
         $multicast6_input = trim((string)($_POST['multicast6_input'] ?? ''));
         $multicast6 = sc_run_multicast6($multicast6_input);
+    }
+
+    if ($is_ssm6 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $ssm6_mode = (string)($_POST['ssm6_mode'] ?? 'encode');
+        if ($ssm6_mode !== 'encode' && $ssm6_mode !== 'decode') {
+            $ssm6_mode = 'encode';
+        }
+        $ssm6_unicast_prefix_input = trim((string)($_POST['ssm6_unicast_prefix'] ?? ''));
+        $ssm6_scope_input          = trim((string)($_POST['ssm6_scope'] ?? '14'));
+        $ssm6_group_id_input       = trim((string)($_POST['ssm6_group_id'] ?? ''));
+        $ssm6_ipv6_input           = trim((string)($_POST['ssm6_ipv6'] ?? ''));
+        $ssm6 = sc_run_ssm6(
+            $ssm6_mode,
+            $ssm6_unicast_prefix_input,
+            $ssm6_scope_input,
+            $ssm6_group_id_input,
+            $ssm6_ipv6_input
+        );
     }
 
     if ($is_prefix_plan6 && !$form_blocked) {
@@ -2516,6 +2695,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($active_tab === 'ipv6' && isset($_GET['multicast6_input'])) {
         $multicast6_input = trim((string)($_GET['multicast6_input'] ?? ''));
         $multicast6 = sc_run_multicast6($multicast6_input);
+    }
+
+    // SSM / unicast-prefix-based multicast shareable GET URL (v3.6.0 Task 3, #398)
+    if (
+        $active_tab === 'ipv6'
+        && (
+            isset($_GET['ssm6_mode'])
+            || isset($_GET['ssm6_unicast_prefix'])
+            || isset($_GET['ssm6_group_id'])
+            || isset($_GET['ssm6_ipv6'])
+        )
+    ) {
+        $ssm6_mode = (string)($_GET['ssm6_mode'] ?? 'encode');
+        if ($ssm6_mode !== 'encode' && $ssm6_mode !== 'decode') {
+            $ssm6_mode = 'encode';
+        }
+        $ssm6_unicast_prefix_input = trim((string)($_GET['ssm6_unicast_prefix'] ?? ''));
+        $ssm6_scope_input          = trim((string)($_GET['ssm6_scope'] ?? '14'));
+        $ssm6_group_id_input       = trim((string)($_GET['ssm6_group_id'] ?? ''));
+        $ssm6_ipv6_input           = trim((string)($_GET['ssm6_ipv6'] ?? ''));
+        $ssm6 = sc_run_ssm6(
+            $ssm6_mode,
+            $ssm6_unicast_prefix_input,
+            $ssm6_scope_input,
+            $ssm6_group_id_input,
+            $ssm6_ipv6_input
+        );
     }
 
     // Supernet6 / summarise6 shareable GET URL (v3.3.0)

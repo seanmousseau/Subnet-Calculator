@@ -3178,6 +3178,134 @@ async def test_ipv6_multicast_ui(page: Page) -> None:
                 len(err_text) > 0, f"got: {err_text!r}")
 
 
+async def test_api_ssm6(page: Page) -> None:
+    section("API — POST /api/v1/ssm6")
+    # Encode — RFC 3306 §6 worked example.
+    status, data = _api_post("ssm6", {
+        "mode": "encode",
+        "unicast_prefix": "2001:db8::/32",
+        "scope": 14,
+        "group_id": 0x12345678,
+    })
+    assert_eq("api ssm6 encode: HTTP 200", status, 200)
+    assert_eq("api ssm6 encode: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api ssm6 encode: address",
+              d.get("address"), "ff3e:20:2001:db8::1234:5678")
+    assert_eq("api ssm6 encode: prefix_length", d.get("prefix_length"), 32)
+    assert_eq("api ssm6 encode: scope", d.get("scope"), 14)
+    assert_eq("api ssm6 encode: group_id", d.get("group_id"), 0x12345678)
+
+    # Encode with zero prefix length.
+    status_z, data_z = _api_post("ssm6", {
+        "mode": "encode",
+        "unicast_prefix": "::/0",
+        "scope": 14,
+        "group_id": 0x12345678,
+    })
+    assert_eq("api ssm6 encode (::/0): HTTP 200", status_z, 200)
+    assert_eq("api ssm6 encode (::/0): address",
+              data_z.get("data", {}).get("address"), "ff3e::1234:5678")
+
+    # Decode — round-trip.
+    status2, data2 = _api_post("ssm6", {
+        "mode": "decode",
+        "ipv6": "ff3e:20:2001:db8::1234:5678",
+    })
+    assert_eq("api ssm6 decode: HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api ssm6 decode: scope", d2.get("scope"), 14)
+    assert_eq("api ssm6 decode: prefix_length", d2.get("prefix_length"), 32)
+    assert_eq("api ssm6 decode: unicast_prefix",
+              d2.get("unicast_prefix"), "2001:db8::")
+    assert_eq("api ssm6 decode: group_id", d2.get("group_id"), 0x12345678)
+
+    # Decode rejects non-SSM input (FF02::1 has flags=0).
+    status3, _ = _api_post("ssm6", {"mode": "decode", "ipv6": "FF02::1"})
+    assert_eq("api ssm6 decode (FF02::1): non-SSM → 400", status3, 400)
+
+    # Decode rejects non-multicast input.
+    status4, _ = _api_post("ssm6", {"mode": "decode", "ipv6": "2001:db8::1"})
+    assert_eq("api ssm6 decode (non-multicast): → 400", status4, 400)
+
+    # Encode rejects prefix length > 64.
+    status5, _ = _api_post("ssm6", {
+        "mode": "encode",
+        "unicast_prefix": "2001:db8::/96",
+        "scope": 14,
+        "group_id": 1,
+    })
+    assert_eq("api ssm6 encode (/96): → 400", status5, 400)
+
+    # Encode rejects out-of-range scope.
+    status6, _ = _api_post("ssm6", {
+        "mode": "encode",
+        "unicast_prefix": "2001:db8::/32",
+        "scope": 0,
+        "group_id": 1,
+    })
+    assert_eq("api ssm6 encode (scope 0): → 400", status6, 400)
+
+    # Missing mode-specific field.
+    status7, _ = _api_post("ssm6", {"mode": "encode"})
+    assert_eq("api ssm6 encode: missing field → 400", status7, 400)
+
+
+async def test_ipv6_ssm_ui(page: Page) -> None:
+    section("IPv6 SSM tool UI")
+
+    # Drawer opens via /ipv6/ssm rewrite path used by multicast deep-link.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=ssm")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='ssm']")
+    assert_eq("ssm UI: panel exists", await panel.count(), 1)
+
+    # Encode mode (default) — submit RFC 3306 §6 worked example.
+    await page.fill("#ssm6_unicast_prefix", "2001:db8::/32")
+    await page.fill("#ssm6_scope", "14")
+    await page.fill("#ssm6_group_id", "0x12345678")
+    await page.click(
+        "#panel-ipv6 .tool-panel[data-tool='ssm'] button.splitter-btn"
+    )
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='ssm']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("ssm UI: built address rendered",
+                "ff3e:20:2001:db8::1234:5678" in body_text)
+    assert_true("ssm UI: unicast prefix rendered",
+                "2001:db8::" in body_text)
+
+    # Decode mode — submit the canonical address back.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=ssm")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#ssm6_mode", "decode")
+    # The form re-renders on submit; round-trip via shareable GET URL is
+    # the documented path. Use that here so the decode input shows up.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&tool=ssm&ssm6_mode=decode"
+        "&ssm6_ipv6=ff3e:20:2001:db8::1234:5678",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='ssm']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("ssm UI: decode group_id rendered",
+                "0x12345678" in body_text or "305419896" in body_text)
+    assert_true("ssm UI: decode unicast prefix rendered",
+                "2001:db8::" in body_text)
+
+    # Error path — non-SSM input.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&tool=ssm&ssm6_mode=decode&ssm6_ipv6=2001:db8::1",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='ssm']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("ssm UI: error band on non-SSM input",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+
 async def test_api_6to4(page: Page) -> None:
     section("API — POST /api/v1/6to4")
 
@@ -9491,6 +9619,8 @@ async def main() -> None:
             await test_api_rfc3531(page)
             await test_ipv6_multicast_ui(page)
             await test_api_multicast6(page)
+            await test_ipv6_ssm_ui(page)
+            await test_api_ssm6(page)
             await test_a11y_ipv6_drawers(page)
             # v3.5.0 (T11) — bulk endpoint coverage + a11y for the 9 new drawers
             await test_api_bulk_covers_v350_endpoints(page)
