@@ -46,6 +46,9 @@ require_once $base . 'functions-prefix-plan6.php';
 // phpcs:disable PSR1.Files.SideEffects -- module include for rfc3531_allocation_order()/rfc3531_apply().
 require_once $base . 'functions-rfc3531.php';
 // phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for decode_multicast()/multicast_well_known_registry().
+require_once $base . 'functions-multicast6.php';
+// phpcs:enable PSR1.Files.SideEffects
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require_once $base . 'functions-resolve.php';
@@ -141,6 +144,7 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/prefix-plan6',
             'POST /api/v1/nibble6',
             'POST /api/v1/rfc3531',
+            'POST /api/v1/multicast6',
             'POST /api/v1/bulk',
             'POST /api/v1/sessions',
             'GET  /api/v1/sessions/{id}',
@@ -294,6 +298,9 @@ switch ($route_key) {
         break;
     case 'POST /rfc3531':
         require __DIR__ . '/handlers/rfc3531.php';
+        break;
+    case 'POST /multicast6':
+        require __DIR__ . '/handlers/multicast6.php';
         break;
     case 'POST /bulk':
         require __DIR__ . '/handlers/bulk.php';

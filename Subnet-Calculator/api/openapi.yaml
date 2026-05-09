@@ -83,6 +83,8 @@ tags:
     description: IPv6 nibble-boundary helper — surface the nibble-aligned neighbours (above and below) of any IPv6 prefix
   - name: Rfc3531
     description: RFC 3531 sparse-allocation guidance — centermost / leftmost / rightmost bit-reservation strategy for growth-friendly prefix assignment
+  - name: Multicast6
+    description: IPv6 multicast scope decoder (RFC 4291 §2.7) — front door for the v3.6.0 multicast tools (scope, flags, scheme, well-known group lookup, deep-link to SSM and embedded-RP)
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -377,6 +379,7 @@ paths:
                     - "POST /api/v1/isatap"
                     - "POST /api/v1/6rd"
                     - "POST /api/v1/nat64"
+                    - "POST /api/v1/multicast6"
                     - "POST /api/v1/bulk"
                     - "POST /api/v1/range/ipv4"
                     - "POST /api/v1/range6"
@@ -3093,6 +3096,176 @@ paths:
                                 prefix: { type: string, example: "2001:db8:0:8000::/52" }
         "400":
           description: Missing required field, unparseable input, or out-of-range request
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /multicast6:
+    post:
+      operationId: multicast6Decode
+      tags: [Multicast6]
+      summary: Decode an IPv6 multicast address (RFC 4291 §2.7)
+      description: |
+        Front-door decoder for the v3.6.0 IPv6 multicast tools. Decodes any
+        FF00::/8 address into:
+
+        - `scope` (1..15) and `scope_name` (`interface-local`, `link-local`,
+          `admin-local`, `site-local`, `organization-local`, `global`,
+          `reserved`) per RFC 4291 §2.7 + RFC 7346.
+        - 4-bit `flags` field (0RPT) with booleans `transient`, `prefix_based`
+          (RFC 3306), `embedded_rp` (RFC 3956).
+        - `scheme` hint: `well-known`, `transient`, `ssm`, `embedded-rp`,
+          or `reserved`.
+        - 112-bit `group_id` as a 28-character hex string.
+        - `well_known` lookup against the in-tree registry of named groups
+          (FF02::1, FF02::2, FF02::5/6 OSPF, FF02::9 RIP, FF02::d All-PIM,
+          FF02::16 MLDv2, FF05::101 NTP, plus the FF02::1:FF**:**** Solicited-Node
+          family). Returns `null` when not matched.
+        - `detail_route` deep-link to the per-scheme tool drawer (`/ipv6/ssm`
+          for prefix-based / SSM groups; `/ipv6/embedded-rp` for embedded-RP);
+          `null` otherwise.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ipv6]
+              properties:
+                ipv6:
+                  type: string
+                  description: An IPv6 multicast address literal (must be in FF00::/8).
+                  example: "FF02::1"
+            examples:
+              all-nodes:
+                summary: All Nodes (link-local well-known)
+                value: { ipv6: "FF02::1" }
+              solicited-node:
+                summary: Solicited-Node (RFC 4291)
+                value: { ipv6: "FF02::1:FF12:3456" }
+              ssm:
+                summary: SSM (prefix-based, scope global)
+                value: { ipv6: "FF3E::1234:5678" }
+              embedded-rp:
+                summary: Embedded-RP (RFC 3956)
+                value: { ipv6: "FF7E:140:2001:db8:cafe::1234" }
+      responses:
+        "200":
+          description: Decoded multicast address
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required:
+                          - input
+                          - address
+                          - scope
+                          - scope_name
+                          - flags
+                          - transient
+                          - prefix_based
+                          - embedded_rp
+                          - group_id
+                          - scheme
+                          - detail_route
+                          - well_known
+                        properties:
+                          input:
+                            type: string
+                            example: "FF02::1"
+                          address:
+                            type: string
+                            description: Canonical compressed lowercase form of the input.
+                            example: "ff02::1"
+                          scope:
+                            type: integer
+                            minimum: 0
+                            maximum: 15
+                            example: 2
+                          scope_name:
+                            type: string
+                            enum: [interface-local, link-local, admin-local, site-local, organization-local, global, reserved]
+                            example: link-local
+                          flags:
+                            type: integer
+                            minimum: 0
+                            maximum: 15
+                            example: 0
+                          transient:
+                            type: boolean
+                            example: false
+                          prefix_based:
+                            type: boolean
+                            example: false
+                          embedded_rp:
+                            type: boolean
+                            example: false
+                          group_id:
+                            type: string
+                            description: 112-bit group ID as a 28-character hex string.
+                            example: "00000000000000000000000000000001"
+                          scheme:
+                            type: string
+                            enum: [well-known, transient, ssm, embedded-rp, reserved]
+                            example: well-known
+                          detail_route:
+                            type: string
+                            nullable: true
+                            description: Relative URL of the per-scheme tool drawer; null when not applicable.
+                            example: null
+                          well_known:
+                            type: object
+                            nullable: true
+                            description: Registry entry when the address matches a well-known group; null otherwise.
+                            required: [name, rfc]
+                            properties:
+                              name: { type: string, example: "All Nodes Address" }
+                              rfc:  { type: string, example: "RFC 4291" }
+              example:
+                ok: true
+                data:
+                  input: "FF02::1"
+                  address: "ff02::1"
+                  scope: 2
+                  scope_name: "link-local"
+                  flags: 0
+                  transient: false
+                  prefix_based: false
+                  embedded_rp: false
+                  group_id: "00000000000000000000000000000001"
+                  scheme: "well-known"
+                  detail_route: null
+                  well_known: { name: "All Nodes Address", rfc: "RFC 4291" }
+        "400":
+          description: Missing or non-multicast IPv6 input
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }

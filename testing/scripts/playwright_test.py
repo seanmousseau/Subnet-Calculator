@@ -3074,6 +3074,110 @@ async def test_ipv6_embedded_v4_ui(page: Page) -> None:
                 len(err_text) > 0, f"got: {err_text!r}")
 
 
+async def test_api_multicast6(page: Page) -> None:
+    section("API — POST /api/v1/multicast6")
+    # All-Nodes link-local well-known
+    status, data = _api_post("multicast6", {"ipv6": "FF02::1"})
+    assert_eq("api multicast6 (all-nodes): HTTP 200", status, 200)
+    assert_eq("api multicast6 (all-nodes): ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api multicast6 (all-nodes): scope", d.get("scope"), 2)
+    assert_eq("api multicast6 (all-nodes): scope_name",
+              d.get("scope_name"), "link-local")
+    assert_eq("api multicast6 (all-nodes): scheme", d.get("scheme"), "well-known")
+    assert_eq("api multicast6 (all-nodes): well_known.name",
+              (d.get("well_known") or {}).get("name"), "All Nodes Address")
+    assert_eq("api multicast6 (all-nodes): detail_route is null",
+              d.get("detail_route"), None)
+
+    # SSM (FF3E:: with P+T flags, scope global)
+    status2, data2 = _api_post("multicast6", {"ipv6": "FF3E::1234:5678"})
+    assert_eq("api multicast6 (ssm): HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api multicast6 (ssm): scheme", d2.get("scheme"), "ssm")
+    assert_eq("api multicast6 (ssm): prefix_based=True",
+              d2.get("prefix_based"), True)
+    assert_eq("api multicast6 (ssm): detail_route",
+              d2.get("detail_route"), "/ipv6/ssm")
+
+    # Embedded-RP (R+P+T flags)
+    status3, data3 = _api_post("multicast6",
+                               {"ipv6": "FF7E:140:2001:db8:cafe::1234"})
+    assert_eq("api multicast6 (embedded-rp): HTTP 200", status3, 200)
+    d3 = data3.get("data", {})
+    assert_eq("api multicast6 (embedded-rp): scheme",
+              d3.get("scheme"), "embedded-rp")
+    assert_eq("api multicast6 (embedded-rp): embedded_rp=True",
+              d3.get("embedded_rp"), True)
+    assert_eq("api multicast6 (embedded-rp): detail_route",
+              d3.get("detail_route"), "/ipv6/embedded-rp")
+
+    # Solicited-Node prefix match (FF02::1:FF**:****)
+    status4, data4 = _api_post("multicast6", {"ipv6": "FF02::1:FF12:3456"})
+    assert_eq("api multicast6 (solicited-node): HTTP 200", status4, 200)
+    d4 = data4.get("data", {})
+    assert_eq("api multicast6 (solicited-node): well_known.name",
+              (d4.get("well_known") or {}).get("name"),
+              "Solicited-Node Address (RFC 4291)")
+
+    # Non-multicast input → 400
+    status5, _ = _api_post("multicast6", {"ipv6": "2001:db8::1"})
+    assert_eq("api multicast6: non-multicast → 400", status5, 400)
+
+    # Garbage input → 400
+    status6, _ = _api_post("multicast6", {"ipv6": "not-an-address"})
+    assert_eq("api multicast6: invalid input → 400", status6, 400)
+
+    # Missing ipv6 field → 400
+    status7, _ = _api_post("multicast6", {})
+    assert_eq("api multicast6: missing ipv6 → 400", status7, 400)
+
+
+async def test_ipv6_multicast_ui(page: Page) -> None:
+    section("IPv6 multicast scope decoder UI")
+
+    # ?tool=multicast should auto-open the drawer.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=multicast")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='multicast']")
+    assert_eq("multicast UI: panel exists", await panel.count(), 1)
+
+    # Submit FF02::1
+    await page.fill("#multicast6_input", "FF02::1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='multicast'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='multicast']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("multicast UI: scope label rendered", "link-local" in body_text)
+    assert_true("multicast UI: scheme well-known rendered",
+                "well-known" in body_text)
+    assert_true("multicast UI: well-known group name rendered",
+                "all nodes address" in body_text)
+
+    # SSM input → deep-link button to /ipv6/ssm appears
+    await navigate(page, APP_URL + "?tab=ipv6&tool=multicast")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#multicast6_input", "FF3E::1234:5678")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='multicast'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='multicast']")
+    open_link = panel.locator("a.splitter-btn[href='/ipv6/ssm']")
+    assert_true("multicast UI: SSM deep-link rendered",
+                await open_link.count() >= 1)
+
+    # Error path — non-multicast input
+    await navigate(page, APP_URL + "?tab=ipv6&tool=multicast")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#multicast6_input", "2001:db8::1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='multicast'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='multicast']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("multicast UI: error band on non-multicast input",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+
 async def test_api_6to4(page: Page) -> None:
     section("API — POST /api/v1/6to4")
 
@@ -9385,6 +9489,8 @@ async def main() -> None:
             await test_api_nibble6(page)
             await test_ipv6_rfc3531_ui(page)
             await test_api_rfc3531(page)
+            await test_ipv6_multicast_ui(page)
+            await test_api_multicast6(page)
             await test_a11y_ipv6_drawers(page)
             # v3.5.0 (T11) — bulk endpoint coverage + a11y for the 9 new drawers
             await test_api_bulk_covers_v350_endpoints(page)
