@@ -3386,12 +3386,14 @@ async def test_api_isatap(page: Page) -> None:
     section("API — POST /api/v1/isatap")
 
     # Encode mode — public IPv4 → globally-unique IID auto-detect.
-    status, data = _api_post("isatap", {"mode": "encode", "ipv4": "192.0.2.1"})
+    # 8.8.8.8 is public unicast (v3.5.1: TEST-NET ranges no longer auto-classify
+    # as globally-unique to match T7's NAT64 helper).
+    status, data = _api_post("isatap", {"mode": "encode", "ipv4": "8.8.8.8"})
     assert_eq("api isatap encode: HTTP 200", status, 200)
     assert_eq("api isatap encode: ok=true", data.get("ok"), True)
     d = data.get("data", {})
     assert_eq("api isatap encode: mode", d.get("mode"), "encode")
-    assert_eq("api isatap encode: iid", d.get("iid"), "200:5efe:c000:201")
+    assert_eq("api isatap encode: iid", d.get("iid"), "200:5efe:808:808")
     assert_eq("api isatap encode: globally_unique=true", d.get("globally_unique"), True)
 
     # Encode mode — private IPv4 → locally-administered.
@@ -3471,16 +3473,17 @@ async def test_ipv6_isatap_ui(page: Page) -> None:
     panel = page.locator("#panel-ipv6 .tool-panel[data-tool='isatap']")
     assert_eq("isatap UI: panel exists", await panel.count(), 1)
 
-    # Encode — IPv4 → IID.
+    # Encode — IPv4 → IID. 8.8.8.8 is public unicast (v3.5.1: TEST-NET no
+    # longer auto-classifies as globally-unique).
     await page.select_option("#isatap_mode", "encode")
-    await page.fill("#isatap_ipv4", "192.0.2.1")
+    await page.fill("#isatap_ipv4", "8.8.8.8")
     await page.click("#panel-ipv6 .tool-panel[data-tool='isatap'] button.splitter-btn")
     await page.wait_for_load_state("load")
 
     panel = page.locator("#panel-ipv6 .tool-panel[data-tool='isatap']")
     body_text = (await panel.text_content() or "").lower()
     assert_true("isatap UI encode: IID rendered",
-                "200:5efe:c000:201" in body_text, f"body: {body_text!r}")
+                "200:5efe:808:808" in body_text, f"body: {body_text!r}")
     assert_true("isatap UI encode: globally-unique badge",
                 "globally-unique" in body_text, f"body: {body_text!r}")
 
@@ -3489,7 +3492,7 @@ async def test_ipv6_isatap_ui(page: Page) -> None:
     await page.wait_for_timeout(50)
     assert_eq("isatap UI encode: copy IID",
               await page.evaluate("window.__lastClipboard"),
-              "::200:5efe:c000:201")
+              "::200:5efe:808:808")
 
     # Decode — IID → IPv4.
     await navigate(page, APP_URL + "?tab=ipv6&tool=isatap")
@@ -3520,12 +3523,12 @@ async def test_ipv6_isatap_ui(page: Page) -> None:
 
     # Shareable GET URL hydrates without re-submission.
     await navigate(page,
-                   APP_URL + "?tab=ipv6&tool=isatap&isatap_mode=encode&isatap_ipv4=192.0.2.1")
+                   APP_URL + "?tab=ipv6&tool=isatap&isatap_mode=encode&isatap_ipv4=8.8.8.8")
     await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
     panel = page.locator("#panel-ipv6 .tool-panel[data-tool='isatap']")
     body_text = (await panel.text_content() or "").lower()
     assert_true("isatap UI shareable URL: IID hydrated",
-                "200:5efe:c000:201" in body_text, f"body: {body_text!r}")
+                "200:5efe:808:808" in body_text, f"body: {body_text!r}")
 
     # embedded-v4 detector now deep-links ISATAP to /ipv6/isatap.
     await navigate(page,

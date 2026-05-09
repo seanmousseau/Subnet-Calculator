@@ -20,7 +20,7 @@ declare(strict_types=1);
  * Slice a parent IPv6 prefix into child prefixes.
  *
  * @param string $parent_prefix    e.g. '2001:db8::/48'
- * @param int    $child_length     e.g. 56 (must be > parent's prefix length, ≤ 128)
+ * @param int    $child_length     e.g. 56 (must be > parent's prefix length, 1..128)
  * @param int    $count            number of child prefixes to allocate (≥1)
  * @param int    $start_offset     skip the first N child prefixes (≥0)
  * @param bool   $nibble_align     snap child_length up to next nibble boundary
@@ -43,9 +43,9 @@ function plan_prefix_delegation(
 ): array {
     [$parent_bin, $parent_length] = prefix_plan6_parse_parent($parent_prefix);
 
-    if ($child_length < 0 || $child_length > 128) {
+    if ($child_length < 1 || $child_length > 128) {
         throw new InvalidArgumentException(
-            'Child prefix length must be 0..128: ' . $child_length
+            'Child prefix length must be 1..128: ' . $child_length
         );
     }
     if ($child_length <= $parent_length) {

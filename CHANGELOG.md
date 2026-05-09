@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.1] - 2026-05-09
+
+**Patch.** Code-quality cleanup carried over from v3.5.0's review trail,
+plus two operational notes captured in the production-deploy runbook.
+
+### Changed
+
+- **ISATAP auto-classify** now rejects multicast (224/4), class-E (240/4),
+  CGN (100.64/10), TEST-NET-1/2/3, 192.0.0.0/24, and benchmarking
+  (198.18/15) when inferring `globally_unique`. Previously these were
+  treated as globally unique. Explicit `globally_unique=true|false`
+  callers are unaffected.
+- **NAT64 handler** now enforces the `{32, 40, 48, 56, 64, 96}` prefix
+  length set at the API layer, matching the error message it advertises.
+- **`plan_prefix_delegation()`** lower bound on `child_length` now matches
+  the handler (1..128); was previously `>= 0` at the function level.
+
+### Documentation
+
+- Clarified that `ipv6_in_prefix()` in `functions-embedded-v4.php` is
+  shared across the per-scheme tools.
+- `rfc3531_allocation_order()` docblock now states that centermost emits
+  `2^N - 1` values (omits 0) while leftmost/rightmost emit `2^N` values.
+
 ## [3.5.0] - 2026-05-09
 
 **IPv6 Prefix Planning + Transition.** Combines the prefix-planning

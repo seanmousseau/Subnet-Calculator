@@ -20,12 +20,77 @@ declare(strict_types=1);
 // for analysis of legacy traffic and address audits.
 
 /**
+ * Decide whether an IPv4 address is globally-unique for ISATAP auto-classify.
+ *
+ * Mirrors the explicit byte-level checks used by T7's NAT64 helper. PHP's
+ * FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE does not reject
+ * multicast (224.0.0.0/4), class-E (240.0.0.0/4), 0.0.0.0, CGN
+ * (100.64.0.0/10), TEST-NET-1/2/3, 192.0.0.0/24, or benchmarking
+ * (198.18.0.0/15) — so we layer those checks on top.
+ */
+function isatap_ipv4_is_globally_unique(string $ipv4): bool
+{
+    if (
+        filter_var(
+            $ipv4,
+            FILTER_VALIDATE_IP,
+            FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+        ) === false
+    ) {
+        return false;
+    }
+    $packed = @inet_pton($ipv4);
+    if ($packed === false || strlen($packed) !== 4) {
+        return false;
+    }
+    $b = array_map('ord', str_split($packed));
+    // 0.0.0.0/8 "this network"
+    if ($b[0] === 0) {
+        return false;
+    }
+    // Multicast 224.0.0.0/4
+    if (($b[0] & 0xF0) === 0xE0) {
+        return false;
+    }
+    // Reserved / class-E 240.0.0.0/4 (includes 255.255.255.255 broadcast)
+    if (($b[0] & 0xF0) === 0xF0) {
+        return false;
+    }
+    // CGN 100.64.0.0/10
+    if ($b[0] === 100 && ($b[1] & 0xC0) === 0x40) {
+        return false;
+    }
+    // 192.0.0.0/24 (IETF protocol assignments) + TEST-NET-1 192.0.2.0/24
+    if ($b[0] === 192 && $b[1] === 0 && $b[2] === 0) {
+        return false;
+    }
+    if ($b[0] === 192 && $b[1] === 0 && $b[2] === 2) {
+        return false;
+    }
+    // Benchmarking 198.18.0.0/15
+    if ($b[0] === 198 && ($b[1] & 0xFE) === 18) {
+        return false;
+    }
+    // TEST-NET-2 198.51.100.0/24
+    if ($b[0] === 198 && $b[1] === 51 && $b[2] === 100) {
+        return false;
+    }
+    // TEST-NET-3 203.0.113.0/24
+    if ($b[0] === 203 && $b[1] === 0 && $b[2] === 113) {
+        return false;
+    }
+    return true;
+}
+
+/**
  * Build an ISATAP interface ID from an IPv4 address per RFC 5214 §6.
  *
  * @param string    $ipv4
- * @param ?bool $globally_unique  When null, infer from filter_var private/
- *                                 reserved checks: globally-routable IPv4 →
- *                                 true; private/reserved → false.
+ * @param ?bool $globally_unique  When null, infer via
+ *                                 isatap_ipv4_is_globally_unique(): public
+ *                                 unicast IPv4 → true; private, reserved,
+ *                                 multicast, class-E, CGN, TEST-NET, or
+ *                                 benchmarking → false.
  *                                 When true, builds '200:5efe:V4ADDR'.
  *                                 When false, builds '0:5efe:V4ADDR'.
  *
@@ -52,14 +117,10 @@ function ipv4_to_isatap_iid(string $ipv4, ?bool $globally_unique = null): string
     }
 
     if ($globally_unique === null) {
-        // Globally-unique means routable on the public internet — neither
-        // private (RFC 1918) nor reserved (loopback/link-local/etc.).
-        $isPublic = filter_var(
-            $raw,
-            FILTER_VALIDATE_IP,
-            FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
-        );
-        $globally_unique = ($isPublic !== false);
+        // Globally-unique means routable on the public internet — excludes
+        // private (RFC 1918), reserved (loopback/link-local/etc.), multicast,
+        // class-E, CGN, TEST-NET, and benchmarking ranges.
+        $globally_unique = isatap_ipv4_is_globally_unique($raw);
     }
 
     // First two hexadectets: ISATAP magic.

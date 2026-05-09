@@ -38,6 +38,9 @@ const EMBEDDEDV4_NAT64_WKP_PREFIX_BIN  = "\x00\x64\xff\x9b\x00\x00\x00\x00\x00\x
 const EMBEDDEDV4_6TO4_PREFIX_BIN       = "\x20\x02";
 const EMBEDDEDV4_TEREDO_PREFIX_BIN     = "\x20\x01\x00\x00";
 
+// Helper used by detect_embedded_v4 and shared with the per-scheme tools
+// (T3-T7) — kept here for v3.5.0 but consider moving to functions-ipv6.php
+// in v3.6.0+.
 /**
  * Return true if $address parses as a valid IPv6 literal whose top
  * $prefix_length bits match the $prefix network. GMP throughout for
