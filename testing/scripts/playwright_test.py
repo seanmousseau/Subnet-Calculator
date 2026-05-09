@@ -4384,6 +4384,202 @@ async def test_api_bulk_covers_new_ipv6_endpoints(page: Page) -> None:
               bad_results[0].get("ok") if bad_results else None, False)
 
 
+async def test_api_bulk_covers_v350_endpoints(page: Page) -> None:
+    """v3.5.0 (T11) — bulk multi-op `items[]` covers all 9 new ops."""
+    section("API — bulk multi-op covers v3.5.0 IPv6 endpoints")
+    items = [
+        {"op": "embedded-v4",  "params": {"input": "::ffff:192.0.2.1"}},
+        {"op": "6to4",         "params": {"mode": "encode", "ipv4": "192.0.2.1"}},
+        {"op": "teredo",       "params": {"mode": "decode",
+                                            "ipv6": "2001:0:4136:e378:8000:63bf:3fff:fdd2"}},
+        {"op": "isatap",       "params": {"mode": "encode", "ipv4": "192.0.2.1"}},
+        {"op": "6rd",          "params": {"mode": "encode",
+                                            "sp_ipv6_prefix": "2001:db8::/32",
+                                            "sp_ipv4_mask_len": 0,
+                                            "customer_ipv4": "192.0.2.1"}},
+        {"op": "nat64",        "params": {"mode": "encode",
+                                            "ipv4": "8.8.8.8",
+                                            "prefix_length": 96}},
+        {"op": "prefix-plan6", "params": {"parent_prefix": "2001:db8::/48",
+                                            "child_length": 56,
+                                            "count": 4}},
+        {"op": "nibble6",      "params": {"prefix": "2001:db8::/49"}},
+        {"op": "rfc3531",      "params": {"parent_prefix": "2001:db8::/48",
+                                            "reservation_bits": 4,
+                                            "strategy": "centermost"}},
+    ]
+    status, data = _api_post("bulk", {"items": items})
+    assert_eq("api bulk v3.5.0: HTTP 200", status, 200)
+    assert_eq("api bulk v3.5.0: ok=true", data.get("ok"), True)
+    results = data.get("data", {}).get("results", [])
+    assert_eq("api bulk v3.5.0: 9 results returned", len(results), 9)
+    expected_ops = ["embedded-v4", "6to4", "teredo", "isatap", "6rd",
+                    "nat64", "prefix-plan6", "nibble6", "rfc3531"]
+    for i, op in enumerate(expected_ops):
+        envelope = results[i] if i < len(results) else {}
+        assert_eq(f"api bulk v3.5.0: item[{i}] op={op}",
+                  envelope.get("op"), op)
+        assert_eq(f"api bulk v3.5.0: item[{i}] ok=true",
+                  envelope.get("ok"), True)
+
+    # Spot checks
+    assert_eq("api bulk v3.5.0: embedded-v4 scheme",
+              results[0].get("scheme"), "mapped")
+    assert_true("api bulk v3.5.0: 6to4 prefix starts with 2002:",
+                str(results[1].get("prefix", "")).startswith("2002:"))
+    assert_true("api bulk v3.5.0: nibble6 has above+below",
+                "above" in results[7] and "below" in results[7])
+
+    # Heterogeneous batch mixing v3.4.0 + v3.5.0 ops in one request.
+    mixed_items = [
+        {"op": "rdns6",        "params": {"address": "2001:db8::1", "prefix": 64}},
+        {"op": "embedded-v4",  "params": {"input": "::ffff:192.0.2.1"}},
+        {"op": "nibble6",      "params": {"prefix": "2001:db8::/49"}},
+    ]
+    s2, d2 = _api_post("bulk", {"items": mixed_items})
+    assert_eq("api bulk v3.5.0 mixed: HTTP 200", s2, 200)
+    res2 = d2.get("data", {}).get("results", [])
+    for i in range(3):
+        assert_eq(f"api bulk v3.5.0 mixed: item[{i}] ok=true",
+                  res2[i].get("ok") if i < len(res2) else None, True)
+
+    # Bad shape on v3.5.0 op surfaces per-item, not 400.
+    s3, d3 = _api_post("bulk", {"items": [
+        {"op": "nibble6", "params": {}},
+    ]})
+    assert_eq("api bulk v3.5.0 bad-shape: HTTP 200", s3, 200)
+    res3 = d3.get("data", {}).get("results", [])
+    assert_eq("api bulk v3.5.0 bad-shape: ok=false",
+              res3[0].get("ok") if res3 else None, False)
+
+
+async def test_a11y_ipv6_drawers_v350(page: Page) -> None:
+    """v3.5.0 (T11) — a11y audit for the 9 new IPv6 transition/planning drawers.
+
+    Asserts, per drawer:
+      1. Every form input has an associated <label> or aria-label.
+      2. Every help_bubble() icon is keyboard-focusable (tabindex='0', role='button').
+      3. Every copy_button() has aria-label starting with 'Copy'.
+      4. Submit buttons have an accessible name.
+      5. Drawer ESC closes (per existing v3.4.0 behaviour, smoke-checked here).
+
+    Mirrors v3.4.0 T11 shape; any gap is a real bug — fix the markup, not the test.
+    """
+    section("v3.5.0 — a11y audit for the 9 new IPv6 drawers")
+
+    drawers = [
+        "embedded-v4", "6to4", "teredo", "isatap", "6rd",
+        "prefix-plan", "nibble", "rfc3531",
+    ]
+    # `nat64` is a sub-disclosure inside the `mapped6` drawer (see
+    # nat64-toggle <details>); it is exercised by mapped6 in v3.4.0
+    # and re-checked here as part of the mapped6 panel's expanded surface.
+
+    for slug in drawers:
+        await navigate(page, APP_URL + f"?tab=ipv6&tool={slug}")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        drawer = page.locator(f"#panel-ipv6 .tool-panel[data-tool='{slug}']")
+        assert_eq(f"a11y v3.5.0 {slug}: panel rendered", await drawer.count(), 1)
+
+        inputs = drawer.locator(
+            "input[type=text], input[type=number], input[type=tel], "
+            "input[type=checkbox], input:not([type]), select"
+        )
+        n_inputs = await inputs.count()
+        assert_true(
+            f"a11y v3.5.0 {slug}: at least one form input present",
+            n_inputs >= 1,
+            f"got: {n_inputs}",
+        )
+        for i in range(n_inputs):
+            el = inputs.nth(i)
+            has_label = await el.evaluate(
+                "(e) => !!(e.labels && e.labels.length) "
+                "|| !!e.getAttribute('aria-label') "
+                "|| !!e.closest('label')"
+            )
+            ident = await el.get_attribute("id") or await el.get_attribute("name") or f"#{i}"
+            assert_true(
+                f"a11y v3.5.0 {slug}: input '{ident}' has label/aria-label",
+                bool(has_label),
+                f"got has_label={has_label!r}",
+            )
+
+        bubbles = drawer.locator(".help-bubble-icon")
+        n_bubbles = await bubbles.count()
+        assert_true(
+            f"a11y v3.5.0 {slug}: at least one help bubble",
+            n_bubbles >= 1,
+            f"got: {n_bubbles}",
+        )
+        for i in range(n_bubbles):
+            ti = await bubbles.nth(i).get_attribute("tabindex")
+            assert_eq(
+                f"a11y v3.5.0 {slug}: help-bubble[{i}] tabindex='0'",
+                ti, "0",
+            )
+            role = await bubbles.nth(i).get_attribute("role")
+            assert_eq(
+                f"a11y v3.5.0 {slug}: help-bubble[{i}] role='button'",
+                role, "button",
+            )
+            al = await bubbles.nth(i).get_attribute("aria-label")
+            assert_eq(
+                f"a11y v3.5.0 {slug}: help-bubble[{i}] aria-label='Help'",
+                al, "Help",
+            )
+
+        copies = drawer.locator("button.subnet-copy")
+        n_copies = await copies.count()
+        for i in range(n_copies):
+            al = await copies.nth(i).get_attribute("aria-label") or ""
+            assert_true(
+                f"a11y v3.5.0 {slug}: copy-button[{i}] aria-label starts with 'Copy'",
+                al.startswith("Copy"),
+                f"got: {al!r}",
+            )
+
+        submits = drawer.locator("button[type=submit]")
+        n_submits = await submits.count()
+        assert_true(
+            f"a11y v3.5.0 {slug}: at least one submit button",
+            n_submits >= 1,
+            f"got: {n_submits}",
+        )
+        for i in range(n_submits):
+            name = await submits.nth(i).evaluate(
+                "(e) => (e.textContent || '').trim() || e.getAttribute('aria-label') || ''"
+            )
+            assert_true(
+                f"a11y v3.5.0 {slug}: submit-button[{i}] has accessible name",
+                bool(name),
+                f"got: {name!r}",
+            )
+
+        # ESC closes drawer (returns focus to the originating tool-trigger).
+        await page.keyboard.press("Escape")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer:not(.open)")
+        assert_true(
+            f"a11y v3.5.0 {slug}: ESC closes drawer",
+            not await page.locator("#panel-ipv6 .tool-drawer.open").is_visible(),
+        )
+
+    # nat64 sub-disclosure (inside the mapped6 drawer): the <summary> must use
+    # the native element so it is keyboard-operable by default. Inputs inside
+    # the disclosure are still labelled; help bubbles still tabindex=0.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=mapped6")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='mapped6']")
+    nat64 = panel.locator("details.nat64-advanced > summary")
+    assert_eq("a11y v3.5.0 nat64: <summary> tag",
+              await nat64.evaluate("(e) => e.tagName"), "SUMMARY")
+    nat64_bubbles = panel.locator("details.nat64-advanced .help-bubble-icon")
+    n_n64b = await nat64_bubbles.count()
+    for i in range(n_n64b):
+        ti = await nat64_bubbles.nth(i).get_attribute("tabindex")
+        assert_eq(f"a11y v3.5.0 nat64: bubble[{i}] tabindex='0'", ti, "0")
+
+
 async def test_vlsm_session_ttl_notice(page: Page) -> None:
     section("VLSM session TTL notice")
     await navigate(page, APP_URL)
@@ -9187,6 +9383,9 @@ async def main() -> None:
             await test_ipv6_rfc3531_ui(page)
             await test_api_rfc3531(page)
             await test_a11y_ipv6_drawers(page)
+            # v3.5.0 (T11) — bulk endpoint coverage + a11y for the 9 new drawers
+            await test_api_bulk_covers_v350_endpoints(page)
+            await test_a11y_ipv6_drawers_v350(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)

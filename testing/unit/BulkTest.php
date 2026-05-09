@@ -231,4 +231,141 @@ final class BulkTest extends TestCase
         $this->assertFalse($r[1]['ok']);
         $this->assertSame('rdns6', $r[1]['op']);
     }
+
+    // ── v3.5.0 ops ──────────────────────────────────────────────────────────
+
+    public function testDispatchEmbeddedV4Success(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'embedded-v4', 'params' => ['input' => '::ffff:192.0.2.1']],
+        ]);
+        $this->assertTrue($r[0]['ok']);
+        $this->assertSame('mapped', $r[0]['scheme']);
+        $this->assertSame('192.0.2.1', $r[0]['ipv4']);
+    }
+
+    public function testDispatch6to4EncodeSuccess(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => '6to4', 'params' => ['mode' => 'encode', 'ipv4' => '192.0.2.1']],
+        ]);
+        $this->assertTrue($r[0]['ok']);
+        $this->assertStringStartsWith('2002:', (string)$r[0]['prefix']);
+    }
+
+    public function testDispatchTeredoDecodeSuccess(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'teredo', 'params' => ['mode' => 'decode', 'ipv6' => '2001:0:4136:e378:8000:63bf:3fff:fdd2']],
+        ]);
+        $this->assertTrue($r[0]['ok'], (string)($r[0]['error'] ?? ''));
+        $this->assertArrayHasKey('client_ipv4', $r[0]);
+    }
+
+    public function testDispatchIsatapEncodeSuccess(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'isatap', 'params' => ['mode' => 'encode', 'ipv4' => '192.0.2.1']],
+        ]);
+        $this->assertTrue($r[0]['ok'], (string)($r[0]['error'] ?? ''));
+        $this->assertArrayHasKey('iid', $r[0]);
+    }
+
+    public function testDispatch6rdEncodeSuccess(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => '6rd', 'params' => [
+                'mode'             => 'encode',
+                'sp_ipv6_prefix'   => '2001:db8::/32',
+                'sp_ipv4_mask_len' => 0,
+                'customer_ipv4'    => '192.0.2.1',
+            ]],
+        ]);
+        $this->assertTrue($r[0]['ok'], (string)($r[0]['error'] ?? ''));
+        $this->assertArrayHasKey('prefix', $r[0]);
+    }
+
+    public function testDispatchNat64EncodeSuccess(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'nat64', 'params' => [
+                'mode'          => 'encode',
+                'ipv4'          => '8.8.8.8',
+                'prefix_length' => 96,
+            ]],
+        ]);
+        $this->assertTrue($r[0]['ok'], (string)($r[0]['error'] ?? ''));
+        $this->assertArrayHasKey('ipv6', $r[0]);
+    }
+
+    public function testDispatchPrefixPlan6Success(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'prefix-plan6', 'params' => [
+                'parent_prefix' => '2001:db8::/48',
+                'child_length'  => 56,
+                'count'         => 4,
+            ]],
+        ]);
+        $this->assertTrue($r[0]['ok'], (string)($r[0]['error'] ?? ''));
+        $this->assertCount(4, $r[0]['children']);
+    }
+
+    public function testDispatchNibble6Success(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'nibble6', 'params' => ['prefix' => '2001:db8::/49']],
+        ]);
+        $this->assertTrue($r[0]['ok'], (string)($r[0]['error'] ?? ''));
+        $this->assertArrayHasKey('above', $r[0]);
+        $this->assertArrayHasKey('below', $r[0]);
+    }
+
+    public function testDispatchRfc3531Success(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'rfc3531', 'params' => [
+                'parent_prefix'    => '2001:db8::/48',
+                'reservation_bits' => 4,
+                'strategy'         => 'centermost',
+            ]],
+        ]);
+        $this->assertTrue($r[0]['ok'], (string)($r[0]['error'] ?? ''));
+        $this->assertSame('centermost', $r[0]['strategy']);
+    }
+
+    public function testDispatchV35MixedBatchAllSucceed(): void
+    {
+        $items = [
+            ['op' => 'embedded-v4',  'params' => ['input' => '::ffff:192.0.2.1']],
+            ['op' => '6to4',         'params' => ['mode' => 'encode', 'ipv4' => '192.0.2.1']],
+            ['op' => 'teredo',       'params' => ['mode' => 'decode', 'ipv6' => '2001:0:4136:e378:8000:63bf:3fff:fdd2']],
+            ['op' => 'isatap',       'params' => ['mode' => 'encode', 'ipv4' => '192.0.2.1']],
+            ['op' => '6rd',          'params' => ['mode' => 'encode', 'sp_ipv6_prefix' => '2001:db8::/32', 'sp_ipv4_mask_len' => 0, 'customer_ipv4' => '192.0.2.1']],
+            ['op' => 'nat64',        'params' => ['mode' => 'encode', 'ipv4' => '8.8.8.8', 'prefix_length' => 96]],
+            ['op' => 'prefix-plan6', 'params' => ['parent_prefix' => '2001:db8::/48', 'child_length' => 56, 'count' => 2]],
+            ['op' => 'nibble6',      'params' => ['prefix' => '2001:db8::/49']],
+            ['op' => 'rfc3531',      'params' => ['parent_prefix' => '2001:db8::/48', 'reservation_bits' => 4, 'strategy' => 'centermost']],
+        ];
+        $r = bulk_dispatch_ops($items);
+        $this->assertCount(9, $r);
+        foreach ($r as $i => $env) {
+            $this->assertTrue(
+                $env['ok'],
+                "Item $i ({$env['op']}) should succeed; error: " . ($env['error'] ?? '<none>')
+            );
+            $this->assertSame($items[$i]['op'], $env['op']);
+        }
+    }
+
+    public function testDispatchV35InvalidShape(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'nibble6', 'params' => []],
+            ['op' => '6to4',    'params' => ['mode' => 'encode']],
+        ]);
+        $this->assertFalse($r[0]['ok']);
+        $this->assertStringContainsString('prefix', $r[0]['error']);
+        $this->assertFalse($r[1]['ok']);
+    }
 }

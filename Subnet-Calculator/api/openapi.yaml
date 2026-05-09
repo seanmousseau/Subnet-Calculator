@@ -3130,11 +3130,13 @@ paths:
 
         - **Legacy CIDR mode** — body contains `cidrs[]`. Resolves each CIDR
           via /ipv4 or /ipv6 logic. Per-item envelope: `{input, ok, data?, error?}`.
-        - **Multi-op mode (v3.4.0)** — body contains `items[]`. Each item
-          has its own `op` slug and `params` payload. Supported ops:
-          `range6`, `supernet6`, `zone-id`, `derive`, `slaac-privacy`,
-          `rdns6`, `mapped6`. Per-item envelope: `{op, ok, error?, ...result}`
-          where `...result` matches the standalone endpoint's success body.
+        - **Multi-op mode (v3.4.0+v3.5.0)** — body contains `items[]`.
+          Each item has its own `op` slug and `params` payload. Supported
+          ops: `range6`, `supernet6`, `zone-id`, `derive`, `slaac-privacy`,
+          `rdns6`, `mapped6` (v3.4.0); `embedded-v4`, `6to4`, `teredo`,
+          `isatap`, `6rd`, `nat64`, `prefix-plan6`, `nibble6`, `rfc3531`
+          (v3.5.0). Per-item envelope: `{op, ok, error?, ...result}` where
+          `...result` matches the standalone endpoint's success body.
 
         Up to 50 entries per request. Individual failures do not abort the
         request — each item carries its own ok/error status. IPv6 ops
@@ -3172,7 +3174,23 @@ paths:
                         properties:
                           op:
                             type: string
-                            enum: [range6, supernet6, zone-id, derive, slaac-privacy, rdns6, mapped6]
+                            enum:
+                              - range6
+                              - supernet6
+                              - zone-id
+                              - derive
+                              - slaac-privacy
+                              - rdns6
+                              - mapped6
+                              - embedded-v4
+                              - 6to4
+                              - teredo
+                              - isatap
+                              - 6rd
+                              - nat64
+                              - prefix-plan6
+                              - nibble6
+                              - rfc3531
                           params:
                             type: object
                             description: Per-op parameters; shape matches the corresponding standalone endpoint's request body.
@@ -3192,6 +3210,24 @@ paths:
                         params: { address: "2001:db8::1", prefix: 64 }
                       - op: mapped6
                         params: { input: "192.0.2.1" }
+                      - op: embedded-v4
+                        params: { input: "::ffff:192.0.2.1" }
+                      - op: 6to4
+                        params: { mode: "encode", ipv4: "192.0.2.1" }
+                      - op: teredo
+                        params: { mode: "decode", ipv6: "2001:0:4136:e378:8000:63bf:3fff:fdd2" }
+                      - op: isatap
+                        params: { mode: "encode", ipv4: "192.0.2.1" }
+                      - op: 6rd
+                        params: { mode: "encode", sp_ipv6_prefix: "2001:db8::/32", sp_ipv4_mask_len: 0, customer_ipv4: "192.0.2.1" }
+                      - op: nat64
+                        params: { mode: "encode", ipv4: "192.0.2.1", prefix_length: 96 }
+                      - op: prefix-plan6
+                        params: { parent_prefix: "2001:db8::/48", child_length: 56, count: 4 }
+                      - op: nibble6
+                        params: { prefix: "2001:db8::/49" }
+                      - op: rfc3531
+                        params: { parent_prefix: "2001:db8::/48", reservation_bits: 4, strategy: "centermost" }
       responses:
         "200":
           description: Per-item calculation results

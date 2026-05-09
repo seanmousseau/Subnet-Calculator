@@ -48,6 +48,16 @@ as each ships.
   tool (Centermost / Leftmost / Rightmost) producing the allocation
   order and concrete child prefixes for growth-friendly prefix
   assignment. Composes with the prefix-delegation planner. (#389)
+- **A11y assertions for the 9 new IPv6 drawers** (`embedded-v4`, `6to4`,
+  `teredo`, `isatap`, `6rd`, `nat64`/`mapped6`-extended, `prefix-plan`,
+  `nibble`, `rfc3531`). Audit covers labels, help-bubble keyboard
+  focus + role/aria-label, copy-button accessible names, submit
+  accessible names, and ESC-closes-drawer behaviour.
+- **Bulk endpoint coverage for v3.5.0 endpoints.** `items[]` mode now
+  accepts `embedded-v4`, `6to4`, `teredo`, `isatap`, `6rd`, `nat64`,
+  `prefix-plan6`, `nibble6`, `rfc3531` in addition to the v3.4.0 ops,
+  with per-item `InvalidArgumentException` mapping to per-item error
+  envelopes. OpenAPI spec updated. (T11)
 
 ## [3.4.1] - 2026-05-08
 
