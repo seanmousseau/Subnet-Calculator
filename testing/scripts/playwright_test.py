@@ -3537,6 +3537,193 @@ async def test_ipv6_isatap_ui(page: Page) -> None:
                 await open_link.count() >= 1)
 
 
+async def test_api_6rd(page: Page) -> None:
+    section("API — POST /api/v1/6rd")
+
+    # Encode mode — basic case (mask=0).
+    status, data = _api_post("6rd", {
+        "mode": "encode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "sp_ipv4_mask_len": 0,
+        "ipv4": "192.0.2.1",
+    })
+    assert_eq("api 6rd encode: HTTP 200", status, 200)
+    assert_eq("api 6rd encode: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api 6rd encode: mode", d.get("mode"), "encode")
+    assert_eq("api 6rd encode: prefix", d.get("prefix"), "2001:db8:c000:201::/64")
+    assert_eq("api 6rd encode: prefix_length", d.get("prefix_length"), 64)
+
+    # Encode with mask_len=8 (SP discards top 8 bits).
+    status2, data2 = _api_post("6rd", {
+        "mode": "encode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "sp_ipv4_mask_len": 8,
+        "ipv4": "192.0.2.1",
+    })
+    assert_eq("api 6rd encode (mask=8): HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api 6rd encode (mask=8): prefix", d2.get("prefix"), "2001:db8:2:100::/56")
+    assert_eq("api 6rd encode (mask=8): prefix_length", d2.get("prefix_length"), 56)
+
+    # Encode default mask_len = 0 when omitted.
+    status3, data3 = _api_post("6rd", {
+        "mode": "encode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "ipv4": "192.0.2.1",
+    })
+    assert_eq("api 6rd encode (default mask): HTTP 200", status3, 200)
+    assert_eq("api 6rd encode (default mask): prefix",
+              data3.get("data", {}).get("prefix"), "2001:db8:c000:201::/64")
+
+    # Decode mode — round-trip.
+    status4, data4 = _api_post("6rd", {
+        "mode": "decode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "sp_ipv4_mask_len": 0,
+        "ipv6": "2001:db8:c000:201::1",
+    })
+    assert_eq("api 6rd decode: HTTP 200", status4, 200)
+    d4 = data4.get("data", {})
+    assert_eq("api 6rd decode: ipv4", d4.get("ipv4"), "192.0.2.1")
+
+    # Decode rejects address outside SP prefix.
+    status5, _ = _api_post("6rd", {
+        "mode": "decode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "ipv6": "2001:db9:c000:201::1",
+    })
+    assert_eq("api 6rd decode: outside SP prefix → 400", status5, 400)
+
+    # Encode rejects bad IPv4.
+    status6, _ = _api_post("6rd", {
+        "mode": "encode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "ipv4": "not-an-ip",
+    })
+    assert_eq("api 6rd encode: invalid IPv4 → 400", status6, 400)
+
+    # Bad SP prefix.
+    status7, _ = _api_post("6rd", {
+        "mode": "encode",
+        "sp_ipv6_prefix": "not-a-prefix",
+        "ipv4": "192.0.2.1",
+    })
+    assert_eq("api 6rd: invalid SP prefix → 400", status7, 400)
+
+    # Mask out of range.
+    status8, _ = _api_post("6rd", {
+        "mode": "encode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "sp_ipv4_mask_len": 33,
+        "ipv4": "192.0.2.1",
+    })
+    assert_eq("api 6rd: mask out of range → 400", status8, 400)
+
+    # Missing required fields.
+    status9, _ = _api_post("6rd", {"mode": "encode"})
+    assert_eq("api 6rd encode: missing sp_ipv6_prefix → 400", status9, 400)
+    status10, _ = _api_post("6rd", {
+        "mode": "encode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+    })
+    assert_eq("api 6rd encode: missing ipv4 → 400", status10, 400)
+    status11, _ = _api_post("6rd", {
+        "mode": "decode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+    })
+    assert_eq("api 6rd decode: missing ipv6 → 400", status11, 400)
+
+    # Invalid mode.
+    status12, _ = _api_post("6rd", {
+        "mode": "bogus",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "ipv4": "192.0.2.1",
+    })
+    assert_eq("api 6rd: invalid mode → 400", status12, 400)
+
+
+async def test_ipv6_6rd_ui(page: Page) -> None:
+    section("IPv6 6rd tool UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # /ipv6/6rd should auto-open the drawer (per-tool URL routing).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=6rd")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6rd']")
+    assert_eq("6rd UI: panel exists", await panel.count(), 1)
+
+    # Encode — IPv4 → delegated prefix.
+    await page.select_option("#sixrd_mode", "encode")
+    await page.fill("#sixrd_sp_prefix", "2001:db8::/32")
+    await page.fill("#sixrd_mask_len", "0")
+    await page.fill("#sixrd_ipv4", "192.0.2.1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6rd'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6rd']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("6rd UI encode: prefix rendered",
+                "2001:db8:c000:201::/64" in body_text, f"body: {body_text!r}")
+
+    # Copy delegated prefix.
+    await panel.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("6rd UI encode: copy prefix",
+              await page.evaluate("window.__lastClipboard"),
+              "2001:db8:c000:201::/64")
+
+    # Decode — 6rd address → IPv4.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=6rd")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#sixrd_mode", "decode")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6rd'] button.splitter-btn")
+    # After mode change the form re-rendered server-side; need to refill values.
+    await page.fill("#sixrd_sp_prefix", "2001:db8::/32")
+    await page.fill("#sixrd_mask_len", "0")
+    await page.fill("#sixrd_ipv6", "2001:db8:c000:201::1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6rd'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6rd']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("6rd UI decode: ipv4 rendered",
+                "192.0.2.1" in body_text, f"body: {body_text!r}")
+
+    # Error path — address outside SP prefix.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=6rd")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#sixrd_mode", "decode")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6rd'] button.splitter-btn")
+    await page.fill("#sixrd_sp_prefix", "2001:db8::/32")
+    await page.fill("#sixrd_mask_len", "0")
+    await page.fill("#sixrd_ipv6", "2001:db9:c000:201::1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6rd'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6rd']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("6rd UI: error band on address outside SP prefix",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+    # Shareable GET URL hydrates without re-submission.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=6rd&sixrd_mode=encode"
+                   "&sixrd_sp_prefix=2001:db8::/32&sixrd_mask_len=0&sixrd_ipv4=192.0.2.1")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6rd']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("6rd UI shareable URL: prefix hydrated",
+                "2001:db8:c000:201::/64" in body_text, f"body: {body_text!r}")
+
+
 async def test_api_bulk(page: Page) -> None:
     section("API — bulk calculation")
     # Two valid IPv4 CIDRs
@@ -8433,6 +8620,8 @@ async def main() -> None:
             await test_api_teredo(page)
             await test_ipv6_isatap_ui(page)
             await test_api_isatap(page)
+            await test_ipv6_6rd_ui(page)
+            await test_api_6rd(page)
             await test_a11y_ipv6_drawers(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)

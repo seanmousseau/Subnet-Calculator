@@ -61,6 +61,7 @@ nav:
     - 6to4 Address Tool: 6to4.md
     - Teredo Address Decoder: teredo.md
     - ISATAP Interface-ID Helper: isatap.md
+    - 6rd Address Tool: 6rd.md
     - Allocation Tree: tree.md
     - Wildcard ↔ CIDR: wildcard.md
     - IP Lookup: lookup.md
