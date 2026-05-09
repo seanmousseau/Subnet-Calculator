@@ -507,6 +507,15 @@ final class BulkTest extends TestCase
         $this->assertStringContainsString('payload_size', $r[0]['error']);
     }
 
+    public function testDispatchPmtu6MissingPathMtu(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'pmtu6', 'params' => ['payload_size' => 100]],
+        ]);
+        $this->assertFalse($r[0]['ok']);
+        $this->assertStringContainsString('path_mtu', $r[0]['error']);
+    }
+
     public function testDispatchPmtu6BadExtensionHeader(): void
     {
         $r = bulk_dispatch_ops([

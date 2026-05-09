@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.1] - 2026-05-09
+
+**Patch.** Code-quality cleanup carried over from v3.6.0's review trail.
+
+### Changed
+
+- **SSM tool** — removed unreachable negative-`prefix_length` check in
+  `build_ssm_group()`; renamed `test_build_rejects_negative_prefix_length`
+  to accurately describe what it tests (missing slash in prefix string).
+- **PMTU tool** — extension-header error messages now distinguish
+  "not a positive integer" from "not a multiple of 8 bytes" instead of
+  reporting both with a single misleading message. Tightened
+  `pmtu_compute()` docblock `@param` to `list<int>`.
+- **Bulk endpoint adapters** — `ssm6` and `embedded-rp6` adapters now
+  enforce field ranges (scope 1..15, riid 0..15, rp_prefix_length 0..64,
+  group_id 0..2^32-1) at the API boundary. Previous behaviour delegated
+  range validation to the underlying functions; the new behaviour
+  produces uniform per-item errors with the advertised range bounds.
+- Tidied `(int) hexdec()` cast in `sc_ssm6_parse_group_id()` to
+  `intval($hex, 16)` for clarity.
+
+### Tests
+
+- Added `BulkTest::testDispatchPmtu6MissingPathMtu` for symmetry with
+  the existing missing-`payload_size` coverage.
+
 ## [3.6.0] - 2026-05-09
 
 **IPv6 Multicast.** Fourth and final release in the IPv6-themed minor
