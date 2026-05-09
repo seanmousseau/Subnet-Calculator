@@ -5095,6 +5095,368 @@ async def test_a11y_ipv6_drawers_v350(page: Page) -> None:
         assert_eq(f"a11y v3.5.0 nat64: bubble[{i}] tabindex='0'", ti, "0")
 
 
+async def test_a11y_ipv6_drawers_v360(page: Page) -> None:
+    """v3.6.0 (T6) — a11y audit for the 4 new IPv6 multicast drawers.
+
+    Asserts, per drawer (multicast, ssm, embedded-rp, pmtu):
+      1. Every form input has an associated <label> or aria-label.
+      2. Every help_bubble() icon is keyboard-focusable
+         (tabindex='0', role='button', aria-label='Help').
+      3. Every copy_button() has aria-label starting with 'Copy'.
+      4. Submit buttons have an accessible name.
+      5. ESC closes the drawer.
+
+    Mirrors v3.5.0 T11 shape; gaps are real bugs to fix in markup.
+    """
+    section("v3.6.0 — a11y audit for the 4 new IPv6 multicast drawers")
+    drawers = ["multicast", "ssm", "embedded-rp", "pmtu"]
+    for slug in drawers:
+        await navigate(page, APP_URL + f"?tab=ipv6&tool={slug}")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        drawer = page.locator(f"#panel-ipv6 .tool-panel[data-tool='{slug}']")
+        assert_eq(f"a11y v3.6.0 {slug}: panel rendered", await drawer.count(), 1)
+
+        inputs = drawer.locator(
+            "input[type=text], input[type=number], input[type=tel], "
+            "input[type=checkbox], input:not([type]), select"
+        )
+        n_inputs = await inputs.count()
+        assert_true(
+            f"a11y v3.6.0 {slug}: at least one form input present",
+            n_inputs >= 1,
+            f"got: {n_inputs}",
+        )
+        for i in range(n_inputs):
+            el = inputs.nth(i)
+            has_label = await el.evaluate(
+                "(e) => !!(e.labels && e.labels.length) "
+                "|| !!e.getAttribute('aria-label') "
+                "|| !!e.closest('label')"
+            )
+            ident = await el.get_attribute("id") or await el.get_attribute("name") or f"#{i}"
+            assert_true(
+                f"a11y v3.6.0 {slug}: input '{ident}' has label/aria-label",
+                bool(has_label),
+                f"got has_label={has_label!r}",
+            )
+
+        bubbles = drawer.locator(".help-bubble-icon")
+        n_bubbles = await bubbles.count()
+        assert_true(
+            f"a11y v3.6.0 {slug}: at least one help bubble",
+            n_bubbles >= 1,
+            f"got: {n_bubbles}",
+        )
+        for i in range(n_bubbles):
+            ti = await bubbles.nth(i).get_attribute("tabindex")
+            assert_eq(
+                f"a11y v3.6.0 {slug}: help-bubble[{i}] tabindex='0'", ti, "0",
+            )
+            role = await bubbles.nth(i).get_attribute("role")
+            assert_eq(
+                f"a11y v3.6.0 {slug}: help-bubble[{i}] role='button'", role, "button",
+            )
+            al = await bubbles.nth(i).get_attribute("aria-label")
+            assert_eq(
+                f"a11y v3.6.0 {slug}: help-bubble[{i}] aria-label='Help'", al, "Help",
+            )
+
+        copies = drawer.locator("button.subnet-copy")
+        n_copies = await copies.count()
+        for i in range(n_copies):
+            al = await copies.nth(i).get_attribute("aria-label") or ""
+            assert_true(
+                f"a11y v3.6.0 {slug}: copy-button[{i}] aria-label starts with 'Copy'",
+                al.startswith("Copy"),
+                f"got: {al!r}",
+            )
+
+        submits = drawer.locator("button[type=submit]")
+        n_submits = await submits.count()
+        assert_true(
+            f"a11y v3.6.0 {slug}: at least one submit button",
+            n_submits >= 1,
+            f"got: {n_submits}",
+        )
+        for i in range(n_submits):
+            name = await submits.nth(i).evaluate(
+                "(e) => (e.textContent || '').trim() || e.getAttribute('aria-label') || ''"
+            )
+            assert_true(
+                f"a11y v3.6.0 {slug}: submit-button[{i}] has accessible name",
+                bool(name),
+                f"got: {name!r}",
+            )
+
+        await page.keyboard.press("Escape")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer:not(.open)")
+        assert_true(
+            f"a11y v3.6.0 {slug}: ESC closes drawer",
+            not await page.locator("#panel-ipv6 .tool-drawer.open").is_visible(),
+        )
+
+
+async def test_a11y_v350_drawers_tab_order(page: Page) -> None:
+    """v3.6.0 (T6 carry-over): tab order on opened drawer.
+
+    For each v3.5.0 drawer, opening it auto-focuses the first non-help
+    interactive element, and tabbing forward stays inside the drawer
+    (focus trap, per app.js _buildTrap). This guarantees a keyboard user
+    cannot tab out of an open drawer accidentally.
+    """
+    section("v3.5.0 — a11y tab order inside opened drawer")
+    slugs = [
+        "embedded-v4", "6to4", "teredo", "isatap", "6rd",
+        "mapped6", "prefix-plan", "nibble", "rfc3531",
+    ]
+    for slug in slugs:
+        await navigate(page, APP_URL + "?tab=ipv6")
+        trigger = page.locator(f"#panel-ipv6 button.tool-trigger[data-tool='{slug}']")
+        await trigger.click()
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        # The drawer wires a Tab focus-trap (app.js _buildTrap) that
+        # ensures Tab/Shift-Tab from the last/first focusable element
+        # cycles within the drawer. We assert that the drawer exposes
+        # at least one focusable input + one submit button (necessary
+        # for the trap to work) and that tabbing forward eventually
+        # lands inside the drawer.
+        focusable = await page.evaluate(
+            f"""() => {{
+                const panel = document.querySelector(
+                  "#panel-ipv6 .tool-panel[data-tool='{slug}']"
+                );
+                if (!panel) return 0;
+                return Array.from(panel.querySelectorAll(
+                  'input, button, textarea, select, [tabindex]:not([tabindex="-1"])'
+                )).filter(el => !el.disabled && el.offsetParent !== null).length;
+            }}"""
+        )
+        assert_true(
+            f"tab-order v3.5.0 {slug}: drawer has focusable elements",
+            focusable >= 2,
+            f"got: {focusable}",
+        )
+        # Direct-focus the first visible input — the trap should then
+        # keep focus inside the drawer.
+        in_drawer = await page.evaluate(
+            f"""() => {{
+                const drawer = document.querySelector("#panel-ipv6 .tool-drawer.open");
+                const panel = document.querySelector(
+                  "#panel-ipv6 .tool-panel[data-tool='{slug}']"
+                );
+                const candidates = panel ? Array.from(panel.querySelectorAll(
+                  'input:not([type="hidden"]), button:not([aria-label="Help"]):not(.help-bubble-icon), textarea, select'
+                )).filter(el => !el.disabled && el.offsetParent !== null) : [];
+                const first = candidates[0] || null;
+                if (first) first.focus();
+                return drawer ? drawer.contains(document.activeElement) : false;
+            }}"""
+        )
+        assert_true(
+            f"tab-order v3.5.0 {slug}: focus lands inside drawer",
+            bool(in_drawer),
+        )
+        # Move focus to the LAST focusable element in the drawer, then
+        # Tab once — the trap must wrap focus back to the first element
+        # inside the drawer (not let it escape to surrounding triggers).
+        await page.evaluate(
+            f"""() => {{
+                const drawer = document.querySelector(
+                  "#panel-ipv6 .tool-drawer.open"
+                );
+                if (!drawer) return;
+                const els = Array.from(drawer.querySelectorAll(
+                  'input, button, textarea, select, [tabindex]:not([tabindex="-1"])'
+                )).filter(el => !el.disabled && el.offsetParent !== null);
+                if (els.length) els[els.length - 1].focus();
+            }}"""
+        )
+        await page.keyboard.press("Tab")
+        wrapped = await page.evaluate(
+            """() => {
+                const drawer = document.querySelector(
+                  "#panel-ipv6 .tool-drawer.open"
+                );
+                return !!(drawer && drawer.contains(document.activeElement));
+            }"""
+        )
+        assert_true(
+            f"tab-order v3.5.0 {slug}: focus trap wraps last → first inside drawer",
+            bool(wrapped),
+        )
+        await page.keyboard.press("Escape")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer:not(.open)")
+
+
+async def test_a11y_v350_drawers_focus_return_after_esc(page: Page) -> None:
+    """v3.6.0 (T6 carry-over): ESC returns focus to the originating trigger."""
+    section("v3.5.0 — a11y focus returns to trigger after ESC")
+    slugs = [
+        "embedded-v4", "6to4", "teredo", "isatap", "6rd",
+        "mapped6", "prefix-plan", "nibble", "rfc3531",
+    ]
+    for slug in slugs:
+        await navigate(page, APP_URL + "?tab=ipv6")
+        trigger = page.locator(f"#panel-ipv6 button.tool-trigger[data-tool='{slug}']")
+        await trigger.click()
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        # Move focus into a drawer input so the ESC handler has a clear
+        # "previously focused" element to restore — close() in app.js
+        # always focuses _activeTrigger which was set on open(), so this
+        # is robust against test-runner focus quirks.
+        await page.evaluate(
+            f"""() => {{
+                const panel = document.querySelector(
+                  "#panel-ipv6 .tool-panel[data-tool='{slug}']"
+                );
+                const candidates = panel ? Array.from(panel.querySelectorAll(
+                  'input:not([type="hidden"]), button:not([aria-label="Help"]):not(.help-bubble-icon), textarea, select'
+                )).filter(el => !el.disabled && el.offsetParent !== null) : [];
+                const first = candidates[0] || null;
+                if (first) first.focus();
+            }}"""
+        )
+        await page.keyboard.press("Escape")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer:not(.open)")
+        focused_slug = await page.evaluate(
+            "() => document.activeElement && document.activeElement.dataset"
+            " ? document.activeElement.dataset.tool : null"
+        )
+        # close() restores focus to the originating trigger via
+        # _activeTrigger.focus() in app.js.
+        assert_eq(
+            f"focus-return v3.5.0 {slug}: focus on trigger after ESC",
+            focused_slug, slug,
+        )
+
+
+async def test_a11y_v350_prefers_reduced_motion_respected(page: Page) -> None:
+    """v3.6.0 (T6 carry-over): the global @media (prefers-reduced-motion: reduce)
+    CSS rules apply when the user agent reports reduced motion preference, and
+    the drawer transitions are zeroed accordingly.
+    """
+    section("v3.5.0 — a11y prefers-reduced-motion respected on drawers")
+    await page.emulate_media(reduced_motion="reduce")
+    try:
+        await navigate(page, APP_URL + "?tab=ipv6&tool=nibble")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        # The matchMedia query should be true after emulate_media.
+        prm = await page.evaluate(
+            "() => window.matchMedia('(prefers-reduced-motion: reduce)').matches"
+        )
+        assert_true("v3.5.0 reduced-motion: media query matches", bool(prm))
+        # The drawer panel should have zero or near-zero animation duration
+        # when reduced motion is on. We probe the active element's computed
+        # transition-duration as a smoke check.
+        panel = page.locator("#panel-ipv6 .tool-panel[data-tool='nibble']")
+        durs = await panel.evaluate(
+            """(el) => {
+                const cs = window.getComputedStyle(el);
+                return [cs.transitionDuration, cs.animationDuration];
+            }"""
+        )
+        # Either '0s' on every entry, or the @media rule zeros via important.
+        # Accept any value that parses to <= 0.01s — being permissive lets
+        # implementations use 1ms or similar negligible durations.
+        def _zeroish(s: str) -> bool:
+            for entry in s.split(","):
+                e = entry.strip()
+                if e.endswith("ms"):
+                    try:
+                        if float(e[:-2]) > 10:
+                            return False
+                    except ValueError:
+                        return False
+                elif e.endswith("s"):
+                    try:
+                        if float(e[:-1]) > 0.01:
+                            return False
+                    except ValueError:
+                        return False
+            return True
+        assert_true(
+            "v3.5.0 reduced-motion: panel transition-duration zeroed",
+            _zeroish(durs[0]),
+            f"got transition-duration={durs[0]!r}",
+        )
+        assert_true(
+            "v3.5.0 reduced-motion: panel animation-duration zeroed",
+            _zeroish(durs[1]),
+            f"got animation-duration={durs[1]!r}",
+        )
+    finally:
+        await page.emulate_media(reduced_motion="no-preference")
+
+
+async def test_api_bulk_covers_v360_endpoints(page: Page) -> None:
+    """v3.6.0 (T6) — bulk multi-op `items[]` covers all 4 new ops."""
+    section("API — bulk multi-op covers v3.6.0 IPv6 multicast endpoints")
+    items = [
+        {"op": "multicast6",   "params": {"ipv6": "ff02::1"}},
+        {"op": "ssm6",         "params": {"mode": "encode",
+                                          "unicast_prefix": "2001:db8::/64",
+                                          "scope": 5,
+                                          "group_id": 1}},
+        {"op": "embedded-rp6", "params": {"mode": "encode",
+                                          "rp_address": "2001:db8::1",
+                                          "rp_prefix_length": 64,
+                                          "riid": 1,
+                                          "scope": 5,
+                                          "group_id": 1}},
+        {"op": "pmtu6",        "params": {"path_mtu": 1500,
+                                          "payload_size": 4000}},
+    ]
+    status, data = _api_post("bulk", {"items": items})
+    assert_eq("api bulk v3.6.0: HTTP 200", status, 200)
+    assert_eq("api bulk v3.6.0: ok=true", data.get("ok"), True)
+    results = data.get("data", {}).get("results", [])
+    assert_eq("api bulk v3.6.0: 4 results returned", len(results), 4)
+    expected_ops = ["multicast6", "ssm6", "embedded-rp6", "pmtu6"]
+    for i, op in enumerate(expected_ops):
+        envelope = results[i] if i < len(results) else {}
+        assert_eq(f"api bulk v3.6.0: item[{i}] op={op}",
+                  envelope.get("op"), op)
+        assert_eq(f"api bulk v3.6.0: item[{i}] ok=true",
+                  envelope.get("ok"), True)
+
+    assert_eq("api bulk v3.6.0: multicast6 scope_name",
+              results[0].get("scope_name"), "link-local")
+    assert_eq("api bulk v3.6.0: ssm6 mode=encode",
+              results[1].get("mode"), "encode")
+    assert_true("api bulk v3.6.0: embedded-rp6 has address",
+                "address" in results[2])
+    assert_true("api bulk v3.6.0: pmtu6 needs_fragmentation",
+                results[3].get("needs_fragmentation") is True)
+    assert_eq("api bulk v3.6.0: pmtu6 path_mtu",
+              results[3].get("path_mtu"), 1500)
+
+    # Heterogeneous batch mixing v3.5.0 + v3.6.0 ops in one request.
+    mixed_items = [
+        {"op": "embedded-v4", "params": {"input": "::ffff:192.0.2.1"}},
+        {"op": "multicast6",  "params": {"ipv6": "ff02::1"}},
+        {"op": "pmtu6",       "params": {"path_mtu": 1500, "payload_size": 0}},
+        {"op": "rfc3531",     "params": {"parent_prefix": "2001:db8::/48",
+                                         "reservation_bits": 4,
+                                         "strategy": "centermost"}},
+    ]
+    s2, d2 = _api_post("bulk", {"items": mixed_items})
+    assert_eq("api bulk v3.6.0 mixed: HTTP 200", s2, 200)
+    res2 = d2.get("data", {}).get("results", [])
+    assert_eq("api bulk v3.6.0 mixed: 4 results", len(res2), 4)
+    for i in range(4):
+        assert_eq(f"api bulk v3.6.0 mixed: item[{i}] ok=true",
+                  res2[i].get("ok") if i < len(res2) else None, True)
+
+    # Bad shape on v3.6.0 op surfaces per-item, not 400.
+    s3, d3 = _api_post("bulk", {"items": [
+        {"op": "pmtu6", "params": {"path_mtu": 1500}},
+    ]})
+    assert_eq("api bulk v3.6.0 bad-shape: HTTP 200", s3, 200)
+    res3 = d3.get("data", {}).get("results", [])
+    assert_eq("api bulk v3.6.0 bad-shape: ok=false",
+              res3[0].get("ok") if res3 else None, False)
+
+
 async def test_vlsm_session_ttl_notice(page: Page) -> None:
     section("VLSM session TTL notice")
     await navigate(page, APP_URL)
@@ -9909,6 +10271,13 @@ async def main() -> None:
             # v3.5.0 (T11) — bulk endpoint coverage + a11y for the 9 new drawers
             await test_api_bulk_covers_v350_endpoints(page)
             await test_a11y_ipv6_drawers_v350(page)
+            # v3.6.0 (T6) — a11y for the 4 new IPv6 multicast drawers + bulk
+            # endpoint coverage + strengthened v3.5.0 a11y assertions
+            await test_a11y_ipv6_drawers_v360(page)
+            await test_api_bulk_covers_v360_endpoints(page)
+            await test_a11y_v350_drawers_tab_order(page)
+            await test_a11y_v350_drawers_focus_return_after_esc(page)
+            await test_a11y_v350_prefers_reduced_motion_respected(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)

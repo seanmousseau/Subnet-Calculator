@@ -3834,12 +3834,13 @@ paths:
 
         - **Legacy CIDR mode** — body contains `cidrs[]`. Resolves each CIDR
           via /ipv4 or /ipv6 logic. Per-item envelope: `{input, ok, data?, error?}`.
-        - **Multi-op mode (v3.4.0+v3.5.0)** — body contains `items[]`.
+        - **Multi-op mode (v3.4.0+v3.5.0+v3.6.0)** — body contains `items[]`.
           Each item has its own `op` slug and `params` payload. Supported
           ops: `range6`, `supernet6`, `zone-id`, `derive`, `slaac-privacy`,
           `rdns6`, `mapped6` (v3.4.0); `embedded-v4`, `6to4`, `teredo`,
           `isatap`, `6rd`, `nat64`, `prefix-plan6`, `nibble6`, `rfc3531`
-          (v3.5.0). Per-item envelope: `{op, ok, error?, ...result}` where
+          (v3.5.0); `multicast6`, `ssm6`, `embedded-rp6`, `pmtu6` (v3.6.0).
+          Per-item envelope: `{op, ok, error?, ...result}` where
           `...result` matches the standalone endpoint's success body.
 
         Up to 50 entries per request. Individual failures do not abort the
@@ -3895,6 +3896,10 @@ paths:
                               - prefix-plan6
                               - nibble6
                               - rfc3531
+                              - multicast6
+                              - ssm6
+                              - embedded-rp6
+                              - pmtu6
                           params:
                             type: object
                             description: Per-op parameters; shape matches the corresponding standalone endpoint's request body.
@@ -3932,6 +3937,14 @@ paths:
                         params: { prefix: "2001:db8::/49" }
                       - op: rfc3531
                         params: { parent_prefix: "2001:db8::/48", reservation_bits: 4, strategy: "centermost" }
+                      - op: multicast6
+                        params: { ipv6: "ff02::1" }
+                      - op: ssm6
+                        params: { mode: "encode", unicast_prefix: "2001:db8::/64", scope: 5, group_id: 1 }
+                      - op: embedded-rp6
+                        params: { mode: "encode", rp_address: "2001:db8::1", rp_prefix_length: 64, riid: 1, scope: 5, group_id: 1 }
+                      - op: pmtu6
+                        params: { path_mtu: 1500, payload_size: 4000 }
       responses:
         "200":
           description: Per-item calculation results
