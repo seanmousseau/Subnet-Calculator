@@ -360,6 +360,678 @@ function sc_run_mapped6(array $input): array
     ];
 }
 
+// ─── NAT64 / DNS64 helper (RFC 6052 / 6147), v3.5.0 Task 7 ──────────────────
+
+/**
+ * Run a NAT64 (RFC 6052) embed/extract or DNS64 (RFC 6147) synthesis.
+ * Mirrors the request-shape of sc_run_6rd / sc_run_mapped6 so the same
+ * helper handles both POST and GET shareable URLs.
+ *
+ * @return array{
+ *     mode?: 'encode'|'decode'|'dns64',
+ *     nat64_prefix?: string,
+ *     prefix_length?: int,
+ *     ipv4?: string,
+ *     ipv6?: string,
+ *     error?: string|null
+ * }
+ */
+function sc_run_nat64(
+    string $mode,
+    string $nat64_prefix,
+    string $prefix_length_str,
+    string $ipv4_input,
+    string $ipv6_input,
+    string $a_record_input
+): array {
+    $mode = strtolower(trim($mode));
+    if ($mode !== 'encode' && $mode !== 'decode' && $mode !== 'dns64') {
+        $mode = 'encode';
+    }
+
+    $prefix = trim($nat64_prefix);
+    if ($prefix === '') {
+        $prefix = NAT64_WELL_KNOWN_PREFIX;
+    }
+
+    $plRaw = trim($prefix_length_str);
+    $pl    = $plRaw === '' ? 96 : (int) $plRaw;
+
+    // Empty inputs → no calculation (fresh form).
+    if ($mode === 'encode' && trim($ipv4_input) === '') {
+        return [];
+    }
+    if ($mode === 'decode' && trim($ipv6_input) === '') {
+        return [];
+    }
+    if ($mode === 'dns64' && trim($a_record_input) === '') {
+        return [];
+    }
+
+    try {
+        if ($mode === 'encode') {
+            $v4   = trim($ipv4_input);
+            $ipv6 = nat64_embed($v4, $prefix, $pl);
+            return [
+                'mode'          => 'encode',
+                'nat64_prefix'  => $prefix,
+                'prefix_length' => $pl,
+                'ipv4'          => $v4,
+                'ipv6'          => $ipv6,
+                'error'         => null,
+            ];
+        }
+        if ($mode === 'decode') {
+            $addr = trim($ipv6_input);
+            $v4   = nat64_extract($addr, $prefix, $pl);
+            return [
+                'mode'          => 'decode',
+                'nat64_prefix'  => $prefix,
+                'prefix_length' => $pl,
+                'ipv6'          => $addr,
+                'ipv4'          => $v4,
+                'error'         => null,
+            ];
+        }
+        // dns64
+        $v4   = trim($a_record_input);
+        $ipv6 = dns64_synthesize($v4, $prefix, $pl);
+        return [
+            'mode'          => 'dns64',
+            'nat64_prefix'  => $prefix,
+            'prefix_length' => $pl,
+            'ipv4'          => $v4,
+            'ipv6'          => $ipv6,
+            'error'         => null,
+        ];
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'mode'          => $mode,
+            'nat64_prefix'  => $prefix,
+            'prefix_length' => $pl,
+            'error'         => $e->getMessage(),
+        ];
+    }
+}
+
+// ─── Embedded-IPv4 detector helper (shared by POST handler and GET shareable URL) ─
+
+/**
+ * Run detect_embedded_v4() against the supplied IPv6 address and return an
+ * associative array with keys: input, scheme, ipv4, deprecated, detail_route,
+ * extra, error. Empty input early-returns []. (v3.5.0 Task 2)
+ *
+ * @return array{
+ *     input?: string,
+ *     scheme?: ?string,
+ *     ipv4?: ?string,
+ *     deprecated?: bool,
+ *     detail_route?: ?string,
+ *     extra?: array<string,mixed>,
+ *     error?: string|null
+ * }
+ */
+function sc_run_embedded_v4(string $address): array
+{
+    $raw = trim($address);
+    if ($raw === '') {
+        return [];
+    }
+    try {
+        $detection = detect_embedded_v4($raw);
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'input' => $raw,
+            'error' => $e->getMessage(),
+        ];
+    }
+    return [
+        'input'        => $raw,
+        'scheme'       => $detection['scheme'],
+        'ipv4'         => $detection['ipv4'],
+        'deprecated'   => $detection['deprecated'],
+        'detail_route' => $detection['detail_route'],
+        'extra'        => $detection['extra'],
+        'error'        => null,
+    ];
+}
+
+// ─── 6to4 helper (shared by POST handler and GET shareable URL) ─────────────
+
+/**
+ * Run the 6to4 tool against the supplied input. Mode is either 'encode'
+ * (IPv4 → 2002:WWXX:YYZZ::/48) or 'decode' (6to4 IPv6 → embedded IPv4 +
+ * subnet ID + interface ID). Empty input returns []. (v3.5.0 Task 3)
+ *
+ * @return array{
+ *     mode?: 'encode'|'decode',
+ *     input?: string,
+ *     prefix?: string,
+ *     ipv4?: string,
+ *     subnet_id?: int,
+ *     interface_id?: string,
+ *     error?: string|null
+ * }
+ */
+function sc_run_6to4(string $input, string $mode): array
+{
+    $raw  = trim($input);
+    $mode = strtolower(trim($mode));
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        $mode = 'encode';
+    }
+    if ($raw === '') {
+        return [];
+    }
+    try {
+        if ($mode === 'encode') {
+            return [
+                'mode'   => 'encode',
+                'input'  => $raw,
+                'prefix' => ipv4_to_6to4($raw),
+                'error'  => null,
+            ];
+        }
+        $decoded = decode_6to4($raw);
+        return [
+            'mode'         => 'decode',
+            'input'        => $raw,
+            'ipv4'         => $decoded['ipv4'],
+            'subnet_id'    => $decoded['subnet_id'],
+            'interface_id' => $decoded['interface_id'],
+            'error'        => null,
+        ];
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'mode'  => $mode,
+            'input' => $raw,
+            'error' => $e->getMessage(),
+        ];
+    }
+}
+
+// ─── Teredo helper (shared by POST handler and GET shareable URL) ──────────
+
+/**
+ * Run the Teredo tool against the supplied input. Mode is either 'decode'
+ * (Teredo IPv6 → server v4 + client v4 + port + flags) or 'encode'
+ * (server v4 + client v4 + port + flags → Teredo IPv6). Empty input
+ * returns []. (v3.5.0 Task 4)
+ *
+ * @return array{
+ *     mode?: 'encode'|'decode',
+ *     input?: string,
+ *     ipv6?: string,
+ *     server_ipv4?: string,
+ *     client_ipv4?: string,
+ *     port?: int,
+ *     flags?: int,
+ *     cone?: bool,
+ *     error?: string|null
+ * }
+ */
+function sc_run_teredo(
+    string $mode,
+    string $ipv6_input,
+    string $server_input,
+    string $client_input,
+    string $port_input,
+    string $flags_input,
+    bool $cone_flag
+): array {
+    $mode = strtolower(trim($mode));
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        $mode = 'decode';
+    }
+
+    if ($mode === 'decode') {
+        $raw = trim($ipv6_input);
+        if ($raw === '') {
+            return [];
+        }
+        try {
+            $r = decode_teredo($raw);
+            return [
+                'mode'        => 'decode',
+                'input'       => $raw,
+                'ipv6'        => $raw,
+                'server_ipv4' => $r['server_ipv4'],
+                'client_ipv4' => $r['client_ipv4'],
+                'port'        => $r['port'],
+                'flags'       => $r['flags'],
+                'cone'        => $r['cone'],
+                'error'       => null,
+            ];
+        } catch (\InvalidArgumentException $e) {
+            return [
+                'mode'  => 'decode',
+                'input' => $raw,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    // Encode mode
+    $server = trim($server_input);
+    $client = trim($client_input);
+    $portRaw  = trim($port_input);
+    $flagsRaw = trim($flags_input);
+
+    // Empty-state: no parts supplied yet.
+    if ($server === '' && $client === '' && $portRaw === '') {
+        return [];
+    }
+
+    if ($portRaw === '' || !ctype_digit($portRaw)) {
+        return [
+            'mode'  => 'encode',
+            'error' => 'Port must be a non-negative integer between 0 and 65535.',
+        ];
+    }
+    $port = (int)$portRaw;
+
+    // Flags input optional. Accept decimal or 0xNNNN. Default to cone or
+    // non-cone based on the boolean toggle.
+    if ($flagsRaw === '') {
+        $flags = $cone_flag ? 0x8000 : 0x0000;
+    } else {
+        if (preg_match('/^0x[0-9a-f]{1,4}$/i', $flagsRaw)) {
+            $flags = (int)hexdec(substr($flagsRaw, 2));
+        } elseif (ctype_digit($flagsRaw)) {
+            $flags = (int)$flagsRaw;
+        } else {
+            return [
+                'mode'  => 'encode',
+                'error' => 'Flags must be a 16-bit integer (decimal or 0xNNNN).',
+            ];
+        }
+        if ($flags < 0 || $flags > 0xFFFF) {
+            return [
+                'mode'  => 'encode',
+                'error' => 'Flags must be in the 16-bit range (0..65535).',
+            ];
+        }
+    }
+
+    try {
+        $addr = encode_teredo($server, $client, $port, $flags);
+        return [
+            'mode'        => 'encode',
+            'server_ipv4' => $server,
+            'client_ipv4' => $client,
+            'port'        => $port,
+            'flags'       => $flags,
+            'cone'        => ($flags & 0x8000) !== 0,
+            'ipv6'        => $addr,
+            'error'       => null,
+        ];
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'mode'        => 'encode',
+            'server_ipv4' => $server,
+            'client_ipv4' => $client,
+            'port'        => $port,
+            'flags'       => $flags,
+            'error'       => $e->getMessage(),
+        ];
+    }
+}
+
+// ─── ISATAP helper (shared by POST handler and GET shareable URL) ─────────
+
+/**
+ * Run the ISATAP tool against the supplied input. Mode is either 'encode'
+ * (IPv4 → ISATAP IID) or 'decode' (IID → IPv4). Empty input returns [].
+ * (v3.5.0 Task 5)
+ *
+ * @return array{
+ *     mode?: 'encode'|'decode',
+ *     input?: string,
+ *     ipv4?: string,
+ *     iid?: string,
+ *     globally_unique?: bool,
+ *     error?: string|null
+ * }
+ */
+function sc_run_isatap(
+    string $mode,
+    string $ipv4_input,
+    string $iid_input,
+    string $globally_unique_input
+): array {
+    $mode = strtolower(trim($mode));
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        $mode = 'encode';
+    }
+
+    if ($mode === 'encode') {
+        $raw = trim($ipv4_input);
+        if ($raw === '') {
+            return [];
+        }
+        $gu = null;
+        $guRaw = strtolower(trim($globally_unique_input));
+        if ($guRaw === 'true' || $guRaw === '1' || $guRaw === 'yes') {
+            $gu = true;
+        } elseif ($guRaw === 'false' || $guRaw === '0' || $guRaw === 'no') {
+            $gu = false;
+        }
+        try {
+            $iid = ipv4_to_isatap_iid($raw, $gu);
+            $decoded = decode_isatap_iid($iid);
+            return [
+                'mode'            => 'encode',
+                'input'           => $raw,
+                'ipv4'            => $raw,
+                'iid'             => $iid,
+                'globally_unique' => $decoded['globally_unique'],
+                'error'           => null,
+            ];
+        } catch (\InvalidArgumentException $e) {
+            return [
+                'mode'  => 'encode',
+                'input' => $raw,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    // decode mode
+    $raw = trim($iid_input);
+    if ($raw === '') {
+        return [];
+    }
+    try {
+        $r = decode_isatap_iid($raw);
+        return [
+            'mode'            => 'decode',
+            'input'           => $raw,
+            'iid'             => $raw,
+            'ipv4'            => $r['ipv4'],
+            'globally_unique' => $r['globally_unique'],
+            'error'           => null,
+        ];
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'mode'  => 'decode',
+            'input' => $raw,
+            'error' => $e->getMessage(),
+        ];
+    }
+}
+
+// ─── 6rd helper (shared by POST handler and GET shareable URL) ──────────────
+
+/**
+ * Run the 6rd tool against the supplied input. Mode is either 'encode'
+ * (customer IPv4 + SP params → delegated IPv6 prefix) or 'decode' (6rd
+ * IPv6 address + SP params → customer IPv4). Empty required input
+ * returns []. (v3.5.0 Task 6)
+ *
+ * @return array{
+ *     mode?: 'encode'|'decode',
+ *     sp_ipv6_prefix?: string,
+ *     sp_ipv4_mask_len?: int,
+ *     ipv4?: string,
+ *     ipv6?: string,
+ *     prefix?: string,
+ *     prefix_length?: int,
+ *     error?: string|null
+ * }
+ */
+function sc_run_6rd(
+    string $mode,
+    string $sp_prefix_input,
+    string $mask_len_input,
+    string $ipv4_input,
+    string $ipv6_input
+): array {
+    $mode = strtolower(trim($mode));
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        $mode = 'encode';
+    }
+
+    $sp_prefix = trim($sp_prefix_input);
+    $mask_raw  = trim($mask_len_input);
+    $mask_len  = 0;
+    if ($mask_raw !== '') {
+        if (!ctype_digit($mask_raw)) {
+            return [
+                'mode'             => $mode,
+                'sp_ipv6_prefix'   => $sp_prefix,
+                'sp_ipv4_mask_len' => 0,
+                'error'            => 'SP IPv4 mask length must be an integer 0..32.',
+            ];
+        }
+        $mask_len = (int) $mask_raw;
+        if ($mask_len < 0 || $mask_len > 32) {
+            return [
+                'mode'             => $mode,
+                'sp_ipv6_prefix'   => $sp_prefix,
+                'sp_ipv4_mask_len' => $mask_len,
+                'error'            => 'SP IPv4 mask length must be 0..32.',
+            ];
+        }
+    }
+
+    if ($mode === 'encode') {
+        $v4 = trim($ipv4_input);
+        if ($sp_prefix === '' || $v4 === '') {
+            return [];
+        }
+        try {
+            $r = compute_6rd_delegation($sp_prefix, $mask_len, $v4);
+            return [
+                'mode'             => 'encode',
+                'sp_ipv6_prefix'   => $sp_prefix,
+                'sp_ipv4_mask_len' => $mask_len,
+                'ipv4'             => $v4,
+                'prefix'           => $r['prefix'],
+                'prefix_length'    => $r['prefix_length'],
+                'error'            => null,
+            ];
+        } catch (\InvalidArgumentException $e) {
+            return [
+                'mode'             => 'encode',
+                'sp_ipv6_prefix'   => $sp_prefix,
+                'sp_ipv4_mask_len' => $mask_len,
+                'ipv4'             => $v4,
+                'error'            => $e->getMessage(),
+            ];
+        }
+    }
+
+    // decode mode
+    $addr = trim($ipv6_input);
+    if ($sp_prefix === '' || $addr === '') {
+        return [];
+    }
+    try {
+        $v4 = extract_6rd_ipv4($sp_prefix, $mask_len, $addr);
+        return [
+            'mode'             => 'decode',
+            'sp_ipv6_prefix'   => $sp_prefix,
+            'sp_ipv4_mask_len' => $mask_len,
+            'ipv6'             => $addr,
+            'ipv4'             => $v4,
+            'error'            => null,
+        ];
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'mode'             => 'decode',
+            'sp_ipv6_prefix'   => $sp_prefix,
+            'sp_ipv4_mask_len' => $mask_len,
+            'ipv6'             => $addr,
+            'error'            => $e->getMessage(),
+        ];
+    }
+}
+
+// ─── Prefix-delegation planner helper (v3.5.0 Task 8) ──────────────────────
+
+/**
+ * Plan an IPv6 prefix-delegation slice. Empty/blank inputs early-return [].
+ * Shared by the POST handler and the GET shareable-URL hydration path.
+ *
+ * @return array{
+ *     parent_prefix?: string,
+ *     child_length_input?: string,
+ *     count_input?: string,
+ *     start_offset_input?: string,
+ *     nibble_align?: bool,
+ *     result?: array{
+ *         parent: array{prefix: string, length: int, total_children_str: string},
+ *         children: list<array{index: int, prefix: string, first: string, last: string, contains_64s: string}>,
+ *         free: array{remaining_str: string},
+ *         normalized_child_length: int,
+ *     },
+ *     error?: string|null
+ * }
+ */
+function sc_run_prefix_plan6(
+    string $parent_prefix_input,
+    string $child_length_input,
+    string $count_input,
+    string $start_offset_input,
+    bool $nibble_align
+): array {
+    $parent = trim($parent_prefix_input);
+    $clen   = trim($child_length_input);
+    $cnt    = trim($count_input);
+    $off    = trim($start_offset_input);
+
+    if ($parent === '' && $clen === '' && $cnt === '') {
+        return [];
+    }
+
+    $base = [
+        'parent_prefix'      => $parent,
+        'child_length_input' => $clen,
+        'count_input'        => $cnt,
+        'start_offset_input' => $off,
+        'nibble_align'       => $nibble_align,
+    ];
+
+    if ($parent === '' || $clen === '' || $cnt === '') {
+        return $base + ['error' => 'Parent prefix, child length, and count are all required.'];
+    }
+    if (!ctype_digit($clen)) {
+        return $base + ['error' => 'Child length must be an integer.'];
+    }
+    if (!ctype_digit($cnt)) {
+        return $base + ['error' => 'Count must be a positive integer.'];
+    }
+    if ($off !== '' && !ctype_digit($off)) {
+        return $base + ['error' => 'Start offset must be a non-negative integer.'];
+    }
+    $offset = $off === '' ? 0 : (int) $off;
+
+    try {
+        $r = plan_prefix_delegation(
+            $parent,
+            (int) $clen,
+            (int) $cnt,
+            $offset,
+            $nibble_align
+        );
+        return $base + ['result' => $r, 'error' => null];
+    } catch (\InvalidArgumentException $e) {
+        return $base + ['error' => $e->getMessage()];
+    }
+}
+
+// ─── Nibble6 helper (shared by POST handler and GET shareable URL) ──────────
+
+/**
+ * Run nibble_neighbours() against a single user-supplied prefix and return
+ * an associative array mirroring sc_run_prefix_plan6(): empty on no input,
+ * `error` on failure, `result` on success. Shared by the POST handler and
+ * the GET shareable-URL hydration path. (v3.5.0 Task 9)
+ *
+ * @return array{
+ *     prefix_input?: string,
+ *     result?: array{
+ *         input: array{prefix: string, length: int},
+ *         above: array{length: int, prefix: string, contains_64s: string},
+ *         below: array{length: int, prefix: string, contains_64s: string},
+ *     },
+ *     error?: string|null
+ * }
+ */
+function sc_run_nibble6(string $prefix_input): array
+{
+    $prefix = trim($prefix_input);
+    if ($prefix === '') {
+        return [];
+    }
+    $base = ['prefix_input' => $prefix];
+    try {
+        $r = nibble_neighbours($prefix);
+        return $base + ['result' => $r, 'error' => null];
+    } catch (\InvalidArgumentException $e) {
+        return $base + ['error' => $e->getMessage()];
+    }
+}
+
+// ─── RFC 3531 helper (shared by POST handler and GET shareable URL) ─────────
+
+/**
+ * Run rfc3531_apply() against raw user inputs and return an associative
+ * array mirroring sc_run_prefix_plan6(): empty on no input, `error` on
+ * failure, `result` on success. Shared by the POST handler and the GET
+ * shareable-URL hydration path. (v3.5.0 Task 10)
+ *
+ * @return array{
+ *     parent_prefix?: string,
+ *     reservation_bits_input?: string,
+ *     strategy?: string,
+ *     result?: array{
+ *         parent: array{prefix: string, length: int},
+ *         strategy: string,
+ *         reservation_bits: int,
+ *         allocation_order: list<int>,
+ *         children: list<array{order: int, value: int, prefix: string}>
+ *     },
+ *     error?: string|null
+ * }
+ */
+function sc_run_rfc3531(
+    string $parent_prefix_input,
+    string $reservation_bits_input,
+    string $strategy_input
+): array {
+    $parent   = trim($parent_prefix_input);
+    $bits     = trim($reservation_bits_input);
+    $strategy = trim($strategy_input);
+    if ($strategy === '') {
+        $strategy = 'centermost';
+    }
+
+    if ($parent === '' && $bits === '') {
+        return [];
+    }
+
+    $base = [
+        'parent_prefix'          => $parent,
+        'reservation_bits_input' => $bits,
+        'strategy'               => $strategy,
+    ];
+
+    if ($parent === '' || $bits === '') {
+        return $base + ['error' => 'Parent prefix and reservation bits are both required.'];
+    }
+    if (!ctype_digit($bits)) {
+        return $base + ['error' => 'Reservation bits must be a positive integer.'];
+    }
+
+    try {
+        $r = rfc3531_apply($parent, (int) $bits, $strategy);
+        return $base + ['result' => $r, 'error' => null];
+    } catch (\InvalidArgumentException $e) {
+        return $base + ['error' => $e->getMessage()];
+    }
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -501,6 +1173,76 @@ $mapped6_prefix_input = '';
 /** @var array{input?: string, ipv4?: string, ipv4_mapped?: string, nat64?: string, nat64_prefix?: string, error?: string|null} */
 $mapped6 = [];
 
+// v3.5.0 Task 7 — NAT64 / DNS64 (RFC 6052 / 6147), shares mapped6 drawer
+$nat64_mode             = 'encode';
+$nat64_prefix_input     = '';
+$nat64_pl_input         = '';
+$nat64_ipv4_input       = '';
+$nat64_ipv6_input       = '';
+$nat64_a_record_input   = '';
+/** @var array{mode?: 'encode'|'decode'|'dns64', nat64_prefix?: string, prefix_length?: int, ipv4?: string, ipv6?: string, error?: string|null} */
+$nat64 = [];
+
+// v3.5.0 Task 2 — IPv6 embedded-v4 detector (front door)
+$embedded_v4_input = '';
+/** @var array{input?: string, scheme?: ?string, ipv4?: ?string, deprecated?: bool, detail_route?: ?string, extra?: array<string,mixed>, error?: string|null} */
+$embedded_v4 = [];
+
+// v3.5.0 Task 3 — 6to4 address tool (RFC 3056)
+$sixtofour_input = '';
+$sixtofour_mode  = 'encode';
+/** @var array{mode?: 'encode'|'decode', input?: string, prefix?: string, ipv4?: string, subnet_id?: int, interface_id?: string, error?: string|null} */
+$sixtofour = [];
+
+// v3.5.0 Task 4 — Teredo address decoder (RFC 4380)
+$teredo_mode         = 'decode';
+$teredo_input        = '';
+$teredo_server_input = '';
+$teredo_client_input = '';
+$teredo_port_input   = '';
+$teredo_flags_input  = '';
+$teredo_cone_flag    = true;
+/** @var array{mode?: 'encode'|'decode', input?: string, ipv6?: string, server_ipv4?: string, client_ipv4?: string, port?: int, flags?: int, cone?: bool, error?: string|null} */
+$teredo = [];
+
+// v3.5.0 Task 5 — ISATAP interface-ID helper (RFC 5214)
+$isatap_mode             = 'encode';
+$isatap_ipv4_input       = '';
+$isatap_iid_input        = '';
+$isatap_globally_unique  = '';
+/** @var array{mode?: 'encode'|'decode', input?: string, ipv4?: string, iid?: string, globally_unique?: bool, error?: string|null} */
+$isatap = [];
+
+// v3.5.0 Task 6 — 6rd address tool (RFC 5969)
+$sixrd_mode             = 'encode';
+$sixrd_sp_prefix_input  = '';
+$sixrd_mask_len_input   = '';
+$sixrd_ipv4_input       = '';
+$sixrd_ipv6_input       = '';
+/** @var array{mode?: 'encode'|'decode', sp_ipv6_prefix?: string, sp_ipv4_mask_len?: int, ipv4?: string, ipv6?: string, prefix?: string, prefix_length?: int, error?: string|null} */
+$sixrd = [];
+
+// v3.5.0 Task 9 — IPv6 nibble-boundary helper
+$nibble6_prefix_input = '';
+/** @var array{prefix_input?: string, result?: array{input: array{prefix: string, length: int}, above: array{length: int, prefix: string, contains_64s: string}, below: array{length: int, prefix: string, contains_64s: string}}, error?: string|null} */
+$nibble6 = [];
+
+// v3.5.0 Task 8 — IPv6 prefix-delegation planner
+$prefix_plan6_parent_input        = '';
+$prefix_plan6_child_length_input  = '';
+$prefix_plan6_count_input         = '';
+$prefix_plan6_start_offset_input  = '';
+$prefix_plan6_nibble_align        = true;
+/** @var array{parent_prefix?: string, child_length_input?: string, count_input?: string, start_offset_input?: string, nibble_align?: bool, result?: array{parent: array{prefix: string, length: int, total_children_str: string}, children: list<array{index: int, prefix: string, first: string, last: string, contains_64s: string}>, free: array{remaining_str: string}, normalized_child_length: int}, error?: string|null} */
+$prefix_plan6 = [];
+
+// v3.5.0 Task 10 — RFC 3531 sparse-allocation guidance
+$rfc3531_parent_input           = '';
+$rfc3531_reservation_bits_input = '';
+$rfc3531_strategy_input         = 'centermost';
+/** @var array{parent_prefix?: string, reservation_bits_input?: string, strategy?: string, result?: array{parent: array{prefix: string, length: int}, strategy: string, reservation_bits: int, allocation_order: list<int>, children: list<array{order: int, value: int, prefix: string}>}, error?: string|null} */
+$rfc3531 = [];
+
 $ula_global_id_input = '';
 /** @var array{result?: array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}, error?: string} */
 $ula = [];
@@ -564,6 +1306,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_slaac         = isset($_POST['slaac_prefix']);
     $is_rdns6         = isset($_POST['rdns6_address']);
     $is_mapped6       = isset($_POST['mapped6_input']);
+    $is_embedded_v4   = isset($_POST['embedded_v4_input']);
+    $is_sixtofour     = isset($_POST['sixtofour_input']);
+    $is_teredo        = isset($_POST['teredo_mode'])
+        || isset($_POST['teredo_input'])
+        || isset($_POST['teredo_server'])
+        || isset($_POST['teredo_client'])
+        || isset($_POST['teredo_port']);
+    $is_isatap        = isset($_POST['isatap_mode'])
+        || isset($_POST['isatap_ipv4'])
+        || isset($_POST['isatap_iid']);
+    $is_sixrd         = isset($_POST['sixrd_mode'])
+        || isset($_POST['sixrd_sp_prefix'])
+        || isset($_POST['sixrd_ipv4'])
+        || isset($_POST['sixrd_ipv6']);
+    $is_nat64         = isset($_POST['nat64_mode'])
+        || isset($_POST['nat64_ipv4'])
+        || isset($_POST['nat64_ipv6'])
+        || isset($_POST['nat64_a_record']);
+    $is_prefix_plan6  = isset($_POST['prefix_plan6_parent'])
+        || isset($_POST['prefix_plan6_child_length'])
+        || isset($_POST['prefix_plan6_count']);
+    $is_nibble6       = isset($_POST['nibble6_prefix']);
+    $is_rfc3531       = isset($_POST['rfc3531_parent'])
+        || isset($_POST['rfc3531_reservation_bits']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -571,7 +1337,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_tool = $is_splitter || $is_overlap || $is_multi_overlap || $is_vlsm
         || $is_vlsm6 || $is_supernet || $is_supernet6 || $is_ula || $is_session_save || $is_range
         || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid
-        || $is_derive || $is_slaac || $is_rdns6 || $is_mapped6;
+        || $is_derive || $is_slaac || $is_rdns6 || $is_mapped6 || $is_embedded_v4
+        || $is_sixtofour || $is_teredo || $is_isatap || $is_sixrd || $is_nat64
+        || $is_prefix_plan6
+        || $is_nibble6
+        || $is_rfc3531;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -982,6 +1752,136 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
     }
 
+    if ($is_embedded_v4 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $embedded_v4_input = trim((string)($_POST['embedded_v4_input'] ?? ''));
+        $embedded_v4 = sc_run_embedded_v4($embedded_v4_input);
+    }
+
+    if ($is_sixtofour && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $sixtofour_input = trim((string)($_POST['sixtofour_input'] ?? ''));
+        $sixtofour_mode  = (string)($_POST['sixtofour_mode'] ?? 'encode');
+        if ($sixtofour_mode !== 'encode' && $sixtofour_mode !== 'decode') {
+            $sixtofour_mode = 'encode';
+        }
+        $sixtofour = sc_run_6to4($sixtofour_input, $sixtofour_mode);
+    }
+
+    if ($is_teredo && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $teredo_mode         = (string)($_POST['teredo_mode'] ?? 'decode');
+        if ($teredo_mode !== 'encode' && $teredo_mode !== 'decode') {
+            $teredo_mode = 'decode';
+        }
+        $teredo_input        = trim((string)($_POST['teredo_input']  ?? ''));
+        $teredo_server_input = trim((string)($_POST['teredo_server'] ?? ''));
+        $teredo_client_input = trim((string)($_POST['teredo_client'] ?? ''));
+        $teredo_port_input   = trim((string)($_POST['teredo_port']   ?? ''));
+        $teredo_flags_input  = trim((string)($_POST['teredo_flags']  ?? ''));
+        $teredo_cone_flag    = isset($_POST['teredo_cone']);
+        $teredo = sc_run_teredo(
+            $teredo_mode,
+            $teredo_input,
+            $teredo_server_input,
+            $teredo_client_input,
+            $teredo_port_input,
+            $teredo_flags_input,
+            $teredo_cone_flag
+        );
+    }
+
+    if ($is_isatap && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $isatap_mode = (string)($_POST['isatap_mode'] ?? 'encode');
+        if ($isatap_mode !== 'encode' && $isatap_mode !== 'decode') {
+            $isatap_mode = 'encode';
+        }
+        $isatap_ipv4_input      = trim((string)($_POST['isatap_ipv4'] ?? ''));
+        $isatap_iid_input       = trim((string)($_POST['isatap_iid']  ?? ''));
+        $isatap_globally_unique = (string)($_POST['isatap_globally_unique'] ?? '');
+        $isatap = sc_run_isatap(
+            $isatap_mode,
+            $isatap_ipv4_input,
+            $isatap_iid_input,
+            $isatap_globally_unique
+        );
+    }
+
+    if ($is_sixrd && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $sixrd_mode = (string)($_POST['sixrd_mode'] ?? 'encode');
+        if ($sixrd_mode !== 'encode' && $sixrd_mode !== 'decode') {
+            $sixrd_mode = 'encode';
+        }
+        $sixrd_sp_prefix_input = trim((string)($_POST['sixrd_sp_prefix'] ?? ''));
+        $sixrd_mask_len_input  = trim((string)($_POST['sixrd_mask_len']  ?? ''));
+        $sixrd_ipv4_input      = trim((string)($_POST['sixrd_ipv4']      ?? ''));
+        $sixrd_ipv6_input      = trim((string)($_POST['sixrd_ipv6']      ?? ''));
+        $sixrd = sc_run_6rd(
+            $sixrd_mode,
+            $sixrd_sp_prefix_input,
+            $sixrd_mask_len_input,
+            $sixrd_ipv4_input,
+            $sixrd_ipv6_input
+        );
+    }
+
+    if ($is_nat64 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $nat64_mode = (string)($_POST['nat64_mode'] ?? 'encode');
+        if ($nat64_mode !== 'encode' && $nat64_mode !== 'decode' && $nat64_mode !== 'dns64') {
+            $nat64_mode = 'encode';
+        }
+        $nat64_prefix_input   = trim((string)($_POST['nat64_prefix']    ?? ''));
+        $nat64_pl_input       = trim((string)($_POST['nat64_pl']        ?? ''));
+        $nat64_ipv4_input     = trim((string)($_POST['nat64_ipv4']      ?? ''));
+        $nat64_ipv6_input     = trim((string)($_POST['nat64_ipv6']      ?? ''));
+        $nat64_a_record_input = trim((string)($_POST['nat64_a_record']  ?? ''));
+        $nat64 = sc_run_nat64(
+            $nat64_mode,
+            $nat64_prefix_input,
+            $nat64_pl_input,
+            $nat64_ipv4_input,
+            $nat64_ipv6_input,
+            $nat64_a_record_input
+        );
+    }
+
+    if ($is_nibble6 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $nibble6_prefix_input = trim((string)($_POST['nibble6_prefix'] ?? ''));
+        $nibble6              = sc_run_nibble6($nibble6_prefix_input);
+    }
+
+    if ($is_rfc3531 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $rfc3531_parent_input           = trim((string)($_POST['rfc3531_parent']           ?? ''));
+        $rfc3531_reservation_bits_input = trim((string)($_POST['rfc3531_reservation_bits'] ?? ''));
+        $rfc3531_strategy_input         = trim((string)($_POST['rfc3531_strategy']         ?? 'centermost'));
+        $rfc3531 = sc_run_rfc3531(
+            $rfc3531_parent_input,
+            $rfc3531_reservation_bits_input,
+            $rfc3531_strategy_input
+        );
+    }
+
+    if ($is_prefix_plan6 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $prefix_plan6_parent_input       = trim((string)($_POST['prefix_plan6_parent']       ?? ''));
+        $prefix_plan6_child_length_input = trim((string)($_POST['prefix_plan6_child_length'] ?? ''));
+        $prefix_plan6_count_input        = trim((string)($_POST['prefix_plan6_count']        ?? ''));
+        $prefix_plan6_start_offset_input = trim((string)($_POST['prefix_plan6_start_offset'] ?? ''));
+        $prefix_plan6_nibble_align       = isset($_POST['prefix_plan6_nibble_align']);
+        $prefix_plan6 = sc_run_prefix_plan6(
+            $prefix_plan6_parent_input,
+            $prefix_plan6_child_length_input,
+            $prefix_plan6_count_input,
+            $prefix_plan6_start_offset_input,
+            $prefix_plan6_nibble_align
+        );
+    }
+
     if ($is_ula && !$form_blocked) {
         $ula_global_id_input = trim((string)($_POST['ula_global_id'] ?? ''));
         $ur = generate_ula_prefix($ula_global_id_input);
@@ -1379,6 +2279,170 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'input'        => $mapped6_input,
             'nat64_prefix' => $mapped6_prefix_input,
         ]);
+    }
+
+    // Embedded-v4 detector shareable GET URL (v3.5.0 Task 2)
+    if ($active_tab === 'ipv6' && isset($_GET['embedded_v4_input'])) {
+        $embedded_v4_input = trim((string)($_GET['embedded_v4_input'] ?? ''));
+        $embedded_v4 = sc_run_embedded_v4($embedded_v4_input);
+    }
+
+    // 6to4 shareable GET URL (v3.5.0 Task 3)
+    if ($active_tab === 'ipv6' && isset($_GET['sixtofour_input'])) {
+        $sixtofour_input = trim((string)($_GET['sixtofour_input'] ?? ''));
+        $sixtofour_mode  = (string)($_GET['sixtofour_mode'] ?? 'encode');
+        if ($sixtofour_mode !== 'encode' && $sixtofour_mode !== 'decode') {
+            $sixtofour_mode = 'encode';
+        }
+        $sixtofour = sc_run_6to4($sixtofour_input, $sixtofour_mode);
+    }
+
+    // Teredo shareable GET URL (v3.5.0 Task 4)
+    if (
+        $active_tab === 'ipv6'
+        && (isset($_GET['teredo_input']) || isset($_GET['teredo_server']))
+    ) {
+        $teredo_mode = (string)($_GET['teredo_mode'] ?? 'decode');
+        if ($teredo_mode !== 'encode' && $teredo_mode !== 'decode') {
+            $teredo_mode = 'decode';
+        }
+        $teredo_input        = trim((string)($_GET['teredo_input']  ?? ''));
+        $teredo_server_input = trim((string)($_GET['teredo_server'] ?? ''));
+        $teredo_client_input = trim((string)($_GET['teredo_client'] ?? ''));
+        $teredo_port_input   = trim((string)($_GET['teredo_port']   ?? ''));
+        $teredo_flags_input  = trim((string)($_GET['teredo_flags']  ?? ''));
+        $teredo_cone_flag    = isset($_GET['teredo_cone']);
+        $teredo = sc_run_teredo(
+            $teredo_mode,
+            $teredo_input,
+            $teredo_server_input,
+            $teredo_client_input,
+            $teredo_port_input,
+            $teredo_flags_input,
+            $teredo_cone_flag
+        );
+    }
+
+    // ISATAP shareable GET URL (v3.5.0 Task 5)
+    if (
+        $active_tab === 'ipv6'
+        && (isset($_GET['isatap_ipv4']) || isset($_GET['isatap_iid']))
+    ) {
+        $isatap_mode = (string)($_GET['isatap_mode'] ?? 'encode');
+        if ($isatap_mode !== 'encode' && $isatap_mode !== 'decode') {
+            $isatap_mode = 'encode';
+        }
+        $isatap_ipv4_input      = trim((string)($_GET['isatap_ipv4'] ?? ''));
+        $isatap_iid_input       = trim((string)($_GET['isatap_iid']  ?? ''));
+        $isatap_globally_unique = (string)($_GET['isatap_globally_unique'] ?? '');
+        $isatap = sc_run_isatap(
+            $isatap_mode,
+            $isatap_ipv4_input,
+            $isatap_iid_input,
+            $isatap_globally_unique
+        );
+    }
+
+    // 6rd shareable GET URL (v3.5.0 Task 6)
+    if (
+        $active_tab === 'ipv6'
+        && (isset($_GET['sixrd_ipv4']) || isset($_GET['sixrd_ipv6']) || isset($_GET['sixrd_sp_prefix']))
+    ) {
+        $sixrd_mode = (string)($_GET['sixrd_mode'] ?? 'encode');
+        if ($sixrd_mode !== 'encode' && $sixrd_mode !== 'decode') {
+            $sixrd_mode = 'encode';
+        }
+        $sixrd_sp_prefix_input = trim((string)($_GET['sixrd_sp_prefix'] ?? ''));
+        $sixrd_mask_len_input  = trim((string)($_GET['sixrd_mask_len']  ?? ''));
+        $sixrd_ipv4_input      = trim((string)($_GET['sixrd_ipv4']      ?? ''));
+        $sixrd_ipv6_input      = trim((string)($_GET['sixrd_ipv6']      ?? ''));
+        $sixrd = sc_run_6rd(
+            $sixrd_mode,
+            $sixrd_sp_prefix_input,
+            $sixrd_mask_len_input,
+            $sixrd_ipv4_input,
+            $sixrd_ipv6_input
+        );
+    }
+
+    // NAT64 / DNS64 shareable GET URL (v3.5.0 Task 7)
+    if (
+        $active_tab === 'ipv6'
+        && (
+            isset($_GET['nat64_mode'])
+            || isset($_GET['nat64_ipv4'])
+            || isset($_GET['nat64_ipv6'])
+            || isset($_GET['nat64_a_record'])
+        )
+    ) {
+        $nat64_mode = (string)($_GET['nat64_mode'] ?? 'encode');
+        if ($nat64_mode !== 'encode' && $nat64_mode !== 'decode' && $nat64_mode !== 'dns64') {
+            $nat64_mode = 'encode';
+        }
+        $nat64_prefix_input   = trim((string)($_GET['nat64_prefix']    ?? ''));
+        $nat64_pl_input       = trim((string)($_GET['nat64_pl']        ?? ''));
+        $nat64_ipv4_input     = trim((string)($_GET['nat64_ipv4']      ?? ''));
+        $nat64_ipv6_input     = trim((string)($_GET['nat64_ipv6']      ?? ''));
+        $nat64_a_record_input = trim((string)($_GET['nat64_a_record']  ?? ''));
+        $nat64 = sc_run_nat64(
+            $nat64_mode,
+            $nat64_prefix_input,
+            $nat64_pl_input,
+            $nat64_ipv4_input,
+            $nat64_ipv6_input,
+            $nat64_a_record_input
+        );
+    }
+
+    // Prefix-delegation planner shareable GET URL (v3.5.0 Task 8)
+    if (
+        $active_tab === 'ipv6'
+        && (
+            isset($_GET['prefix_plan6_parent'])
+            || isset($_GET['prefix_plan6_child_length'])
+            || isset($_GET['prefix_plan6_count'])
+        )
+    ) {
+        $prefix_plan6_parent_input       = trim((string)($_GET['prefix_plan6_parent']       ?? ''));
+        $prefix_plan6_child_length_input = trim((string)($_GET['prefix_plan6_child_length'] ?? ''));
+        $prefix_plan6_count_input        = trim((string)($_GET['prefix_plan6_count']        ?? ''));
+        $prefix_plan6_start_offset_input = trim((string)($_GET['prefix_plan6_start_offset'] ?? ''));
+        // GET hydration accepts an explicit `=0` to mean "off"; presence with any
+        // truthy value or no value defaults to on. This mirrors how shareable
+        // URLs serialise checkbox state across the rest of the app.
+        $prefix_plan6_nibble_align = !isset($_GET['prefix_plan6_nibble_align'])
+            || (string)$_GET['prefix_plan6_nibble_align'] !== '0';
+        $prefix_plan6 = sc_run_prefix_plan6(
+            $prefix_plan6_parent_input,
+            $prefix_plan6_child_length_input,
+            $prefix_plan6_count_input,
+            $prefix_plan6_start_offset_input,
+            $prefix_plan6_nibble_align
+        );
+    }
+
+    // Nibble-boundary helper shareable GET URL (v3.5.0 Task 9)
+    if ($active_tab === 'ipv6' && isset($_GET['nibble6_prefix'])) {
+        $nibble6_prefix_input = trim((string)($_GET['nibble6_prefix'] ?? ''));
+        $nibble6              = sc_run_nibble6($nibble6_prefix_input);
+    }
+
+    // RFC 3531 sparse-allocation shareable GET URL (v3.5.0 Task 10)
+    if (
+        $active_tab === 'ipv6'
+        && (
+            isset($_GET['rfc3531_parent'])
+            || isset($_GET['rfc3531_reservation_bits'])
+        )
+    ) {
+        $rfc3531_parent_input           = trim((string)($_GET['rfc3531_parent']           ?? ''));
+        $rfc3531_reservation_bits_input = trim((string)($_GET['rfc3531_reservation_bits'] ?? ''));
+        $rfc3531_strategy_input         = trim((string)($_GET['rfc3531_strategy']         ?? 'centermost'));
+        $rfc3531 = sc_run_rfc3531(
+            $rfc3531_parent_input,
+            $rfc3531_reservation_bits_input,
+            $rfc3531_strategy_input
+        );
     }
 
     // Supernet6 / summarise6 shareable GET URL (v3.3.0)

@@ -65,6 +65,24 @@ tags:
     description: Reverse-DNS zone generation
   - name: Mapped6
     description: IPv4-mapped IPv6 and NAT64 conversion
+  - name: EmbeddedV4
+    description: IPv6 embedded-IPv4 detector (front door for v3.5.0 transition tools)
+  - name: SixToFour
+    description: 6to4 address tool (RFC 3056) — bidirectional IPv4 ↔ 2002::/16 translation
+  - name: Teredo
+    description: Teredo address decoder (RFC 4380) — bidirectional decoding/encoding of 2001:0::/32 addresses
+  - name: Isatap
+    description: ISATAP interface-ID helper (RFC 5214) — bidirectional encoding/decoding of the 64-bit ISATAP IID
+  - name: SixRd
+    description: 6rd address tool (RFC 5969) — service-provider-configured IPv4 ↔ delegated IPv6 prefix translation
+  - name: Nat64
+    description: NAT64 / DNS64 helper (RFC 6052 / 6147) — prefix-length-aware IPv4 ↔ NAT64 IPv6 translation and DNS64 AAAA synthesis
+  - name: PrefixPlan6
+    description: IPv6 prefix-delegation planner — slice a parent prefix into nibble-aligned child prefixes (operator math, not detection)
+  - name: Nibble6
+    description: IPv6 nibble-boundary helper — surface the nibble-aligned neighbours (above and below) of any IPv6 prefix
+  - name: Rfc3531
+    description: RFC 3531 sparse-allocation guidance — centermost / leftmost / rightmost bit-reservation strategy for growth-friendly prefix assignment
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -353,6 +371,12 @@ paths:
                     - "POST /api/v1/rdns"
                     - "POST /api/v1/rdns6"
                     - "POST /api/v1/mapped6"
+                    - "POST /api/v1/embedded-v4"
+                    - "POST /api/v1/6to4"
+                    - "POST /api/v1/teredo"
+                    - "POST /api/v1/isatap"
+                    - "POST /api/v1/6rd"
+                    - "POST /api/v1/nat64"
                     - "POST /api/v1/bulk"
                     - "POST /api/v1/range/ipv4"
                     - "POST /api/v1/range6"
@@ -1865,6 +1889,1237 @@ paths:
             X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
             Retry-After:           { $ref: "#/components/headers/RetryAfter" }
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /embedded-v4:
+    post:
+      operationId: embeddedV4Detect
+      tags: [EmbeddedV4]
+      summary: Detect embedded-IPv4 scheme inside an IPv6 address
+      description: |
+        Front-door detector for the IPv6 transition tools (v3.5.0).
+        Identifies whether the supplied IPv6 address embeds an IPv4 via
+        any of the supported schemes:
+
+        - `mapped`     — IPv4-mapped (`::ffff:0:0/96`, RFC 4291 §2.5.5.2)
+        - `compatible` — IPv4-compatible (`::/96`, RFC 4291 §2.5.5.1, **deprecated**)
+        - `6to4`       — RFC 3056 (`2002::/16`)
+        - `teredo`     — RFC 4380 (`2001:0::/32`)
+        - `nat64-wkp`  — NAT64 well-known prefix (`64:ff9b::/96`, RFC 6052)
+        - `isatap`     — RFC 5214 IID `*0000:5efe:V4` or `*0200:5efe:V4`
+
+        When no embedded IPv4 is detected, `scheme` and `ipv4` are `null`.
+        `detail_route` deep-links to the per-scheme tool drawer when
+        available; v3.5.0 PRs T3–T7 wire it as those drawers ship.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input]
+              properties:
+                input:
+                  type: string
+                  description: An IPv6 address literal.
+                  example: "::ffff:192.0.2.1"
+            examples:
+              mapped:
+                summary: IPv4-mapped IPv6
+                value: { input: "::ffff:192.0.2.1" }
+              six-to-four:
+                summary: 6to4
+                value: { input: "2002:c000:0201::" }
+              teredo:
+                summary: Teredo (RFC 4380 §4 example)
+                value: { input: "2001:0:4136:e378:8000:63bf:3fff:fdd2" }
+              nat64-wkp:
+                summary: NAT64 well-known prefix
+                value: { input: "64:ff9b::192.0.2.1" }
+              isatap:
+                summary: ISATAP
+                value: { input: "2001:db8::200:5efe:c000:201" }
+      responses:
+        "200":
+          description: Detection result (or null scheme when no embedded IPv4 was found)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [input, scheme, ipv4, deprecated, detail_route, extra]
+                        properties:
+                          input:
+                            type: string
+                            example: "::ffff:192.0.2.1"
+                          scheme:
+                            type: string
+                            nullable: true
+                            enum: [mapped, compatible, 6to4, teredo, nat64-wkp, isatap]
+                            example: "mapped"
+                          ipv4:
+                            type: string
+                            nullable: true
+                            example: "192.0.2.1"
+                          deprecated:
+                            type: boolean
+                            example: false
+                          detail_route:
+                            type: string
+                            nullable: true
+                            description: Relative URL of the per-scheme tool drawer; null until that drawer ships.
+                            example: null
+                          extra:
+                            type: object
+                            description: Scheme-specific extras (e.g. Teredo flags + UDP port, 6to4 SLA ID, ISATAP u-bit).
+                            additionalProperties: true
+              example:
+                ok: true
+                data:
+                  input: "::ffff:192.0.2.1"
+                  scheme: "mapped"
+                  ipv4: "192.0.2.1"
+                  deprecated: false
+                  detail_route: null
+                  extra: {}
+        "400":
+          description: Missing or unparseable IPv6 input
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /6to4:
+    post:
+      operationId: sixToFourConvert
+      tags: [SixToFour]
+      summary: Convert between public IPv4 and 6to4 IPv6 prefix (RFC 3056)
+      description: |
+        Bidirectional conversion between public IPv4 addresses and the
+        `2002::/16` 6to4 prefix family (RFC 3056). Two modes:
+
+        - **`encode`** — input `ipv4`, output `prefix` as `2002:WWXX:YYZZ::/48`
+          where `W.X.Y.Z` is the IPv4 broken into two 16-bit hexadectets.
+          Private (RFC 1918), reserved, multicast (`224.0.0.0/4`), and the
+          unspecified address `0.0.0.0` are rejected with HTTP 400.
+        - **`decode`** — input `ipv6` (any address under `2002::/16`),
+          output `ipv4` (the embedded V4 from bytes 2–5), `subnet_id` (the
+          16-bit Subnet/SLA ID from bytes 6–7), and `interface_id` (the
+          64-bit Interface ID from bytes 8–15, rendered as four
+          colon-separated 16-bit groups).
+
+        RFC 7526 deprecated the 6to4 anycast relay (`192.88.99.1`) in 2015.
+        This endpoint is provided for analysis and migration audits.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [mode, ipv4]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [encode]
+                    ipv4:
+                      type: string
+                      description: A public IPv4 address.
+                      example: "192.0.2.1"
+                - type: object
+                  required: [mode, ipv6]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [decode]
+                    ipv6:
+                      type: string
+                      description: An IPv6 literal under 2002::/16.
+                      example: "2002:c000:0201::1"
+            examples:
+              encode:
+                summary: Encode IPv4 → 6to4 prefix
+                value: { mode: encode, ipv4: "192.0.2.1" }
+              decode:
+                summary: Decode 6to4 IPv6 → IPv4
+                value: { mode: decode, ipv6: "2002:c000:0201::1" }
+      responses:
+        "200":
+          description: Conversion result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        oneOf:
+                          - type: object
+                            required: [mode, ipv4, prefix]
+                            properties:
+                              mode:
+                                type: string
+                                enum: [encode]
+                              ipv4:
+                                type: string
+                                example: "192.0.2.1"
+                              prefix:
+                                type: string
+                                example: "2002:c000:0201::/48"
+                          - type: object
+                            required: [mode, ipv6, ipv4, subnet_id, interface_id]
+                            properties:
+                              mode:
+                                type: string
+                                enum: [decode]
+                              ipv6:
+                                type: string
+                                example: "2002:c000:0201::1"
+                              ipv4:
+                                type: string
+                                example: "192.0.2.1"
+                              subnet_id:
+                                type: integer
+                                minimum: 0
+                                maximum: 65535
+                                example: 0
+                              interface_id:
+                                type: string
+                                description: The 64-bit Interface ID rendered as four colon-separated 16-bit groups (lowercase hex, zero-padded).
+                                example: "0000:0000:0000:0001"
+              example:
+                ok: true
+                data:
+                  mode: encode
+                  ipv4: "192.0.2.1"
+                  prefix: "2002:c000:0201::/48"
+        "400":
+          description: Missing required field, unparseable input, or non-public IPv4 (private / reserved / multicast)
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /teredo:
+    post:
+      operationId: teredoConvert
+      tags: [Teredo]
+      summary: Decode or encode a Teredo IPv6 address (RFC 4380)
+      description: |
+        Bidirectional conversion between Teredo IPv6 addresses (2001:0::/32)
+        and their constituent parts: server IPv4 (raw), 16-bit flags
+        (high bit 0x8000 = "cone"), de-XOR'd UDP port, and de-XOR'd
+        client IPv4. Two modes:
+
+        - **`decode`** — input `ipv6` (any address under 2001:0::/32),
+          output `server_ipv4`, `flags`, `cone`, `port`, `client_ipv4`.
+        - **`encode`** — input `server_ipv4`, `client_ipv4`, `port`
+          (0..65535), and optional `flags` (default `0x8000` for cone),
+          output `ipv6` plus the echoed parts.
+
+        Microsoft retired the public Teredo service for consumer
+        Windows in 2019. This endpoint is provided for analysis of
+        legacy traffic captures and address audits.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [mode, ipv6]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [decode]
+                    ipv6:
+                      type: string
+                      description: An IPv6 literal under 2001:0::/32.
+                      example: "2001:0:4136:e378:8000:63bf:3fff:fdd2"
+                - type: object
+                  required: [mode, server_ipv4, client_ipv4, port]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [encode]
+                    server_ipv4:
+                      type: string
+                      example: "65.54.227.120"
+                    client_ipv4:
+                      type: string
+                      example: "192.0.2.45"
+                    port:
+                      type: integer
+                      minimum: 0
+                      maximum: 65535
+                      example: 40000
+                    flags:
+                      type: integer
+                      minimum: 0
+                      maximum: 65535
+                      default: 32768
+                      description: 16-bit flags field; the high bit (0x8000) is the cone-NAT indicator. Default is 0x8000.
+            examples:
+              decode:
+                summary: Decode Teredo IPv6 → parts
+                value: { mode: decode, ipv6: "2001:0:4136:e378:8000:63bf:3fff:fdd2" }
+              encode:
+                summary: Encode parts → Teredo IPv6
+                value: { mode: encode, server_ipv4: "65.54.227.120", client_ipv4: "192.0.2.45", port: 40000, flags: 32768 }
+      responses:
+        "200":
+          description: Conversion result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        oneOf:
+                          - type: object
+                            required: [mode, ipv6, server_ipv4, flags, cone, port, client_ipv4]
+                            properties:
+                              mode:
+                                type: string
+                                enum: [decode]
+                              ipv6:
+                                type: string
+                                example: "2001:0:4136:e378:8000:63bf:3fff:fdd2"
+                              server_ipv4:
+                                type: string
+                                example: "65.54.227.120"
+                              flags:
+                                type: integer
+                                example: 32768
+                              cone:
+                                type: boolean
+                                example: true
+                              port:
+                                type: integer
+                                example: 40000
+                              client_ipv4:
+                                type: string
+                                example: "192.0.2.45"
+                          - type: object
+                            required: [mode, ipv6, server_ipv4, client_ipv4, port, flags, cone]
+                            properties:
+                              mode:
+                                type: string
+                                enum: [encode]
+                              server_ipv4:
+                                type: string
+                                example: "65.54.227.120"
+                              client_ipv4:
+                                type: string
+                                example: "192.0.2.45"
+                              port:
+                                type: integer
+                                example: 40000
+                              flags:
+                                type: integer
+                                example: 32768
+                              cone:
+                                type: boolean
+                                example: true
+                              ipv6:
+                                type: string
+                                example: "2001:0:4136:e378:8000:63bf:3fff:fdd2"
+              example:
+                ok: true
+                data:
+                  mode: decode
+                  ipv6: "2001:0:4136:e378:8000:63bf:3fff:fdd2"
+                  server_ipv4: "65.54.227.120"
+                  flags: 32768
+                  cone: true
+                  port: 40000
+                  client_ipv4: "192.0.2.45"
+        "400":
+          description: Missing required field, unparseable input, or non-Teredo address
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /isatap:
+    post:
+      operationId: isatapConvert
+      tags: [Isatap]
+      summary: Encode an IPv4 into an ISATAP IID or decode an ISATAP IID back to IPv4 (RFC 5214)
+      description: |
+        Bidirectional conversion between an IPv4 address and the 64-bit
+        ISATAP interface ID that embeds it. Two modes:
+
+        - **`encode`** — input `ipv4` (any IPv4 literal) and optional
+          `globally_unique` (boolean). When `globally_unique` is omitted
+          the helper auto-detects from the IPv4: public address →
+          `true` (`0200:5efe:V4`); private/reserved → `false`
+          (`0000:5efe:V4`). Output is the colon-grouped IID with
+          leading zeros stripped per hexadectet (`inet_ntop`-style),
+          plus the resolved `globally_unique` flag.
+        - **`decode`** — input `iid` (four colon-separated hexadectets,
+          either canonical or zero-padded; magic must be `0000:5efe`
+          or `0200:5efe`). Output is the embedded `ipv4` and
+          `globally_unique` flag.
+
+        ISATAP saw limited deployment outside specific enterprise
+        transition scenarios. This endpoint is provided for analysis of
+        legacy traffic and address audits.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [mode, ipv4]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [encode]
+                    ipv4:
+                      type: string
+                      example: "192.0.2.1"
+                    globally_unique:
+                      type: boolean
+                      description: When omitted, auto-detected from the IPv4 (public → true, private/reserved → false).
+                - type: object
+                  required: [mode, iid]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [decode]
+                    iid:
+                      type: string
+                      description: ISATAP IID — four colon-separated hexadectets.
+                      example: "200:5efe:c000:201"
+            examples:
+              encode:
+                summary: Encode IPv4 → ISATAP IID
+                value: { mode: encode, ipv4: "192.0.2.1" }
+              decode:
+                summary: Decode ISATAP IID → IPv4
+                value: { mode: decode, iid: "200:5efe:c000:201" }
+      responses:
+        "200":
+          description: Conversion result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        oneOf:
+                          - type: object
+                            required: [mode, ipv4, iid, globally_unique]
+                            properties:
+                              mode:
+                                type: string
+                                enum: [encode]
+                              ipv4:
+                                type: string
+                                example: "192.0.2.1"
+                              iid:
+                                type: string
+                                example: "200:5efe:c000:201"
+                              globally_unique:
+                                type: boolean
+                                example: true
+                          - type: object
+                            required: [mode, iid, ipv4, globally_unique]
+                            properties:
+                              mode:
+                                type: string
+                                enum: [decode]
+                              iid:
+                                type: string
+                                example: "200:5efe:c000:201"
+                              ipv4:
+                                type: string
+                                example: "192.0.2.1"
+                              globally_unique:
+                                type: boolean
+                                example: true
+              example:
+                ok: true
+                data:
+                  mode: encode
+                  ipv4: "192.0.2.1"
+                  iid: "200:5efe:c000:201"
+                  globally_unique: true
+        "400":
+          description: Missing required field, unparseable input, or non-ISATAP IID
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /6rd:
+    post:
+      operationId: sixRdConvert
+      tags: [SixRd]
+      summary: Compute customer 6rd-delegated IPv6 prefix or extract customer IPv4 (RFC 5969)
+      description: |
+        Bidirectional translation between a customer IPv4 and the
+        customer-delegated IPv6 prefix produced by a 6rd service
+        provider. 6rd is service-provider-configured; the SP IPv6
+        prefix and IPv4 mask length must be supplied by the caller
+        (out-of-band configuration, typically delivered via DHCPv6
+        OPTION_6RD).
+
+        - **`encode`** — input `sp_ipv6_prefix` (e.g. `2001:db8::/32`),
+          optional `sp_ipv4_mask_len` (0..32, default 0), and `ipv4`.
+          Output is the delegated IPv6 prefix and its length.
+        - **`decode`** — input `sp_ipv6_prefix`, optional
+          `sp_ipv4_mask_len`, and `ipv6` (any address within the SP's
+          6rd domain). Output is the customer IPv4. The masked-off
+          high bits of the v4 are treated as zero — they are SP-side
+          configuration not recoverable from the 6rd address alone.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [mode, sp_ipv6_prefix, ipv4]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [encode]
+                    sp_ipv6_prefix:
+                      type: string
+                      example: "2001:db8::/32"
+                    sp_ipv4_mask_len:
+                      type: integer
+                      minimum: 0
+                      maximum: 32
+                      default: 0
+                    ipv4:
+                      type: string
+                      example: "192.0.2.1"
+                - type: object
+                  required: [mode, sp_ipv6_prefix, ipv6]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [decode]
+                    sp_ipv6_prefix:
+                      type: string
+                      example: "2001:db8::/32"
+                    sp_ipv4_mask_len:
+                      type: integer
+                      minimum: 0
+                      maximum: 32
+                      default: 0
+                    ipv6:
+                      type: string
+                      example: "2001:db8:c000:201::1"
+            examples:
+              encode:
+                summary: Encode customer IPv4 → delegated IPv6 prefix
+                value: { mode: encode, sp_ipv6_prefix: "2001:db8::/32", sp_ipv4_mask_len: 0, ipv4: "192.0.2.1" }
+              decode:
+                summary: Decode 6rd IPv6 address → customer IPv4
+                value: { mode: decode, sp_ipv6_prefix: "2001:db8::/32", sp_ipv4_mask_len: 0, ipv6: "2001:db8:c000:201::1" }
+      responses:
+        "200":
+          description: Conversion result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        oneOf:
+                          - type: object
+                            required: [mode, sp_ipv6_prefix, sp_ipv4_mask_len, ipv4, prefix, prefix_length]
+                            properties:
+                              mode:
+                                type: string
+                                enum: [encode]
+                              sp_ipv6_prefix:
+                                type: string
+                                example: "2001:db8::/32"
+                              sp_ipv4_mask_len:
+                                type: integer
+                                example: 0
+                              ipv4:
+                                type: string
+                                example: "192.0.2.1"
+                              prefix:
+                                type: string
+                                example: "2001:db8:c000:201::/64"
+                              prefix_length:
+                                type: integer
+                                example: 64
+                          - type: object
+                            required: [mode, sp_ipv6_prefix, sp_ipv4_mask_len, ipv6, ipv4]
+                            properties:
+                              mode:
+                                type: string
+                                enum: [decode]
+                              sp_ipv6_prefix:
+                                type: string
+                                example: "2001:db8::/32"
+                              sp_ipv4_mask_len:
+                                type: integer
+                                example: 0
+                              ipv6:
+                                type: string
+                                example: "2001:db8:c000:201::1"
+                              ipv4:
+                                type: string
+                                example: "192.0.2.1"
+              example:
+                ok: true
+                data:
+                  mode: encode
+                  sp_ipv6_prefix: "2001:db8::/32"
+                  sp_ipv4_mask_len: 0
+                  ipv4: "192.0.2.1"
+                  prefix: "2001:db8:c000:201::/64"
+                  prefix_length: 64
+        "400":
+          description: Missing required field, unparseable input, or address outside SP prefix
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /nat64:
+    post:
+      operationId: nat64Convert
+      tags: [Nat64]
+      summary: Embed/extract IPv4 in a NAT64 prefix or synthesise a DNS64 AAAA (RFC 6052 / 6147)
+      description: |
+        Prefix-length-aware NAT64 helper covering all six RFC 6052 §2.2
+        prefix lengths (`/32`, `/40`, `/48`, `/56`, `/64`, `/96`) and
+        DNS64 (RFC 6147) AAAA synthesis from an A record.
+
+        - **`encode`** — embed `ipv4` into the supplied
+          `nat64_prefix` (default `64:ff9b::`) at the supplied
+          `prefix_length` (default 96). Output is the NAT64 IPv6.
+        - **`decode`** — extract the embedded IPv4 from `ipv6`.
+        - **`dns64`** — alias for `encode` whose request field is
+          named `a_record` and whose semantic intent is DNS64.
+
+        The well-known prefix `64:ff9b::/96` rejects non-globally-unique
+        IPv4 sources (RFC 6052 §3.1).
+
+        The legacy `/api/v1/mapped6` endpoint (v3.4.0) is unchanged and
+        continues to handle the simpler /96-only IPv4 ↔ IPv4-mapped ↔
+        NAT64 conversion.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [mode, ipv4]
+                  properties:
+                    mode: { type: string, enum: [encode] }
+                    nat64_prefix:
+                      type: string
+                      example: "64:ff9b::"
+                    prefix_length:
+                      type: integer
+                      enum: [32, 40, 48, 56, 64, 96]
+                      default: 96
+                    ipv4: { type: string, example: "192.0.2.33" }
+                - type: object
+                  required: [mode, ipv6]
+                  properties:
+                    mode: { type: string, enum: [decode] }
+                    nat64_prefix:
+                      type: string
+                      example: "2001:db8::"
+                    prefix_length:
+                      type: integer
+                      enum: [32, 40, 48, 56, 64, 96]
+                      default: 96
+                    ipv6: { type: string, example: "2001:db8:c000:221::" }
+                - type: object
+                  required: [mode, a_record]
+                  properties:
+                    mode: { type: string, enum: [dns64] }
+                    nat64_prefix:
+                      type: string
+                      example: "64:ff9b::"
+                    prefix_length:
+                      type: integer
+                      enum: [32, 40, 48, 56, 64, 96]
+                      default: 96
+                    a_record: { type: string, example: "192.0.2.33" }
+            examples:
+              encodeWkp:
+                summary: Encode IPv4 into well-known /96 prefix
+                value: { mode: encode, nat64_prefix: "64:ff9b::", prefix_length: 96, ipv4: "192.0.2.33" }
+              encodeSlash32:
+                summary: Encode IPv4 into a /32 NAT64 prefix
+                value: { mode: encode, nat64_prefix: "2001:db8::", prefix_length: 32, ipv4: "192.0.2.33" }
+              decodeSlash32:
+                summary: Decode a /32 NAT64 IPv6 → IPv4
+                value: { mode: decode, nat64_prefix: "2001:db8::", prefix_length: 32, ipv6: "2001:db8:c000:221::" }
+              dns64:
+                summary: DNS64 AAAA synthesis
+                value: { mode: dns64, a_record: "192.0.2.33" }
+      responses:
+        "200":
+          description: Conversion / synthesis result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [mode, nat64_prefix, prefix_length]
+                        properties:
+                          mode:
+                            type: string
+                            enum: [encode, decode, dns64]
+                          nat64_prefix: { type: string, example: "64:ff9b::" }
+                          prefix_length:
+                            type: integer
+                            enum: [32, 40, 48, 56, 64, 96]
+                            example: 96
+                          ipv4: { type: string, example: "192.0.2.33" }
+                          ipv6: { type: string, example: "64:ff9b::c000:221" }
+        "400":
+          description: Missing required field, unparseable input, or RFC 6052 §3.1 violation
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /prefix-plan6:
+    post:
+      operationId: prefixPlan6
+      tags: [PrefixPlan6]
+      summary: Slice a parent IPv6 prefix into child prefixes (operator math)
+      description: |
+        Plan an IPv6 prefix delegation. Given a parent prefix
+        (e.g. `2001:db8::/48`), a desired child prefix length
+        (e.g. `56`), and a count, returns the first `count` child
+        prefixes (optionally skipping the first `start_offset` blocks)
+        plus a free-space report.
+
+        Counts at delegation differences ≥ 64 overflow signed 64-bit
+        ints, so totals and free-remaining values are returned as
+        strings. Clean powers of two with exponent ≥ 63 are returned
+        in the `"2^N"` overflow form (consistent with
+        `/api/v1/vlsm6` and `/api/v1/range6`).
+
+        Each child carries a `contains_64s` field that surfaces the
+        block's relationship to the standard /64 LAN sizing:
+        a decimal count when the child is larger than a /64,
+        `"1"` for /64 itself, and `"subset of /64"` for anything
+        smaller.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parent_prefix, child_length, count]
+              properties:
+                parent_prefix:
+                  type: string
+                  example: "2001:db8::/48"
+                child_length:
+                  type: integer
+                  minimum: 1
+                  maximum: 128
+                  example: 56
+                count:
+                  type: integer
+                  minimum: 1
+                  maximum: 256
+                  description: |
+                    Number of child prefixes to allocate. The default cap is 256;
+                    operators can raise it via the `$prefix_plan6_max_count`
+                    config token, up to a hard ceiling of 4096.
+                  example: 4
+                start_offset:
+                  type: integer
+                  minimum: 0
+                  default: 0
+                nibble_align:
+                  type: boolean
+                  default: true
+            examples:
+              slice48Into56s:
+                summary: Slice a /48 into the first four /56s
+                value: { parent_prefix: "2001:db8::/48", child_length: 56, count: 4 }
+              huge:
+                summary: Plan a /32 → /128 (overflow path)
+                value: { parent_prefix: "2001:db8::/32", child_length: 128, count: 1, nibble_align: false }
+      responses:
+        "200":
+          description: Prefix plan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [parent, children, free, normalized_child_length]
+                        properties:
+                          parent:
+                            type: object
+                            required: [prefix, length, total_children_str]
+                            properties:
+                              prefix: { type: string, example: "2001:db8::/48" }
+                              length: { type: integer, example: 48 }
+                              total_children_str:
+                                type: string
+                                description: Decimal string, or "2^N" overflow form when N ≥ 63.
+                                example: "256"
+                          children:
+                            type: array
+                            items:
+                              type: object
+                              required: [index, prefix, first, last, contains_64s]
+                              properties:
+                                index: { type: integer, example: 0 }
+                                prefix: { type: string, example: "2001:db8::/56" }
+                                first:  { type: string, example: "2001:db8::" }
+                                last:   { type: string, example: "2001:db8:0:ff:ffff:ffff:ffff:ffff" }
+                                contains_64s:
+                                  type: string
+                                  description: Decimal count, "1", or "subset of /64".
+                                  example: "256"
+                          free:
+                            type: object
+                            required: [remaining_str]
+                            properties:
+                              remaining_str:
+                                type: string
+                                example: "252"
+                          normalized_child_length:
+                            type: integer
+                            description: Snapped-up child length when nibble_align=true; else identical to request.
+                            example: 56
+        "400":
+          description: Missing required field, unparseable input, or out-of-range request
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /nibble6:
+    post:
+      operationId: nibble6
+      tags: [Nibble6]
+      summary: Surface the nibble-aligned neighbours of an IPv6 prefix
+      description: |
+        Given any IPv6 prefix (e.g. `2001:db8::/49`), return the
+        nibble-aligned neighbours: `above` (the nearest nibble boundary
+        at-or-shorter than the input length) and `below` (the nearest
+        nibble boundary at-or-longer than the input length, capped at
+        /128).
+
+        Both neighbour prefixes are emitted in canonical form: address
+        bits beyond the neighbour's prefix length are zeroed. Each
+        carries a `contains_64s` field with the same semantics as
+        `/api/v1/prefix-plan6` (decimal count, `"1"`, or `"subset of /64"`).
+
+        Useful for reverse-zone (`ip6.arpa`) delegation planning, where
+        non-nibble prefix lengths require explicit operator decisions
+        about which nibble boundary to delegate against.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prefix]
+              properties:
+                prefix:
+                  type: string
+                  example: "2001:db8::/49"
+            examples:
+              forty_nine:
+                summary: A /49 sits between /48 and /52
+                value: { prefix: "2001:db8::/49" }
+              already_aligned:
+                summary: A /48 is already nibble-aligned
+                value: { prefix: "2001:db8::/48" }
+      responses:
+        "200":
+          description: Nibble-aligned neighbours
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [input, above, below]
+                        properties:
+                          input:
+                            type: object
+                            required: [prefix, length]
+                            properties:
+                              prefix: { type: string, example: "2001:db8::/49" }
+                              length: { type: integer, example: 49 }
+                          above:
+                            type: object
+                            required: [length, prefix, contains_64s]
+                            properties:
+                              length: { type: integer, example: 48 }
+                              prefix: { type: string, example: "2001:db8::/48" }
+                              contains_64s:
+                                type: string
+                                description: Decimal count, "1", or "subset of /64".
+                                example: "65536"
+                          below:
+                            type: object
+                            required: [length, prefix, contains_64s]
+                            properties:
+                              length: { type: integer, example: 52 }
+                              prefix: { type: string, example: "2001:db8::/52" }
+                              contains_64s:
+                                type: string
+                                description: Decimal count, "1", or "subset of /64".
+                                example: "4096"
+        "400":
+          description: Missing required field or unparseable input
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /rfc3531:
+    post:
+      operationId: rfc3531
+      tags: [Rfc3531]
+      summary: Apply an RFC 3531 sparse-allocation strategy to a parent IPv6 prefix
+      description: |
+        RFC 3531 §3 describes a flexible bit-reservation method for
+        managing prefix growth. Given a parent prefix and a reservation
+        field of N bits, this endpoint produces:
+
+          • the **allocation order** — a list of `2^N` bit-pattern
+            values (or `2^N - 1` under centermost, where 0 is omitted
+            as the default reservation);
+          • the **child prefixes** — concrete `parent_length + N`-bit
+            CIDRs in that order, each with `order`, `value`, and `prefix`.
+
+        Three strategies:
+
+          • **centermost** — bisect outward from the middle. The canonical
+            RFC 3531 §3 example (4 bits) yields `8, 4, 12, 2, 6, 10, 14,
+            1, 3, 5, 7, 9, 11, 13, 15`. Best for growth-friendly
+            allocation: future expansion has room either side of every
+            reservation.
+          • **leftmost** — monotonic `0, 1, 2, …, 2^N-1`. Dense sequential
+            allocation (no growth headroom).
+          • **rightmost** — `2^N-1, …, 1, 0`. Mirror of leftmost.
+
+        The maximum reservation_bits is sourced from the
+        `$rfc3531_max_bits` config token (default 8 → 256 children;
+        clamped to a hard ceiling of 12 → 4096 children).
+
+        Composes with `/api/v1/prefix-plan6`: the prefix-delegation
+        planner answers "how many child blocks fit," and `/rfc3531`
+        answers "in what order should I assign them so future growth
+        survives."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parent_prefix, reservation_bits]
+              properties:
+                parent_prefix:
+                  type: string
+                  example: "2001:db8::/48"
+                reservation_bits:
+                  type: integer
+                  minimum: 1
+                  maximum: 12
+                  description: |
+                    Number of bits in the reservation field. The default
+                    cap is 8 (256 children); operators can raise it via
+                    the `$rfc3531_max_bits` config token, up to a hard
+                    ceiling of 12 (4096 children).
+                  example: 4
+                strategy:
+                  type: string
+                  enum: [centermost, leftmost, rightmost]
+                  default: centermost
+            examples:
+              centermost4:
+                summary: RFC 3531 §3 worked example (4 bits, centermost)
+                value: { parent_prefix: "2001:db8::/48", reservation_bits: 4, strategy: "centermost" }
+              leftmost4:
+                summary: Dense sequential allocation
+                value: { parent_prefix: "2001:db8::/48", reservation_bits: 4, strategy: "leftmost" }
+      responses:
+        "200":
+          description: Allocation plan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [parent, strategy, reservation_bits, allocation_order, children]
+                        properties:
+                          parent:
+                            type: object
+                            required: [prefix, length]
+                            properties:
+                              prefix: { type: string, example: "2001:db8::/48" }
+                              length: { type: integer, example: 48 }
+                          strategy:
+                            type: string
+                            enum: [centermost, leftmost, rightmost]
+                            example: "centermost"
+                          reservation_bits:
+                            type: integer
+                            example: 4
+                          allocation_order:
+                            type: array
+                            items: { type: integer }
+                            example: [8, 4, 12, 2, 6, 10, 14, 1, 3, 5, 7, 9, 11, 13, 15]
+                          children:
+                            type: array
+                            items:
+                              type: object
+                              required: [order, value, prefix]
+                              properties:
+                                order: { type: integer, example: 0 }
+                                value: { type: integer, example: 8 }
+                                prefix: { type: string, example: "2001:db8:0:8000::/52" }
+        "400":
+          description: Missing required field, unparseable input, or out-of-range request
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /bulk:
     post:
       operationId: bulkCalculate
@@ -1875,11 +3130,13 @@ paths:
 
         - **Legacy CIDR mode** — body contains `cidrs[]`. Resolves each CIDR
           via /ipv4 or /ipv6 logic. Per-item envelope: `{input, ok, data?, error?}`.
-        - **Multi-op mode (v3.4.0)** — body contains `items[]`. Each item
-          has its own `op` slug and `params` payload. Supported ops:
-          `range6`, `supernet6`, `zone-id`, `derive`, `slaac-privacy`,
-          `rdns6`, `mapped6`. Per-item envelope: `{op, ok, error?, ...result}`
-          where `...result` matches the standalone endpoint's success body.
+        - **Multi-op mode (v3.4.0+v3.5.0)** — body contains `items[]`.
+          Each item has its own `op` slug and `params` payload. Supported
+          ops: `range6`, `supernet6`, `zone-id`, `derive`, `slaac-privacy`,
+          `rdns6`, `mapped6` (v3.4.0); `embedded-v4`, `6to4`, `teredo`,
+          `isatap`, `6rd`, `nat64`, `prefix-plan6`, `nibble6`, `rfc3531`
+          (v3.5.0). Per-item envelope: `{op, ok, error?, ...result}` where
+          `...result` matches the standalone endpoint's success body.
 
         Up to 50 entries per request. Individual failures do not abort the
         request — each item carries its own ok/error status. IPv6 ops
@@ -1917,7 +3174,23 @@ paths:
                         properties:
                           op:
                             type: string
-                            enum: [range6, supernet6, zone-id, derive, slaac-privacy, rdns6, mapped6]
+                            enum:
+                              - range6
+                              - supernet6
+                              - zone-id
+                              - derive
+                              - slaac-privacy
+                              - rdns6
+                              - mapped6
+                              - embedded-v4
+                              - 6to4
+                              - teredo
+                              - isatap
+                              - 6rd
+                              - nat64
+                              - prefix-plan6
+                              - nibble6
+                              - rfc3531
                           params:
                             type: object
                             description: Per-op parameters; shape matches the corresponding standalone endpoint's request body.
@@ -1937,6 +3210,24 @@ paths:
                         params: { address: "2001:db8::1", prefix: 64 }
                       - op: mapped6
                         params: { input: "192.0.2.1" }
+                      - op: embedded-v4
+                        params: { input: "::ffff:192.0.2.1" }
+                      - op: 6to4
+                        params: { mode: "encode", ipv4: "192.0.2.1" }
+                      - op: teredo
+                        params: { mode: "decode", ipv6: "2001:0:4136:e378:8000:63bf:3fff:fdd2" }
+                      - op: isatap
+                        params: { mode: "encode", ipv4: "192.0.2.1" }
+                      - op: 6rd
+                        params: { mode: "encode", sp_ipv6_prefix: "2001:db8::/32", sp_ipv4_mask_len: 0, customer_ipv4: "192.0.2.1" }
+                      - op: nat64
+                        params: { mode: "encode", ipv4: "192.0.2.1", prefix_length: 96 }
+                      - op: prefix-plan6
+                        params: { parent_prefix: "2001:db8::/48", child_length: 56, count: 4 }
+                      - op: nibble6
+                        params: { prefix: "2001:db8::/49" }
+                      - op: rfc3531
+                        params: { parent_prefix: "2001:db8::/48", reservation_bits: 4, strategy: "centermost" }
       responses:
         "200":
           description: Per-item calculation results

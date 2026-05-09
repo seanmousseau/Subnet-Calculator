@@ -20,6 +20,24 @@ require __DIR__ . '/includes/functions-derive6.php';
 require __DIR__ . '/includes/functions-slaac6.php';
 require __DIR__ . '/includes/functions-rdns6.php';
 require __DIR__ . '/includes/functions-mapped6.php';
+require __DIR__ . '/includes/functions-embedded-v4.php';
+require __DIR__ . '/includes/functions-6to4.php';
+require_once __DIR__ . '/includes/functions-teredo.php';
+// phpcs:disable PSR1.Files.SideEffects -- module include for ipv4_to_isatap_iid()/decode_isatap_iid().
+require_once __DIR__ . '/includes/functions-isatap.php';
+// phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for compute_6rd_delegation()/extract_6rd_ipv4().
+require_once __DIR__ . '/includes/functions-6rd.php';
+// phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for nat64_embed()/nat64_extract()/dns64_synthesize().
+require_once __DIR__ . '/includes/functions-nat64.php';
+// phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for plan_prefix_delegation().
+require_once __DIR__ . '/includes/functions-prefix-plan6.php';
+// phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for rfc3531_allocation_order()/rfc3531_apply().
+require_once __DIR__ . '/includes/functions-rfc3531.php';
+// phpcs:enable PSR1.Files.SideEffects
 require __DIR__ . '/includes/functions-tree.php';
 require __DIR__ . '/includes/functions-tree-diff.php';
 require __DIR__ . '/includes/functions-lookup.php';

@@ -118,3 +118,63 @@ route from v3.4.0 Task 7:
 
 Open the link and the mapped6 drawer auto-opens with the result already
 calculated.
+
+## NAT64 prefix lengths (v3.5.0)
+
+The drawer now exposes a second form for the full set of RFC 6052 §2.2
+prefix lengths and DNS64 (RFC 6147) AAAA synthesis. The legacy
+`/96`-only form above is unchanged.
+
+### Prefix length / bit layout (RFC 6052 §2.2)
+
+| Prefix length | Bit layout (IPv4 octets a.b.c.d → IPv6) |
+|---------------|------------------------------------------|
+| `/32` | bits 32–63 = a.b.c.d |
+| `/40` | bits 40–63 = a.b.c; bits 64–71 = 0; bits 72–79 = d |
+| `/48` | bits 48–63 = a.b; bits 64–71 = 0; bits 72–87 = c.d |
+| `/56` | bits 56–63 = a; bits 64–71 = 0; bits 72–95 = b.c.d |
+| `/64` | bits 64–71 = 0; bits 72–103 = a.b.c.d |
+| `/96` | bits 96–127 = a.b.c.d (well-known prefix usage) |
+
+The "bits 64–71 = 0" reservation at every non-`/96` length is the
+RFC 6052 *u-octet* — synthesised addresses keep it zero.
+
+### RFC 6052 §2.4 vectors (IPv4 192.0.2.33)
+
+| Prefix         | Length | Result                                |
+|----------------|--------|---------------------------------------|
+| `2001:db8::`           | /32 | `2001:db8:c000:221::`            |
+| `2001:db8:100::`       | /40 | `2001:db8:1c0:2:21::`            |
+| `2001:db8:122::`       | /48 | `2001:db8:122:c000:2:2100::`     |
+| `2001:db8:122:300::`   | /56 | `2001:db8:122:3c0:0:221::`       |
+| `2001:db8:122:344::`   | /64 | `2001:db8:122:344:c0:2:2100:0`   |
+| `2001:db8::`           | /96 | `2001:db8::c000:221`             |
+
+The /96 row uses the documentation NSP `2001:db8::/96` because RFC 6052
+§3.1 forbids embedding non-globally-unique IPv4 (incl. TEST-NET-1
+`192.0.2.0/24`) under the well-known prefix `64:ff9b::/96`.
+
+### `POST /api/v1/nat64`
+
+```json
+{ "mode": "encode", "nat64_prefix": "2001:db8::", "prefix_length": 32, "ipv4": "192.0.2.33" }
+{ "mode": "decode", "nat64_prefix": "2001:db8::", "prefix_length": 32, "ipv6": "2001:db8:c000:221::" }
+{ "mode": "dns64", "a_record": "8.8.8.8" }
+```
+
+`mode=dns64` is an alias for `encode` whose request field is named
+`a_record`; it always synthesises against the well-known prefix
+`64:ff9b::/96` unless overridden.
+
+### Validation (RFC 6052 §3.1)
+
+The well-known prefix `64:ff9b::/96` rejects non-globally-unique IPv4
+sources (RFC 1918 private-use, loopback, link-local, multicast, CGN
+`100.64.0.0/10`, etc.). Use a custom NAT64 prefix to translate those.
+
+### Shareable URLs
+
+```
+/?tab=ipv6&nat64_mode=encode&nat64_prefix=2001:db8::&nat64_pl=32&nat64_ipv4=192.0.2.33
+/?tab=ipv6&nat64_mode=dns64&nat64_a_record=8.8.8.8
+```

@@ -21,6 +21,7 @@ declare(strict_types=1);
 // (e.g. missing `op`, unsupported op) are also reported per-item.
 
 const BULK_SUPPORTED_OPS = [
+    // v3.4.0
     'range6',
     'supernet6',
     'zone-id',
@@ -28,6 +29,16 @@ const BULK_SUPPORTED_OPS = [
     'slaac-privacy',
     'rdns6',
     'mapped6',
+    // v3.5.0
+    'embedded-v4',
+    '6to4',
+    'teredo',
+    'isatap',
+    '6rd',
+    'nat64',
+    'prefix-plan6',
+    'nibble6',
+    'rfc3531',
 ];
 
 /**
@@ -89,6 +100,24 @@ function bulk_dispatch_one($item): array
                 return _bulk_op_rdns6($params);
             case 'mapped6':
                 return _bulk_op_mapped6($params);
+            case 'embedded-v4':
+                return _bulk_op_embedded_v4($params);
+            case '6to4':
+                return _bulk_op_6to4($params);
+            case 'teredo':
+                return _bulk_op_teredo($params);
+            case 'isatap':
+                return _bulk_op_isatap($params);
+            case '6rd':
+                return _bulk_op_6rd($params);
+            case 'nat64':
+                return _bulk_op_nat64($params);
+            case 'prefix-plan6':
+                return _bulk_op_prefix_plan6($params);
+            case 'nibble6':
+                return _bulk_op_nibble6($params);
+            case 'rfc3531':
+                return _bulk_op_rfc3531($params);
         }
     } catch (\InvalidArgumentException $e) {
         return ['op' => $op, 'ok' => false, 'error' => $e->getMessage()];
@@ -327,5 +356,422 @@ function _bulk_op_mapped6(array $p): array
         'ipv4_mapped'  => $mapped,
         'nat64'        => $nat64,
         'nat64_prefix' => $prefix,
+    ];
+}
+
+// ── v3.5.0 adapters ──────────────────────────────────────────────────────────
+
+/**
+ * @param array<string, mixed> $p
+ * @return array<string, mixed>
+ */
+function _bulk_op_embedded_v4(array $p): array
+{
+    $input = isset($p['input']) && is_string($p['input']) ? trim($p['input']) : '';
+    if ($input === '') {
+        throw new \InvalidArgumentException('Field "input" is required.');
+    }
+    $r = detect_embedded_v4($input);
+    return [
+        'op'           => 'embedded-v4',
+        'ok'           => true,
+        'input'        => $input,
+        'scheme'       => $r['scheme'],
+        'ipv4'         => $r['ipv4'],
+        'deprecated'   => $r['deprecated'],
+        'detail_route' => $r['detail_route'],
+        'extra'        => $r['extra'],
+    ];
+}
+
+/**
+ * @param array<string, mixed> $p
+ * @return array<string, mixed>
+ */
+function _bulk_op_6to4(array $p): array
+{
+    $mode = isset($p['mode']) && is_string($p['mode']) ? strtolower(trim($p['mode'])) : 'encode';
+    if ($mode === '') {
+        $mode = 'encode';
+    }
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        throw new \InvalidArgumentException('Field "mode" must be "encode" or "decode".');
+    }
+    if ($mode === 'encode') {
+        $v4 = isset($p['ipv4']) && is_string($p['ipv4']) ? trim($p['ipv4']) : '';
+        if ($v4 === '') {
+            throw new \InvalidArgumentException('Field "ipv4" is required when mode=encode.');
+        }
+        $prefix = ipv4_to_6to4($v4);
+        return ['op' => '6to4', 'ok' => true, 'mode' => 'encode', 'ipv4' => $v4, 'prefix' => $prefix];
+    }
+    $v6 = isset($p['ipv6']) && is_string($p['ipv6']) ? trim($p['ipv6']) : '';
+    if ($v6 === '') {
+        throw new \InvalidArgumentException('Field "ipv6" is required when mode=decode.');
+    }
+    $r = decode_6to4($v6);
+    return [
+        'op'           => '6to4',
+        'ok'           => true,
+        'mode'         => 'decode',
+        'ipv6'         => $v6,
+        'ipv4'         => $r['ipv4'],
+        'subnet_id'    => $r['subnet_id'],
+        'interface_id' => $r['interface_id'],
+    ];
+}
+
+/**
+ * @param array<string, mixed> $p
+ * @return array<string, mixed>
+ */
+function _bulk_op_teredo(array $p): array
+{
+    $mode = isset($p['mode']) && is_string($p['mode']) ? strtolower(trim($p['mode'])) : 'decode';
+    if ($mode === '') {
+        $mode = 'decode';
+    }
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        throw new \InvalidArgumentException('Field "mode" must be "encode" or "decode".');
+    }
+    if ($mode === 'decode') {
+        $v6 = isset($p['ipv6']) && is_string($p['ipv6']) ? trim($p['ipv6']) : '';
+        if ($v6 === '') {
+            throw new \InvalidArgumentException('Field "ipv6" is required when mode=decode.');
+        }
+        $r = decode_teredo($v6);
+        return [
+            'op'          => 'teredo',
+            'ok'          => true,
+            'mode'        => 'decode',
+            'ipv6'        => $v6,
+            'server_ipv4' => $r['server_ipv4'],
+            'flags'       => $r['flags'],
+            'cone'        => $r['cone'],
+            'port'        => $r['port'],
+            'client_ipv4' => $r['client_ipv4'],
+        ];
+    }
+    $server = isset($p['server_ipv4']) && is_string($p['server_ipv4']) ? trim($p['server_ipv4']) : '';
+    $client = isset($p['client_ipv4']) && is_string($p['client_ipv4']) ? trim($p['client_ipv4']) : '';
+    if ($server === '') {
+        throw new \InvalidArgumentException('Field "server_ipv4" is required when mode=encode.');
+    }
+    if ($client === '') {
+        throw new \InvalidArgumentException('Field "client_ipv4" is required when mode=encode.');
+    }
+    if (!isset($p['port']) || !is_int($p['port'])) {
+        throw new \InvalidArgumentException('Field "port" (integer 0..65535) is required when mode=encode.');
+    }
+    $port  = $p['port'];
+    $flags = 0x8000;
+    if (array_key_exists('flags', $p)) {
+        if (!is_int($p['flags'])) {
+            throw new \InvalidArgumentException('Field "flags" must be an integer.');
+        }
+        if ($p['flags'] < 0 || $p['flags'] > 0xFFFF) {
+            throw new \InvalidArgumentException('Field "flags" must be in 16-bit range (0..65535).');
+        }
+        $flags = $p['flags'];
+    }
+    $addr = encode_teredo($server, $client, $port, $flags);
+    return [
+        'op'          => 'teredo',
+        'ok'          => true,
+        'mode'        => 'encode',
+        'server_ipv4' => $server,
+        'client_ipv4' => $client,
+        'port'        => $port,
+        'flags'       => $flags & 0xFFFF,
+        'cone'        => ($flags & 0x8000) !== 0,
+        'ipv6'        => $addr,
+    ];
+}
+
+/**
+ * @param array<string, mixed> $p
+ * @return array<string, mixed>
+ */
+function _bulk_op_isatap(array $p): array
+{
+    $mode = isset($p['mode']) && is_string($p['mode']) ? strtolower(trim($p['mode'])) : 'encode';
+    if ($mode === '') {
+        $mode = 'encode';
+    }
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        throw new \InvalidArgumentException('Field "mode" must be "encode" or "decode".');
+    }
+    if ($mode === 'encode') {
+        $v4 = isset($p['ipv4']) && is_string($p['ipv4']) ? trim($p['ipv4']) : '';
+        if ($v4 === '') {
+            throw new \InvalidArgumentException('Field "ipv4" is required when mode=encode.');
+        }
+        $globally_unique = null;
+        if (array_key_exists('globally_unique', $p)) {
+            if (!is_bool($p['globally_unique'])) {
+                throw new \InvalidArgumentException('Field "globally_unique" must be a boolean.');
+            }
+            $globally_unique = $p['globally_unique'];
+        }
+        $iid = ipv4_to_isatap_iid($v4, $globally_unique);
+        $decoded = decode_isatap_iid($iid);
+        return [
+            'op'              => 'isatap',
+            'ok'              => true,
+            'mode'            => 'encode',
+            'ipv4'            => $v4,
+            'iid'             => $iid,
+            'globally_unique' => $decoded['globally_unique'],
+        ];
+    }
+    $iid = isset($p['iid']) && is_string($p['iid']) ? trim($p['iid']) : '';
+    if ($iid === '') {
+        throw new \InvalidArgumentException('Field "iid" is required when mode=decode.');
+    }
+    $r = decode_isatap_iid($iid);
+    return [
+        'op'              => 'isatap',
+        'ok'              => true,
+        'mode'            => 'decode',
+        'iid'             => $iid,
+        'ipv4'            => $r['ipv4'],
+        'globally_unique' => $r['globally_unique'],
+    ];
+}
+
+/**
+ * @param array<string, mixed> $p
+ * @return array<string, mixed>
+ */
+function _bulk_op_6rd(array $p): array
+{
+    $mode = isset($p['mode']) && is_string($p['mode']) ? strtolower(trim($p['mode'])) : 'encode';
+    if ($mode === '') {
+        $mode = 'encode';
+    }
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        throw new \InvalidArgumentException('Field "mode" must be "encode" or "decode".');
+    }
+    $sp = isset($p['sp_ipv6_prefix']) && is_string($p['sp_ipv6_prefix']) ? trim($p['sp_ipv6_prefix']) : '';
+    if ($sp === '') {
+        throw new \InvalidArgumentException('Field "sp_ipv6_prefix" is required.');
+    }
+    $mask = 0;
+    if (array_key_exists('sp_ipv4_mask_len', $p)) {
+        if (!is_int($p['sp_ipv4_mask_len'])) {
+            throw new \InvalidArgumentException('Field "sp_ipv4_mask_len" must be an integer 0..32.');
+        }
+        if ($p['sp_ipv4_mask_len'] < 0 || $p['sp_ipv4_mask_len'] > 32) {
+            throw new \InvalidArgumentException('Field "sp_ipv4_mask_len" must be 0..32.');
+        }
+        $mask = $p['sp_ipv4_mask_len'];
+    }
+    if ($mode === 'encode') {
+        $v4 = isset($p['customer_ipv4']) && is_string($p['customer_ipv4']) ? trim($p['customer_ipv4']) : '';
+        if ($v4 === '' && isset($p['ipv4']) && is_string($p['ipv4'])) {
+            $v4 = trim($p['ipv4']);
+        }
+        if ($v4 === '') {
+            throw new \InvalidArgumentException('Field "customer_ipv4" (or "ipv4") is required when mode=encode.');
+        }
+        $r = compute_6rd_delegation($sp, $mask, $v4);
+        return [
+            'op'               => '6rd',
+            'ok'               => true,
+            'mode'             => 'encode',
+            'sp_ipv6_prefix'   => $sp,
+            'sp_ipv4_mask_len' => $mask,
+            'ipv4'             => $v4,
+            'prefix'           => $r['prefix'],
+            'prefix_length'    => $r['prefix_length'],
+        ];
+    }
+    $addr = isset($p['rd_ipv6_address']) && is_string($p['rd_ipv6_address']) ? trim($p['rd_ipv6_address']) : '';
+    if ($addr === '' && isset($p['ipv6']) && is_string($p['ipv6'])) {
+        $addr = trim($p['ipv6']);
+    }
+    if ($addr === '') {
+        throw new \InvalidArgumentException('Field "rd_ipv6_address" (or "ipv6") is required when mode=decode.');
+    }
+    $v4 = extract_6rd_ipv4($sp, $mask, $addr);
+    return [
+        'op'               => '6rd',
+        'ok'               => true,
+        'mode'             => 'decode',
+        'sp_ipv6_prefix'   => $sp,
+        'sp_ipv4_mask_len' => $mask,
+        'ipv6'             => $addr,
+        'ipv4'             => $v4,
+    ];
+}
+
+/**
+ * @param array<string, mixed> $p
+ * @return array<string, mixed>
+ */
+function _bulk_op_nat64(array $p): array
+{
+    $mode = isset($p['mode']) && is_string($p['mode']) ? strtolower(trim($p['mode'])) : 'encode';
+    if ($mode === '') {
+        $mode = 'encode';
+    }
+    if ($mode !== 'encode' && $mode !== 'decode' && $mode !== 'dns64') {
+        throw new \InvalidArgumentException('Field "mode" must be "encode", "decode", or "dns64".');
+    }
+    $prefix = NAT64_WELL_KNOWN_PREFIX;
+    if (array_key_exists('nat64_prefix', $p) && $p['nat64_prefix'] !== null && $p['nat64_prefix'] !== '') {
+        if (!is_string($p['nat64_prefix'])) {
+            throw new \InvalidArgumentException('Field "nat64_prefix" must be a string.');
+        }
+        $prefix = trim($p['nat64_prefix']);
+    }
+    $pl = 96;
+    if (array_key_exists('prefix_length', $p) && $p['prefix_length'] !== null) {
+        if (!is_int($p['prefix_length'])) {
+            throw new \InvalidArgumentException(
+                'Field "prefix_length" must be an integer (32, 40, 48, 56, 64, or 96).'
+            );
+        }
+        $pl = $p['prefix_length'];
+    }
+    if ($mode === 'encode' || $mode === 'dns64') {
+        $field = $mode === 'dns64' ? 'a_record' : 'ipv4';
+        $raw   = isset($p[$field]) && is_string($p[$field]) ? trim($p[$field]) : '';
+        if ($raw === '') {
+            throw new \InvalidArgumentException("Field \"{$field}\" is required when mode={$mode}.");
+        }
+        $ipv6 = $mode === 'dns64'
+            ? dns64_synthesize($raw, $prefix, $pl)
+            : nat64_embed($raw, $prefix, $pl);
+        return [
+            'op'            => 'nat64',
+            'ok'            => true,
+            'mode'          => $mode,
+            'nat64_prefix'  => $prefix,
+            'prefix_length' => $pl,
+            'ipv4'          => $raw,
+            'ipv6'          => $ipv6,
+        ];
+    }
+    $v6 = isset($p['ipv6']) && is_string($p['ipv6']) ? trim($p['ipv6']) : '';
+    if ($v6 === '') {
+        throw new \InvalidArgumentException('Field "ipv6" is required when mode=decode.');
+    }
+    $v4 = nat64_extract($v6, $prefix, $pl);
+    return [
+        'op'            => 'nat64',
+        'ok'            => true,
+        'mode'          => 'decode',
+        'nat64_prefix'  => $prefix,
+        'prefix_length' => $pl,
+        'ipv6'          => $v6,
+        'ipv4'          => $v4,
+    ];
+}
+
+/**
+ * @param array<string, mixed> $p
+ * @return array<string, mixed>
+ */
+function _bulk_op_prefix_plan6(array $p): array
+{
+    $parent = isset($p['parent_prefix']) && is_string($p['parent_prefix']) ? trim($p['parent_prefix']) : '';
+    if ($parent === '') {
+        throw new \InvalidArgumentException('Field "parent_prefix" is required.');
+    }
+    if (
+        !isset($p['child_length']) || !is_int($p['child_length'])
+        || $p['child_length'] < 1 || $p['child_length'] > 128
+    ) {
+        throw new \InvalidArgumentException('Field "child_length" (integer 1..128) is required.');
+    }
+    $cap = isset($GLOBALS['prefix_plan6_max_count']) && is_int($GLOBALS['prefix_plan6_max_count'])
+        ? $GLOBALS['prefix_plan6_max_count']
+        : 256;
+    if (!isset($p['count']) || !is_int($p['count']) || $p['count'] < 1 || $p['count'] > $cap) {
+        throw new \InvalidArgumentException(sprintf('Field "count" (integer 1..%d) is required.', $cap));
+    }
+    $start = 0;
+    if (array_key_exists('start_offset', $p)) {
+        if (!is_int($p['start_offset']) || $p['start_offset'] < 0) {
+            throw new \InvalidArgumentException('Field "start_offset" must be a non-negative integer.');
+        }
+        $start = $p['start_offset'];
+    }
+    $align = true;
+    if (array_key_exists('nibble_align', $p)) {
+        if (!is_bool($p['nibble_align'])) {
+            throw new \InvalidArgumentException('Field "nibble_align" must be a boolean.');
+        }
+        $align = $p['nibble_align'];
+    }
+    $r = plan_prefix_delegation($parent, $p['child_length'], $p['count'], $start, $align);
+    return [
+        'op'                      => 'prefix-plan6',
+        'ok'                      => true,
+        'parent'                  => $r['parent'],
+        'children'                => $r['children'],
+        'free'                    => $r['free'],
+        'normalized_child_length' => $r['normalized_child_length'],
+    ];
+}
+
+/**
+ * @param array<string, mixed> $p
+ * @return array<string, mixed>
+ */
+function _bulk_op_nibble6(array $p): array
+{
+    $prefix = isset($p['prefix']) && is_string($p['prefix']) ? trim($p['prefix']) : '';
+    if ($prefix === '') {
+        throw new \InvalidArgumentException('Field "prefix" is required.');
+    }
+    $r = nibble_neighbours($prefix);
+    return [
+        'op'    => 'nibble6',
+        'ok'    => true,
+        'input' => $r['input'],
+        'above' => $r['above'],
+        'below' => $r['below'],
+    ];
+}
+
+/**
+ * @param array<string, mixed> $p
+ * @return array<string, mixed>
+ */
+function _bulk_op_rfc3531(array $p): array
+{
+    $parent = isset($p['parent_prefix']) && is_string($p['parent_prefix']) ? trim($p['parent_prefix']) : '';
+    if ($parent === '') {
+        throw new \InvalidArgumentException('Field "parent_prefix" is required.');
+    }
+    $cap = isset($GLOBALS['rfc3531_max_bits']) && is_int($GLOBALS['rfc3531_max_bits'])
+        ? $GLOBALS['rfc3531_max_bits']
+        : 8;
+    if ($cap < 1 || $cap > 12) {
+        $cap = 8;
+    }
+    if (
+        !isset($p['reservation_bits']) || !is_int($p['reservation_bits'])
+        || $p['reservation_bits'] < 1 || $p['reservation_bits'] > $cap
+    ) {
+        throw new \InvalidArgumentException(
+            sprintf('Field "reservation_bits" (integer 1..%d) is required.', $cap)
+        );
+    }
+    $strategy = isset($p['strategy']) && is_string($p['strategy']) ? $p['strategy'] : 'centermost';
+    if (!in_array($strategy, ['leftmost', 'centermost', 'rightmost'], true)) {
+        throw new \InvalidArgumentException('Field "strategy" must be one of "leftmost", "centermost", "rightmost".');
+    }
+    $r = rfc3531_apply($parent, $p['reservation_bits'], $strategy);
+    return [
+        'op'               => 'rfc3531',
+        'ok'               => true,
+        'parent'           => $r['parent'],
+        'strategy'         => $r['strategy'],
+        'reservation_bits' => $r['reservation_bits'],
+        'allocation_order' => $r['allocation_order'],
+        'children'         => $r['children'],
     ];
 }

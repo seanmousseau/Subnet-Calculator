@@ -89,4 +89,27 @@ final class Mapped6Test extends TestCase
         $this->expectException(InvalidArgumentException::class);
         nat64_to_ipv4('::ffff:192.0.2.1');  // mapped, not NAT64
     }
+
+    // v3.5.0 Task 7 — NAT64 prefix-length-aware helpers (RFC 6052 §2.4).
+    // The legacy /96-only helpers above are retained verbatim; these new
+    // tests exercise the prefix-length-aware nat64_embed/nat64_extract.
+
+    public function testNat64EmbedSlash96WellKnown(): void
+    {
+        // 8.8.8.8 → 0x08080808 → 64:ff9b::808:808. Use a globally-unique IPv4
+        // because RFC 6052 §3.1 forbids embedding non-globally-unique IPv4
+        // (incl. TEST-NET) into the well-known prefix.
+        $this->assertSame(
+            '64:ff9b::808:808',
+            nat64_embed('8.8.8.8', '64:ff9b::', 96)
+        );
+    }
+
+    public function testNat64ExtractSlash32(): void
+    {
+        $this->assertSame(
+            '192.0.2.33',
+            nat64_extract('2001:db8:c000:221::', '2001:db8::', 32)
+        );
+    }
 }

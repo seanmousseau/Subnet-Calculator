@@ -2935,6 +2935,1351 @@ async def test_ipv6_mapped6_ui(page: Page) -> None:
               await panel.locator(".zoneid-result__row").count(), 0)
 
 
+async def test_api_embedded_v4(page: Page) -> None:
+    section("API — POST /api/v1/embedded-v4")
+    # IPv4-mapped → scheme=mapped, ipv4 extracted
+    status, data = _api_post("embedded-v4", {"input": "::ffff:192.0.2.1"})
+    assert_eq("api embedded-v4 (mapped): HTTP 200", status, 200)
+    assert_eq("api embedded-v4 (mapped): ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api embedded-v4 (mapped): scheme", d.get("scheme"), "mapped")
+    assert_eq("api embedded-v4 (mapped): ipv4", d.get("ipv4"), "192.0.2.1")
+    assert_eq("api embedded-v4 (mapped): deprecated=False", d.get("deprecated"), False)
+    assert_eq("api embedded-v4 (mapped): detail_route is null",
+              d.get("detail_route"), None)
+
+    # IPv4-compatible → deprecated
+    status2, data2 = _api_post("embedded-v4", {"input": "::192.0.2.1"})
+    assert_eq("api embedded-v4 (compat): HTTP 200", status2, 200)
+    assert_eq("api embedded-v4 (compat): scheme",
+              data2.get("data", {}).get("scheme"), "compatible")
+    assert_eq("api embedded-v4 (compat): deprecated=True",
+              data2.get("data", {}).get("deprecated"), True)
+
+    # 6to4
+    status3, data3 = _api_post("embedded-v4", {"input": "2002:c000:0201::"})
+    assert_eq("api embedded-v4 (6to4): HTTP 200", status3, 200)
+    assert_eq("api embedded-v4 (6to4): scheme",
+              data3.get("data", {}).get("scheme"), "6to4")
+    assert_eq("api embedded-v4 (6to4): ipv4",
+              data3.get("data", {}).get("ipv4"), "192.0.2.1")
+
+    # Teredo
+    status4, data4 = _api_post("embedded-v4",
+                               {"input": "2001:0:4136:e378:8000:63bf:3fff:fdd2"})
+    assert_eq("api embedded-v4 (teredo): HTTP 200", status4, 200)
+    assert_eq("api embedded-v4 (teredo): scheme",
+              data4.get("data", {}).get("scheme"), "teredo")
+
+    # NAT64 well-known
+    status5, data5 = _api_post("embedded-v4", {"input": "64:ff9b::192.0.2.1"})
+    assert_eq("api embedded-v4 (nat64-wkp): HTTP 200", status5, 200)
+    assert_eq("api embedded-v4 (nat64-wkp): scheme",
+              data5.get("data", {}).get("scheme"), "nat64-wkp")
+    assert_eq("api embedded-v4 (nat64-wkp): ipv4",
+              data5.get("data", {}).get("ipv4"), "192.0.2.1")
+
+    # ISATAP
+    status6, data6 = _api_post("embedded-v4",
+                               {"input": "2001:db8::200:5efe:c000:201"})
+    assert_eq("api embedded-v4 (isatap): HTTP 200", status6, 200)
+    assert_eq("api embedded-v4 (isatap): scheme",
+              data6.get("data", {}).get("scheme"), "isatap")
+    assert_eq("api embedded-v4 (isatap): ipv4",
+              data6.get("data", {}).get("ipv4"), "192.0.2.1")
+
+    # No embedding
+    status7, data7 = _api_post("embedded-v4", {"input": "2001:db8::1"})
+    assert_eq("api embedded-v4 (none): HTTP 200", status7, 200)
+    assert_eq("api embedded-v4 (none): scheme is null",
+              data7.get("data", {}).get("scheme"), None)
+    assert_eq("api embedded-v4 (none): ipv4 is null",
+              data7.get("data", {}).get("ipv4"), None)
+
+    # Loopback / unspecified must NOT be misdetected as compatible (RFC 4291 §2.5.5.1)
+    status8, data8 = _api_post("embedded-v4", {"input": "::1"})
+    assert_eq("api embedded-v4 (loopback): scheme is null",
+              data8.get("data", {}).get("scheme"), None)
+
+    # Missing input → 400
+    status9, _ = _api_post("embedded-v4", {})
+    assert_eq("api embedded-v4: missing input → 400", status9, 400)
+
+    # Garbage input → 400
+    status10, _ = _api_post("embedded-v4", {"input": "not-an-address"})
+    assert_eq("api embedded-v4: invalid input → 400", status10, 400)
+
+
+async def test_ipv6_embedded_v4_ui(page: Page) -> None:
+    section("IPv6 embedded-v4 detector UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # T7 per-tool URL routing — /ipv6/embedded-v4 should auto-open the drawer.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=embedded-v4")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-v4']")
+    assert_eq("embedded-v4 UI: panel exists", await panel.count(), 1)
+
+    # Submit IPv4-mapped address
+    await page.fill("#embedded_v4_input", "::ffff:192.0.2.1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='embedded-v4'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-v4']")
+    rows = panel.locator(".zoneid-result__row")
+    # Scheme + Embedded IPv4 + Open-in-tool = 3 rows (no extras for mapped)
+    assert_true("embedded-v4 UI: at least scheme + ipv4 rows",
+                await rows.count() >= 2)
+
+    # Copy embedded IPv4
+    await rows.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("embedded-v4 UI: copy IPv4",
+              await page.evaluate("window.__lastClipboard"), "192.0.2.1")
+
+    # Open-in-tool button is rendered but disabled (per-scheme drawers land in T3–T7)
+    open_btn = panel.locator("button.splitter-btn[disabled]")
+    assert_true("embedded-v4 UI: open-in-tool button is disabled",
+                await open_btn.count() >= 1)
+
+    # No embedding → result card with "No embedded IPv4 detected"
+    await navigate(page, APP_URL + "?tab=ipv6&tool=embedded-v4")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#embedded_v4_input", "2001:db8::1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='embedded-v4'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-v4']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("embedded-v4 UI: empty-state message rendered",
+                "no embedded ipv4" in body_text, f"body: {body_text!r}")
+
+    # Error path — invalid IPv6 literal
+    await navigate(page, APP_URL + "?tab=ipv6&tool=embedded-v4")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#embedded_v4_input", "not-an-address")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='embedded-v4'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-v4']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("embedded-v4 UI: error band on invalid input",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+
+async def test_api_6to4(page: Page) -> None:
+    section("API — POST /api/v1/6to4")
+
+    # Encode mode — RFC 3056 §2 worked example.
+    status, data = _api_post("6to4", {"mode": "encode", "ipv4": "192.0.2.1"})
+    assert_eq("api 6to4 encode: HTTP 200", status, 200)
+    assert_eq("api 6to4 encode: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api 6to4 encode: mode", d.get("mode"), "encode")
+    assert_eq("api 6to4 encode: ipv4", d.get("ipv4"), "192.0.2.1")
+    assert_eq("api 6to4 encode: prefix", d.get("prefix"), "2002:c000:0201::/48")
+
+    # Decode mode — round-trip.
+    status2, data2 = _api_post("6to4", {"mode": "decode", "ipv6": "2002:c000:0201::1"})
+    assert_eq("api 6to4 decode: HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api 6to4 decode: mode", d2.get("mode"), "decode")
+    assert_eq("api 6to4 decode: ipv4", d2.get("ipv4"), "192.0.2.1")
+    assert_eq("api 6to4 decode: subnet_id", d2.get("subnet_id"), 0)
+    assert_eq("api 6to4 decode: interface_id",
+              d2.get("interface_id"), "0000:0000:0000:0001")
+
+    # Decode with non-trivial subnet ID + IID.
+    status3, data3 = _api_post("6to4",
+                               {"mode": "decode", "ipv6": "2002:cb00:7105:cafe:dead:beef:1234:5678"})
+    assert_eq("api 6to4 decode (full): HTTP 200", status3, 200)
+    d3 = data3.get("data", {})
+    assert_eq("api 6to4 decode (full): ipv4", d3.get("ipv4"), "203.0.113.5")
+    assert_eq("api 6to4 decode (full): subnet_id", d3.get("subnet_id"), 0xcafe)
+    assert_eq("api 6to4 decode (full): interface_id",
+              d3.get("interface_id"), "dead:beef:1234:5678")
+
+    # Encode rejects RFC 1918.
+    status4, _ = _api_post("6to4", {"mode": "encode", "ipv4": "10.0.0.1"})
+    assert_eq("api 6to4 encode: private IPv4 → 400", status4, 400)
+
+    # Encode rejects multicast.
+    status5, _ = _api_post("6to4", {"mode": "encode", "ipv4": "239.0.0.1"})
+    assert_eq("api 6to4 encode: multicast IPv4 → 400", status5, 400)
+
+    # Encode rejects garbage.
+    status6, _ = _api_post("6to4", {"mode": "encode", "ipv4": "not-an-address"})
+    assert_eq("api 6to4 encode: garbage → 400", status6, 400)
+
+    # Decode rejects non-2002 addresses.
+    status7, _ = _api_post("6to4", {"mode": "decode", "ipv6": "2001:db8::1"})
+    assert_eq("api 6to4 decode: non-2002 → 400", status7, 400)
+
+    # Missing required field.
+    status8, _ = _api_post("6to4", {"mode": "encode"})
+    assert_eq("api 6to4 encode: missing ipv4 → 400", status8, 400)
+    status9, _ = _api_post("6to4", {"mode": "decode"})
+    assert_eq("api 6to4 decode: missing ipv6 → 400", status9, 400)
+
+    # Invalid mode.
+    status10, _ = _api_post("6to4", {"mode": "bogus", "ipv4": "192.0.2.1"})
+    assert_eq("api 6to4: invalid mode → 400", status10, 400)
+
+    # embedded-v4 detector now deep-links 6to4 to /ipv6/6to4 (T3 contract).
+    status11, data11 = _api_post("embedded-v4", {"input": "2002:c000:0201::"})
+    assert_eq("api embedded-v4 (6to4): HTTP 200", status11, 200)
+    assert_eq("api embedded-v4 (6to4): detail_route is /ipv6/6to4",
+              data11.get("data", {}).get("detail_route"), "/ipv6/6to4")
+
+
+async def test_ipv6_6to4_ui(page: Page) -> None:
+    section("IPv6 6to4 tool UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # /ipv6/6to4 should auto-open the drawer (per-tool URL routing).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=6to4")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6to4']")
+    assert_eq("6to4 UI: panel exists", await panel.count(), 1)
+
+    # Encode — IPv4 → 6to4 prefix.
+    await page.select_option("#sixtofour_mode", "encode")
+    await page.fill("#sixtofour_input", "192.0.2.1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6to4'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6to4']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("6to4 UI encode: prefix rendered",
+                "2002:c000:0201::/48" in body_text, f"body: {body_text!r}")
+
+    # Copy the prefix.
+    await panel.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("6to4 UI encode: copy prefix",
+              await page.evaluate("window.__lastClipboard"),
+              "2002:c000:0201::/48")
+
+    # Decode — 6to4 IPv6 → IPv4 + subnet ID + IID.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=6to4")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#sixtofour_mode", "decode")
+    await page.fill("#sixtofour_input", "2002:cb00:7105:cafe:dead:beef:1234:5678")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6to4'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6to4']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("6to4 UI decode: embedded ipv4 rendered",
+                "203.0.113.5" in body_text, f"body: {body_text!r}")
+    assert_true("6to4 UI decode: subnet id rendered",
+                "cafe" in body_text, f"body: {body_text!r}")
+    assert_true("6to4 UI decode: interface id rendered",
+                "dead:beef:1234:5678" in body_text, f"body: {body_text!r}")
+
+    # Error path — private IPv4 in encode mode.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=6to4")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#sixtofour_mode", "encode")
+    await page.fill("#sixtofour_input", "10.0.0.1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6to4'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6to4']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("6to4 UI: error band on private IPv4",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+    # Shareable GET URL hydrates without re-submission.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=6to4&sixtofour_mode=encode&sixtofour_input=198.51.100.42")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6to4']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("6to4 UI shareable URL: prefix hydrated",
+                "2002:c633:642a::/48" in body_text, f"body: {body_text!r}")
+
+    # embedded-v4 detector now deep-links 6to4 to /ipv6/6to4. Render the
+    # embedded-v4 drawer with a 6to4 input and verify the Open-in-tool
+    # button is enabled (anchor element rather than disabled <button>).
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=embedded-v4&embedded_v4_input=2002:c000:0201::")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    ev4_panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-v4']")
+    open_link = ev4_panel.locator("a.splitter-btn[href='/ipv6/6to4']")
+    assert_true("embedded-v4 → 6to4 deep-link: anchor present",
+                await open_link.count() >= 1)
+
+
+async def test_api_teredo(page: Page) -> None:
+    section("API — POST /api/v1/teredo")
+
+    # Decode mode — RFC 4380 §4 worked example.
+    status, data = _api_post("teredo", {
+        "mode": "decode",
+        "ipv6": "2001:0:4136:e378:8000:63bf:3fff:fdd2",
+    })
+    assert_eq("api teredo decode: HTTP 200", status, 200)
+    assert_eq("api teredo decode: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api teredo decode: mode", d.get("mode"), "decode")
+    assert_eq("api teredo decode: server_ipv4", d.get("server_ipv4"), "65.54.227.120")
+    assert_eq("api teredo decode: client_ipv4", d.get("client_ipv4"), "192.0.2.45")
+    assert_eq("api teredo decode: port", d.get("port"), 40000)
+    assert_eq("api teredo decode: flags", d.get("flags"), 0x8000)
+    assert_eq("api teredo decode: cone", d.get("cone"), True)
+
+    # Encode mode — round-trip.
+    status2, data2 = _api_post("teredo", {
+        "mode": "encode",
+        "server_ipv4": "65.54.227.120",
+        "client_ipv4": "192.0.2.45",
+        "port": 40000,
+        "flags": 0x8000,
+    })
+    assert_eq("api teredo encode: HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api teredo encode: ipv6",
+              d2.get("ipv6"), "2001:0:4136:e378:8000:63bf:3fff:fdd2")
+    assert_eq("api teredo encode: cone", d2.get("cone"), True)
+
+    # Decode rejects non-Teredo addresses.
+    status3, _ = _api_post("teredo", {"mode": "decode", "ipv6": "2001:db8::1"})
+    assert_eq("api teredo decode: non-Teredo → 400", status3, 400)
+
+    # Decode rejects garbage.
+    status4, _ = _api_post("teredo", {"mode": "decode", "ipv6": "not-an-address"})
+    assert_eq("api teredo decode: garbage → 400", status4, 400)
+
+    # Encode rejects bad IPv4.
+    status5, _ = _api_post("teredo", {
+        "mode": "encode",
+        "server_ipv4": "not-an-ip",
+        "client_ipv4": "192.0.2.45",
+        "port": 40000,
+    })
+    assert_eq("api teredo encode: invalid server IPv4 → 400", status5, 400)
+
+    # Encode rejects out-of-range port.
+    status6, _ = _api_post("teredo", {
+        "mode": "encode",
+        "server_ipv4": "65.54.227.120",
+        "client_ipv4": "192.0.2.45",
+        "port": 70000,
+    })
+    assert_eq("api teredo encode: port out of range → 400", status6, 400)
+
+    # Missing required field on decode.
+    status7, _ = _api_post("teredo", {"mode": "decode"})
+    assert_eq("api teredo decode: missing ipv6 → 400", status7, 400)
+
+    # Missing required fields on encode.
+    status8, _ = _api_post("teredo", {"mode": "encode"})
+    assert_eq("api teredo encode: missing parts → 400", status8, 400)
+
+    # Invalid mode.
+    status9, _ = _api_post("teredo", {"mode": "bogus", "ipv6": "2001:0::1"})
+    assert_eq("api teredo: invalid mode → 400", status9, 400)
+
+    # embedded-v4 detector now deep-links Teredo to /ipv6/teredo (T4 contract).
+    status10, data10 = _api_post("embedded-v4",
+                                 {"input": "2001:0:4136:e378:8000:63bf:3fff:fdd2"})
+    assert_eq("api embedded-v4 (teredo): HTTP 200", status10, 200)
+    assert_eq("api embedded-v4 (teredo): detail_route is /ipv6/teredo",
+              data10.get("data", {}).get("detail_route"), "/ipv6/teredo")
+
+
+async def test_ipv6_teredo_ui(page: Page) -> None:
+    section("IPv6 Teredo tool UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # /ipv6/teredo should auto-open the drawer (per-tool URL routing).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=teredo")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='teredo']")
+    assert_eq("teredo UI: panel exists", await panel.count(), 1)
+
+    # Decode — Teredo IPv6 → parts.
+    await page.select_option("#teredo_mode", "decode")
+    await page.fill("#teredo_input", "2001:0:4136:e378:8000:63bf:3fff:fdd2")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='teredo'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='teredo']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("teredo UI decode: server v4 rendered",
+                "65.54.227.120" in body_text, f"body: {body_text!r}")
+    assert_true("teredo UI decode: client v4 rendered",
+                "192.0.2.45" in body_text, f"body: {body_text!r}")
+    assert_true("teredo UI decode: port rendered",
+                "40000" in body_text, f"body: {body_text!r}")
+    assert_true("teredo UI decode: flags rendered",
+                "0x8000" in body_text, f"body: {body_text!r}")
+
+    # Copy server IPv4.
+    await panel.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("teredo UI decode: copy server IPv4",
+              await page.evaluate("window.__lastClipboard"),
+              "65.54.227.120")
+
+    # Error path — non-Teredo address.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=teredo")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#teredo_mode", "decode")
+    await page.fill("#teredo_input", "2001:db8::1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='teredo'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='teredo']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("teredo UI: error band on non-Teredo address",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+    # Shareable GET URL hydrates without re-submission.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=teredo&teredo_mode=decode&teredo_input=2001:0:4136:e378:8000:63bf:3fff:fdd2")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='teredo']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("teredo UI shareable URL: server v4 hydrated",
+                "65.54.227.120" in body_text, f"body: {body_text!r}")
+    assert_true("teredo UI shareable URL: client v4 hydrated",
+                "192.0.2.45" in body_text, f"body: {body_text!r}")
+
+    # embedded-v4 detector now deep-links Teredo to /ipv6/teredo. Render
+    # the embedded-v4 drawer with a Teredo input and verify the
+    # Open-in-tool button is enabled (anchor element).
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=embedded-v4&embedded_v4_input=2001:0:4136:e378:8000:63bf:3fff:fdd2")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    ev4_panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-v4']")
+    open_link = ev4_panel.locator("a.splitter-btn[href='/ipv6/teredo']")
+    assert_true("embedded-v4 → teredo deep-link: anchor present",
+                await open_link.count() >= 1)
+
+
+async def test_api_isatap(page: Page) -> None:
+    section("API — POST /api/v1/isatap")
+
+    # Encode mode — public IPv4 → globally-unique IID auto-detect.
+    status, data = _api_post("isatap", {"mode": "encode", "ipv4": "192.0.2.1"})
+    assert_eq("api isatap encode: HTTP 200", status, 200)
+    assert_eq("api isatap encode: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api isatap encode: mode", d.get("mode"), "encode")
+    assert_eq("api isatap encode: iid", d.get("iid"), "200:5efe:c000:201")
+    assert_eq("api isatap encode: globally_unique=true", d.get("globally_unique"), True)
+
+    # Encode mode — private IPv4 → locally-administered.
+    status2, data2 = _api_post("isatap", {"mode": "encode", "ipv4": "10.0.0.1"})
+    assert_eq("api isatap encode (private): HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api isatap encode (private): iid", d2.get("iid"), "0:5efe:a00:1")
+    assert_eq("api isatap encode (private): globally_unique=false",
+              d2.get("globally_unique"), False)
+
+    # Encode with explicit globally_unique=false override.
+    status3, data3 = _api_post("isatap", {
+        "mode": "encode", "ipv4": "192.0.2.1", "globally_unique": False,
+    })
+    assert_eq("api isatap encode (forced local): HTTP 200", status3, 200)
+    assert_eq("api isatap encode (forced local): iid",
+              data3.get("data", {}).get("iid"), "0:5efe:c000:201")
+
+    # Decode mode — round-trip.
+    status4, data4 = _api_post("isatap", {"mode": "decode", "iid": "200:5efe:c000:201"})
+    assert_eq("api isatap decode: HTTP 200", status4, 200)
+    d4 = data4.get("data", {})
+    assert_eq("api isatap decode: ipv4", d4.get("ipv4"), "192.0.2.1")
+    assert_eq("api isatap decode: globally_unique", d4.get("globally_unique"), True)
+
+    # Decode rejects non-ISATAP IID.
+    status5, _ = _api_post("isatap", {"mode": "decode", "iid": "feed:beef:cafe:1"})
+    assert_eq("api isatap decode: non-ISATAP → 400", status5, 400)
+
+    # Decode rejects garbage.
+    status6, _ = _api_post("isatap", {"mode": "decode", "iid": "not-an-iid"})
+    assert_eq("api isatap decode: garbage → 400", status6, 400)
+
+    # Encode rejects bad IPv4.
+    status7, _ = _api_post("isatap", {"mode": "encode", "ipv4": "not-an-ip"})
+    assert_eq("api isatap encode: invalid IPv4 → 400", status7, 400)
+
+    # Missing required fields.
+    status8, _ = _api_post("isatap", {"mode": "encode"})
+    assert_eq("api isatap encode: missing ipv4 → 400", status8, 400)
+    status9, _ = _api_post("isatap", {"mode": "decode"})
+    assert_eq("api isatap decode: missing iid → 400", status9, 400)
+
+    # Invalid mode.
+    status10, _ = _api_post("isatap", {"mode": "bogus", "ipv4": "192.0.2.1"})
+    assert_eq("api isatap: invalid mode → 400", status10, 400)
+
+    # embedded-v4 detector now deep-links ISATAP to /ipv6/isatap (T5 contract).
+    status11, data11 = _api_post("embedded-v4",
+                                 {"input": "2001:db8::200:5efe:c000:201"})
+    assert_eq("api embedded-v4 (isatap): HTTP 200", status11, 200)
+    ev4 = data11.get("data", {})
+    assert_eq("api embedded-v4 (isatap): detail_route is /ipv6/isatap",
+              ev4.get("detail_route"), "/ipv6/isatap")
+    assert_eq("api embedded-v4 (isatap): extra.ipv4 from decoder",
+              ev4.get("extra", {}).get("ipv4"), "192.0.2.1")
+    assert_eq("api embedded-v4 (isatap): extra.globally_unique from decoder",
+              ev4.get("extra", {}).get("globally_unique"), True)
+
+
+async def test_ipv6_isatap_ui(page: Page) -> None:
+    section("IPv6 ISATAP tool UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # /ipv6/isatap should auto-open the drawer (per-tool URL routing).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=isatap")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='isatap']")
+    assert_eq("isatap UI: panel exists", await panel.count(), 1)
+
+    # Encode — IPv4 → IID.
+    await page.select_option("#isatap_mode", "encode")
+    await page.fill("#isatap_ipv4", "192.0.2.1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='isatap'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='isatap']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("isatap UI encode: IID rendered",
+                "200:5efe:c000:201" in body_text, f"body: {body_text!r}")
+    assert_true("isatap UI encode: globally-unique badge",
+                "globally-unique" in body_text, f"body: {body_text!r}")
+
+    # Copy IID.
+    await panel.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("isatap UI encode: copy IID",
+              await page.evaluate("window.__lastClipboard"),
+              "::200:5efe:c000:201")
+
+    # Decode — IID → IPv4.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=isatap")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#isatap_mode", "decode")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='isatap'] button.splitter-btn")
+    # After mode change the form re-rendered server-side; need to refill iid.
+    await page.fill("#isatap_iid", "200:5efe:c000:201")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='isatap'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='isatap']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("isatap UI decode: ipv4 rendered",
+                "192.0.2.1" in body_text, f"body: {body_text!r}")
+
+    # Error path — non-ISATAP IID.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=isatap")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#isatap_mode", "decode")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='isatap'] button.splitter-btn")
+    await page.fill("#isatap_iid", "feed:beef:cafe:1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='isatap'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='isatap']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("isatap UI: error band on non-ISATAP IID",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+    # Shareable GET URL hydrates without re-submission.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=isatap&isatap_mode=encode&isatap_ipv4=192.0.2.1")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='isatap']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("isatap UI shareable URL: IID hydrated",
+                "200:5efe:c000:201" in body_text, f"body: {body_text!r}")
+
+    # embedded-v4 detector now deep-links ISATAP to /ipv6/isatap.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=embedded-v4&embedded_v4_input=2001:db8::200:5efe:c000:201")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    ev4_panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-v4']")
+    open_link = ev4_panel.locator("a.splitter-btn[href='/ipv6/isatap']")
+    assert_true("embedded-v4 → isatap deep-link: anchor present",
+                await open_link.count() >= 1)
+
+
+async def test_api_6rd(page: Page) -> None:
+    section("API — POST /api/v1/6rd")
+
+    # Encode mode — basic case (mask=0).
+    status, data = _api_post("6rd", {
+        "mode": "encode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "sp_ipv4_mask_len": 0,
+        "ipv4": "192.0.2.1",
+    })
+    assert_eq("api 6rd encode: HTTP 200", status, 200)
+    assert_eq("api 6rd encode: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api 6rd encode: mode", d.get("mode"), "encode")
+    assert_eq("api 6rd encode: prefix", d.get("prefix"), "2001:db8:c000:201::/64")
+    assert_eq("api 6rd encode: prefix_length", d.get("prefix_length"), 64)
+
+    # Encode with mask_len=8 (SP discards top 8 bits).
+    status2, data2 = _api_post("6rd", {
+        "mode": "encode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "sp_ipv4_mask_len": 8,
+        "ipv4": "192.0.2.1",
+    })
+    assert_eq("api 6rd encode (mask=8): HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api 6rd encode (mask=8): prefix", d2.get("prefix"), "2001:db8:2:100::/56")
+    assert_eq("api 6rd encode (mask=8): prefix_length", d2.get("prefix_length"), 56)
+
+    # Encode default mask_len = 0 when omitted.
+    status3, data3 = _api_post("6rd", {
+        "mode": "encode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "ipv4": "192.0.2.1",
+    })
+    assert_eq("api 6rd encode (default mask): HTTP 200", status3, 200)
+    assert_eq("api 6rd encode (default mask): prefix",
+              data3.get("data", {}).get("prefix"), "2001:db8:c000:201::/64")
+
+    # Decode mode — round-trip.
+    status4, data4 = _api_post("6rd", {
+        "mode": "decode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "sp_ipv4_mask_len": 0,
+        "ipv6": "2001:db8:c000:201::1",
+    })
+    assert_eq("api 6rd decode: HTTP 200", status4, 200)
+    d4 = data4.get("data", {})
+    assert_eq("api 6rd decode: ipv4", d4.get("ipv4"), "192.0.2.1")
+
+    # Decode rejects address outside SP prefix.
+    status5, _ = _api_post("6rd", {
+        "mode": "decode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "ipv6": "2001:db9:c000:201::1",
+    })
+    assert_eq("api 6rd decode: outside SP prefix → 400", status5, 400)
+
+    # Encode rejects bad IPv4.
+    status6, _ = _api_post("6rd", {
+        "mode": "encode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "ipv4": "not-an-ip",
+    })
+    assert_eq("api 6rd encode: invalid IPv4 → 400", status6, 400)
+
+    # Bad SP prefix.
+    status7, _ = _api_post("6rd", {
+        "mode": "encode",
+        "sp_ipv6_prefix": "not-a-prefix",
+        "ipv4": "192.0.2.1",
+    })
+    assert_eq("api 6rd: invalid SP prefix → 400", status7, 400)
+
+    # Mask out of range.
+    status8, _ = _api_post("6rd", {
+        "mode": "encode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "sp_ipv4_mask_len": 33,
+        "ipv4": "192.0.2.1",
+    })
+    assert_eq("api 6rd: mask out of range → 400", status8, 400)
+
+    # Missing required fields.
+    status9, _ = _api_post("6rd", {"mode": "encode"})
+    assert_eq("api 6rd encode: missing sp_ipv6_prefix → 400", status9, 400)
+    status10, _ = _api_post("6rd", {
+        "mode": "encode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+    })
+    assert_eq("api 6rd encode: missing ipv4 → 400", status10, 400)
+    status11, _ = _api_post("6rd", {
+        "mode": "decode",
+        "sp_ipv6_prefix": "2001:db8::/32",
+    })
+    assert_eq("api 6rd decode: missing ipv6 → 400", status11, 400)
+
+    # Invalid mode.
+    status12, _ = _api_post("6rd", {
+        "mode": "bogus",
+        "sp_ipv6_prefix": "2001:db8::/32",
+        "ipv4": "192.0.2.1",
+    })
+    assert_eq("api 6rd: invalid mode → 400", status12, 400)
+
+
+async def test_api_nat64(page: Page) -> None:
+    section("API — POST /api/v1/nat64")
+
+    # Encode at /96 well-known prefix. RFC 6052 §3.1 forbids non-globally-
+    # unique IPv4 (incl. TEST-NET) under the WKP, so use 8.8.8.8 here.
+    status, data = _api_post("nat64", {
+        "mode": "encode",
+        "nat64_prefix": "64:ff9b::",
+        "prefix_length": 96,
+        "ipv4": "8.8.8.8",
+    })
+    assert_eq("api nat64 encode wkp: HTTP 200", status, 200)
+    assert_eq("api nat64 encode wkp: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api nat64 encode wkp: ipv6", d.get("ipv6"), "64:ff9b::808:808")
+    assert_eq("api nat64 encode wkp: prefix_length", d.get("prefix_length"), 96)
+
+    # Encode at /32 — RFC 6052 §2.4 vector.
+    status2, data2 = _api_post("nat64", {
+        "mode": "encode",
+        "nat64_prefix": "2001:db8::",
+        "prefix_length": 32,
+        "ipv4": "192.0.2.33",
+    })
+    assert_eq("api nat64 encode /32: HTTP 200", status2, 200)
+    assert_eq("api nat64 encode /32: ipv6",
+              data2.get("data", {}).get("ipv6"), "2001:db8:c000:221::")
+
+    # Encode at /64 — RFC 6052 §2.4 vector.
+    status3, data3 = _api_post("nat64", {
+        "mode": "encode",
+        "nat64_prefix": "2001:db8:122:344::",
+        "prefix_length": 64,
+        "ipv4": "192.0.2.33",
+    })
+    assert_eq("api nat64 encode /64: HTTP 200", status3, 200)
+    assert_eq("api nat64 encode /64: ipv6",
+              data3.get("data", {}).get("ipv6"), "2001:db8:122:344:c0:2:2100:0")
+
+    # Decode at /32 round-trip.
+    status4, data4 = _api_post("nat64", {
+        "mode": "decode",
+        "nat64_prefix": "2001:db8::",
+        "prefix_length": 32,
+        "ipv6": "2001:db8:c000:221::",
+    })
+    assert_eq("api nat64 decode /32: HTTP 200", status4, 200)
+    assert_eq("api nat64 decode /32: ipv4",
+              data4.get("data", {}).get("ipv4"), "192.0.2.33")
+
+    # DNS64 mode — defaults to well-known /96. Use a globally-unique IPv4
+    # (RFC 6052 §3.1 forbids non-globally-unique sources under the WKP).
+    status5, data5 = _api_post("nat64", {
+        "mode": "dns64",
+        "a_record": "8.8.8.8",
+    })
+    assert_eq("api nat64 dns64: HTTP 200", status5, 200)
+    assert_eq("api nat64 dns64: ipv6",
+              data5.get("data", {}).get("ipv6"), "64:ff9b::808:808")
+
+    # RFC 6052 §3.1: WKP rejects RFC 1918 source.
+    status6, _ = _api_post("nat64", {
+        "mode": "encode",
+        "ipv4": "10.0.0.1",
+    })
+    assert_eq("api nat64 encode wkp + private → 400", status6, 400)
+
+    # Invalid prefix length.
+    status7, _ = _api_post("nat64", {
+        "mode": "encode",
+        "nat64_prefix": "2001:db8::",
+        "prefix_length": 80,
+        "ipv4": "192.0.2.33",
+    })
+    assert_eq("api nat64 encode invalid PL → 400", status7, 400)
+
+    # Decode rejects address outside the prefix.
+    status8, _ = _api_post("nat64", {
+        "mode": "decode",
+        "nat64_prefix": "2001:db8::",
+        "prefix_length": 32,
+        "ipv6": "2001:db9::1",
+    })
+    assert_eq("api nat64 decode out-of-prefix → 400", status8, 400)
+
+    # Missing required fields.
+    status9, _ = _api_post("nat64", {"mode": "encode"})
+    assert_eq("api nat64 encode missing ipv4 → 400", status9, 400)
+
+
+async def test_ipv6_nat64_ui(page: Page) -> None:
+    section("IPv6 NAT64 / DNS64 drawer UI (extends mapped6)")
+
+    # Per-tool URL routing auto-opens the mapped6 drawer.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=mapped6")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+
+    # Open the NAT64 disclosure inside the drawer.
+    await page.evaluate("document.querySelector('details.nat64-advanced').open = true;")
+    await page.wait_for_selector("#nat64_mode", state="attached")
+
+    # Run an encode at /32 — RFC 6052 §2.4 vector.
+    await page.select_option("#nat64_mode", "encode")
+    await page.select_option("#nat64_pl", "32")
+    await page.fill("#nat64_prefix", "2001:db8::")
+    await page.fill("#nat64_ipv4",   "192.0.2.33")
+    await page.click("button.nat64-submit")
+    await page.wait_for_load_state("load")
+    await page.wait_for_selector("dl[data-history-source='nat64']")
+
+    body_text = await page.inner_text("dl[data-history-source='nat64']")
+    assert "2001:db8:c000:221::" in body_text, \
+        f"expected NAT64 /32 result, got: {body_text!r}"
+    section_ok = "encode" in body_text
+    assert section_ok, f"expected mode=encode in NAT64 result, got: {body_text!r}"
+
+    # GET shareable URL: NAT64 dns64 mode round-trip.
+    await navigate(
+        page,
+        APP_URL
+        + "?tab=ipv6&tool=mapped6"
+        + "&nat64_mode=dns64"
+        + "&nat64_prefix=64:ff9b::"
+        + "&nat64_pl=96"
+        + "&nat64_a_record=8.8.8.8"
+    )
+    await page.wait_for_selector("dl[data-history-source='nat64']")
+    body_text2 = await page.inner_text("dl[data-history-source='nat64']")
+    assert "64:ff9b::808:808" in body_text2, \
+        f"expected DNS64 AAAA result via GET, got: {body_text2!r}"
+
+    # Existing mapped6 form still works (no regression).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=mapped6")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#mapped6_input", "192.0.2.1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='mapped6'] form:first-of-type button[type='submit']")
+    await page.wait_for_load_state("load")
+    rows = page.locator(
+        "#panel-ipv6 .tool-panel[data-tool='mapped6'] dl[data-history-source='mapped6'] .zoneid-result__row"
+    )
+    assert_eq("nat64 UI: existing mapped6 form still 4 rows", await rows.count(), 4)
+
+
+async def test_ipv6_6rd_ui(page: Page) -> None:
+    section("IPv6 6rd tool UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # /ipv6/6rd should auto-open the drawer (per-tool URL routing).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=6rd")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6rd']")
+    assert_eq("6rd UI: panel exists", await panel.count(), 1)
+
+    # Encode — IPv4 → delegated prefix.
+    await page.select_option("#sixrd_mode", "encode")
+    await page.fill("#sixrd_sp_prefix", "2001:db8::/32")
+    await page.fill("#sixrd_mask_len", "0")
+    await page.fill("#sixrd_ipv4", "192.0.2.1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6rd'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6rd']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("6rd UI encode: prefix rendered",
+                "2001:db8:c000:201::/64" in body_text, f"body: {body_text!r}")
+
+    # Copy delegated prefix.
+    await panel.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("6rd UI encode: copy prefix",
+              await page.evaluate("window.__lastClipboard"),
+              "2001:db8:c000:201::/64")
+
+    # Decode — 6rd address → IPv4.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=6rd")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#sixrd_mode", "decode")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6rd'] button.splitter-btn")
+    # After mode change the form re-rendered server-side; need to refill values.
+    await page.fill("#sixrd_sp_prefix", "2001:db8::/32")
+    await page.fill("#sixrd_mask_len", "0")
+    await page.fill("#sixrd_ipv6", "2001:db8:c000:201::1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6rd'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6rd']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("6rd UI decode: ipv4 rendered",
+                "192.0.2.1" in body_text, f"body: {body_text!r}")
+
+    # Error path — address outside SP prefix.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=6rd")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#sixrd_mode", "decode")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6rd'] button.splitter-btn")
+    await page.fill("#sixrd_sp_prefix", "2001:db8::/32")
+    await page.fill("#sixrd_mask_len", "0")
+    await page.fill("#sixrd_ipv6", "2001:db9:c000:201::1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='6rd'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6rd']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("6rd UI: error band on address outside SP prefix",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+    # Shareable GET URL hydrates without re-submission.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=6rd&sixrd_mode=encode"
+                   "&sixrd_sp_prefix=2001:db8::/32&sixrd_mask_len=0&sixrd_ipv4=192.0.2.1")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='6rd']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("6rd UI shareable URL: prefix hydrated",
+                "2001:db8:c000:201::/64" in body_text, f"body: {body_text!r}")
+
+
+async def test_api_prefix_plan6(page: Page) -> None:
+    section("API — POST /api/v1/prefix-plan6")
+
+    # Slice /48 into the first four /56s.
+    status, data = _api_post("prefix-plan6", {
+        "parent_prefix": "2001:db8::/48",
+        "child_length": 56,
+        "count": 4,
+    })
+    assert_eq("api prefix-plan6 /48→/56: HTTP 200", status, 200)
+    assert_eq("api prefix-plan6 /48→/56: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    children = d.get("children", [])
+    assert_eq("api prefix-plan6 /48→/56: count=4", len(children), 4)
+    assert_eq("api prefix-plan6 /48→/56: first child prefix",
+              children[0].get("prefix") if children else None, "2001:db8::/56")
+    assert_eq("api prefix-plan6 /48→/56: second child prefix",
+              children[1].get("prefix") if len(children) > 1 else None, "2001:db8:0:100::/56")
+    assert_eq("api prefix-plan6 /48→/56: total_children_str",
+              d.get("parent", {}).get("total_children_str"), "256")
+    assert_eq("api prefix-plan6 /48→/56: free remaining",
+              d.get("free", {}).get("remaining_str"), "252")
+    assert_eq("api prefix-plan6 /48→/56: normalized_child_length",
+              d.get("normalized_child_length"), 56)
+    assert_eq("api prefix-plan6 /48→/56: contains_64s",
+              children[0].get("contains_64s") if children else None, "256")
+
+    # Nibble-align snaps /49 → /52.
+    status2, data2 = _api_post("prefix-plan6", {
+        "parent_prefix": "2001:db8::/48",
+        "child_length": 49,
+        "count": 1,
+        "nibble_align": True,
+    })
+    assert_eq("api prefix-plan6 nibble-align: HTTP 200", status2, 200)
+    assert_eq("api prefix-plan6 nibble-align: snaps to /52",
+              data2.get("data", {}).get("normalized_child_length"), 52)
+
+    # Overflow path — /32 → /128 ⇒ 2^96 children.
+    status3, data3 = _api_post("prefix-plan6", {
+        "parent_prefix": "2001:db8::/32",
+        "child_length": 128,
+        "count": 1,
+        "nibble_align": False,
+    })
+    assert_eq("api prefix-plan6 overflow: HTTP 200", status3, 200)
+    assert_eq("api prefix-plan6 overflow: total uses 2^N",
+              data3.get("data", {}).get("parent", {}).get("total_children_str"), "2^96")
+
+    # Start offset skips first N.
+    status4, data4 = _api_post("prefix-plan6", {
+        "parent_prefix": "2001:db8::/48",
+        "child_length": 56,
+        "count": 2,
+        "start_offset": 2,
+    })
+    assert_eq("api prefix-plan6 offset: HTTP 200", status4, 200)
+    kids = data4.get("data", {}).get("children", [])
+    assert_eq("api prefix-plan6 offset: first child index",
+              kids[0].get("index") if kids else None, 2)
+    assert_eq("api prefix-plan6 offset: first child prefix",
+              kids[0].get("prefix") if kids else None, "2001:db8:0:200::/56")
+
+    # Invalid: child_length ≤ parent_length.
+    status5, _ = _api_post("prefix-plan6", {
+        "parent_prefix": "2001:db8::/48",
+        "child_length": 32,
+        "count": 1,
+    })
+    assert_eq("api prefix-plan6 child<parent → 400", status5, 400)
+
+    # Invalid: missing required fields.
+    status6, _ = _api_post("prefix-plan6", {"parent_prefix": "2001:db8::/48"})
+    assert_eq("api prefix-plan6 missing fields → 400", status6, 400)
+
+    # Invalid: offset + count exceeds total. Disable nibble-align so /49 stays /49
+    # (only 2 children); with nibble-align on it would snap to /52 (16 children).
+    status7, _ = _api_post("prefix-plan6", {
+        "parent_prefix": "2001:db8::/48",
+        "child_length": 49,
+        "count": 2,
+        "start_offset": 1,
+        "nibble_align": False,
+    })
+    assert_eq("api prefix-plan6 offset+count overflow → 400", status7, 400)
+
+
+async def test_ipv6_prefix_plan_ui(page: Page) -> None:
+    section("IPv6 prefix-delegation planner UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # /ipv6/prefix-plan should auto-open the drawer (per-tool URL routing).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=prefix-plan")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='prefix-plan']")
+    assert_eq("prefix-plan UI: panel exists", await panel.count(), 1)
+
+    # Plan a /48 → /56 slice (first 4).
+    await page.fill("#prefix_plan6_parent", "2001:db8::/48")
+    await page.fill("#prefix_plan6_child_length", "56")
+    await page.fill("#prefix_plan6_count", "4")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='prefix-plan'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='prefix-plan']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("prefix-plan UI: first child rendered",
+                "2001:db8::/56" in body_text, f"body: {body_text!r}")
+    assert_true("prefix-plan UI: fourth child rendered",
+                "2001:db8:0:300::/56" in body_text, f"body: {body_text!r}")
+
+    # Copy a child prefix.
+    await panel.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("prefix-plan UI: copy child prefix",
+              await page.evaluate("window.__lastClipboard"),
+              "2001:db8::/56")
+
+    # Error path — child smaller than parent.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=prefix-plan")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#prefix_plan6_parent", "2001:db8::/48")
+    await page.fill("#prefix_plan6_child_length", "32")
+    await page.fill("#prefix_plan6_count", "1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='prefix-plan'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='prefix-plan']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("prefix-plan UI: error band when child ≤ parent",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+    # Shareable GET URL hydrates without re-submission.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=prefix-plan"
+                   "&prefix_plan6_parent=2001:db8::/48"
+                   "&prefix_plan6_child_length=56"
+                   "&prefix_plan6_count=2")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='prefix-plan']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("prefix-plan UI shareable URL: hydrated",
+                "2001:db8::/56" in body_text, f"body: {body_text!r}")
+
+
+async def test_api_nibble6(page: Page) -> None:
+    section("API — POST /api/v1/nibble6")
+
+    # /49 → above=/48, below=/52.
+    status, data = _api_post("nibble6", {"prefix": "2001:db8::/49"})
+    assert_eq("api nibble6 /49: HTTP 200", status, 200)
+    assert_eq("api nibble6 /49: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api nibble6 /49: input length",
+              d.get("input", {}).get("length"), 49)
+    assert_eq("api nibble6 /49: above length",
+              d.get("above", {}).get("length"), 48)
+    assert_eq("api nibble6 /49: below length",
+              d.get("below", {}).get("length"), 52)
+    assert_eq("api nibble6 /49: above prefix",
+              d.get("above", {}).get("prefix"), "2001:db8::/48")
+    assert_eq("api nibble6 /49: below prefix",
+              d.get("below", {}).get("prefix"), "2001:db8::/52")
+    assert_eq("api nibble6 /49: above contains_64s",
+              d.get("above", {}).get("contains_64s"), "65536")
+    assert_eq("api nibble6 /49: below contains_64s",
+              d.get("below", {}).get("contains_64s"), "4096")
+
+    # Already-aligned input — /48 stays /48 above, advances to /52 below.
+    status2, data2 = _api_post("nibble6", {"prefix": "2001:db8::/48"})
+    assert_eq("api nibble6 /48: HTTP 200", status2, 200)
+    assert_eq("api nibble6 /48: above stays at /48",
+              data2.get("data", {}).get("above", {}).get("prefix"), "2001:db8::/48")
+    assert_eq("api nibble6 /48: below = /52",
+              data2.get("data", {}).get("below", {}).get("prefix"), "2001:db8::/52")
+
+    # /128 — both collapse.
+    status3, data3 = _api_post("nibble6", {"prefix": "2001:db8::1/128"})
+    assert_eq("api nibble6 /128: HTTP 200", status3, 200)
+    assert_eq("api nibble6 /128: below caps at /128",
+              data3.get("data", {}).get("below", {}).get("length"), 128)
+
+    # Invalid: missing field.
+    status4, _ = _api_post("nibble6", {})
+    assert_eq("api nibble6 missing field → 400", status4, 400)
+
+    # Invalid: unparseable address.
+    status5, _ = _api_post("nibble6", {"prefix": "not-an-address/48"})
+    assert_eq("api nibble6 invalid address → 400", status5, 400)
+
+
+async def test_ipv6_nibble_ui(page: Page) -> None:
+    section("IPv6 nibble-boundary helper UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # /ipv6/nibble should auto-open the drawer (per-tool URL routing).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=nibble")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='nibble']")
+    assert_eq("nibble UI: panel exists", await panel.count(), 1)
+
+    # Compute neighbours of /49.
+    await page.fill("#nibble6_prefix", "2001:db8::/49")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='nibble'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='nibble']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("nibble UI: above /48 rendered",
+                "2001:db8::/48" in body_text, f"body: {body_text!r}")
+    assert_true("nibble UI: below /52 rendered",
+                "2001:db8::/52" in body_text, f"body: {body_text!r}")
+
+    # Copy the above prefix.
+    await panel.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("nibble UI: copy above prefix",
+              await page.evaluate("window.__lastClipboard"),
+              "2001:db8::/48")
+
+    # Error path — missing prefix length.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=nibble")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#nibble6_prefix", "2001:db8::")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='nibble'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='nibble']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("nibble UI: error band on missing length",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+    # Shareable GET URL hydrates without re-submission.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=nibble"
+                   "&nibble6_prefix=2001:db8::/49")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='nibble']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("nibble UI shareable URL: hydrated",
+                "2001:db8::/48" in body_text and "2001:db8::/52" in body_text,
+                f"body: {body_text!r}")
+
+
+async def test_api_rfc3531(page: Page) -> None:
+    section("API — POST /api/v1/rfc3531")
+
+    # Centermost / 4 bits — RFC 3531 §3 worked example.
+    status, data = _api_post("rfc3531", {
+        "parent_prefix": "2001:db8::/48",
+        "reservation_bits": 4,
+        "strategy": "centermost",
+    })
+    assert_eq("api rfc3531 centermost/4: HTTP 200", status, 200)
+    assert_eq("api rfc3531 centermost/4: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api rfc3531 centermost/4: strategy", d.get("strategy"), "centermost")
+    assert_eq("api rfc3531 centermost/4: reservation_bits", d.get("reservation_bits"), 4)
+    assert_eq("api rfc3531 centermost/4: allocation_order",
+              d.get("allocation_order"),
+              [8, 4, 12, 2, 6, 10, 14, 1, 3, 5, 7, 9, 11, 13, 15])
+    children = d.get("children", [])
+    assert_eq("api rfc3531 centermost/4: 15 children (no 0)", len(children), 15)
+    assert_eq("api rfc3531 centermost/4: first child = value 8 prefix",
+              children[0].get("prefix") if children else None,
+              "2001:db8:0:8000::/52")
+    assert_eq("api rfc3531 centermost/4: parent canonicalised",
+              d.get("parent", {}).get("prefix"), "2001:db8::/48")
+
+    # Leftmost / 4 bits — monotonic 0..15.
+    status2, data2 = _api_post("rfc3531", {
+        "parent_prefix": "2001:db8::/48",
+        "reservation_bits": 4,
+        "strategy": "leftmost",
+    })
+    assert_eq("api rfc3531 leftmost/4: HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api rfc3531 leftmost/4: allocation_order",
+              d2.get("allocation_order"), list(range(16)))
+    kids2 = d2.get("children", [])
+    assert_eq("api rfc3531 leftmost/4: 16 children", len(kids2), 16)
+    assert_eq("api rfc3531 leftmost/4: first prefix = parent",
+              kids2[0].get("prefix") if kids2 else None, "2001:db8::/52")
+    assert_eq("api rfc3531 leftmost/4: second prefix",
+              kids2[1].get("prefix") if len(kids2) > 1 else None,
+              "2001:db8:0:1000::/52")
+
+    # Rightmost / 4 bits — reverse of leftmost.
+    status3, data3 = _api_post("rfc3531", {
+        "parent_prefix": "2001:db8::/48",
+        "reservation_bits": 4,
+        "strategy": "rightmost",
+    })
+    assert_eq("api rfc3531 rightmost/4: HTTP 200", status3, 200)
+    d3 = data3.get("data", {})
+    assert_eq("api rfc3531 rightmost/4: allocation_order[0]",
+              d3.get("allocation_order", [None])[0], 15)
+    kids3 = d3.get("children", [])
+    assert_eq("api rfc3531 rightmost/4: first child prefix",
+              kids3[0].get("prefix") if kids3 else None, "2001:db8:0:f000::/52")
+
+    # Invalid: missing reservation_bits.
+    status4, _ = _api_post("rfc3531", {"parent_prefix": "2001:db8::/48"})
+    assert_eq("api rfc3531 missing field → 400", status4, 400)
+
+    # Invalid: bad strategy.
+    status5, _ = _api_post("rfc3531", {
+        "parent_prefix": "2001:db8::/48",
+        "reservation_bits": 4,
+        "strategy": "random",
+    })
+    assert_eq("api rfc3531 bad strategy → 400", status5, 400)
+
+    # Invalid: reservation_bits over default cap (8).
+    status6, _ = _api_post("rfc3531", {
+        "parent_prefix": "2001:db8::/40",
+        "reservation_bits": 9,
+    })
+    assert_eq("api rfc3531 bits > cap → 400", status6, 400)
+
+    # Invalid: parent_length + reservation_bits > 128.
+    status7, _ = _api_post("rfc3531", {
+        "parent_prefix": "2001:db8::/126",
+        "reservation_bits": 4,
+    })
+    assert_eq("api rfc3531 parent+bits > 128 → 400", status7, 400)
+
+
+async def test_ipv6_rfc3531_ui(page: Page) -> None:
+    section("IPv6 RFC 3531 sparse-allocation UI")
+
+    # Install clipboard intercept (docker test harness serves over insecure HTTP).
+    await page.add_init_script("""
+        (() => {
+            window.__lastClipboard = null;
+            const stub = { writeText: (text) => { window.__lastClipboard = text; return Promise.resolve(); } };
+            try { Object.defineProperty(navigator, 'clipboard', { value: stub, configurable: true }); }
+            catch (e) { navigator.clipboard = stub; }
+        })();
+    """)
+
+    # /ipv6/rfc3531 should auto-open the drawer (per-tool URL routing).
+    await navigate(page, APP_URL + "?tab=ipv6&tool=rfc3531")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='rfc3531']")
+    assert_eq("rfc3531 UI: panel exists", await panel.count(), 1)
+
+    # Apply centermost / 4 bits.
+    await page.fill("#rfc3531_parent", "2001:db8::/48")
+    await page.fill("#rfc3531_reservation_bits", "4")
+    await page.select_option("#rfc3531_strategy", "centermost")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='rfc3531'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='rfc3531']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("rfc3531 UI: centre child rendered (value 8)",
+                "2001:db8:0:8000::/52" in body_text, f"body: {body_text!r}")
+    assert_true("rfc3531 UI: second child rendered (value 4)",
+                "2001:db8:0:4000::/52" in body_text, f"body: {body_text!r}")
+
+    # Copy the first child prefix.
+    await panel.locator(".subnet-copy").first.click()
+    await page.wait_for_timeout(50)
+    assert_eq("rfc3531 UI: copy first child prefix",
+              await page.evaluate("window.__lastClipboard"),
+              "2001:db8:0:8000::/52")
+
+    # Error path — bad strategy via direct field manipulation isn't possible
+    # (it's a select), so trigger an error via parent-length overflow instead.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=rfc3531")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#rfc3531_parent", "2001:db8::/126")
+    await page.fill("#rfc3531_reservation_bits", "4")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='rfc3531'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='rfc3531']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("rfc3531 UI: error band on parent+bits > 128",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+    # Shareable GET URL hydrates without re-submission.
+    await navigate(page,
+                   APP_URL + "?tab=ipv6&tool=rfc3531"
+                   "&rfc3531_parent=2001:db8::/48"
+                   "&rfc3531_reservation_bits=4"
+                   "&rfc3531_strategy=leftmost")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='rfc3531']")
+    body_text = (await panel.text_content() or "").lower()
+    # Leftmost first child is parent itself: 2001:db8::/52
+    assert_true("rfc3531 UI shareable URL: leftmost hydrated",
+                "2001:db8::/52" in body_text, f"body: {body_text!r}")
+    assert_true("rfc3531 UI shareable URL: second child rendered",
+                "2001:db8:0:1000::/52" in body_text, f"body: {body_text!r}")
+
+
 async def test_api_bulk(page: Page) -> None:
     section("API — bulk calculation")
     # Two valid IPv4 CIDRs
@@ -3037,6 +4382,202 @@ async def test_api_bulk_covers_new_ipv6_endpoints(page: Page) -> None:
     bad_results = data_bad.get("data", {}).get("results", [])
     assert_eq("api bulk multi-op unsupported: ok=false",
               bad_results[0].get("ok") if bad_results else None, False)
+
+
+async def test_api_bulk_covers_v350_endpoints(page: Page) -> None:
+    """v3.5.0 (T11) — bulk multi-op `items[]` covers all 9 new ops."""
+    section("API — bulk multi-op covers v3.5.0 IPv6 endpoints")
+    items = [
+        {"op": "embedded-v4",  "params": {"input": "::ffff:192.0.2.1"}},
+        {"op": "6to4",         "params": {"mode": "encode", "ipv4": "192.0.2.1"}},
+        {"op": "teredo",       "params": {"mode": "decode",
+                                            "ipv6": "2001:0:4136:e378:8000:63bf:3fff:fdd2"}},
+        {"op": "isatap",       "params": {"mode": "encode", "ipv4": "192.0.2.1"}},
+        {"op": "6rd",          "params": {"mode": "encode",
+                                            "sp_ipv6_prefix": "2001:db8::/32",
+                                            "sp_ipv4_mask_len": 0,
+                                            "customer_ipv4": "192.0.2.1"}},
+        {"op": "nat64",        "params": {"mode": "encode",
+                                            "ipv4": "8.8.8.8",
+                                            "prefix_length": 96}},
+        {"op": "prefix-plan6", "params": {"parent_prefix": "2001:db8::/48",
+                                            "child_length": 56,
+                                            "count": 4}},
+        {"op": "nibble6",      "params": {"prefix": "2001:db8::/49"}},
+        {"op": "rfc3531",      "params": {"parent_prefix": "2001:db8::/48",
+                                            "reservation_bits": 4,
+                                            "strategy": "centermost"}},
+    ]
+    status, data = _api_post("bulk", {"items": items})
+    assert_eq("api bulk v3.5.0: HTTP 200", status, 200)
+    assert_eq("api bulk v3.5.0: ok=true", data.get("ok"), True)
+    results = data.get("data", {}).get("results", [])
+    assert_eq("api bulk v3.5.0: 9 results returned", len(results), 9)
+    expected_ops = ["embedded-v4", "6to4", "teredo", "isatap", "6rd",
+                    "nat64", "prefix-plan6", "nibble6", "rfc3531"]
+    for i, op in enumerate(expected_ops):
+        envelope = results[i] if i < len(results) else {}
+        assert_eq(f"api bulk v3.5.0: item[{i}] op={op}",
+                  envelope.get("op"), op)
+        assert_eq(f"api bulk v3.5.0: item[{i}] ok=true",
+                  envelope.get("ok"), True)
+
+    # Spot checks
+    assert_eq("api bulk v3.5.0: embedded-v4 scheme",
+              results[0].get("scheme"), "mapped")
+    assert_true("api bulk v3.5.0: 6to4 prefix starts with 2002:",
+                str(results[1].get("prefix", "")).startswith("2002:"))
+    assert_true("api bulk v3.5.0: nibble6 has above+below",
+                "above" in results[7] and "below" in results[7])
+
+    # Heterogeneous batch mixing v3.4.0 + v3.5.0 ops in one request.
+    mixed_items = [
+        {"op": "rdns6",        "params": {"address": "2001:db8::1", "prefix": 64}},
+        {"op": "embedded-v4",  "params": {"input": "::ffff:192.0.2.1"}},
+        {"op": "nibble6",      "params": {"prefix": "2001:db8::/49"}},
+    ]
+    s2, d2 = _api_post("bulk", {"items": mixed_items})
+    assert_eq("api bulk v3.5.0 mixed: HTTP 200", s2, 200)
+    res2 = d2.get("data", {}).get("results", [])
+    for i in range(3):
+        assert_eq(f"api bulk v3.5.0 mixed: item[{i}] ok=true",
+                  res2[i].get("ok") if i < len(res2) else None, True)
+
+    # Bad shape on v3.5.0 op surfaces per-item, not 400.
+    s3, d3 = _api_post("bulk", {"items": [
+        {"op": "nibble6", "params": {}},
+    ]})
+    assert_eq("api bulk v3.5.0 bad-shape: HTTP 200", s3, 200)
+    res3 = d3.get("data", {}).get("results", [])
+    assert_eq("api bulk v3.5.0 bad-shape: ok=false",
+              res3[0].get("ok") if res3 else None, False)
+
+
+async def test_a11y_ipv6_drawers_v350(page: Page) -> None:
+    """v3.5.0 (T11) — a11y audit for the 9 new IPv6 transition/planning drawers.
+
+    Asserts, per drawer:
+      1. Every form input has an associated <label> or aria-label.
+      2. Every help_bubble() icon is keyboard-focusable (tabindex='0', role='button').
+      3. Every copy_button() has aria-label starting with 'Copy'.
+      4. Submit buttons have an accessible name.
+      5. Drawer ESC closes (per existing v3.4.0 behaviour, smoke-checked here).
+
+    Mirrors v3.4.0 T11 shape; any gap is a real bug — fix the markup, not the test.
+    """
+    section("v3.5.0 — a11y audit for the 9 new IPv6 drawers")
+
+    drawers = [
+        "embedded-v4", "6to4", "teredo", "isatap", "6rd",
+        "prefix-plan", "nibble", "rfc3531",
+    ]
+    # `nat64` is a sub-disclosure inside the `mapped6` drawer (see
+    # nat64-toggle <details>); it is exercised by mapped6 in v3.4.0
+    # and re-checked here as part of the mapped6 panel's expanded surface.
+
+    for slug in drawers:
+        await navigate(page, APP_URL + f"?tab=ipv6&tool={slug}")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        drawer = page.locator(f"#panel-ipv6 .tool-panel[data-tool='{slug}']")
+        assert_eq(f"a11y v3.5.0 {slug}: panel rendered", await drawer.count(), 1)
+
+        inputs = drawer.locator(
+            "input[type=text], input[type=number], input[type=tel], "
+            "input[type=checkbox], input:not([type]), select"
+        )
+        n_inputs = await inputs.count()
+        assert_true(
+            f"a11y v3.5.0 {slug}: at least one form input present",
+            n_inputs >= 1,
+            f"got: {n_inputs}",
+        )
+        for i in range(n_inputs):
+            el = inputs.nth(i)
+            has_label = await el.evaluate(
+                "(e) => !!(e.labels && e.labels.length) "
+                "|| !!e.getAttribute('aria-label') "
+                "|| !!e.closest('label')"
+            )
+            ident = await el.get_attribute("id") or await el.get_attribute("name") or f"#{i}"
+            assert_true(
+                f"a11y v3.5.0 {slug}: input '{ident}' has label/aria-label",
+                bool(has_label),
+                f"got has_label={has_label!r}",
+            )
+
+        bubbles = drawer.locator(".help-bubble-icon")
+        n_bubbles = await bubbles.count()
+        assert_true(
+            f"a11y v3.5.0 {slug}: at least one help bubble",
+            n_bubbles >= 1,
+            f"got: {n_bubbles}",
+        )
+        for i in range(n_bubbles):
+            ti = await bubbles.nth(i).get_attribute("tabindex")
+            assert_eq(
+                f"a11y v3.5.0 {slug}: help-bubble[{i}] tabindex='0'",
+                ti, "0",
+            )
+            role = await bubbles.nth(i).get_attribute("role")
+            assert_eq(
+                f"a11y v3.5.0 {slug}: help-bubble[{i}] role='button'",
+                role, "button",
+            )
+            al = await bubbles.nth(i).get_attribute("aria-label")
+            assert_eq(
+                f"a11y v3.5.0 {slug}: help-bubble[{i}] aria-label='Help'",
+                al, "Help",
+            )
+
+        copies = drawer.locator("button.subnet-copy")
+        n_copies = await copies.count()
+        for i in range(n_copies):
+            al = await copies.nth(i).get_attribute("aria-label") or ""
+            assert_true(
+                f"a11y v3.5.0 {slug}: copy-button[{i}] aria-label starts with 'Copy'",
+                al.startswith("Copy"),
+                f"got: {al!r}",
+            )
+
+        submits = drawer.locator("button[type=submit]")
+        n_submits = await submits.count()
+        assert_true(
+            f"a11y v3.5.0 {slug}: at least one submit button",
+            n_submits >= 1,
+            f"got: {n_submits}",
+        )
+        for i in range(n_submits):
+            name = await submits.nth(i).evaluate(
+                "(e) => (e.textContent || '').trim() || e.getAttribute('aria-label') || ''"
+            )
+            assert_true(
+                f"a11y v3.5.0 {slug}: submit-button[{i}] has accessible name",
+                bool(name),
+                f"got: {name!r}",
+            )
+
+        # ESC closes drawer (returns focus to the originating tool-trigger).
+        await page.keyboard.press("Escape")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer:not(.open)")
+        assert_true(
+            f"a11y v3.5.0 {slug}: ESC closes drawer",
+            not await page.locator("#panel-ipv6 .tool-drawer.open").is_visible(),
+        )
+
+    # nat64 sub-disclosure (inside the mapped6 drawer): the <summary> must use
+    # the native element so it is keyboard-operable by default. Inputs inside
+    # the disclosure are still labelled; help bubbles still tabindex=0.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=mapped6")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='mapped6']")
+    nat64 = panel.locator("details.nat64-advanced > summary")
+    assert_eq("a11y v3.5.0 nat64: <summary> tag",
+              await nat64.evaluate("(e) => e.tagName"), "SUMMARY")
+    nat64_bubbles = panel.locator("details.nat64-advanced .help-bubble-icon")
+    n_n64b = await nat64_bubbles.count()
+    for i in range(n_n64b):
+        ti = await nat64_bubbles.nth(i).get_attribute("tabindex")
+        assert_eq(f"a11y v3.5.0 nat64: bubble[{i}] tabindex='0'", ti, "0")
 
 
 async def test_vlsm_session_ttl_notice(page: Page) -> None:
@@ -7823,7 +9364,28 @@ async def main() -> None:
             await test_api_rdns6(page)
             await test_ipv6_mapped6_ui(page)
             await test_api_mapped6(page)
+            await test_ipv6_embedded_v4_ui(page)
+            await test_api_embedded_v4(page)
+            await test_ipv6_6to4_ui(page)
+            await test_api_6to4(page)
+            await test_ipv6_teredo_ui(page)
+            await test_api_teredo(page)
+            await test_ipv6_isatap_ui(page)
+            await test_api_isatap(page)
+            await test_ipv6_6rd_ui(page)
+            await test_api_6rd(page)
+            await test_ipv6_nat64_ui(page)
+            await test_api_nat64(page)
+            await test_ipv6_prefix_plan_ui(page)
+            await test_api_prefix_plan6(page)
+            await test_ipv6_nibble_ui(page)
+            await test_api_nibble6(page)
+            await test_ipv6_rfc3531_ui(page)
+            await test_api_rfc3531(page)
             await test_a11y_ipv6_drawers(page)
+            # v3.5.0 (T11) — bulk endpoint coverage + a11y for the 9 new drawers
+            await test_api_bulk_covers_v350_endpoints(page)
+            await test_a11y_ipv6_drawers_v350(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)

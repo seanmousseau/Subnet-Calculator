@@ -28,6 +28,24 @@ require $base . 'functions-derive6.php';
 require $base . 'functions-slaac6.php';
 require $base . 'functions-rdns6.php';
 require $base . 'functions-mapped6.php';
+require $base . 'functions-embedded-v4.php';
+require $base . 'functions-6to4.php';
+require_once $base . 'functions-teredo.php';
+// phpcs:disable PSR1.Files.SideEffects -- module include for ipv4_to_isatap_iid()/decode_isatap_iid().
+require_once $base . 'functions-isatap.php';
+// phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for compute_6rd_delegation()/extract_6rd_ipv4().
+require_once $base . 'functions-6rd.php';
+// phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for nat64_embed()/nat64_extract()/dns64_synthesize().
+require_once $base . 'functions-nat64.php';
+// phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for plan_prefix_delegation().
+require_once $base . 'functions-prefix-plan6.php';
+// phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for rfc3531_allocation_order()/rfc3531_apply().
+require_once $base . 'functions-rfc3531.php';
+// phpcs:enable PSR1.Files.SideEffects
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require_once $base . 'functions-resolve.php';
@@ -114,6 +132,15 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/rdns',
             'POST /api/v1/rdns6',
             'POST /api/v1/mapped6',
+            'POST /api/v1/embedded-v4',
+            'POST /api/v1/6to4',
+            'POST /api/v1/teredo',
+            'POST /api/v1/isatap',
+            'POST /api/v1/6rd',
+            'POST /api/v1/nat64',
+            'POST /api/v1/prefix-plan6',
+            'POST /api/v1/nibble6',
+            'POST /api/v1/rfc3531',
             'POST /api/v1/bulk',
             'POST /api/v1/sessions',
             'GET  /api/v1/sessions/{id}',
@@ -240,6 +267,33 @@ switch ($route_key) {
         break;
     case 'POST /mapped6':
         require __DIR__ . '/handlers/mapped6.php';
+        break;
+    case 'POST /embedded-v4':
+        require __DIR__ . '/handlers/embedded-v4.php';
+        break;
+    case 'POST /6to4':
+        require __DIR__ . '/handlers/6to4.php';
+        break;
+    case 'POST /teredo':
+        require __DIR__ . '/handlers/teredo.php';
+        break;
+    case 'POST /isatap':
+        require __DIR__ . '/handlers/isatap.php';
+        break;
+    case 'POST /6rd':
+        require __DIR__ . '/handlers/6rd.php';
+        break;
+    case 'POST /nat64':
+        require __DIR__ . '/handlers/nat64.php';
+        break;
+    case 'POST /prefix-plan6':
+        require __DIR__ . '/handlers/prefix-plan6.php';
+        break;
+    case 'POST /nibble6':
+        require __DIR__ . '/handlers/nibble6.php';
+        break;
+    case 'POST /rfc3531':
+        require __DIR__ . '/handlers/rfc3531.php';
         break;
     case 'POST /bulk':
         require __DIR__ . '/handlers/bulk.php';

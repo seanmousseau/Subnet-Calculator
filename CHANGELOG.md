@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-05-09
+
+**IPv6 Prefix Planning + Transition.** Combines the prefix-planning
+items originally roadmapped for v3.4.0 with the originally-planned
+v3.5.0 transition theme. PRs land incrementally; this section accretes
+as each ships.
+
+### Added
+
+- **IPv6 embedded-v4 detector.** Front-door tool for the v3.5.0
+  transition theme: detects IPv4-mapped, IPv4-compatible (deprecated),
+  6to4, Teredo, NAT64 well-known, and ISATAP embeddings; extracts the
+  embedded IPv4. Deep-links to per-scheme tools as they ship. (#390)
+- **6to4 address tool (RFC 3056).** Bidirectional translation between
+  public IPv4 and `2002::/16` 6to4 prefixes. Help text notes RFC 7526
+  deprecated status. (#392)
+- **Teredo address decoder (RFC 4380).** Decode and encode `2001:0::/32`
+  Teredo addresses (server v4, flags incl. cone bit, XOR'd UDP port,
+  XOR'd client v4). Help text notes operational status. (#393)
+- **ISATAP interface-ID helper (RFC 5214).** Build ISATAP IIDs from
+  IPv4 (`::0:5efe:V4ADDR` for non-global, `::200:5efe:V4ADDR` for
+  global) and decode them back. Auto-detects globally-unique vs
+  private from the IPv4 input. (#394)
+- **6rd address tool (RFC 5969).** Service-provider 6to4 variant —
+  configurable SP IPv6 prefix and IPv4 mask length. Bidirectional
+  translation between customer IPv4 and customer-delegated IPv6
+  prefix. (#395)
+- **NAT64 / DNS64 helper (RFC 6052 / 6146 / 6147).** Extends the v3.4.0
+  `mapped6` drawer with all six RFC 6052 prefix lengths
+  (`/32`, `/40`, `/48`, `/56`, `/64`, `/96`), custom NAT64 prefix
+  support, and DNS64 AAAA synthesis from A records. Existing `mapped6`
+  behaviour unchanged. (#391)
+- **IPv6 prefix-delegation planner.** Slice a delegated prefix (e.g. /48)
+  into nibble-aligned child prefixes (e.g. /56) with a usage table and
+  free-space report. GMP throughout — counts that overflow signed 64
+  print as `"2^N"`. (#387)
+- **IPv6 nibble-boundary helper.** Show nibble-aligned neighbours
+  (above and below) for any IPv6 prefix. Helps with reverse-zone
+  delegation planning. (#388)
+- **RFC 3531 sparse-allocation guidance.** Bit-reservation strategy
+  tool (Centermost / Leftmost / Rightmost) producing the allocation
+  order and concrete child prefixes for growth-friendly prefix
+  assignment. Composes with the prefix-delegation planner. (#389)
+- **A11y assertions for the 9 new IPv6 drawers** (`embedded-v4`, `6to4`,
+  `teredo`, `isatap`, `6rd`, `nat64`/`mapped6`-extended, `prefix-plan`,
+  `nibble`, `rfc3531`). Audit covers labels, help-bubble keyboard
+  focus + role/aria-label, copy-button accessible names, submit
+  accessible names, and ESC-closes-drawer behaviour.
+- **Bulk endpoint coverage for v3.5.0 endpoints.** `items[]` mode now
+  accepts `embedded-v4`, `6to4`, `teredo`, `isatap`, `6rd`, `nat64`,
+  `prefix-plan6`, `nibble6`, `rfc3531` in addition to the v3.4.0 ops,
+  with per-item `InvalidArgumentException` mapping to per-item error
+  envelopes. OpenAPI spec updated. (T11)
+
 ## [3.4.1] - 2026-05-08
 
 **Patch.** CodeRabbit cleanup carried over from v3.4.0's tracking PR review.

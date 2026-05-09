@@ -764,9 +764,17 @@ if ($i < 3) {
         elseif (!empty($diff) && $active_tab === 'ipv6') { $open_tool_ipv6 = 'diff'; }
         elseif (!empty($rdns6)) { $open_tool_ipv6 = 'rdns6'; }
         elseif (!empty($mapped6)) { $open_tool_ipv6 = 'mapped6'; }
+        elseif (!empty($embedded_v4)) { $open_tool_ipv6 = 'embedded-v4'; }
+        elseif (!empty($sixtofour)) { $open_tool_ipv6 = '6to4'; }
+        elseif (!empty($teredo)) { $open_tool_ipv6 = 'teredo'; }
+        elseif (!empty($isatap)) { $open_tool_ipv6 = 'isatap'; }
+        elseif (!empty($sixrd)) { $open_tool_ipv6 = '6rd'; }
+        elseif (!empty($prefix_plan6)) { $open_tool_ipv6 = 'prefix-plan'; }
+        elseif (!empty($nibble6)) { $open_tool_ipv6 = 'nibble'; }
+        elseif (!empty($rfc3531)) { $open_tool_ipv6 = 'rfc3531'; }
         // v3.4.0 — fallback: /ipv6/<tool> rewrites to ?tool=<tool>; honour it
         // when no other GET trigger has already chosen a tool above.
-        $ipv6_tool_whitelist = ['split6','ula','range6','supernet6','zoneid','derive','slaac','lookup','diff','rdns6','mapped6'];
+        $ipv6_tool_whitelist = ['split6','ula','range6','supernet6','zoneid','derive','slaac','lookup','diff','rdns6','mapped6','embedded-v4','6to4','teredo','isatap','6rd','prefix-plan','nibble','rfc3531'];
         if ($open_tool_ipv6 === null && $active_tab === 'ipv6'
             && in_array($requested_tool, $ipv6_tool_whitelist, true)) {
             $open_tool_ipv6 = $requested_tool;
@@ -784,6 +792,14 @@ if ($i < 3) {
             <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
             <button type="button" class="tool-trigger" data-tool="rdns6" aria-expanded="false">Reverse DNS</button>
             <button type="button" class="tool-trigger" data-tool="mapped6" aria-expanded="false">IPv4-mapped / NAT64</button>
+            <button type="button" class="tool-trigger" data-tool="embedded-v4" aria-expanded="false">Embedded IPv4</button>
+            <button type="button" class="tool-trigger" data-tool="6to4" aria-expanded="false">6to4</button>
+            <button type="button" class="tool-trigger" data-tool="teredo" aria-expanded="false">Teredo</button>
+            <button type="button" class="tool-trigger" data-tool="isatap" aria-expanded="false">ISATAP</button>
+            <button type="button" class="tool-trigger" data-tool="6rd" aria-expanded="false">6rd</button>
+            <button type="button" class="tool-trigger" data-tool="prefix-plan" aria-expanded="false">Prefix Plan</button>
+            <button type="button" class="tool-trigger" data-tool="nibble" aria-expanded="false">Nibble Neighbours</button>
+            <button type="button" class="tool-trigger" data-tool="rfc3531" aria-expanded="false">RFC 3531 Sparse</button>
         </div>
 
         <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv6">
@@ -1348,6 +1364,113 @@ if ($i < 3) {
                             <button type="submit" class="splitter-btn">Convert</button>
                         </div>
                     </form>
+                    <?php
+                    // v3.5.0 Task 7 — NAT64 / DNS64 (RFC 6052 / 6147).
+                    // The existing v3.4.0 mapped6 form (above) handles the
+                    // /96-only IPv4 ↔ IPv4-mapped ↔ NAT64 conversions and
+                    // is unchanged. The form below adds prefix-length-aware
+                    // NAT64 (any of /32, /40, /48, /56, /64, /96) and DNS64
+                    // AAAA synthesis as a separate <form>; submitting it
+                    // posts $_POST['nat64_mode'] which sc_run_nat64() reads
+                    // independently of $mapped6.
+                    $_nat64_mode = $nat64_mode ?? 'encode';
+                    $_nat64_pl   = ($nat64_pl_input ?? '') !== '' ? (int)$nat64_pl_input : 96;
+                    ?>
+                    <details class="slaac-advanced nat64-advanced"<?= !empty($nat64) ? ' open' : '' ?>>
+                        <summary>NAT64 / DNS64 (any RFC 6052 prefix length)<?= help_bubble('nat64-toggle', 'Open for prefix-length-aware NAT64 (RFC 6052 §2.2 — /32, /40, /48, /56, /64, /96) and DNS64 AAAA synthesis (RFC 6147). The well-known prefix 64:ff9b::/96 is rejected for non-globally-unique IPv4 per RFC 6052 §3.1.') ?></summary>
+                        <form method="post" novalidate>
+                            <input type="hidden" name="tab" value="ipv6">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="nat64_mode">Mode<?= help_bubble('nat64-mode', 'encode embeds an IPv4 into a NAT64 prefix; decode extracts the IPv4 from a NAT64 IPv6; dns64 synthesises an AAAA record for an A record (RFC 6147).') ?></label>
+                                    <select id="nat64_mode" name="nat64_mode">
+                                        <option value="encode" <?= $_nat64_mode === 'encode' ? 'selected' : '' ?>>encode (IPv4 → NAT64)</option>
+                                        <option value="decode" <?= $_nat64_mode === 'decode' ? 'selected' : '' ?>>decode (NAT64 → IPv4)</option>
+                                        <option value="dns64"  <?= $_nat64_mode === 'dns64'  ? 'selected' : '' ?>>dns64 (A → AAAA)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="nat64_pl">Prefix length<?= help_bubble('nat64-pl', 'One of 32, 40, 48, 56, 64, 96 per RFC 6052 §2.2. Defaults to /96 (matches DNS64 well-known prefix usage).') ?></label>
+                                    <select id="nat64_pl" name="nat64_pl">
+                                        <?php foreach ([32, 40, 48, 56, 64, 96] as $_pl) : ?>
+                                            <option value="<?= $_pl ?>" <?= $_nat64_pl === $_pl ? 'selected' : '' ?>>/<?= $_pl ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="nat64_prefix">NAT64 prefix<?= help_bubble('nat64-prefix', 'IPv6 literal of the NAT64 prefix without the /PL suffix. Examples: 64:ff9b:: (well-known), 2001:db8::, 2001:db8:122::. Bits beyond the declared prefix length must be zero.') ?></label>
+                                    <input type="text" id="nat64_prefix" name="nat64_prefix"
+                                           value="<?= htmlspecialchars($nat64_prefix_input ?? '') ?>"
+                                           placeholder="64:ff9b::"
+                                           autocomplete="off" spellcheck="false">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="nat64_ipv4">IPv4 (encode)<?= help_bubble('nat64-ipv4-input', 'Dotted-quad IPv4 to embed. Globally-unique addresses only when using the well-known prefix 64:ff9b::/96 (RFC 6052 §3.1).') ?></label>
+                                    <input type="text" id="nat64_ipv4" name="nat64_ipv4"
+                                           value="<?= htmlspecialchars($nat64_ipv4_input ?? '') ?>"
+                                           placeholder="192.0.2.33"
+                                           autocomplete="off" spellcheck="false">
+                                </div>
+                                <div class="form-group">
+                                    <label for="nat64_ipv6">NAT64 IPv6 (decode)<?= help_bubble('nat64-ipv6-input', 'IPv6 literal whose top bits match the NAT64 prefix. Example for /32: 2001:db8:c000:221::') ?></label>
+                                    <input type="text" id="nat64_ipv6" name="nat64_ipv6"
+                                           value="<?= htmlspecialchars($nat64_ipv6_input ?? '') ?>"
+                                           placeholder="2001:db8:c000:221::"
+                                           autocomplete="off" spellcheck="false">
+                                </div>
+                                <div class="form-group">
+                                    <label for="nat64_a_record">A record (dns64)<?= help_bubble('nat64-a-record', 'IPv4 address from a DNS A record. DNS64 (RFC 6147) synthesises an AAAA by embedding it into the supplied NAT64 prefix.') ?></label>
+                                    <input type="text" id="nat64_a_record" name="nat64_a_record"
+                                           value="<?= htmlspecialchars($nat64_a_record_input ?? '') ?>"
+                                           placeholder="192.0.2.33"
+                                           autocomplete="off" spellcheck="false">
+                                </div>
+                            </div>
+                            <div class="splitter-row">
+                                <button type="submit" class="splitter-btn nat64-submit">Run NAT64 / DNS64</button>
+                            </div>
+                        </form>
+                        <?php if (!empty($nat64['error'])) : ?>
+                            <div class="error" id="nat64-error"><?= htmlspecialchars((string)$nat64['error']) ?></div>
+                        <?php elseif (!empty($nat64) && (isset($nat64['ipv6']) || isset($nat64['ipv4']))) : ?>
+                            <?php $_nat64_history = 'nat64: ' . (string)($nat64['ipv4'] ?? $nat64['ipv6'] ?? ''); ?>
+                            <dl class="zoneid-result"
+                                data-history-source="nat64"
+                                data-history-active="1"
+                                data-history-label="<?= htmlspecialchars($_nat64_history) ?>">
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Mode</dt>
+                                    <dd class="zoneid-result__value"><code><?= htmlspecialchars((string)($nat64['mode'] ?? '')) ?></code></dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">NAT64 prefix</dt>
+                                    <dd class="zoneid-result__value"><code><?= htmlspecialchars((string)($nat64['nat64_prefix'] ?? '')) ?>/<?= (int)($nat64['prefix_length'] ?? 96) ?></code></dd>
+                                </div>
+                                <?php if (isset($nat64['ipv4'])) : ?>
+                                    <div class="zoneid-result__row">
+                                        <dt class="zoneid-result__label">IPv4</dt>
+                                        <dd class="zoneid-result__value">
+                                            <code><?= htmlspecialchars((string)$nat64['ipv4']) ?></code>
+                                            <?= copy_button((string)$nat64['ipv4'], 'Copy IPv4 address') ?>
+                                        </dd>
+                                    </div>
+                                <?php endif; ?>
+                                <?php if (isset($nat64['ipv6'])) : ?>
+                                    <div class="zoneid-result__row">
+                                        <dt class="zoneid-result__label">IPv6 (NAT64 / AAAA)</dt>
+                                        <dd class="zoneid-result__value">
+                                            <code><?= htmlspecialchars((string)$nat64['ipv6']) ?></code>
+                                            <?= copy_button((string)$nat64['ipv6'], 'Copy NAT64 IPv6') ?>
+                                        </dd>
+                                    </div>
+                                <?php endif; ?>
+                            </dl>
+                        <?php endif; ?>
+                    </details>
                     <?php if (!empty($mapped6['error'])) : ?>
                         <div class="error" id="mapped6-error"><?= htmlspecialchars((string)$mapped6['error']) ?></div>
                     <?php elseif (isset($mapped6['ipv4'])) : ?>
@@ -1382,6 +1505,851 @@ if ($i < 3) {
                                 <dd class="zoneid-result__value"><code><?= htmlspecialchars((string)$mapped6['nat64_prefix']) ?></code></dd>
                             </div>
                         </dl>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="embedded-v4">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Embedded IPv4 detector<?= help_bubble('ipv6-embedded-v4', 'Front door for v3.5.0 transition tools. Detects whether an IPv6 address embeds an IPv4 via IPv4-mapped, IPv4-compatible (deprecated), 6to4, Teredo, NAT64 well-known, or ISATAP — and extracts the embedded IPv4. Per-scheme deep-link buttons activate as their drawers ship.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="embedded_v4_input">IPv6 address<?= help_bubble('embedded-v4-input', 'Any IPv6 literal. Examples: ::ffff:192.0.2.1 (mapped), 2002:c000:0201:: (6to4), 64:ff9b::192.0.2.1 (NAT64 WKP), 2001:db8::200:5efe:c000:201 (ISATAP).') ?></label>
+                                <input type="text" id="embedded_v4_input" name="embedded_v4_input"
+                                       value="<?= htmlspecialchars($embedded_v4_input ?? '') ?>"
+                                       placeholder="::ffff:192.0.2.1"
+                                       autocomplete="off" spellcheck="false"
+                                       <?= !empty($embedded_v4['error']) ? 'aria-invalid="true" aria-describedby="embedded-v4-error"' : '' ?>>
+                            </div>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Detect</button>
+                        </div>
+                    </form>
+                    <?php if (!empty($embedded_v4['error'])) : ?>
+                        <div class="error" id="embedded-v4-error"><?= htmlspecialchars((string)$embedded_v4['error']) ?></div>
+                    <?php elseif (array_key_exists('scheme', $embedded_v4) && $embedded_v4['scheme'] !== null) : ?>
+                        <?php
+                        $_ev4_scheme_labels = [
+                            'mapped'     => 'IPv4-mapped IPv6 (RFC 4291)',
+                            'compatible' => 'IPv4-compatible IPv6 (RFC 4291, DEPRECATED)',
+                            '6to4'       => '6to4 (RFC 3056)',
+                            'teredo'     => 'Teredo (RFC 4380)',
+                            'nat64-wkp'  => 'NAT64 well-known prefix (RFC 6052)',
+                            'isatap'     => 'ISATAP (RFC 5214)',
+                        ];
+                        $_ev4_scheme    = (string)($embedded_v4['scheme'] ?? '');
+                        $_ev4_label     = $_ev4_scheme === ''
+                            ? 'No embedded IPv4 detected'
+                            : ($_ev4_scheme_labels[$_ev4_scheme] ?? $_ev4_scheme);
+                        $_ev4_history   = 'embedded-v4: ' . (string)$embedded_v4['input'];
+                        $_ev4_route     = $embedded_v4['detail_route'] ?? null;
+                        ?>
+                        <dl class="zoneid-result"
+                            data-history-source="embedded-v4"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_ev4_history) ?>">
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Scheme</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars($_ev4_label) ?></code>
+                                    <?php if (!empty($embedded_v4['deprecated'])) : ?>
+                                        <span class="badge badge-private">deprecated</span>
+                                    <?php endif; ?>
+                                </dd>
+                            </div>
+                            <?php if (!empty($embedded_v4['ipv4'])) : ?>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Embedded IPv4</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)$embedded_v4['ipv4']) ?></code>
+                                        <?= copy_button((string)$embedded_v4['ipv4'], 'Copy embedded IPv4') ?>
+                                    </dd>
+                                </div>
+                            <?php endif; ?>
+                            <?php if (is_array($embedded_v4['extra'] ?? null) && $embedded_v4['extra'] !== []) : ?>
+                                <?php foreach ($embedded_v4['extra'] as $_ev4_key => $_ev4_val) : ?>
+                                    <div class="zoneid-result__row">
+                                        <dt class="zoneid-result__label"><?= htmlspecialchars((string)$_ev4_key) ?></dt>
+                                        <dd class="zoneid-result__value">
+                                            <code><?= htmlspecialchars(is_scalar($_ev4_val) ? (string)$_ev4_val : ((string)(json_encode($_ev4_val) ?: ''))) ?></code>
+                                        </dd>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Open in tool</dt>
+                                <dd class="zoneid-result__value">
+                                    <?php if ($_ev4_route !== null && $_ev4_route !== '') : ?>
+                                        <a class="splitter-btn" href="<?= htmlspecialchars((string)$_ev4_route) ?>">Open <?= htmlspecialchars($_ev4_scheme) ?> tool</a>
+                                    <?php else : ?>
+                                        <button type="button" class="splitter-btn" disabled aria-disabled="true" title="Per-scheme tool not yet available — lands in subsequent v3.5.0 PRs.">Open <?= htmlspecialchars($_ev4_scheme) ?> tool</button>
+                                    <?php endif; ?>
+                                </dd>
+                            </div>
+                        </dl>
+                    <?php elseif (array_key_exists('scheme', $embedded_v4) && $embedded_v4['scheme'] === null) : ?>
+                        <dl class="zoneid-result">
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Result</dt>
+                                <dd class="zoneid-result__value"><code>No embedded IPv4 detected</code></dd>
+                            </div>
+                        </dl>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="6to4">
+                <div class="overlap-panel">
+                    <div class="overlap-title">6to4 address tool<?= help_bubble('ipv6-6to4', 'Bidirectional translation between public IPv4 addresses and 2002::/16 6to4 prefixes (RFC 3056). Encode mode produces 2002:WWXX:YYZZ::/48 from W.X.Y.Z; decode mode extracts the embedded IPv4, 16-bit Subnet/SLA ID, and 64-bit Interface ID from a 6to4 address. RFC 7526 deprecated the 6to4 anycast relay in 2015 — use this tool for analysis and migration audits, not for greenfield deployments.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="sixtofour_mode">Mode<?= help_bubble('sixtofour-mode', 'Encode: IPv4 → 2002:WWXX:YYZZ::/48. Decode: 6to4 IPv6 → embedded IPv4, Subnet ID, Interface ID.') ?></label>
+                                <select id="sixtofour_mode" name="sixtofour_mode">
+                                    <option value="encode"<?= ($sixtofour_mode ?? 'encode') === 'encode' ? ' selected' : '' ?>>Encode (IPv4 → 6to4 prefix)</option>
+                                    <option value="decode"<?= ($sixtofour_mode ?? 'encode') === 'decode' ? ' selected' : '' ?>>Decode (6to4 IPv6 → IPv4)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="sixtofour_input">Address<?= help_bubble('sixtofour-input', 'Encode: a public IPv4 (e.g. 192.0.2.1). Private (RFC 1918), reserved, multicast, and 0.0.0.0 are rejected. Decode: any IPv6 literal under 2002::/16 (e.g. 2002:c000:0201::1).') ?></label>
+                                <input type="text" id="sixtofour_input" name="sixtofour_input"
+                                       value="<?= htmlspecialchars($sixtofour_input ?? '') ?>"
+                                       placeholder="192.0.2.1 or 2002:c000:0201::1"
+                                       autocomplete="off" spellcheck="false"
+                                       <?= !empty($sixtofour['error']) ? 'aria-invalid="true" aria-describedby="sixtofour-error"' : '' ?>>
+                            </div>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Convert</button>
+                        </div>
+                    </form>
+                    <?php if (!empty($sixtofour['error'])) : ?>
+                        <div class="error" id="sixtofour-error"><?= htmlspecialchars((string)$sixtofour['error']) ?></div>
+                    <?php elseif (!empty($sixtofour) && empty($sixtofour['error'])) : ?>
+                        <?php
+                        $_s2f_history = '6to4: ' . (string)($sixtofour['input'] ?? '');
+                        ?>
+                        <dl class="zoneid-result"
+                            data-history-source="6to4"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_s2f_history) ?>">
+                            <?php if (($sixtofour['mode'] ?? 'encode') === 'encode') : ?>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Input IPv4</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($sixtofour['input'] ?? '')) ?></code>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">6to4 prefix</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($sixtofour['prefix'] ?? '')) ?></code>
+                                        <?= copy_button((string)($sixtofour['prefix'] ?? ''), 'Copy 6to4 prefix') ?>
+                                    </dd>
+                                </div>
+                            <?php else : ?>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Input IPv6</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($sixtofour['input'] ?? '')) ?></code>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Embedded IPv4</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($sixtofour['ipv4'] ?? '')) ?></code>
+                                        <?= copy_button((string)($sixtofour['ipv4'] ?? ''), 'Copy embedded IPv4') ?>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Subnet ID</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars(sprintf('0x%04x (%d)', (int)($sixtofour['subnet_id'] ?? 0), (int)($sixtofour['subnet_id'] ?? 0))) ?></code>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Interface ID</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($sixtofour['interface_id'] ?? '')) ?></code>
+                                        <?= copy_button((string)($sixtofour['interface_id'] ?? ''), 'Copy Interface ID') ?>
+                                    </dd>
+                                </div>
+                            <?php endif; ?>
+                        </dl>
+                        <p><small>RFC 7526 deprecated the 6to4 anycast relay (192.88.99.1) in 2015. This tool is provided for analysis and migration audits.</small></p>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="teredo">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Teredo address decoder<?= help_bubble('ipv6-teredo', 'Decode and encode IPv6 addresses in the 2001:0::/32 Teredo prefix (RFC 4380). Decode mode extracts the server IPv4 (raw), 16-bit flags (cone bit = 0x8000), de-XOR\'d UDP port (XOR 0xFFFF), and de-XOR\'d client IPv4 (each byte XOR 0xFF). Encode mode rebuilds the address from those parts. Microsoft retired the public Teredo service for consumer Windows in 2019; this tool is provided for analysis of legacy traffic captures and address audits.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="teredo_mode">Mode<?= help_bubble('teredo-mode', 'Decode: Teredo IPv6 → server v4, client v4, port, flags. Encode: parts → Teredo IPv6 in 2001:0::/32.') ?></label>
+                                <select id="teredo_mode" name="teredo_mode">
+                                    <option value="decode"<?= ($teredo_mode ?? 'decode') === 'decode' ? ' selected' : '' ?>>Decode (Teredo IPv6 → parts)</option>
+                                    <option value="encode"<?= ($teredo_mode ?? 'decode') === 'encode' ? ' selected' : '' ?>>Encode (parts → Teredo IPv6)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <?php if (($teredo_mode ?? 'decode') === 'decode') : ?>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="teredo_input">Teredo IPv6 address<?= help_bubble('teredo-input', 'Any IPv6 literal under 2001:0::/32. Example: 2001:0:4136:e378:8000:63bf:3fff:fdd2 (RFC 4380 §4 worked example).') ?></label>
+                                    <input type="text" id="teredo_input" name="teredo_input"
+                                           value="<?= htmlspecialchars($teredo_input ?? '') ?>"
+                                           placeholder="2001:0:4136:e378:8000:63bf:3fff:fdd2"
+                                           autocomplete="off" spellcheck="false"
+                                           <?= !empty($teredo['error']) ? 'aria-invalid="true" aria-describedby="teredo-error"' : '' ?>>
+                                </div>
+                            </div>
+                        <?php else : ?>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="teredo_server">Server IPv4<?= help_bubble('teredo-server', 'The Teredo server\'s public IPv4 address. Stored raw in the address (no XOR obfuscation).') ?></label>
+                                    <input type="text" id="teredo_server" name="teredo_server"
+                                           value="<?= htmlspecialchars($teredo_server_input ?? '') ?>"
+                                           placeholder="65.54.227.120"
+                                           autocomplete="off" spellcheck="false">
+                                </div>
+                                <div class="form-group">
+                                    <label for="teredo_client">Client IPv4<?= help_bubble('teredo-client', 'The Teredo client\'s public IPv4 address. Obfuscated with XOR 0xFF byte-by-byte before insertion into the IPv6 address.') ?></label>
+                                    <input type="text" id="teredo_client" name="teredo_client"
+                                           value="<?= htmlspecialchars($teredo_client_input ?? '') ?>"
+                                           placeholder="192.0.2.45"
+                                           autocomplete="off" spellcheck="false">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="teredo_port">UDP port<?= help_bubble('teredo-port', 'The client\'s mapped UDP port (0..65535). Obfuscated with XOR 0xFFFF before insertion.') ?></label>
+                                    <input type="text" id="teredo_port" name="teredo_port"
+                                           value="<?= htmlspecialchars($teredo_port_input ?? '') ?>"
+                                           placeholder="40000"
+                                           inputmode="numeric"
+                                           autocomplete="off" spellcheck="false">
+                                </div>
+                                <div class="form-group">
+                                    <label for="teredo_flags">Flags<?= help_bubble('teredo-flags', '16-bit flags field. Decimal or 0xNNNN. The high bit (0x8000) is the "cone" indicator. Leave blank to use the cone toggle below.') ?></label>
+                                    <input type="text" id="teredo_flags" name="teredo_flags"
+                                           value="<?= htmlspecialchars($teredo_flags_input ?? '') ?>"
+                                           placeholder="0x8000"
+                                           autocomplete="off" spellcheck="false">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label><input type="checkbox" name="teredo_cone" value="1"<?= !empty($teredo_cone_flag) ? ' checked' : '' ?>> Cone NAT<?= help_bubble('teredo-cone', 'When set, the Teredo client is behind a cone NAT (flags = 0x8000). When unset, flags = 0x0000. Ignored if you supply a flags value above.') ?></label>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Convert</button>
+                        </div>
+                    </form>
+                    <?php if (!empty($teredo['error'])) : ?>
+                        <div class="error" id="teredo-error"><?= htmlspecialchars((string)$teredo['error']) ?></div>
+                    <?php elseif (!empty($teredo) && empty($teredo['error'])) : ?>
+                        <?php
+                        $_teredo_history = 'teredo: ' . (string)($teredo['ipv6'] ?? $teredo['input'] ?? '');
+                        ?>
+                        <dl class="zoneid-result"
+                            data-history-source="teredo"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_teredo_history) ?>">
+                            <?php if (($teredo['mode'] ?? 'decode') === 'decode') : ?>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Input IPv6</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($teredo['input'] ?? '')) ?></code>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Server IPv4</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($teredo['server_ipv4'] ?? '')) ?></code>
+                                        <?= copy_button((string)($teredo['server_ipv4'] ?? ''), 'Copy server IPv4') ?>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Client IPv4</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($teredo['client_ipv4'] ?? '')) ?></code>
+                                        <?= copy_button((string)($teredo['client_ipv4'] ?? ''), 'Copy client IPv4') ?>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">UDP port</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)(int)($teredo['port'] ?? 0)) ?></code>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Flags</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars(sprintf('0x%04x', (int)($teredo['flags'] ?? 0))) ?></code>
+                                        <?= !empty($teredo['cone']) ? ' <span class="badge">cone</span>' : '' ?>
+                                    </dd>
+                                </div>
+                            <?php else : ?>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Server IPv4</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($teredo['server_ipv4'] ?? '')) ?></code>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Client IPv4</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($teredo['client_ipv4'] ?? '')) ?></code>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">UDP port</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)(int)($teredo['port'] ?? 0)) ?></code>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Flags</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars(sprintf('0x%04x', (int)($teredo['flags'] ?? 0))) ?></code>
+                                        <?= !empty($teredo['cone']) ? ' <span class="badge">cone</span>' : '' ?>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Teredo IPv6</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($teredo['ipv6'] ?? '')) ?></code>
+                                        <?= copy_button((string)($teredo['ipv6'] ?? ''), 'Copy Teredo IPv6') ?>
+                                    </dd>
+                                </div>
+                            <?php endif; ?>
+                        </dl>
+                        <p><small>Microsoft retired the public Teredo service for consumer Windows in 2019. This tool is provided for analysis of legacy traffic captures and address audits.</small></p>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="isatap">
+                <div class="overlap-panel">
+                    <div class="overlap-title">ISATAP interface-ID helper<?= help_bubble('ipv6-isatap', 'Build and decode the 64-bit ISATAP interface ID (RFC 5214). Encode mode wraps an IPv4 in `0:5efe:V4` (locally-administered) or `200:5efe:V4` (globally-unique, u-bit set); the universal/local bit is auto-detected from the IPv4 (private/reserved → local; public → global) but you can force either side. Decode mode recognises both forms and pulls the embedded IPv4 back out. Append the resulting IID to any /64 prefix to get a complete IPv6 address.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="isatap_mode">Mode<?= help_bubble('isatap-mode', 'Encode: IPv4 → ISATAP IID. Decode: IID → IPv4 + globally-unique flag.') ?></label>
+                                <select id="isatap_mode" name="isatap_mode">
+                                    <option value="encode"<?= ($isatap_mode ?? 'encode') === 'encode' ? ' selected' : '' ?>>Encode (IPv4 → ISATAP IID)</option>
+                                    <option value="decode"<?= ($isatap_mode ?? 'encode') === 'decode' ? ' selected' : '' ?>>Decode (IID → IPv4)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <?php if (($isatap_mode ?? 'encode') === 'encode') : ?>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="isatap_ipv4">IPv4 address<?= help_bubble('isatap-ipv4', 'Any IPv4 literal. The encoder packs it into the bottom 32 bits of the IID.') ?></label>
+                                    <input type="text" id="isatap_ipv4" name="isatap_ipv4"
+                                           value="<?= htmlspecialchars($isatap_ipv4_input ?? '') ?>"
+                                           placeholder="192.0.2.1"
+                                           autocomplete="off" spellcheck="false"
+                                           <?= !empty($isatap['error']) ? 'aria-invalid="true" aria-describedby="isatap-error"' : '' ?>>
+                                </div>
+                                <div class="form-group">
+                                    <label for="isatap_globally_unique">Universal/local bit<?= help_bubble('isatap-gu', 'Auto: infer from the IPv4 (public → globally-unique, private/reserved → local). True: force globally-unique (200:5efe). False: force local (0:5efe).') ?></label>
+                                    <select id="isatap_globally_unique" name="isatap_globally_unique">
+                                        <option value=""<?= ($isatap_globally_unique ?? '') === '' ? ' selected' : '' ?>>Auto-detect</option>
+                                        <option value="true"<?= ($isatap_globally_unique ?? '') === 'true' ? ' selected' : '' ?>>Force globally-unique (0200:5efe)</option>
+                                        <option value="false"<?= ($isatap_globally_unique ?? '') === 'false' ? ' selected' : '' ?>>Force locally-administered (0000:5efe)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        <?php else : ?>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="isatap_iid">ISATAP IID<?= help_bubble('isatap-iid', 'Four colon-separated hexadectets. Magic must be 0000:5efe (locally-administered) or 0200:5efe (globally-unique). Examples: 0:5efe:c000:201, 200:5efe:c000:201.') ?></label>
+                                    <input type="text" id="isatap_iid" name="isatap_iid"
+                                           value="<?= htmlspecialchars($isatap_iid_input ?? '') ?>"
+                                           placeholder="200:5efe:c000:201"
+                                           autocomplete="off" spellcheck="false"
+                                           <?= !empty($isatap['error']) ? 'aria-invalid="true" aria-describedby="isatap-error"' : '' ?>>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Convert</button>
+                        </div>
+                    </form>
+                    <?php if (!empty($isatap['error'])) : ?>
+                        <div class="error" id="isatap-error"><?= htmlspecialchars((string)$isatap['error']) ?></div>
+                    <?php elseif (!empty($isatap) && empty($isatap['error'])) : ?>
+                        <?php
+                        $_isatap_history = 'isatap: ' . (string)($isatap['iid'] ?? $isatap['ipv4'] ?? $isatap['input'] ?? '');
+                        ?>
+                        <dl class="zoneid-result"
+                            data-history-source="isatap"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_isatap_history) ?>">
+                            <?php if (($isatap['mode'] ?? 'encode') === 'encode') : ?>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">IPv4</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($isatap['ipv4'] ?? '')) ?></code>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">ISATAP IID</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code>::<?= htmlspecialchars((string)($isatap['iid'] ?? '')) ?></code>
+                                        <?= copy_button('::' . (string)($isatap['iid'] ?? ''), 'Copy ISATAP IID') ?>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Universal/local bit</dt>
+                                    <dd class="zoneid-result__value">
+                                        <?= !empty($isatap['globally_unique'])
+                                            ? '<span class="badge">globally-unique</span>'
+                                            : '<span class="badge">locally-administered</span>' ?>
+                                    </dd>
+                                </div>
+                            <?php else : ?>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Input IID</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($isatap['iid'] ?? $isatap['input'] ?? '')) ?></code>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Embedded IPv4</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($isatap['ipv4'] ?? '')) ?></code>
+                                        <?= copy_button((string)($isatap['ipv4'] ?? ''), 'Copy IPv4') ?>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Universal/local bit</dt>
+                                    <dd class="zoneid-result__value">
+                                        <?= !empty($isatap['globally_unique'])
+                                            ? '<span class="badge">globally-unique</span>'
+                                            : '<span class="badge">locally-administered</span>' ?>
+                                    </dd>
+                                </div>
+                            <?php endif; ?>
+                        </dl>
+                        <p><small>ISATAP (RFC 5214) saw limited deployment outside specific enterprise transition scenarios. Provided for analysis of legacy traffic and address audits.</small></p>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="6rd">
+                <div class="overlap-panel">
+                    <div class="overlap-title">6rd address tool<?= help_bubble('ipv6-6rd', 'Compute the customer IPv6 prefix delegated by a 6rd service provider per RFC 5969. Encode mode takes the SP IPv6 prefix, the SP IPv4 mask length (bits stripped from the high end of the customer v4), and the customer IPv4, and emits the delegated IPv6 prefix. Decode mode reverses: SP params + a 6rd IPv6 address → the customer IPv4 (the masked-off region is treated as zero since it is SP-side configuration).') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="sixrd_mode">Mode<?= help_bubble('6rd-mode', 'Encode: customer IPv4 → delegated IPv6 prefix. Decode: 6rd IPv6 address → customer IPv4.') ?></label>
+                                <select id="sixrd_mode" name="sixrd_mode">
+                                    <option value="encode"<?= ($sixrd_mode ?? 'encode') === 'encode' ? ' selected' : '' ?>>Encode (IPv4 → delegated prefix)</option>
+                                    <option value="decode"<?= ($sixrd_mode ?? 'encode') === 'decode' ? ' selected' : '' ?>>Decode (6rd address → IPv4)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="sixrd_sp_prefix">SP IPv6 prefix<?= help_bubble('6rd-sp-prefix', 'The service provider\'s globally-routed 6rd IPv6 prefix in CIDR form, e.g. 2001:db8::/32. Provided by the SP via DHCPv6 OPTION_6RD or out-of-band configuration.') ?></label>
+                                <input type="text" id="sixrd_sp_prefix" name="sixrd_sp_prefix"
+                                       value="<?= htmlspecialchars($sixrd_sp_prefix_input ?? '') ?>"
+                                       placeholder="2001:db8::/32"
+                                       autocomplete="off" spellcheck="false"
+                                       <?= !empty($sixrd['error']) ? 'aria-invalid="true" aria-describedby="sixrd-error"' : '' ?>>
+                            </div>
+                            <div class="form-group form-group--mask">
+                                <label for="sixrd_mask_len">SP IPv4 mask length<?= help_bubble('6rd-mask-len', 'How many leading bits of the customer IPv4 the SP discards before embedding (0..32). Typically 0 to embed the full v4. The remaining (32 − mask_len) bits are appended to the SP prefix.') ?></label>
+                                <input type="number" id="sixrd_mask_len" name="sixrd_mask_len"
+                                       value="<?= htmlspecialchars($sixrd_mask_len_input ?? '') ?>"
+                                       min="0" max="32" placeholder="0"
+                                       autocomplete="off" spellcheck="false"
+                                       <?= !empty($sixrd['error']) ? 'aria-invalid="true" aria-describedby="sixrd-error"' : '' ?>>
+                            </div>
+                        </div>
+                        <?php if (($sixrd_mode ?? 'encode') === 'encode') : ?>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="sixrd_ipv4">Customer IPv4<?= help_bubble('6rd-ipv4', 'The customer\'s WAN IPv4 address. After stripping the top mask-length bits, the remaining bits are appended to the SP prefix to form the delegated IPv6 prefix.') ?></label>
+                                    <input type="text" id="sixrd_ipv4" name="sixrd_ipv4"
+                                           value="<?= htmlspecialchars($sixrd_ipv4_input ?? '') ?>"
+                                           placeholder="192.0.2.1"
+                                           autocomplete="off" spellcheck="false"
+                                           <?= !empty($sixrd['error']) ? 'aria-invalid="true" aria-describedby="sixrd-error"' : '' ?>>
+                                </div>
+                            </div>
+                        <?php else : ?>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="sixrd_ipv6">6rd IPv6 address<?= help_bubble('6rd-ipv6', 'Any IPv6 address (with or without /prefix) within the SP\'s 6rd domain. The decoder verifies the address starts with the SP prefix and extracts the customer-contributed bits.') ?></label>
+                                    <input type="text" id="sixrd_ipv6" name="sixrd_ipv6"
+                                           value="<?= htmlspecialchars($sixrd_ipv6_input ?? '') ?>"
+                                           placeholder="2001:db8:c000:201::1"
+                                           autocomplete="off" spellcheck="false"
+                                           <?= !empty($sixrd['error']) ? 'aria-invalid="true" aria-describedby="sixrd-error"' : '' ?>>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Convert</button>
+                        </div>
+                    </form>
+                    <?php if (!empty($sixrd['error'])) : ?>
+                        <div class="error" id="sixrd-error"><?= htmlspecialchars((string)$sixrd['error']) ?></div>
+                    <?php elseif (!empty($sixrd) && empty($sixrd['error'])) : ?>
+                        <?php
+                        $_sixrd_history = '6rd: ' . (string)($sixrd['prefix'] ?? $sixrd['ipv4'] ?? '');
+                        ?>
+                        <dl class="zoneid-result"
+                            data-history-source="6rd"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_sixrd_history) ?>">
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">SP IPv6 prefix</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)($sixrd['sp_ipv6_prefix'] ?? '')) ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">SP IPv4 mask length</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)($sixrd['sp_ipv4_mask_len'] ?? 0)) ?></code>
+                                </dd>
+                            </div>
+                            <?php if (($sixrd['mode'] ?? 'encode') === 'encode') : ?>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Customer IPv4</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($sixrd['ipv4'] ?? '')) ?></code>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Delegated IPv6 prefix</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($sixrd['prefix'] ?? '')) ?></code>
+                                        <?= copy_button((string)($sixrd['prefix'] ?? ''), 'Copy delegated prefix') ?>
+                                    </dd>
+                                </div>
+                            <?php else : ?>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">6rd IPv6 address</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($sixrd['ipv6'] ?? '')) ?></code>
+                                    </dd>
+                                </div>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Customer IPv4</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)($sixrd['ipv4'] ?? '')) ?></code>
+                                        <?= copy_button((string)($sixrd['ipv4'] ?? ''), 'Copy IPv4') ?>
+                                    </dd>
+                                </div>
+                            <?php endif; ?>
+                        </dl>
+                        <p><small>6rd (RFC 5969) is a service-provider-configured tunneling scheme; the SP parameters above must come from your provider. The masked-off portion of the customer IPv4 cannot be recovered from the 6rd address alone — it is treated as zero on decode.</small></p>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="tool-panel" data-tool="prefix-plan">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IPv6 prefix-delegation planner<?= help_bubble('ipv6-prefix-plan', 'Slice a delegated parent prefix (e.g. /48) into nibble-aligned child prefixes (e.g. /56) and report how much of the parent space is left over. GMP throughout — counts that overflow signed 64-bit ints (e.g. /32 → /128) print as "2^N".') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="prefix_plan6_parent">Parent IPv6 prefix<?= help_bubble('prefix-plan-parent', 'The delegated parent prefix in CIDR form, e.g. 2001:db8::/48. Host bits are zeroed before slicing.') ?></label>
+                                <input type="text" id="prefix_plan6_parent" name="prefix_plan6_parent"
+                                       value="<?= htmlspecialchars($prefix_plan6_parent_input ?? '') ?>"
+                                       placeholder="2001:db8::/48"
+                                       autocomplete="off" spellcheck="false"
+                                       <?= !empty($prefix_plan6['error']) ? 'aria-invalid="true" aria-describedby="prefix-plan6-error"' : '' ?>>
+                            </div>
+                            <div class="form-group form-group--mask">
+                                <label for="prefix_plan6_child_length">Child length<?= help_bubble('prefix-plan-child-length', 'Prefix length for each child block (1..128). Must be greater than the parent length. With nibble-align on, non-nibble values snap up to the next multiple of 4.') ?></label>
+                                <input type="number" id="prefix_plan6_child_length" name="prefix_plan6_child_length"
+                                       value="<?= htmlspecialchars($prefix_plan6_child_length_input ?? '') ?>"
+                                       min="1" max="128" placeholder="56"
+                                       autocomplete="off" spellcheck="false"
+                                       <?= !empty($prefix_plan6['error']) ? 'aria-invalid="true" aria-describedby="prefix-plan6-error"' : '' ?>>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group form-group--mask">
+                                <label for="prefix_plan6_count">Count<?= help_bubble('prefix-plan-count', 'How many child prefixes to allocate (≥ 1). Bounded by the parent: start_offset + count must not exceed the total available children.') ?></label>
+                                <input type="number" id="prefix_plan6_count" name="prefix_plan6_count"
+                                       value="<?= htmlspecialchars($prefix_plan6_count_input ?? '') ?>"
+                                       min="1" placeholder="4"
+                                       autocomplete="off" spellcheck="false"
+                                       <?= !empty($prefix_plan6['error']) ? 'aria-invalid="true" aria-describedby="prefix-plan6-error"' : '' ?>>
+                            </div>
+                            <div class="form-group form-group--mask">
+                                <label for="prefix_plan6_start_offset">Start offset<?= help_bubble('prefix-plan-start-offset', 'Skip the first N child prefixes before allocating. Default 0. Useful for resuming an in-progress delegation plan.') ?></label>
+                                <input type="number" id="prefix_plan6_start_offset" name="prefix_plan6_start_offset"
+                                       value="<?= htmlspecialchars($prefix_plan6_start_offset_input ?? '') ?>"
+                                       min="0" placeholder="0"
+                                       autocomplete="off" spellcheck="false">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group form-group--checkbox">
+                                <label>
+                                    <input type="checkbox" name="prefix_plan6_nibble_align" value="1"
+                                           <?= ($prefix_plan6_nibble_align ?? true) ? 'checked' : '' ?>>
+                                    Nibble-align child length<?= help_bubble('prefix-plan-nibble-align', 'When on, snap the child prefix length up to the next multiple of 4 so each child is a clean nibble boundary in the IPv6 address (easier for humans to read and DNS reverse-zones).') ?>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Plan</button>
+                        </div>
+                    </form>
+                    <?php if (!empty($prefix_plan6['error'])) : ?>
+                        <div class="error" id="prefix-plan6-error"><?= htmlspecialchars((string)$prefix_plan6['error']) ?></div>
+                    <?php elseif (!empty($prefix_plan6['result'])) : ?>
+                        <?php
+                        $_pp = $prefix_plan6['result'];
+                        $_pp_history = 'Prefix plan: ' . (string)($_pp['parent']['prefix'] ?? '')
+                            . ' → /' . (string)($_pp['normalized_child_length'] ?? '');
+                        ?>
+                        <dl class="zoneid-result"
+                            data-history-source="prefix-plan6"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_pp_history) ?>">
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Parent prefix</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)$_pp['parent']['prefix']) ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Child length</dt>
+                                <dd class="zoneid-result__value">
+                                    <code>/<?= (int)$_pp['normalized_child_length'] ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Total children</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)$_pp['parent']['total_children_str']) ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Free remaining</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)$_pp['free']['remaining_str']) ?></code>
+                                </dd>
+                            </div>
+                        </dl>
+                        <table class="vlsm-table" data-prefix-plan6-table>
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Prefix</th>
+                                    <th>First</th>
+                                    <th>Last</th>
+                                    <th>/64s</th>
+                                    <th aria-label="Copy"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($_pp['children'] as $_child) : ?>
+                                <tr>
+                                    <td><?= (int)$_child['index'] ?></td>
+                                    <td><code><?= htmlspecialchars((string)$_child['prefix']) ?></code></td>
+                                    <td><code><?= htmlspecialchars((string)$_child['first']) ?></code></td>
+                                    <td><code><?= htmlspecialchars((string)$_child['last']) ?></code></td>
+                                    <td><?= htmlspecialchars((string)$_child['contains_64s']) ?></td>
+                                    <td><?= copy_button((string)$_child['prefix'], 'Copy child prefix') ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                        <p><small>Prefix-delegation planning is operator math, not auto-detection. The parent prefix and child length come from your delegation policy; nibble-aligned children print cleanly and align with DNS reverse zones.</small></p>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="tool-panel" data-tool="nibble">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IPv6 nibble-boundary helper<?= help_bubble('ipv6-nibble', 'For any IPv6 prefix, surface the nibble-aligned neighbours: above (≤ input length, less specific) and below (≥ input length, more specific). Useful for ip6.arpa reverse-zone delegation planning where non-nibble lengths require an explicit nibble-boundary decision.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="nibble6_prefix">IPv6 prefix<?= help_bubble('nibble-prefix', 'Any IPv6 prefix in CIDR form, e.g. 2001:db8::/49. Host bits beyond the prefix length are zeroed before the neighbours are computed.') ?></label>
+                                <input type="text" id="nibble6_prefix" name="nibble6_prefix"
+                                       value="<?= htmlspecialchars($nibble6_prefix_input ?? '') ?>"
+                                       placeholder="2001:db8::/49"
+                                       autocomplete="off" spellcheck="false"
+                                       <?= !empty($nibble6['error']) ? 'aria-invalid="true" aria-describedby="nibble6-error"' : '' ?>>
+                            </div>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Find neighbours</button>
+                        </div>
+                    </form>
+                    <?php if (!empty($nibble6['error'])) : ?>
+                        <div class="error" id="nibble6-error"><?= htmlspecialchars((string)$nibble6['error']) ?></div>
+                    <?php elseif (!empty($nibble6['result'])) : ?>
+                        <?php $_n = $nibble6['result']; ?>
+                        <dl class="zoneid-result"
+                            data-history-source="nibble6"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars('Nibble neighbours: ' . (string)$_n['input']['prefix']) ?>">
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Input prefix</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)$_n['input']['prefix']) ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Above (less specific)</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)$_n['above']['prefix']) ?></code>
+                                    <?= copy_button((string)$_n['above']['prefix'], 'Copy above prefix') ?>
+                                    <?php $_c = (string)$_n['above']['contains_64s']; ?>
+                                    <small><?php
+                                        if ($_c === '1') {
+                                            echo 'is itself a /64';
+                                        } elseif ($_c === 'subset of /64') {
+                                            echo 'smaller than a /64';
+                                        } else {
+                                            echo 'contains ' . htmlspecialchars($_c, ENT_QUOTES, 'UTF-8') . ' /64s';
+                                        }
+                                    ?></small>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Below (more specific)</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)$_n['below']['prefix']) ?></code>
+                                    <?= copy_button((string)$_n['below']['prefix'], 'Copy below prefix') ?>
+                                    <?php $_c = (string)$_n['below']['contains_64s']; ?>
+                                    <small><?php
+                                        if ($_c === '1') {
+                                            echo 'is itself a /64';
+                                        } elseif ($_c === 'subset of /64') {
+                                            echo 'smaller than a /64';
+                                        } else {
+                                            echo 'contains ' . htmlspecialchars($_c, ENT_QUOTES, 'UTF-8') . ' /64s';
+                                        }
+                                    ?></small>
+                                </dd>
+                            </div>
+                        </dl>
+                        <p><small>Nibble boundaries (multiples of 4) align with the per-nibble <code>ip6.arpa</code> reverse-DNS hierarchy. <em>Above</em> is the nearest nibble at-or-shorter than your input; <em>below</em> is the nearest nibble at-or-longer (capped at /128).</small></p>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="tool-panel" data-tool="rfc3531">
+                <div class="overlap-panel">
+                    <div class="overlap-title">RFC 3531 sparse allocation<?= help_bubble('ipv6-rfc3531', 'Apply an RFC 3531 bit-reservation strategy (centermost / leftmost / rightmost) to a parent IPv6 prefix. Centermost bisects outward from the middle so future growth has room either side; leftmost is dense sequential; rightmost mirrors leftmost from the top down.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="rfc3531_parent">Parent IPv6 prefix<?= help_bubble('rfc3531-parent', 'The parent prefix in CIDR form, e.g. 2001:db8::/48. Host bits are zeroed before allocation.') ?></label>
+                                <input type="text" id="rfc3531_parent" name="rfc3531_parent"
+                                       value="<?= htmlspecialchars($rfc3531_parent_input ?? '') ?>"
+                                       placeholder="2001:db8::/48"
+                                       autocomplete="off" spellcheck="false"
+                                       <?= !empty($rfc3531['error']) ? 'aria-invalid="true" aria-describedby="rfc3531-error"' : '' ?>>
+                            </div>
+                            <div class="form-group form-group--mask">
+                                <label for="rfc3531_reservation_bits">Reservation bits<?= help_bubble('rfc3531-reservation-bits', 'Number of bits in the reservation field (1..8 by default; operators can raise to 12). Each child block has prefix length parent_length + reservation_bits.') ?></label>
+                                <input type="number" id="rfc3531_reservation_bits" name="rfc3531_reservation_bits"
+                                       value="<?= htmlspecialchars($rfc3531_reservation_bits_input ?? '') ?>"
+                                       min="1" max="12" placeholder="4"
+                                       autocomplete="off" spellcheck="false"
+                                       <?= !empty($rfc3531['error']) ? 'aria-invalid="true" aria-describedby="rfc3531-error"' : '' ?>>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="rfc3531_strategy">Strategy<?= help_bubble('rfc3531-strategy', 'Centermost: bisect outward from the middle (RFC 3531 §3 — best for growth). Leftmost: monotonic 0..N. Rightmost: reverse of leftmost.') ?></label>
+                                <select id="rfc3531_strategy" name="rfc3531_strategy">
+                                    <?php $_strat = (string)($rfc3531_strategy_input ?? 'centermost'); ?>
+                                    <option value="centermost" <?= $_strat === 'centermost' ? 'selected' : '' ?>>Centermost</option>
+                                    <option value="leftmost"   <?= $_strat === 'leftmost'   ? 'selected' : '' ?>>Leftmost</option>
+                                    <option value="rightmost"  <?= $_strat === 'rightmost'  ? 'selected' : '' ?>>Rightmost</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Apply</button>
+                        </div>
+                    </form>
+                    <?php if (!empty($rfc3531['error'])) : ?>
+                        <div class="error" id="rfc3531-error"><?= htmlspecialchars((string)$rfc3531['error']) ?></div>
+                    <?php elseif (!empty($rfc3531['result'])) : ?>
+                        <?php
+                        $_r3 = $rfc3531['result'];
+                        $_r3_history = 'RFC 3531: ' . (string)($_r3['parent']['prefix'] ?? '')
+                            . ' / ' . (string)$_r3['strategy']
+                            . ' / ' . (int)$_r3['reservation_bits'] . ' bits';
+                        ?>
+                        <dl class="zoneid-result"
+                            data-history-source="rfc3531"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_r3_history) ?>">
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Parent prefix</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)$_r3['parent']['prefix']) ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Strategy</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)$_r3['strategy']) ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Reservation bits</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= (int)$_r3['reservation_bits'] ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Children</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= count($_r3['children']) ?></code>
+                                </dd>
+                            </div>
+                        </dl>
+                        <table class="vlsm-table" data-rfc3531-table>
+                            <thead>
+                                <tr>
+                                    <th>Order</th>
+                                    <th>Value</th>
+                                    <th>Prefix</th>
+                                    <th aria-label="Copy"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($_r3['children'] as $_child) : ?>
+                                <tr>
+                                    <td><?= (int)$_child['order'] ?></td>
+                                    <td><?= (int)$_child['value'] ?></td>
+                                    <td><code><?= htmlspecialchars((string)$_child['prefix']) ?></code></td>
+                                    <td><?= copy_button((string)$_child['prefix'], 'Copy child prefix') ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                        <p><small>RFC 3531 sparse allocation orders the reservation field for growth-friendly prefix assignment. Centermost is the canonical strategy from §3 — the centre value is allocated first, then halves bisect outward, leaving room either side for future expansion.</small></p>
                     <?php endif; ?>
                 </div>
             </div>

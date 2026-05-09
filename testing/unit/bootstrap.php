@@ -19,6 +19,24 @@ require $base . 'functions-derive6.php';
 require $base . 'functions-slaac6.php';
 require $base . 'functions-rdns6.php';
 require $base . 'functions-mapped6.php';
+require $base . 'functions-embedded-v4.php';
+require $base . 'functions-6to4.php';
+require_once $base . 'functions-teredo.php';
+// phpcs:disable PSR1.Files.SideEffects -- module include for ipv4_to_isatap_iid()/decode_isatap_iid().
+require_once $base . 'functions-isatap.php';
+// phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for compute_6rd_delegation()/extract_6rd_ipv4().
+require_once $base . 'functions-6rd.php';
+// phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for nat64_embed()/nat64_extract()/dns64_synthesize().
+require_once $base . 'functions-nat64.php';
+// phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for plan_prefix_delegation().
+require_once $base . 'functions-prefix-plan6.php';
+// phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for rfc3531_allocation_order()/rfc3531_apply().
+require_once $base . 'functions-rfc3531.php';
+// phpcs:enable PSR1.Files.SideEffects
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require $base . 'functions-resolve.php';
