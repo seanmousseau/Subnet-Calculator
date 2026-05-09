@@ -666,6 +666,113 @@ function sc_run_isatap(
     }
 }
 
+// ─── 6rd helper (shared by POST handler and GET shareable URL) ──────────────
+
+/**
+ * Run the 6rd tool against the supplied input. Mode is either 'encode'
+ * (customer IPv4 + SP params → delegated IPv6 prefix) or 'decode' (6rd
+ * IPv6 address + SP params → customer IPv4). Empty required input
+ * returns []. (v3.5.0 Task 6)
+ *
+ * @return array{
+ *     mode?: 'encode'|'decode',
+ *     sp_ipv6_prefix?: string,
+ *     sp_ipv4_mask_len?: int,
+ *     ipv4?: string,
+ *     ipv6?: string,
+ *     prefix?: string,
+ *     prefix_length?: int,
+ *     error?: string|null
+ * }
+ */
+function sc_run_6rd(
+    string $mode,
+    string $sp_prefix_input,
+    string $mask_len_input,
+    string $ipv4_input,
+    string $ipv6_input
+): array {
+    $mode = strtolower(trim($mode));
+    if ($mode !== 'encode' && $mode !== 'decode') {
+        $mode = 'encode';
+    }
+
+    $sp_prefix = trim($sp_prefix_input);
+    $mask_raw  = trim($mask_len_input);
+    $mask_len  = 0;
+    if ($mask_raw !== '') {
+        if (!ctype_digit($mask_raw)) {
+            return [
+                'mode'             => $mode,
+                'sp_ipv6_prefix'   => $sp_prefix,
+                'sp_ipv4_mask_len' => 0,
+                'error'            => 'SP IPv4 mask length must be an integer 0..32.',
+            ];
+        }
+        $mask_len = (int) $mask_raw;
+        if ($mask_len < 0 || $mask_len > 32) {
+            return [
+                'mode'             => $mode,
+                'sp_ipv6_prefix'   => $sp_prefix,
+                'sp_ipv4_mask_len' => $mask_len,
+                'error'            => 'SP IPv4 mask length must be 0..32.',
+            ];
+        }
+    }
+
+    if ($mode === 'encode') {
+        $v4 = trim($ipv4_input);
+        if ($sp_prefix === '' || $v4 === '') {
+            return [];
+        }
+        try {
+            $r = compute_6rd_delegation($sp_prefix, $mask_len, $v4);
+            return [
+                'mode'             => 'encode',
+                'sp_ipv6_prefix'   => $sp_prefix,
+                'sp_ipv4_mask_len' => $mask_len,
+                'ipv4'             => $v4,
+                'prefix'           => $r['prefix'],
+                'prefix_length'    => $r['prefix_length'],
+                'error'            => null,
+            ];
+        } catch (\InvalidArgumentException $e) {
+            return [
+                'mode'             => 'encode',
+                'sp_ipv6_prefix'   => $sp_prefix,
+                'sp_ipv4_mask_len' => $mask_len,
+                'ipv4'             => $v4,
+                'error'            => $e->getMessage(),
+            ];
+        }
+    }
+
+    // decode mode
+    $addr = trim($ipv6_input);
+    if ($sp_prefix === '' || $addr === '') {
+        return [];
+    }
+    try {
+        $v4 = extract_6rd_ipv4($sp_prefix, $mask_len, $addr);
+        return [
+            'mode'             => 'decode',
+            'sp_ipv6_prefix'   => $sp_prefix,
+            'sp_ipv4_mask_len' => $mask_len,
+            'ipv6'             => $addr,
+            'ipv4'             => $v4,
+            'error'            => null,
+        ];
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'mode'             => 'decode',
+            'sp_ipv6_prefix'   => $sp_prefix,
+            'sp_ipv4_mask_len' => $mask_len,
+            'ipv6'             => $addr,
+            'error'            => $e->getMessage(),
+        ];
+    }
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -837,6 +944,15 @@ $isatap_globally_unique  = '';
 /** @var array{mode?: 'encode'|'decode', input?: string, ipv4?: string, iid?: string, globally_unique?: bool, error?: string|null} */
 $isatap = [];
 
+// v3.5.0 Task 6 — 6rd address tool (RFC 5969)
+$sixrd_mode             = 'encode';
+$sixrd_sp_prefix_input  = '';
+$sixrd_mask_len_input   = '';
+$sixrd_ipv4_input       = '';
+$sixrd_ipv6_input       = '';
+/** @var array{mode?: 'encode'|'decode', sp_ipv6_prefix?: string, sp_ipv4_mask_len?: int, ipv4?: string, ipv6?: string, prefix?: string, prefix_length?: int, error?: string|null} */
+$sixrd = [];
+
 $ula_global_id_input = '';
 /** @var array{result?: array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}, error?: string} */
 $ula = [];
@@ -910,6 +1026,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_isatap        = isset($_POST['isatap_mode'])
         || isset($_POST['isatap_ipv4'])
         || isset($_POST['isatap_iid']);
+    $is_sixrd         = isset($_POST['sixrd_mode'])
+        || isset($_POST['sixrd_sp_prefix'])
+        || isset($_POST['sixrd_ipv4'])
+        || isset($_POST['sixrd_ipv6']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -918,7 +1038,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || $is_vlsm6 || $is_supernet || $is_supernet6 || $is_ula || $is_session_save || $is_range
         || $is_range6 || $is_tree || $is_wildcard || $is_lookup || $is_diff || $is_zoneid
         || $is_derive || $is_slaac || $is_rdns6 || $is_mapped6 || $is_embedded_v4
-        || $is_sixtofour || $is_teredo || $is_isatap;
+        || $is_sixtofour || $is_teredo || $is_isatap || $is_sixrd;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -1385,6 +1505,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
     }
 
+    if ($is_sixrd && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $sixrd_mode = (string)($_POST['sixrd_mode'] ?? 'encode');
+        if ($sixrd_mode !== 'encode' && $sixrd_mode !== 'decode') {
+            $sixrd_mode = 'encode';
+        }
+        $sixrd_sp_prefix_input = trim((string)($_POST['sixrd_sp_prefix'] ?? ''));
+        $sixrd_mask_len_input  = trim((string)($_POST['sixrd_mask_len']  ?? ''));
+        $sixrd_ipv4_input      = trim((string)($_POST['sixrd_ipv4']      ?? ''));
+        $sixrd_ipv6_input      = trim((string)($_POST['sixrd_ipv6']      ?? ''));
+        $sixrd = sc_run_6rd(
+            $sixrd_mode,
+            $sixrd_sp_prefix_input,
+            $sixrd_mask_len_input,
+            $sixrd_ipv4_input,
+            $sixrd_ipv6_input
+        );
+    }
+
     if ($is_ula && !$form_blocked) {
         $ula_global_id_input = trim((string)($_POST['ula_global_id'] ?? ''));
         $ur = generate_ula_prefix($ula_global_id_input);
@@ -1843,6 +1982,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $isatap_ipv4_input,
             $isatap_iid_input,
             $isatap_globally_unique
+        );
+    }
+
+    // 6rd shareable GET URL (v3.5.0 Task 6)
+    if (
+        $active_tab === 'ipv6'
+        && (isset($_GET['sixrd_ipv4']) || isset($_GET['sixrd_ipv6']) || isset($_GET['sixrd_sp_prefix']))
+    ) {
+        $sixrd_mode = (string)($_GET['sixrd_mode'] ?? 'encode');
+        if ($sixrd_mode !== 'encode' && $sixrd_mode !== 'decode') {
+            $sixrd_mode = 'encode';
+        }
+        $sixrd_sp_prefix_input = trim((string)($_GET['sixrd_sp_prefix'] ?? ''));
+        $sixrd_mask_len_input  = trim((string)($_GET['sixrd_mask_len']  ?? ''));
+        $sixrd_ipv4_input      = trim((string)($_GET['sixrd_ipv4']      ?? ''));
+        $sixrd_ipv6_input      = trim((string)($_GET['sixrd_ipv6']      ?? ''));
+        $sixrd = sc_run_6rd(
+            $sixrd_mode,
+            $sixrd_sp_prefix_input,
+            $sixrd_mask_len_input,
+            $sixrd_ipv4_input,
+            $sixrd_ipv6_input
         );
     }
 

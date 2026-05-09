@@ -28,6 +28,10 @@ as each ships.
   IPv4 (`::0:5efe:V4ADDR` for non-global, `::200:5efe:V4ADDR` for
   global) and decode them back. Auto-detects globally-unique vs
   private from the IPv4 input. (#394)
+- **6rd address tool (RFC 5969).** Service-provider 6to4 variant —
+  configurable SP IPv6 prefix and IPv4 mask length. Bidirectional
+  translation between customer IPv4 and customer-delegated IPv6
+  prefix. (#395)
 
 ## [3.4.1] - 2026-05-08
 

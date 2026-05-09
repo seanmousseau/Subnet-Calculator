@@ -73,6 +73,8 @@ tags:
     description: Teredo address decoder (RFC 4380) — bidirectional decoding/encoding of 2001:0::/32 addresses
   - name: Isatap
     description: ISATAP interface-ID helper (RFC 5214) — bidirectional encoding/decoding of the 64-bit ISATAP IID
+  - name: SixRd
+    description: 6rd address tool (RFC 5969) — service-provider-configured IPv4 ↔ delegated IPv6 prefix translation
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -365,6 +367,7 @@ paths:
                     - "POST /api/v1/6to4"
                     - "POST /api/v1/teredo"
                     - "POST /api/v1/isatap"
+                    - "POST /api/v1/6rd"
                     - "POST /api/v1/bulk"
                     - "POST /api/v1/range/ipv4"
                     - "POST /api/v1/range6"
@@ -2410,6 +2413,163 @@ paths:
                   globally_unique: true
         "400":
           description: Missing required field, unparseable input, or non-ISATAP IID
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /6rd:
+    post:
+      operationId: sixRdConvert
+      tags: [SixRd]
+      summary: Compute customer 6rd-delegated IPv6 prefix or extract customer IPv4 (RFC 5969)
+      description: |
+        Bidirectional translation between a customer IPv4 and the
+        customer-delegated IPv6 prefix produced by a 6rd service
+        provider. 6rd is service-provider-configured; the SP IPv6
+        prefix and IPv4 mask length must be supplied by the caller
+        (out-of-band configuration, typically delivered via DHCPv6
+        OPTION_6RD).
+
+        - **`encode`** — input `sp_ipv6_prefix` (e.g. `2001:db8::/32`),
+          optional `sp_ipv4_mask_len` (0..32, default 0), and `ipv4`.
+          Output is the delegated IPv6 prefix and its length.
+        - **`decode`** — input `sp_ipv6_prefix`, optional
+          `sp_ipv4_mask_len`, and `ipv6` (any address within the SP's
+          6rd domain). Output is the customer IPv4. The masked-off
+          high bits of the v4 are treated as zero — they are SP-side
+          configuration not recoverable from the 6rd address alone.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [mode, sp_ipv6_prefix, ipv4]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [encode]
+                    sp_ipv6_prefix:
+                      type: string
+                      example: "2001:db8::/32"
+                    sp_ipv4_mask_len:
+                      type: integer
+                      minimum: 0
+                      maximum: 32
+                      default: 0
+                    ipv4:
+                      type: string
+                      example: "192.0.2.1"
+                - type: object
+                  required: [mode, sp_ipv6_prefix, ipv6]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [decode]
+                    sp_ipv6_prefix:
+                      type: string
+                      example: "2001:db8::/32"
+                    sp_ipv4_mask_len:
+                      type: integer
+                      minimum: 0
+                      maximum: 32
+                      default: 0
+                    ipv6:
+                      type: string
+                      example: "2001:db8:c000:201::1"
+            examples:
+              encode:
+                summary: Encode customer IPv4 → delegated IPv6 prefix
+                value: { mode: encode, sp_ipv6_prefix: "2001:db8::/32", sp_ipv4_mask_len: 0, ipv4: "192.0.2.1" }
+              decode:
+                summary: Decode 6rd IPv6 address → customer IPv4
+                value: { mode: decode, sp_ipv6_prefix: "2001:db8::/32", sp_ipv4_mask_len: 0, ipv6: "2001:db8:c000:201::1" }
+      responses:
+        "200":
+          description: Conversion result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        oneOf:
+                          - type: object
+                            required: [mode, sp_ipv6_prefix, sp_ipv4_mask_len, ipv4, prefix, prefix_length]
+                            properties:
+                              mode:
+                                type: string
+                                enum: [encode]
+                              sp_ipv6_prefix:
+                                type: string
+                                example: "2001:db8::/32"
+                              sp_ipv4_mask_len:
+                                type: integer
+                                example: 0
+                              ipv4:
+                                type: string
+                                example: "192.0.2.1"
+                              prefix:
+                                type: string
+                                example: "2001:db8:c000:201::/64"
+                              prefix_length:
+                                type: integer
+                                example: 64
+                          - type: object
+                            required: [mode, sp_ipv6_prefix, sp_ipv4_mask_len, ipv6, ipv4]
+                            properties:
+                              mode:
+                                type: string
+                                enum: [decode]
+                              sp_ipv6_prefix:
+                                type: string
+                                example: "2001:db8::/32"
+                              sp_ipv4_mask_len:
+                                type: integer
+                                example: 0
+                              ipv6:
+                                type: string
+                                example: "2001:db8:c000:201::1"
+                              ipv4:
+                                type: string
+                                example: "192.0.2.1"
+              example:
+                ok: true
+                data:
+                  mode: encode
+                  sp_ipv6_prefix: "2001:db8::/32"
+                  sp_ipv4_mask_len: 0
+                  ipv4: "192.0.2.1"
+                  prefix: "2001:db8:c000:201::/64"
+                  prefix_length: 64
+        "400":
+          description: Missing required field, unparseable input, or address outside SP prefix
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
