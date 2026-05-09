@@ -843,6 +843,9 @@ function _bulk_op_ssm6(array $p): array
         if (!isset($p['scope']) || !is_int($p['scope'])) {
             throw new \InvalidArgumentException('Field "scope" (integer 1..15) is required when mode=encode.');
         }
+        if ($p['scope'] < 1 || $p['scope'] > 15) {
+            throw new \InvalidArgumentException('Field "scope" must be 1..15.');
+        }
         if (!isset($p['group_id']) || !is_int($p['group_id'])) {
             throw new \InvalidArgumentException(
                 'Field "group_id" (32-bit unsigned integer) is required when mode=encode.'
@@ -906,11 +909,20 @@ function _bulk_op_embedded_rp6(array $p): array
                 'Field "rp_prefix_length" (integer 0..64) is required when mode=encode.'
             );
         }
+        if ($p['rp_prefix_length'] < 0 || $p['rp_prefix_length'] > 64) {
+            throw new \InvalidArgumentException('Field "rp_prefix_length" must be 0..64.');
+        }
         if (!isset($p['riid']) || !is_int($p['riid'])) {
             throw new \InvalidArgumentException('Field "riid" (integer 0..15) is required when mode=encode.');
         }
+        if ($p['riid'] < 0 || $p['riid'] > 15) {
+            throw new \InvalidArgumentException('Field "riid" must be 0..15.');
+        }
         if (!isset($p['scope']) || !is_int($p['scope'])) {
             throw new \InvalidArgumentException('Field "scope" (integer 1..15) is required when mode=encode.');
+        }
+        if ($p['scope'] < 1 || $p['scope'] > 15) {
+            throw new \InvalidArgumentException('Field "scope" must be 1..15.');
         }
         if (!isset($p['group_id']) || !is_int($p['group_id'])) {
             throw new \InvalidArgumentException(

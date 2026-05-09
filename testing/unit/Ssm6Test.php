@@ -40,10 +40,10 @@ final class Ssm6Test extends TestCase
         build_ssm_group('2001:db8::/96', 0xE, 1);
     }
 
-    public function test_build_rejects_negative_prefix_length(): void
+    public function test_build_rejects_missing_slash(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        // ::/-1 won't parse so synthesise via valid parse + invalid format.
+        // Input without "/N" hits the format-validation branch in build_ssm_group().
         build_ssm_group('2001:db8::', 0xE, 1);
     }
 

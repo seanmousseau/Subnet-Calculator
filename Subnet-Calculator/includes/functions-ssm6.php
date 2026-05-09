@@ -60,7 +60,8 @@ function build_ssm_group(string $unicast_prefix, int $scope, int $group_id): arr
         throw new InvalidArgumentException('Unicast prefix length must be a non-negative integer.');
     }
     $prefix_length = (int)$length_str;
-    if ($prefix_length < 0 || $prefix_length > 64) {
+    // ctype_digit() above guarantees $prefix_length >= 0; only the upper bound needs runtime enforcement.
+    if ($prefix_length > 64) {
         throw new InvalidArgumentException('Unicast prefix length must be in 0..64 for RFC 3306 SSM groups.');
     }
 

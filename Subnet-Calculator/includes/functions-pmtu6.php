@@ -23,7 +23,7 @@ declare(strict_types=1);
  *
  * @param int                  $path_mtu          Path MTU in bytes (must be > 0).
  * @param int                  $payload_size      Payload size in bytes (>= 0).
- * @param array<int|string,int> $extension_headers List of extension-header byte sizes
+ * @param list<int>            $extension_headers List of extension-header byte sizes
  *                                                 (each must be > 0 and a multiple of 8).
  *
  * @return array{

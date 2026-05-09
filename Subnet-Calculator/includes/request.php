@@ -830,12 +830,18 @@ function sc_run_pmtu6(
             if ($part === '') {
                 continue;
             }
-            if (!ctype_digit($part)) {
+            if (!ctype_digit($part) || (int)$part <= 0) {
                 return $base_echo + [
-                    'error' => 'Each extension-header size must be a positive integer multiple of 8 bytes.',
+                    'error' => 'Each extension-header size must be a positive integer.',
                 ];
             }
-            $ext_list[] = (int)$part;
+            $val = (int)$part;
+            if ($val % 8 !== 0) {
+                return $base_echo + [
+                    'error' => 'Each extension-header size must be a multiple of 8 bytes (RFC 8200 §4.2).',
+                ];
+            }
+            $ext_list[] = $val;
         }
     }
     try {
@@ -866,7 +872,8 @@ function sc_ssm6_parse_group_id(string $raw): ?int
         if (strlen($hex) > 8) {
             return null;
         }
-        return (int)hexdec($hex);
+        // strlen <= 8 bounds the value to <= 2^32-1, fits PHP int on 64-bit (PHP_INT_SIZE === 8).
+        return intval($hex, 16);
     }
     if (!ctype_digit($s)) {
         return null;
