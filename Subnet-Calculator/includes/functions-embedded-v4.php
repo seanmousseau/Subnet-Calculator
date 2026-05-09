@@ -38,39 +38,7 @@ const EMBEDDEDV4_NAT64_WKP_PREFIX_BIN  = "\x00\x64\xff\x9b\x00\x00\x00\x00\x00\x
 const EMBEDDEDV4_6TO4_PREFIX_BIN       = "\x20\x02";
 const EMBEDDEDV4_TEREDO_PREFIX_BIN     = "\x20\x01\x00\x00";
 
-// Helper used by detect_embedded_v4 and shared with the per-scheme tools
-// (T3-T7) — kept here for v3.5.0 but consider moving to functions-ipv6.php
-// in v3.6.0+.
-/**
- * Return true if $address parses as a valid IPv6 literal whose top
- * $prefix_length bits match the $prefix network. GMP throughout for
- * arbitrary prefix lengths.
- *
- * Returns false (no throw) on parse failure or prefix length out of
- * the 0..128 range — the caller should validate inputs first.
- */
-function ipv6_in_prefix(string $address, string $prefix, int $prefix_length): bool
-{
-    if ($prefix_length < 0 || $prefix_length > 128) {
-        return false;
-    }
-    $abin = @inet_pton($address);
-    $pbin = @inet_pton($prefix);
-    if ($abin === false || $pbin === false || strlen($abin) !== 16 || strlen($pbin) !== 16) {
-        return false;
-    }
-    if ($prefix_length === 0) {
-        return true;
-    }
-    $a = gmp_import($abin);
-    $p = gmp_import($pbin);
-    $shift = 128 - $prefix_length;
-    // Build mask = ((1 << 128) - 1) ^ ((1 << shift) - 1)
-    $all  = gmp_sub(gmp_pow(2, 128), 1);
-    $low  = $shift === 0 ? gmp_init(0) : gmp_sub(gmp_pow(2, $shift), 1);
-    $mask = gmp_xor($all, $low);
-    return gmp_cmp(gmp_and($a, $mask), gmp_and($p, $mask)) === 0;
-}
+// Moved to functions-ipv6.php in v3.6.0 T2 for cross-module reuse.
 
 /**
  * Detect any embedded-IPv4 scheme in the given IPv6 address.

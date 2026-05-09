@@ -37,6 +37,9 @@ require_once $base . 'functions-prefix-plan6.php';
 // phpcs:disable PSR1.Files.SideEffects -- module include for rfc3531_allocation_order()/rfc3531_apply().
 require_once $base . 'functions-rfc3531.php';
 // phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for decode_multicast()/multicast_well_known_registry().
+require_once $base . 'functions-multicast6.php';
+// phpcs:enable PSR1.Files.SideEffects
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require $base . 'functions-resolve.php';

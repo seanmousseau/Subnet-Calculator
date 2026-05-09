@@ -496,6 +496,60 @@ function sc_run_embedded_v4(string $address): array
     ];
 }
 
+// ─── Multicast scope decoder helper (shared by POST handler and GET shareable URL) ─
+
+/**
+ * Run decode_multicast() against the supplied IPv6 multicast address and
+ * return an associative array suitable for direct rendering in the
+ * multicast drawer. Empty input early-returns []. (v3.6.0 Task 2, #396)
+ *
+ * @return array{
+ *     input?: string,
+ *     address?: string,
+ *     scope?: int,
+ *     scope_name?: string,
+ *     flags?: int,
+ *     transient?: bool,
+ *     prefix_based?: bool,
+ *     embedded_rp?: bool,
+ *     group_id?: string,
+ *     scheme?: string,
+ *     detail_route?: string|null,
+ *     well_known?: array{name: string, rfc: string}|null,
+ *     error?: string|null
+ * }
+ */
+function sc_run_multicast6(string $address): array
+{
+    $raw = trim($address);
+    if ($raw === '') {
+        return [];
+    }
+    try {
+        $r = decode_multicast($raw);
+    } catch (\InvalidArgumentException $e) {
+        return [
+            'input' => $raw,
+            'error' => $e->getMessage(),
+        ];
+    }
+    return [
+        'input'        => $raw,
+        'address'      => $r['address'],
+        'scope'        => $r['scope'],
+        'scope_name'   => $r['scope_name'],
+        'flags'        => $r['flags'],
+        'transient'    => $r['transient'],
+        'prefix_based' => $r['prefix_based'],
+        'embedded_rp'  => $r['embedded_rp'],
+        'group_id'     => $r['group_id'],
+        'scheme'       => $r['scheme'],
+        'detail_route' => $r['detail_route'],
+        'well_known'   => $r['well_known'],
+        'error'        => null,
+    ];
+}
+
 // ─── 6to4 helper (shared by POST handler and GET shareable URL) ─────────────
 
 /**
@@ -1236,6 +1290,11 @@ $prefix_plan6_nibble_align        = true;
 /** @var array{parent_prefix?: string, child_length_input?: string, count_input?: string, start_offset_input?: string, nibble_align?: bool, result?: array{parent: array{prefix: string, length: int, total_children_str: string}, children: list<array{index: int, prefix: string, first: string, last: string, contains_64s: string}>, free: array{remaining_str: string}, normalized_child_length: int}, error?: string|null} */
 $prefix_plan6 = [];
 
+// v3.6.0 Task 2 — IPv6 multicast scope decoder (front door for multicast tools)
+$multicast6_input = '';
+/** @var array{input?: string, address?: string, scope?: int, scope_name?: string, flags?: int, transient?: bool, prefix_based?: bool, embedded_rp?: bool, group_id?: string, scheme?: string, detail_route?: string|null, well_known?: array{name: string, rfc: string}|null, error?: string|null} */
+$multicast6 = [];
+
 // v3.5.0 Task 10 — RFC 3531 sparse-allocation guidance
 $rfc3531_parent_input           = '';
 $rfc3531_reservation_bits_input = '';
@@ -1330,6 +1389,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_nibble6       = isset($_POST['nibble6_prefix']);
     $is_rfc3531       = isset($_POST['rfc3531_parent'])
         || isset($_POST['rfc3531_reservation_bits']);
+    $is_multicast6    = isset($_POST['multicast6_input']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -1341,7 +1401,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || $is_sixtofour || $is_teredo || $is_isatap || $is_sixrd || $is_nat64
         || $is_prefix_plan6
         || $is_nibble6
-        || $is_rfc3531;
+        || $is_rfc3531
+        || $is_multicast6;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -1864,6 +1925,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $rfc3531_reservation_bits_input,
             $rfc3531_strategy_input
         );
+    }
+
+    if ($is_multicast6 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $multicast6_input = trim((string)($_POST['multicast6_input'] ?? ''));
+        $multicast6 = sc_run_multicast6($multicast6_input);
     }
 
     if ($is_prefix_plan6 && !$form_blocked) {
@@ -2443,6 +2510,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $rfc3531_reservation_bits_input,
             $rfc3531_strategy_input
         );
+    }
+
+    // Multicast scope decoder shareable GET URL (v3.6.0 Task 2, #396)
+    if ($active_tab === 'ipv6' && isset($_GET['multicast6_input'])) {
+        $multicast6_input = trim((string)($_GET['multicast6_input'] ?? ''));
+        $multicast6 = sc_run_multicast6($multicast6_input);
     }
 
     // Supernet6 / summarise6 shareable GET URL (v3.3.0)
