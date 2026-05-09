@@ -22,11 +22,33 @@ final class IsatapTest extends TestCase
 
     public function test_auto_globally_unique_decision(): void
     {
-        // 192.0.2.1 is documentation/global → globally_unique=true by default.
-        $this->assertSame('200:5efe:c000:201', ipv4_to_isatap_iid('192.0.2.1'));
+        // 8.8.8.8 is public unicast → globally_unique=true by default.
+        $this->assertSame('200:5efe:808:808', ipv4_to_isatap_iid('8.8.8.8'));
 
         // 10.0.0.1 is private → globally_unique=false.
         $this->assertSame('0:5efe:a00:1', ipv4_to_isatap_iid('10.0.0.1'));
+
+        // 192.0.2.1 is TEST-NET-1 (RFC 5737) — treated as non-global in
+        // v3.5.1+ to match T7's NAT64 helper. Was global in v3.5.0.
+        $this->assertSame('0:5efe:c000:201', ipv4_to_isatap_iid('192.0.2.1'));
+    }
+
+    public function test_auto_classify_rejects_multicast(): void
+    {
+        // 224.0.0.0/4 multicast → non-global form.
+        $this->assertSame('0:5efe:e000:1', ipv4_to_isatap_iid('224.0.0.1'));
+    }
+
+    public function test_auto_classify_rejects_class_e(): void
+    {
+        // 240.0.0.0/4 reserved (class-E) → non-global form.
+        $this->assertSame('0:5efe:f000:1', ipv4_to_isatap_iid('240.0.0.1'));
+    }
+
+    public function test_auto_classify_rejects_zero(): void
+    {
+        // 0.0.0.0 → non-global form.
+        $this->assertSame('0:5efe:0:0', ipv4_to_isatap_iid('0.0.0.0'));
     }
 
     public function test_encode_zero_address(): void

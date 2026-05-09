@@ -21,6 +21,9 @@ declare(strict_types=1);
  * Produce the next-allocation order for a reservation field of
  * `$reservation_bits` bits, using the given strategy.
  *
+ * Returns 2^N values for leftmost/rightmost; 2^N - 1 values for
+ * centermost (omits 0, the default reservation).
+ *
  * @param int    $reservation_bits  number of bits in the reservation field (1..16)
  * @param string $strategy          'centermost' | 'leftmost' | 'rightmost'
  *
