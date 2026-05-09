@@ -83,6 +83,14 @@ tags:
     description: IPv6 nibble-boundary helper — surface the nibble-aligned neighbours (above and below) of any IPv6 prefix
   - name: Rfc3531
     description: RFC 3531 sparse-allocation guidance — centermost / leftmost / rightmost bit-reservation strategy for growth-friendly prefix assignment
+  - name: Multicast6
+    description: IPv6 multicast scope decoder (RFC 4291 §2.7) — front door for the v3.6.0 multicast tools (scope, flags, scheme, well-known group lookup, deep-link to SSM and embedded-RP)
+  - name: Ssm6
+    description: SSM / unicast-prefix-based IPv6 multicast (RFC 3306 / RFC 4607) — bidirectional encode/decode of FF3x::/12 group addresses with embedded unicast prefix and 32-bit group ID
+  - name: EmbeddedRp6
+    description: Embedded-RP IPv6 multicast (RFC 3956) — bidirectional encode/decode of FF7x::/12 group addresses with the Rendezvous Point address and 4-bit RIID embedded directly in the group
+  - name: Pmtu6
+    description: IPv6 PMTU + fragmentation helper (RFC 8200) — compute effective payload, per-fragment breakdown, and surface the §5 minimum link MTU (1280) warning
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -377,6 +385,10 @@ paths:
                     - "POST /api/v1/isatap"
                     - "POST /api/v1/6rd"
                     - "POST /api/v1/nat64"
+                    - "POST /api/v1/multicast6"
+                    - "POST /api/v1/ssm6"
+                    - "POST /api/v1/embedded-rp6"
+                    - "POST /api/v1/pmtu6"
                     - "POST /api/v1/bulk"
                     - "POST /api/v1/range/ipv4"
                     - "POST /api/v1/range6"
@@ -3120,6 +3132,698 @@ paths:
             X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
             Retry-After:           { $ref: "#/components/headers/RetryAfter" }
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /multicast6:
+    post:
+      operationId: multicast6Decode
+      tags: [Multicast6]
+      summary: Decode an IPv6 multicast address (RFC 4291 §2.7)
+      description: |
+        Front-door decoder for the v3.6.0 IPv6 multicast tools. Decodes any
+        FF00::/8 address into:
+
+        - `scope` (1..15) and `scope_name` (`interface-local`, `link-local`,
+          `admin-local`, `site-local`, `organization-local`, `global`,
+          `reserved`) per RFC 4291 §2.7 + RFC 7346.
+        - 4-bit `flags` field (0RPT) with booleans `transient`, `prefix_based`
+          (RFC 3306), `embedded_rp` (RFC 3956).
+        - `scheme` hint: `well-known`, `transient`, `ssm`, `embedded-rp`,
+          or `reserved`.
+        - 112-bit `group_id` as a 28-character hex string.
+        - `well_known` lookup against the in-tree registry of named groups
+          (FF02::1, FF02::2, FF02::5/6 OSPF, FF02::9 RIP, FF02::d All-PIM,
+          FF02::16 MLDv2, FF05::101 NTP, plus the FF02::1:FF**:**** Solicited-Node
+          family). Returns `null` when not matched.
+        - `detail_route` deep-link to the per-scheme tool drawer (`/ipv6/ssm`
+          for prefix-based / SSM groups; `/ipv6/embedded-rp` for embedded-RP);
+          `null` otherwise.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ipv6]
+              properties:
+                ipv6:
+                  type: string
+                  description: An IPv6 multicast address literal (must be in FF00::/8).
+                  example: "FF02::1"
+            examples:
+              all-nodes:
+                summary: All Nodes (link-local well-known)
+                value: { ipv6: "FF02::1" }
+              solicited-node:
+                summary: Solicited-Node (RFC 4291)
+                value: { ipv6: "FF02::1:FF12:3456" }
+              ssm:
+                summary: SSM (prefix-based, scope global)
+                value: { ipv6: "FF3E::1234:5678" }
+              embedded-rp:
+                summary: Embedded-RP (RFC 3956)
+                value: { ipv6: "FF7E:140:2001:db8:cafe::1234" }
+      responses:
+        "200":
+          description: Decoded multicast address
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required:
+                          - input
+                          - address
+                          - scope
+                          - scope_name
+                          - flags
+                          - transient
+                          - prefix_based
+                          - embedded_rp
+                          - group_id
+                          - scheme
+                          - detail_route
+                          - well_known
+                        properties:
+                          input:
+                            type: string
+                            example: "FF02::1"
+                          address:
+                            type: string
+                            description: Canonical compressed lowercase form of the input.
+                            example: "ff02::1"
+                          scope:
+                            type: integer
+                            minimum: 0
+                            maximum: 15
+                            example: 2
+                          scope_name:
+                            type: string
+                            enum: [interface-local, link-local, admin-local, site-local, organization-local, global, reserved]
+                            example: link-local
+                          flags:
+                            type: integer
+                            minimum: 0
+                            maximum: 15
+                            example: 0
+                          transient:
+                            type: boolean
+                            example: false
+                          prefix_based:
+                            type: boolean
+                            example: false
+                          embedded_rp:
+                            type: boolean
+                            example: false
+                          group_id:
+                            type: string
+                            description: 112-bit group ID as a 28-character hex string.
+                            example: "00000000000000000000000000000001"
+                          scheme:
+                            type: string
+                            enum: [well-known, transient, ssm, embedded-rp, reserved]
+                            example: well-known
+                          detail_route:
+                            type: string
+                            nullable: true
+                            description: Relative URL of the per-scheme tool drawer; null when not applicable.
+                            example: null
+                          well_known:
+                            type: object
+                            nullable: true
+                            description: Registry entry when the address matches a well-known group; null otherwise.
+                            required: [name, rfc]
+                            properties:
+                              name: { type: string, example: "All Nodes Address" }
+                              rfc:  { type: string, example: "RFC 4291" }
+              example:
+                ok: true
+                data:
+                  input: "FF02::1"
+                  address: "ff02::1"
+                  scope: 2
+                  scope_name: "link-local"
+                  flags: 0
+                  transient: false
+                  prefix_based: false
+                  embedded_rp: false
+                  group_id: "00000000000000000000000000000001"
+                  scheme: "well-known"
+                  detail_route: null
+                  well_known: { name: "All Nodes Address", rfc: "RFC 4291" }
+        "400":
+          description: Missing or non-multicast IPv6 input
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /ssm6:
+    post:
+      operationId: ssm6Build
+      tags: [Ssm6]
+      summary: Build or decode an SSM / unicast-prefix-based multicast group (RFC 3306)
+      description: |
+        Bidirectional tool for the FF3x::/12 unicast-prefix-based multicast
+        range. Encodes a unicast prefix + scope + 32-bit group ID into an
+        SSM group address, or reverses the process. The flag nibble is
+        fixed at 0x3 (P + T); embedded-RP groups (R+P+T = 0x7) are
+        deliberately rejected and routed to the embedded-RP tool. The
+        prefix length is restricted to 0..64 because only the upper
+        64 bits of the unicast prefix fit in the multicast address per
+        RFC 3306 §4.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [mode, unicast_prefix, scope, group_id]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [encode]
+                    unicast_prefix:
+                      type: string
+                      description: Source unicast prefix in `<ipv6>/<n>` form. Length 0..64. Host bits are masked.
+                      example: "2001:db8::/32"
+                    scope:
+                      type: integer
+                      minimum: 1
+                      maximum: 15
+                      example: 14
+                    group_id:
+                      type: integer
+                      minimum: 0
+                      maximum: 4294967295
+                      example: 305419896
+                - type: object
+                  required: [mode, ipv6]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [decode]
+                    ipv6:
+                      type: string
+                      description: An SSM / unicast-prefix-based multicast address in FF3x::/12.
+                      example: "FF3E:20:2001:db8::1234:5678"
+            examples:
+              encode-rfc-3306-example:
+                summary: RFC 3306 §6 worked example (encode)
+                value:
+                  mode: encode
+                  unicast_prefix: "2001:db8::/32"
+                  scope: 14
+                  group_id: 305419896
+              encode-zero-prefix:
+                summary: Zero-length unicast prefix (encode)
+                value:
+                  mode: encode
+                  unicast_prefix: "::/0"
+                  scope: 14
+                  group_id: 305419896
+              decode-round-trip:
+                summary: Round-trip decode of the §6 example
+                value: { mode: decode, ipv6: "ff3e:20:2001:db8::1234:5678" }
+      responses:
+        "200":
+          description: Built or decoded SSM multicast group
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required:
+                          - mode
+                          - address
+                          - scope
+                          - prefix_length
+                          - unicast_prefix
+                          - group_id
+                        properties:
+                          mode:
+                            type: string
+                            enum: [encode, decode]
+                            example: encode
+                          input:
+                            type: string
+                            description: Echoed input string (decode mode only).
+                            example: "FF3E:20:2001:db8::1234:5678"
+                          address:
+                            type: string
+                            description: Canonical compressed lowercase SSM group address.
+                            example: "ff3e:20:2001:db8::1234:5678"
+                          scope:
+                            type: integer
+                            minimum: 1
+                            maximum: 15
+                            example: 14
+                          prefix_length:
+                            type: integer
+                            minimum: 0
+                            maximum: 64
+                            example: 32
+                          unicast_prefix:
+                            type: string
+                            description: Canonical lowercase unicast prefix with host bits zeroed.
+                            example: "2001:db8::"
+                          group_id:
+                            type: integer
+                            minimum: 0
+                            maximum: 4294967295
+                            example: 305419896
+              example:
+                ok: true
+                data:
+                  mode: encode
+                  address: "ff3e:20:2001:db8::1234:5678"
+                  scope: 14
+                  prefix_length: 32
+                  unicast_prefix: "2001:db8::"
+                  group_id: 305419896
+        "400":
+          description: Missing field or invalid SSM input
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /embedded-rp6:
+    post:
+      operationId: embeddedRp6Build
+      tags: [EmbeddedRp6]
+      summary: Build or decode an embedded-RP multicast group (RFC 3956)
+      description: |
+        Bidirectional tool for the FF7x::/12 embedded-RP multicast range.
+        Encodes the Rendezvous Point address + RP prefix length + 4-bit
+        RIID + scope + 32-bit group ID into an embedded-RP group address,
+        or reverses the process. The flag nibble is fixed at 0x7
+        (R + P + T); SSM-only groups (P + T = 0x3) are deliberately
+        rejected and routed to the SSM tool. The RP prefix length is
+        restricted to 0..64 because only the upper 64 bits of the RP
+        prefix fit in the multicast address per RFC 3956 §4.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [mode, rp_address, rp_prefix_length, riid, scope, group_id]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [encode]
+                    rp_address:
+                      type: string
+                      description: Rendezvous Point IPv6 address. Only the upper bits selected by `rp_prefix_length` are encoded; the host suffix is replaced by `riid`.
+                      example: "2001:db8:cafe::1"
+                    rp_prefix_length:
+                      type: integer
+                      minimum: 0
+                      maximum: 64
+                      example: 48
+                    riid:
+                      type: integer
+                      minimum: 0
+                      maximum: 15
+                      description: 4-bit RP interface ID.
+                      example: 1
+                    scope:
+                      type: integer
+                      minimum: 1
+                      maximum: 15
+                      example: 14
+                    group_id:
+                      type: integer
+                      minimum: 0
+                      maximum: 4294967295
+                      example: 305419896
+                - type: object
+                  required: [mode, ipv6]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [decode]
+                    ipv6:
+                      type: string
+                      description: An embedded-RP multicast address in FF7x::/12.
+                      example: "ff7e:130:2001:db8:cafe:0:1234:5678"
+            examples:
+              encode-rfc-3956-example:
+                summary: RFC 3956 worked example (encode)
+                value:
+                  mode: encode
+                  rp_address: "2001:db8:cafe::1"
+                  rp_prefix_length: 48
+                  riid: 1
+                  scope: 14
+                  group_id: 305419896
+              decode-round-trip:
+                summary: Round-trip decode of the worked example
+                value: { mode: decode, ipv6: "ff7e:130:2001:db8:cafe:0:1234:5678" }
+      responses:
+        "200":
+          description: Built or decoded embedded-RP multicast group
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required:
+                          - mode
+                          - address
+                          - scope
+                          - rp_prefix
+                          - rp_prefix_length
+                          - rp_address
+                          - riid
+                          - group_id
+                        properties:
+                          mode:
+                            type: string
+                            enum: [encode, decode]
+                            example: encode
+                          input:
+                            type: string
+                            description: Echoed input string (decode mode only).
+                            example: "ff7e:130:2001:db8:cafe:0:1234:5678"
+                          address:
+                            type: string
+                            description: Canonical compressed lowercase embedded-RP group address.
+                            example: "ff7e:130:2001:db8:cafe:0:1234:5678"
+                          scope:
+                            type: integer
+                            minimum: 1
+                            maximum: 15
+                            example: 14
+                          rp_prefix:
+                            type: string
+                            description: Canonical lowercase RP prefix with host bits zeroed.
+                            example: "2001:db8:cafe::"
+                          rp_prefix_length:
+                            type: integer
+                            minimum: 0
+                            maximum: 64
+                            example: 48
+                          rp_address:
+                            type: string
+                            description: Canonical RP address reconstructed as `<rp_prefix>::<riid>`.
+                            example: "2001:db8:cafe::1"
+                          riid:
+                            type: integer
+                            minimum: 0
+                            maximum: 15
+                            example: 1
+                          group_id:
+                            type: integer
+                            minimum: 0
+                            maximum: 4294967295
+                            example: 305419896
+              example:
+                ok: true
+                data:
+                  mode: encode
+                  address: "ff7e:130:2001:db8:cafe:0:1234:5678"
+                  scope: 14
+                  rp_prefix: "2001:db8:cafe::"
+                  rp_prefix_length: 48
+                  rp_address: "2001:db8:cafe::1"
+                  riid: 1
+                  group_id: 305419896
+        "400":
+          description: Missing field or invalid embedded-RP input
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /pmtu6:
+    post:
+      operationId: pmtu6Compute
+      tags: [Pmtu6]
+      summary: Compute IPv6 PMTU + fragmentation breakdown (RFC 8200)
+      description: |
+        Compute the effective per-packet payload and per-fragment
+        breakdown for sending `payload_size` bytes over a path with the
+        given path MTU and optional list of extension-header sizes.
+
+        The IPv6 fixed header is always 40 bytes (RFC 8200 §3); each
+        extension header must be a positive multiple of 8 bytes. When
+        the payload exceeds `effective_payload`, the helper computes
+        the per-fragment breakdown using an 8-byte-aligned per-fragment
+        max payload (the trailing fragment carries the remainder with
+        M=0). The 8-byte Fragment header (RFC 8200 §4.5) is accounted
+        for automatically and is NOT included in `extension_headers`.
+
+        Path MTUs below the IPv6 minimum link MTU (1280, RFC 8200 §5)
+        are flagged in `meets_minimum` and surfaced via `notes`, but
+        still computed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path_mtu, payload_size]
+              properties:
+                path_mtu:
+                  type: integer
+                  minimum: 1
+                  description: Path MTU in bytes (must be > 0).
+                  example: 1500
+                payload_size:
+                  type: integer
+                  minimum: 0
+                  description: Upper-layer payload size in bytes.
+                  example: 3000
+                extension_headers:
+                  type: array
+                  description: Optional list of extension-header sizes in bytes. Each must be a positive multiple of 8. The 8-byte Fragment header is added automatically when fragmentation occurs and must NOT appear here.
+                  items:
+                    type: integer
+                    minimum: 8
+                  example: [8, 8]
+            examples:
+              no-fragmentation:
+                summary: 1500 MTU, 1000-byte payload (fits in one packet)
+                value: { path_mtu: 1500, payload_size: 1000 }
+              fragmentation:
+                summary: 1280 MTU, 3000-byte payload (3 fragments)
+                value: { path_mtu: 1280, payload_size: 3000 }
+              extensions:
+                summary: HBH + routing extension headers
+                value: { path_mtu: 1500, payload_size: 100, extension_headers: [8, 8] }
+              below-minimum:
+                summary: PMTU below RFC 8200 §5 minimum (1280)
+                value: { path_mtu: 1200, payload_size: 100 }
+      responses:
+        "200":
+          description: PMTU + fragmentation breakdown
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required:
+                          - path_mtu
+                          - meets_minimum
+                          - fixed_header
+                          - extension_overhead
+                          - total_overhead
+                          - effective_payload
+                          - payload_size
+                          - needs_fragmentation
+                          - fragment_count
+                          - fragments
+                          - notes
+                        properties:
+                          path_mtu:
+                            type: integer
+                            example: 1280
+                          meets_minimum:
+                            type: boolean
+                            description: True when path_mtu >= 1280 (RFC 8200 §5).
+                            example: true
+                          fixed_header:
+                            type: integer
+                            description: Always 40 (RFC 8200 §3).
+                            example: 40
+                          extension_overhead:
+                            type: integer
+                            example: 0
+                          total_overhead:
+                            type: integer
+                            description: fixed_header + extension_overhead.
+                            example: 40
+                          effective_payload:
+                            type: integer
+                            description: path_mtu - total_overhead. Maximum payload that fits in one unfragmented packet.
+                            example: 1240
+                          payload_size:
+                            type: integer
+                            example: 3000
+                          needs_fragmentation:
+                            type: boolean
+                            example: true
+                          fragment_count:
+                            type: integer
+                            minimum: 1
+                            example: 3
+                          fragments:
+                            type: array
+                            description: Per-fragment breakdown. When fragmentation is not needed, exactly one virtual fragment is returned with offset=0 and m_bit=0.
+                            items:
+                              type: object
+                              required: [offset, m_bit, payload_bytes]
+                              properties:
+                                offset:
+                                  type: integer
+                                  description: Fragment offset in 8-byte units (RFC 8200 §4.5).
+                                  example: 0
+                                m_bit:
+                                  type: integer
+                                  enum: [0, 1]
+                                  description: More-fragments flag. 1 for all fragments except the last; 0 for the last (or the sole virtual fragment when no fragmentation is needed).
+                                  example: 1
+                                payload_bytes:
+                                  type: integer
+                                  example: 1232
+                          notes:
+                            type: array
+                            items: { type: string }
+                            example:
+                              - "End-host fragmentation only; routers do not fragment IPv6 per RFC 8200 §5."
+                              - "IPv6 fixed header is 40 bytes (RFC 8200 §3)."
+              example:
+                ok: true
+                data:
+                  path_mtu: 1280
+                  meets_minimum: true
+                  fixed_header: 40
+                  extension_overhead: 0
+                  total_overhead: 40
+                  effective_payload: 1240
+                  payload_size: 3000
+                  needs_fragmentation: true
+                  fragment_count: 3
+                  fragments:
+                    - { offset: 0,   m_bit: 1, payload_bytes: 1232 }
+                    - { offset: 154, m_bit: 1, payload_bytes: 1232 }
+                    - { offset: 308, m_bit: 0, payload_bytes: 536 }
+                  notes:
+                    - "End-host fragmentation only; routers do not fragment IPv6 per RFC 8200 §5."
+                    - "IPv6 fixed header is 40 bytes (RFC 8200 §3)."
+        "400":
+          description: Missing or invalid input
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /bulk:
     post:
       operationId: bulkCalculate
@@ -3130,12 +3834,13 @@ paths:
 
         - **Legacy CIDR mode** — body contains `cidrs[]`. Resolves each CIDR
           via /ipv4 or /ipv6 logic. Per-item envelope: `{input, ok, data?, error?}`.
-        - **Multi-op mode (v3.4.0+v3.5.0)** — body contains `items[]`.
+        - **Multi-op mode (v3.4.0+v3.5.0+v3.6.0)** — body contains `items[]`.
           Each item has its own `op` slug and `params` payload. Supported
           ops: `range6`, `supernet6`, `zone-id`, `derive`, `slaac-privacy`,
           `rdns6`, `mapped6` (v3.4.0); `embedded-v4`, `6to4`, `teredo`,
           `isatap`, `6rd`, `nat64`, `prefix-plan6`, `nibble6`, `rfc3531`
-          (v3.5.0). Per-item envelope: `{op, ok, error?, ...result}` where
+          (v3.5.0); `multicast6`, `ssm6`, `embedded-rp6`, `pmtu6` (v3.6.0).
+          Per-item envelope: `{op, ok, error?, ...result}` where
           `...result` matches the standalone endpoint's success body.
 
         Up to 50 entries per request. Individual failures do not abort the
@@ -3191,6 +3896,10 @@ paths:
                               - prefix-plan6
                               - nibble6
                               - rfc3531
+                              - multicast6
+                              - ssm6
+                              - embedded-rp6
+                              - pmtu6
                           params:
                             type: object
                             description: Per-op parameters; shape matches the corresponding standalone endpoint's request body.
@@ -3228,6 +3937,14 @@ paths:
                         params: { prefix: "2001:db8::/49" }
                       - op: rfc3531
                         params: { parent_prefix: "2001:db8::/48", reservation_bits: 4, strategy: "centermost" }
+                      - op: multicast6
+                        params: { ipv6: "ff02::1" }
+                      - op: ssm6
+                        params: { mode: "encode", unicast_prefix: "2001:db8::/64", scope: 5, group_id: 1 }
+                      - op: embedded-rp6
+                        params: { mode: "encode", rp_address: "2001:db8::1", rp_prefix_length: 64, riid: 1, scope: 5, group_id: 1 }
+                      - op: pmtu6
+                        params: { path_mtu: 1500, payload_size: 4000 }
       responses:
         "200":
           description: Per-item calculation results

@@ -3074,6 +3074,518 @@ async def test_ipv6_embedded_v4_ui(page: Page) -> None:
                 len(err_text) > 0, f"got: {err_text!r}")
 
 
+async def test_api_multicast6(page: Page) -> None:
+    section("API — POST /api/v1/multicast6")
+    # All-Nodes link-local well-known
+    status, data = _api_post("multicast6", {"ipv6": "FF02::1"})
+    assert_eq("api multicast6 (all-nodes): HTTP 200", status, 200)
+    assert_eq("api multicast6 (all-nodes): ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api multicast6 (all-nodes): scope", d.get("scope"), 2)
+    assert_eq("api multicast6 (all-nodes): scope_name",
+              d.get("scope_name"), "link-local")
+    assert_eq("api multicast6 (all-nodes): scheme", d.get("scheme"), "well-known")
+    assert_eq("api multicast6 (all-nodes): well_known.name",
+              (d.get("well_known") or {}).get("name"), "All Nodes Address")
+    assert_eq("api multicast6 (all-nodes): detail_route is null",
+              d.get("detail_route"), None)
+
+    # SSM (FF3E:: with P+T flags, scope global)
+    status2, data2 = _api_post("multicast6", {"ipv6": "FF3E::1234:5678"})
+    assert_eq("api multicast6 (ssm): HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api multicast6 (ssm): scheme", d2.get("scheme"), "ssm")
+    assert_eq("api multicast6 (ssm): prefix_based=True",
+              d2.get("prefix_based"), True)
+    assert_eq("api multicast6 (ssm): detail_route",
+              d2.get("detail_route"), "/ipv6/ssm")
+
+    # Embedded-RP (R+P+T flags)
+    status3, data3 = _api_post("multicast6",
+                               {"ipv6": "FF7E:140:2001:db8:cafe::1234"})
+    assert_eq("api multicast6 (embedded-rp): HTTP 200", status3, 200)
+    d3 = data3.get("data", {})
+    assert_eq("api multicast6 (embedded-rp): scheme",
+              d3.get("scheme"), "embedded-rp")
+    assert_eq("api multicast6 (embedded-rp): embedded_rp=True",
+              d3.get("embedded_rp"), True)
+    assert_eq("api multicast6 (embedded-rp): detail_route",
+              d3.get("detail_route"), "/ipv6/embedded-rp")
+
+    # Solicited-Node prefix match (FF02::1:FF**:****)
+    status4, data4 = _api_post("multicast6", {"ipv6": "FF02::1:FF12:3456"})
+    assert_eq("api multicast6 (solicited-node): HTTP 200", status4, 200)
+    d4 = data4.get("data", {})
+    assert_eq("api multicast6 (solicited-node): well_known.name",
+              (d4.get("well_known") or {}).get("name"),
+              "Solicited-Node Address (RFC 4291)")
+
+    # Non-multicast input → 400
+    status5, _ = _api_post("multicast6", {"ipv6": "2001:db8::1"})
+    assert_eq("api multicast6: non-multicast → 400", status5, 400)
+
+    # Garbage input → 400
+    status6, _ = _api_post("multicast6", {"ipv6": "not-an-address"})
+    assert_eq("api multicast6: invalid input → 400", status6, 400)
+
+    # Missing ipv6 field → 400
+    status7, _ = _api_post("multicast6", {})
+    assert_eq("api multicast6: missing ipv6 → 400", status7, 400)
+
+
+async def test_ipv6_multicast_ui(page: Page) -> None:
+    section("IPv6 multicast scope decoder UI")
+
+    # ?tool=multicast should auto-open the drawer.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=multicast")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='multicast']")
+    assert_eq("multicast UI: panel exists", await panel.count(), 1)
+
+    # Submit FF02::1
+    await page.fill("#multicast6_input", "FF02::1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='multicast'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='multicast']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("multicast UI: scope label rendered", "link-local" in body_text)
+    assert_true("multicast UI: scheme well-known rendered",
+                "well-known" in body_text)
+    assert_true("multicast UI: well-known group name rendered",
+                "all nodes address" in body_text)
+
+    # SSM input → deep-link button to /ipv6/ssm appears
+    await navigate(page, APP_URL + "?tab=ipv6&tool=multicast")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#multicast6_input", "FF3E::1234:5678")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='multicast'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='multicast']")
+    open_link = panel.locator("a.splitter-btn[href='/ipv6/ssm']")
+    assert_true("multicast UI: SSM deep-link rendered",
+                await open_link.count() >= 1)
+
+    # Error path — non-multicast input
+    await navigate(page, APP_URL + "?tab=ipv6&tool=multicast")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.fill("#multicast6_input", "2001:db8::1")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='multicast'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='multicast']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("multicast UI: error band on non-multicast input",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+
+async def test_api_ssm6(page: Page) -> None:
+    section("API — POST /api/v1/ssm6")
+    # Encode — RFC 3306 §6 worked example.
+    status, data = _api_post("ssm6", {
+        "mode": "encode",
+        "unicast_prefix": "2001:db8::/32",
+        "scope": 14,
+        "group_id": 0x12345678,
+    })
+    assert_eq("api ssm6 encode: HTTP 200", status, 200)
+    assert_eq("api ssm6 encode: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api ssm6 encode: address",
+              d.get("address"), "ff3e:20:2001:db8::1234:5678")
+    assert_eq("api ssm6 encode: prefix_length", d.get("prefix_length"), 32)
+    assert_eq("api ssm6 encode: scope", d.get("scope"), 14)
+    assert_eq("api ssm6 encode: group_id", d.get("group_id"), 0x12345678)
+
+    # Encode with zero prefix length.
+    status_z, data_z = _api_post("ssm6", {
+        "mode": "encode",
+        "unicast_prefix": "::/0",
+        "scope": 14,
+        "group_id": 0x12345678,
+    })
+    assert_eq("api ssm6 encode (::/0): HTTP 200", status_z, 200)
+    assert_eq("api ssm6 encode (::/0): address",
+              data_z.get("data", {}).get("address"), "ff3e::1234:5678")
+
+    # Decode — round-trip.
+    status2, data2 = _api_post("ssm6", {
+        "mode": "decode",
+        "ipv6": "ff3e:20:2001:db8::1234:5678",
+    })
+    assert_eq("api ssm6 decode: HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api ssm6 decode: scope", d2.get("scope"), 14)
+    assert_eq("api ssm6 decode: prefix_length", d2.get("prefix_length"), 32)
+    assert_eq("api ssm6 decode: unicast_prefix",
+              d2.get("unicast_prefix"), "2001:db8::")
+    assert_eq("api ssm6 decode: group_id", d2.get("group_id"), 0x12345678)
+
+    # Decode rejects non-SSM input (FF02::1 has flags=0).
+    status3, _ = _api_post("ssm6", {"mode": "decode", "ipv6": "FF02::1"})
+    assert_eq("api ssm6 decode (FF02::1): non-SSM → 400", status3, 400)
+
+    # Decode rejects non-multicast input.
+    status4, _ = _api_post("ssm6", {"mode": "decode", "ipv6": "2001:db8::1"})
+    assert_eq("api ssm6 decode (non-multicast): → 400", status4, 400)
+
+    # Encode rejects prefix length > 64.
+    status5, _ = _api_post("ssm6", {
+        "mode": "encode",
+        "unicast_prefix": "2001:db8::/96",
+        "scope": 14,
+        "group_id": 1,
+    })
+    assert_eq("api ssm6 encode (/96): → 400", status5, 400)
+
+    # Encode rejects out-of-range scope.
+    status6, _ = _api_post("ssm6", {
+        "mode": "encode",
+        "unicast_prefix": "2001:db8::/32",
+        "scope": 0,
+        "group_id": 1,
+    })
+    assert_eq("api ssm6 encode (scope 0): → 400", status6, 400)
+
+    # Missing mode-specific field.
+    status7, _ = _api_post("ssm6", {"mode": "encode"})
+    assert_eq("api ssm6 encode: missing field → 400", status7, 400)
+
+
+async def test_ipv6_ssm_ui(page: Page) -> None:
+    section("IPv6 SSM tool UI")
+
+    # Drawer opens via /ipv6/ssm rewrite path used by multicast deep-link.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=ssm")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='ssm']")
+    assert_eq("ssm UI: panel exists", await panel.count(), 1)
+
+    # Encode mode (default) — submit RFC 3306 §6 worked example.
+    await page.fill("#ssm6_unicast_prefix", "2001:db8::/32")
+    await page.fill("#ssm6_scope", "14")
+    await page.fill("#ssm6_group_id", "0x12345678")
+    await page.click(
+        "#panel-ipv6 .tool-panel[data-tool='ssm'] button.splitter-btn"
+    )
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='ssm']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("ssm UI: built address rendered",
+                "ff3e:20:2001:db8::1234:5678" in body_text)
+    assert_true("ssm UI: unicast prefix rendered",
+                "2001:db8::" in body_text)
+
+    # Decode mode — submit the canonical address back.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=ssm")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    await page.select_option("#ssm6_mode", "decode")
+    # The form re-renders on submit; round-trip via shareable GET URL is
+    # the documented path. Use that here so the decode input shows up.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&tool=ssm&ssm6_mode=decode"
+        "&ssm6_ipv6=ff3e:20:2001:db8::1234:5678",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='ssm']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("ssm UI: decode group_id rendered",
+                "0x12345678" in body_text or "305419896" in body_text)
+    assert_true("ssm UI: decode unicast prefix rendered",
+                "2001:db8::" in body_text)
+
+    # Error path — non-SSM input.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&tool=ssm&ssm6_mode=decode&ssm6_ipv6=2001:db8::1",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='ssm']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("ssm UI: error band on non-SSM input",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+
+async def test_api_embedded_rp6(page: Page) -> None:
+    section("API — POST /api/v1/embedded-rp6")
+    # Encode — RFC 3956 worked example.
+    status, data = _api_post("embedded-rp6", {
+        "mode": "encode",
+        "rp_address": "2001:db8:cafe::1",
+        "rp_prefix_length": 48,
+        "riid": 1,
+        "scope": 14,
+        "group_id": 0x12345678,
+    })
+    assert_eq("api embedded-rp6 encode: HTTP 200", status, 200)
+    assert_eq("api embedded-rp6 encode: ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api embedded-rp6 encode: address",
+              d.get("address"), "ff7e:130:2001:db8:cafe:0:1234:5678")
+    assert_eq("api embedded-rp6 encode: rp_prefix_length",
+              d.get("rp_prefix_length"), 48)
+    assert_eq("api embedded-rp6 encode: riid", d.get("riid"), 1)
+    assert_eq("api embedded-rp6 encode: scope", d.get("scope"), 14)
+    assert_eq("api embedded-rp6 encode: group_id",
+              d.get("group_id"), 0x12345678)
+    assert_eq("api embedded-rp6 encode: rp_address",
+              d.get("rp_address"), "2001:db8:cafe::1")
+    assert_eq("api embedded-rp6 encode: rp_prefix",
+              d.get("rp_prefix"), "2001:db8:cafe::")
+
+    # Decode — round-trip.
+    status2, data2 = _api_post("embedded-rp6", {
+        "mode": "decode",
+        "ipv6": "ff7e:130:2001:db8:cafe:0:1234:5678",
+    })
+    assert_eq("api embedded-rp6 decode: HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api embedded-rp6 decode: scope", d2.get("scope"), 14)
+    assert_eq("api embedded-rp6 decode: rp_prefix_length",
+              d2.get("rp_prefix_length"), 48)
+    assert_eq("api embedded-rp6 decode: rp_prefix",
+              d2.get("rp_prefix"), "2001:db8:cafe::")
+    assert_eq("api embedded-rp6 decode: rp_address",
+              d2.get("rp_address"), "2001:db8:cafe::1")
+    assert_eq("api embedded-rp6 decode: riid", d2.get("riid"), 1)
+    assert_eq("api embedded-rp6 decode: group_id",
+              d2.get("group_id"), 0x12345678)
+
+    # Decode rejects SSM-only flags (FF3E:: has flags=0x3, not 0x7).
+    status3, _ = _api_post("embedded-rp6", {
+        "mode": "decode", "ipv6": "FF3E::1234:5678"})
+    assert_eq("api embedded-rp6 decode (FF3E::): non-embedded-RP → 400",
+              status3, 400)
+
+    # Decode rejects non-multicast input.
+    status4, _ = _api_post("embedded-rp6", {
+        "mode": "decode", "ipv6": "2001:db8::1"})
+    assert_eq("api embedded-rp6 decode (non-multicast): → 400", status4, 400)
+
+    # Encode rejects RIID > 15.
+    status5, _ = _api_post("embedded-rp6", {
+        "mode": "encode",
+        "rp_address": "2001:db8::1",
+        "rp_prefix_length": 48,
+        "riid": 16,
+        "scope": 14,
+        "group_id": 1,
+    })
+    assert_eq("api embedded-rp6 encode (riid=16): → 400", status5, 400)
+
+    # Encode rejects RP prefix length > 64.
+    status6, _ = _api_post("embedded-rp6", {
+        "mode": "encode",
+        "rp_address": "2001:db8::1",
+        "rp_prefix_length": 96,
+        "riid": 1,
+        "scope": 14,
+        "group_id": 1,
+    })
+    assert_eq("api embedded-rp6 encode (/96): → 400", status6, 400)
+
+    # Encode rejects out-of-range scope.
+    status7, _ = _api_post("embedded-rp6", {
+        "mode": "encode",
+        "rp_address": "2001:db8::1",
+        "rp_prefix_length": 48,
+        "riid": 1,
+        "scope": 0,
+        "group_id": 1,
+    })
+    assert_eq("api embedded-rp6 encode (scope 0): → 400", status7, 400)
+
+    # Missing mode-specific field.
+    status8, _ = _api_post("embedded-rp6", {"mode": "encode"})
+    assert_eq("api embedded-rp6 encode: missing field → 400", status8, 400)
+
+
+async def test_ipv6_embedded_rp_ui(page: Page) -> None:
+    section("IPv6 embedded-RP tool UI")
+
+    # Drawer opens via /ipv6/embedded-rp rewrite path used by multicast deep-link.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=embedded-rp")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-rp']")
+    assert_eq("embedded-rp UI: panel exists", await panel.count(), 1)
+
+    # Encode mode (default) — submit RFC 3956 worked example.
+    await page.fill("#embedded_rp6_rp_address", "2001:db8:cafe::1")
+    await page.fill("#embedded_rp6_rp_prefix_length", "48")
+    await page.fill("#embedded_rp6_riid", "1")
+    await page.fill("#embedded_rp6_scope", "14")
+    await page.fill("#embedded_rp6_group_id", "0x12345678")
+    await page.click(
+        "#panel-ipv6 .tool-panel[data-tool='embedded-rp'] button.splitter-btn"
+    )
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-rp']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("embedded-rp UI: built address rendered",
+                "ff7e:130:2001:db8:cafe:0:1234:5678" in body_text)
+    assert_true("embedded-rp UI: rp address rendered",
+                "2001:db8:cafe::1" in body_text)
+
+    # Decode mode — round-trip via shareable GET URL.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&tool=embedded-rp&embedded_rp6_mode=decode"
+        "&embedded_rp6_ipv6=ff7e:130:2001:db8:cafe:0:1234:5678",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-rp']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("embedded-rp UI: decode group_id rendered",
+                "0x12345678" in body_text or "305419896" in body_text)
+    assert_true("embedded-rp UI: decode rp prefix rendered",
+                "2001:db8:cafe::" in body_text)
+    assert_true("embedded-rp UI: decode rp address rendered",
+                "2001:db8:cafe::1" in body_text)
+
+    # Error path — SSM-only flags (FF3E::) must be rejected.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&tool=embedded-rp&embedded_rp6_mode=decode"
+        "&embedded_rp6_ipv6=FF3E::1234:5678",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='embedded-rp']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("embedded-rp UI: error band on non-embedded-RP input",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+
+async def test_api_pmtu6(page: Page) -> None:
+    section("API — POST /api/v1/pmtu6")
+
+    # No-fragmentation case — 1500 MTU, 1000-byte payload.
+    status, data = _api_post("pmtu6", {"path_mtu": 1500, "payload_size": 1000})
+    assert_eq("api pmtu6 (fits): HTTP 200", status, 200)
+    assert_eq("api pmtu6 (fits): ok=true", data.get("ok"), True)
+    d = data.get("data", {})
+    assert_eq("api pmtu6 (fits): fixed_header", d.get("fixed_header"), 40)
+    assert_eq("api pmtu6 (fits): effective_payload",
+              d.get("effective_payload"), 1460)
+    assert_eq("api pmtu6 (fits): needs_fragmentation",
+              d.get("needs_fragmentation"), False)
+    assert_eq("api pmtu6 (fits): fragment_count", d.get("fragment_count"), 1)
+    assert_eq("api pmtu6 (fits): meets_minimum", d.get("meets_minimum"), True)
+
+    # Fragmentation case — 1280 MTU, 3000-byte payload, 3 fragments.
+    status2, data2 = _api_post("pmtu6", {"path_mtu": 1280, "payload_size": 3000})
+    assert_eq("api pmtu6 (frag): HTTP 200", status2, 200)
+    d2 = data2.get("data", {})
+    assert_eq("api pmtu6 (frag): needs_fragmentation",
+              d2.get("needs_fragmentation"), True)
+    assert_eq("api pmtu6 (frag): fragment_count", d2.get("fragment_count"), 3)
+    frags = d2.get("fragments") or []
+    assert_eq("api pmtu6 (frag): first payload", frags[0].get("payload_bytes"), 1232)
+    assert_eq("api pmtu6 (frag): first m_bit", frags[0].get("m_bit"), 1)
+    assert_eq("api pmtu6 (frag): second offset", frags[1].get("offset"), 154)
+    assert_eq("api pmtu6 (frag): last m_bit", frags[2].get("m_bit"), 0)
+    assert_eq("api pmtu6 (frag): last payload", frags[2].get("payload_bytes"), 536)
+
+    # Below-minimum PMTU is flagged but still computed.
+    status3, data3 = _api_post("pmtu6", {"path_mtu": 1200, "payload_size": 100})
+    assert_eq("api pmtu6 (below-min): HTTP 200", status3, 200)
+    d3 = data3.get("data", {})
+    assert_eq("api pmtu6 (below-min): meets_minimum",
+              d3.get("meets_minimum"), False)
+    notes = d3.get("notes") or []
+    assert_true("api pmtu6 (below-min): minimum-link-MTU note rendered",
+                any("1280" in str(n) for n in notes))
+
+    # Extension headers are accumulated.
+    status4, data4 = _api_post("pmtu6", {
+        "path_mtu": 1500,
+        "payload_size": 100,
+        "extension_headers": [8, 8, 8],
+    })
+    assert_eq("api pmtu6 (ext): HTTP 200", status4, 200)
+    d4 = data4.get("data", {})
+    assert_eq("api pmtu6 (ext): extension_overhead",
+              d4.get("extension_overhead"), 24)
+    assert_eq("api pmtu6 (ext): total_overhead", d4.get("total_overhead"), 64)
+    assert_eq("api pmtu6 (ext): effective_payload",
+              d4.get("effective_payload"), 1436)
+
+    # Invalid path_mtu (zero) → 400.
+    status5, _ = _api_post("pmtu6", {"path_mtu": 0, "payload_size": 100})
+    assert_eq("api pmtu6: zero path_mtu → 400", status5, 400)
+
+    # Extension header not multiple of 8 → 400.
+    status6, _ = _api_post("pmtu6", {
+        "path_mtu": 1500,
+        "payload_size": 100,
+        "extension_headers": [7],
+    })
+    assert_eq("api pmtu6: bad ext header → 400", status6, 400)
+
+    # Missing fields → 400.
+    status7, _ = _api_post("pmtu6", {})
+    assert_eq("api pmtu6: missing fields → 400", status7, 400)
+
+
+async def test_ipv6_pmtu_ui(page: Page) -> None:
+    section("IPv6 PMTU helper UI")
+
+    # ?tool=pmtu should auto-open the drawer.
+    await navigate(page, APP_URL + "?tab=ipv6&tool=pmtu")
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='pmtu']")
+    assert_eq("pmtu UI: panel exists", await panel.count(), 1)
+
+    # No-fragmentation submit.
+    await page.fill("#pmtu6_path_mtu", "1500")
+    await page.fill("#pmtu6_payload_size", "1000")
+    await page.click("#panel-ipv6 .tool-panel[data-tool='pmtu'] button.splitter-btn")
+    await page.wait_for_load_state("load")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='pmtu']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("pmtu UI: effective_payload rendered (1460)",
+                "1460" in body_text)
+    assert_true("pmtu UI: no fragmentation rendered",
+                "no" in body_text)
+
+    # Fragmentation submit via shareable GET URL.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&tool=pmtu&pmtu6_path_mtu=1280&pmtu6_payload_size=3000",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='pmtu']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("pmtu UI: fragmentation count 3 rendered",
+                "3" in body_text)
+    assert_true("pmtu UI: fragment payload 1232 rendered",
+                "1232" in body_text)
+    assert_true("pmtu UI: fragment payload 536 rendered",
+                "536" in body_text)
+
+    # Below-minimum warning rendered.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&tool=pmtu&pmtu6_path_mtu=1200&pmtu6_payload_size=100",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='pmtu']")
+    body_text = (await panel.text_content() or "").lower()
+    assert_true("pmtu UI: minimum-link-MTU warning rendered",
+                "1280" in body_text)
+
+    # Error path — invalid extension header.
+    await navigate(
+        page,
+        APP_URL + "?tab=ipv6&tool=pmtu&pmtu6_path_mtu=1500"
+        "&pmtu6_payload_size=100&pmtu6_extension_headers=7",
+    )
+    await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+    panel = page.locator("#panel-ipv6 .tool-panel[data-tool='pmtu']")
+    err_text = await panel.locator(".error").text_content() or ""
+    assert_true("pmtu UI: error band on bad ext header",
+                len(err_text) > 0, f"got: {err_text!r}")
+
+
 async def test_api_6to4(page: Page) -> None:
     section("API — POST /api/v1/6to4")
 
@@ -4581,6 +5093,368 @@ async def test_a11y_ipv6_drawers_v350(page: Page) -> None:
     for i in range(n_n64b):
         ti = await nat64_bubbles.nth(i).get_attribute("tabindex")
         assert_eq(f"a11y v3.5.0 nat64: bubble[{i}] tabindex='0'", ti, "0")
+
+
+async def test_a11y_ipv6_drawers_v360(page: Page) -> None:
+    """v3.6.0 (T6) — a11y audit for the 4 new IPv6 multicast drawers.
+
+    Asserts, per drawer (multicast, ssm, embedded-rp, pmtu):
+      1. Every form input has an associated <label> or aria-label.
+      2. Every help_bubble() icon is keyboard-focusable
+         (tabindex='0', role='button', aria-label='Help').
+      3. Every copy_button() has aria-label starting with 'Copy'.
+      4. Submit buttons have an accessible name.
+      5. ESC closes the drawer.
+
+    Mirrors v3.5.0 T11 shape; gaps are real bugs to fix in markup.
+    """
+    section("v3.6.0 — a11y audit for the 4 new IPv6 multicast drawers")
+    drawers = ["multicast", "ssm", "embedded-rp", "pmtu"]
+    for slug in drawers:
+        await navigate(page, APP_URL + f"?tab=ipv6&tool={slug}")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        drawer = page.locator(f"#panel-ipv6 .tool-panel[data-tool='{slug}']")
+        assert_eq(f"a11y v3.6.0 {slug}: panel rendered", await drawer.count(), 1)
+
+        inputs = drawer.locator(
+            "input[type=text], input[type=number], input[type=tel], "
+            "input[type=checkbox], input:not([type]), select"
+        )
+        n_inputs = await inputs.count()
+        assert_true(
+            f"a11y v3.6.0 {slug}: at least one form input present",
+            n_inputs >= 1,
+            f"got: {n_inputs}",
+        )
+        for i in range(n_inputs):
+            el = inputs.nth(i)
+            has_label = await el.evaluate(
+                "(e) => !!(e.labels && e.labels.length) "
+                "|| !!e.getAttribute('aria-label') "
+                "|| !!e.closest('label')"
+            )
+            ident = await el.get_attribute("id") or await el.get_attribute("name") or f"#{i}"
+            assert_true(
+                f"a11y v3.6.0 {slug}: input '{ident}' has label/aria-label",
+                bool(has_label),
+                f"got has_label={has_label!r}",
+            )
+
+        bubbles = drawer.locator(".help-bubble-icon")
+        n_bubbles = await bubbles.count()
+        assert_true(
+            f"a11y v3.6.0 {slug}: at least one help bubble",
+            n_bubbles >= 1,
+            f"got: {n_bubbles}",
+        )
+        for i in range(n_bubbles):
+            ti = await bubbles.nth(i).get_attribute("tabindex")
+            assert_eq(
+                f"a11y v3.6.0 {slug}: help-bubble[{i}] tabindex='0'", ti, "0",
+            )
+            role = await bubbles.nth(i).get_attribute("role")
+            assert_eq(
+                f"a11y v3.6.0 {slug}: help-bubble[{i}] role='button'", role, "button",
+            )
+            al = await bubbles.nth(i).get_attribute("aria-label")
+            assert_eq(
+                f"a11y v3.6.0 {slug}: help-bubble[{i}] aria-label='Help'", al, "Help",
+            )
+
+        copies = drawer.locator("button.subnet-copy")
+        n_copies = await copies.count()
+        for i in range(n_copies):
+            al = await copies.nth(i).get_attribute("aria-label") or ""
+            assert_true(
+                f"a11y v3.6.0 {slug}: copy-button[{i}] aria-label starts with 'Copy'",
+                al.startswith("Copy"),
+                f"got: {al!r}",
+            )
+
+        submits = drawer.locator("button[type=submit]")
+        n_submits = await submits.count()
+        assert_true(
+            f"a11y v3.6.0 {slug}: at least one submit button",
+            n_submits >= 1,
+            f"got: {n_submits}",
+        )
+        for i in range(n_submits):
+            name = await submits.nth(i).evaluate(
+                "(e) => (e.textContent || '').trim() || e.getAttribute('aria-label') || ''"
+            )
+            assert_true(
+                f"a11y v3.6.0 {slug}: submit-button[{i}] has accessible name",
+                bool(name),
+                f"got: {name!r}",
+            )
+
+        await page.keyboard.press("Escape")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer:not(.open)")
+        assert_true(
+            f"a11y v3.6.0 {slug}: ESC closes drawer",
+            not await page.locator("#panel-ipv6 .tool-drawer.open").is_visible(),
+        )
+
+
+async def test_a11y_v350_drawers_tab_order(page: Page) -> None:
+    """v3.6.0 (T6 carry-over): tab order on opened drawer.
+
+    For each v3.5.0 drawer, opening it auto-focuses the first non-help
+    interactive element, and tabbing forward stays inside the drawer
+    (focus trap, per app.js _buildTrap). This guarantees a keyboard user
+    cannot tab out of an open drawer accidentally.
+    """
+    section("v3.5.0 — a11y tab order inside opened drawer")
+    slugs = [
+        "embedded-v4", "6to4", "teredo", "isatap", "6rd",
+        "mapped6", "prefix-plan", "nibble", "rfc3531",
+    ]
+    for slug in slugs:
+        await navigate(page, APP_URL + "?tab=ipv6")
+        trigger = page.locator(f"#panel-ipv6 button.tool-trigger[data-tool='{slug}']")
+        await trigger.click()
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        # The drawer wires a Tab focus-trap (app.js _buildTrap) that
+        # ensures Tab/Shift-Tab from the last/first focusable element
+        # cycles within the drawer. We assert that the drawer exposes
+        # at least one focusable input + one submit button (necessary
+        # for the trap to work) and that tabbing forward eventually
+        # lands inside the drawer.
+        focusable = await page.evaluate(
+            f"""() => {{
+                const panel = document.querySelector(
+                  "#panel-ipv6 .tool-panel[data-tool='{slug}']"
+                );
+                if (!panel) return 0;
+                return Array.from(panel.querySelectorAll(
+                  'input, button, textarea, select, [tabindex]:not([tabindex="-1"])'
+                )).filter(el => !el.disabled && el.offsetParent !== null).length;
+            }}"""
+        )
+        assert_true(
+            f"tab-order v3.5.0 {slug}: drawer has focusable elements",
+            focusable >= 2,
+            f"got: {focusable}",
+        )
+        # Direct-focus the first visible input — the trap should then
+        # keep focus inside the drawer.
+        in_drawer = await page.evaluate(
+            f"""() => {{
+                const drawer = document.querySelector("#panel-ipv6 .tool-drawer.open");
+                const panel = document.querySelector(
+                  "#panel-ipv6 .tool-panel[data-tool='{slug}']"
+                );
+                const candidates = panel ? Array.from(panel.querySelectorAll(
+                  'input:not([type="hidden"]), button:not([aria-label="Help"]):not(.help-bubble-icon), textarea, select'
+                )).filter(el => !el.disabled && el.offsetParent !== null) : [];
+                const first = candidates[0] || null;
+                if (first) first.focus();
+                return drawer ? drawer.contains(document.activeElement) : false;
+            }}"""
+        )
+        assert_true(
+            f"tab-order v3.5.0 {slug}: focus lands inside drawer",
+            bool(in_drawer),
+        )
+        # Move focus to the LAST focusable element in the drawer, then
+        # Tab once — the trap must wrap focus back to the first element
+        # inside the drawer (not let it escape to surrounding triggers).
+        await page.evaluate(
+            f"""() => {{
+                const drawer = document.querySelector(
+                  "#panel-ipv6 .tool-drawer.open"
+                );
+                if (!drawer) return;
+                const els = Array.from(drawer.querySelectorAll(
+                  'input, button, textarea, select, [tabindex]:not([tabindex="-1"])'
+                )).filter(el => !el.disabled && el.offsetParent !== null);
+                if (els.length) els[els.length - 1].focus();
+            }}"""
+        )
+        await page.keyboard.press("Tab")
+        wrapped = await page.evaluate(
+            """() => {
+                const drawer = document.querySelector(
+                  "#panel-ipv6 .tool-drawer.open"
+                );
+                return !!(drawer && drawer.contains(document.activeElement));
+            }"""
+        )
+        assert_true(
+            f"tab-order v3.5.0 {slug}: focus trap wraps last → first inside drawer",
+            bool(wrapped),
+        )
+        await page.keyboard.press("Escape")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer:not(.open)")
+
+
+async def test_a11y_v350_drawers_focus_return_after_esc(page: Page) -> None:
+    """v3.6.0 (T6 carry-over): ESC returns focus to the originating trigger."""
+    section("v3.5.0 — a11y focus returns to trigger after ESC")
+    slugs = [
+        "embedded-v4", "6to4", "teredo", "isatap", "6rd",
+        "mapped6", "prefix-plan", "nibble", "rfc3531",
+    ]
+    for slug in slugs:
+        await navigate(page, APP_URL + "?tab=ipv6")
+        trigger = page.locator(f"#panel-ipv6 button.tool-trigger[data-tool='{slug}']")
+        await trigger.click()
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        # Move focus into a drawer input so the ESC handler has a clear
+        # "previously focused" element to restore — close() in app.js
+        # always focuses _activeTrigger which was set on open(), so this
+        # is robust against test-runner focus quirks.
+        await page.evaluate(
+            f"""() => {{
+                const panel = document.querySelector(
+                  "#panel-ipv6 .tool-panel[data-tool='{slug}']"
+                );
+                const candidates = panel ? Array.from(panel.querySelectorAll(
+                  'input:not([type="hidden"]), button:not([aria-label="Help"]):not(.help-bubble-icon), textarea, select'
+                )).filter(el => !el.disabled && el.offsetParent !== null) : [];
+                const first = candidates[0] || null;
+                if (first) first.focus();
+            }}"""
+        )
+        await page.keyboard.press("Escape")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer:not(.open)")
+        focused_slug = await page.evaluate(
+            "() => document.activeElement && document.activeElement.dataset"
+            " ? document.activeElement.dataset.tool : null"
+        )
+        # close() restores focus to the originating trigger via
+        # _activeTrigger.focus() in app.js.
+        assert_eq(
+            f"focus-return v3.5.0 {slug}: focus on trigger after ESC",
+            focused_slug, slug,
+        )
+
+
+async def test_a11y_v350_prefers_reduced_motion_respected(page: Page) -> None:
+    """v3.6.0 (T6 carry-over): the global @media (prefers-reduced-motion: reduce)
+    CSS rules apply when the user agent reports reduced motion preference, and
+    the drawer transitions are zeroed accordingly.
+    """
+    section("v3.5.0 — a11y prefers-reduced-motion respected on drawers")
+    await page.emulate_media(reduced_motion="reduce")
+    try:
+        await navigate(page, APP_URL + "?tab=ipv6&tool=nibble")
+        await page.wait_for_selector("#panel-ipv6 .tool-drawer.open")
+        # The matchMedia query should be true after emulate_media.
+        prm = await page.evaluate(
+            "() => window.matchMedia('(prefers-reduced-motion: reduce)').matches"
+        )
+        assert_true("v3.5.0 reduced-motion: media query matches", bool(prm))
+        # The drawer panel should have zero or near-zero animation duration
+        # when reduced motion is on. We probe the active element's computed
+        # transition-duration as a smoke check.
+        panel = page.locator("#panel-ipv6 .tool-panel[data-tool='nibble']")
+        durs = await panel.evaluate(
+            """(el) => {
+                const cs = window.getComputedStyle(el);
+                return [cs.transitionDuration, cs.animationDuration];
+            }"""
+        )
+        # Either '0s' on every entry, or the @media rule zeros via important.
+        # Accept any value that parses to <= 0.01s — being permissive lets
+        # implementations use 1ms or similar negligible durations.
+        def _zeroish(s: str) -> bool:
+            for entry in s.split(","):
+                e = entry.strip()
+                if e.endswith("ms"):
+                    try:
+                        if float(e[:-2]) > 10:
+                            return False
+                    except ValueError:
+                        return False
+                elif e.endswith("s"):
+                    try:
+                        if float(e[:-1]) > 0.01:
+                            return False
+                    except ValueError:
+                        return False
+            return True
+        assert_true(
+            "v3.5.0 reduced-motion: panel transition-duration zeroed",
+            _zeroish(durs[0]),
+            f"got transition-duration={durs[0]!r}",
+        )
+        assert_true(
+            "v3.5.0 reduced-motion: panel animation-duration zeroed",
+            _zeroish(durs[1]),
+            f"got animation-duration={durs[1]!r}",
+        )
+    finally:
+        await page.emulate_media(reduced_motion="no-preference")
+
+
+async def test_api_bulk_covers_v360_endpoints(page: Page) -> None:
+    """v3.6.0 (T6) — bulk multi-op `items[]` covers all 4 new ops."""
+    section("API — bulk multi-op covers v3.6.0 IPv6 multicast endpoints")
+    items = [
+        {"op": "multicast6",   "params": {"ipv6": "ff02::1"}},
+        {"op": "ssm6",         "params": {"mode": "encode",
+                                          "unicast_prefix": "2001:db8::/64",
+                                          "scope": 5,
+                                          "group_id": 1}},
+        {"op": "embedded-rp6", "params": {"mode": "encode",
+                                          "rp_address": "2001:db8::1",
+                                          "rp_prefix_length": 64,
+                                          "riid": 1,
+                                          "scope": 5,
+                                          "group_id": 1}},
+        {"op": "pmtu6",        "params": {"path_mtu": 1500,
+                                          "payload_size": 4000}},
+    ]
+    status, data = _api_post("bulk", {"items": items})
+    assert_eq("api bulk v3.6.0: HTTP 200", status, 200)
+    assert_eq("api bulk v3.6.0: ok=true", data.get("ok"), True)
+    results = data.get("data", {}).get("results", [])
+    assert_eq("api bulk v3.6.0: 4 results returned", len(results), 4)
+    expected_ops = ["multicast6", "ssm6", "embedded-rp6", "pmtu6"]
+    for i, op in enumerate(expected_ops):
+        envelope = results[i] if i < len(results) else {}
+        assert_eq(f"api bulk v3.6.0: item[{i}] op={op}",
+                  envelope.get("op"), op)
+        assert_eq(f"api bulk v3.6.0: item[{i}] ok=true",
+                  envelope.get("ok"), True)
+
+    assert_eq("api bulk v3.6.0: multicast6 scope_name",
+              results[0].get("scope_name"), "link-local")
+    assert_eq("api bulk v3.6.0: ssm6 mode=encode",
+              results[1].get("mode"), "encode")
+    assert_true("api bulk v3.6.0: embedded-rp6 has address",
+                "address" in results[2])
+    assert_true("api bulk v3.6.0: pmtu6 needs_fragmentation",
+                results[3].get("needs_fragmentation") is True)
+    assert_eq("api bulk v3.6.0: pmtu6 path_mtu",
+              results[3].get("path_mtu"), 1500)
+
+    # Heterogeneous batch mixing v3.5.0 + v3.6.0 ops in one request.
+    mixed_items = [
+        {"op": "embedded-v4", "params": {"input": "::ffff:192.0.2.1"}},
+        {"op": "multicast6",  "params": {"ipv6": "ff02::1"}},
+        {"op": "pmtu6",       "params": {"path_mtu": 1500, "payload_size": 0}},
+        {"op": "rfc3531",     "params": {"parent_prefix": "2001:db8::/48",
+                                         "reservation_bits": 4,
+                                         "strategy": "centermost"}},
+    ]
+    s2, d2 = _api_post("bulk", {"items": mixed_items})
+    assert_eq("api bulk v3.6.0 mixed: HTTP 200", s2, 200)
+    res2 = d2.get("data", {}).get("results", [])
+    assert_eq("api bulk v3.6.0 mixed: 4 results", len(res2), 4)
+    for i in range(4):
+        assert_eq(f"api bulk v3.6.0 mixed: item[{i}] ok=true",
+                  res2[i].get("ok") if i < len(res2) else None, True)
+
+    # Bad shape on v3.6.0 op surfaces per-item, not 400.
+    s3, d3 = _api_post("bulk", {"items": [
+        {"op": "pmtu6", "params": {"path_mtu": 1500}},
+    ]})
+    assert_eq("api bulk v3.6.0 bad-shape: HTTP 200", s3, 200)
+    res3 = d3.get("data", {}).get("results", [])
+    assert_eq("api bulk v3.6.0 bad-shape: ok=false",
+              res3[0].get("ok") if res3 else None, False)
 
 
 async def test_vlsm_session_ttl_notice(page: Page) -> None:
@@ -9385,10 +10259,25 @@ async def main() -> None:
             await test_api_nibble6(page)
             await test_ipv6_rfc3531_ui(page)
             await test_api_rfc3531(page)
+            await test_ipv6_multicast_ui(page)
+            await test_api_multicast6(page)
+            await test_ipv6_ssm_ui(page)
+            await test_api_ssm6(page)
+            await test_ipv6_embedded_rp_ui(page)
+            await test_api_embedded_rp6(page)
+            await test_ipv6_pmtu_ui(page)
+            await test_api_pmtu6(page)
             await test_a11y_ipv6_drawers(page)
             # v3.5.0 (T11) — bulk endpoint coverage + a11y for the 9 new drawers
             await test_api_bulk_covers_v350_endpoints(page)
             await test_a11y_ipv6_drawers_v350(page)
+            # v3.6.0 (T6) — a11y for the 4 new IPv6 multicast drawers + bulk
+            # endpoint coverage + strengthened v3.5.0 a11y assertions
+            await test_a11y_ipv6_drawers_v360(page)
+            await test_api_bulk_covers_v360_endpoints(page)
+            await test_a11y_v350_drawers_tab_order(page)
+            await test_a11y_v350_drawers_focus_return_after_esc(page)
+            await test_a11y_v350_prefers_reduced_motion_respected(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)

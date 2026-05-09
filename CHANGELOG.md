@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] - 2026-05-09
+
+**IPv6 Multicast.** Fourth and final release in the IPv6-themed minor
+roadmap. Four new IPv6-tab drawer entries with REST endpoints,
+shareable URLs, Playwright coverage, and a11y assertions. Closes the
+roadmap defined in `docs/internal/specs/2026-05-06-v3.3.0-ipv6-foundations-design.md`.
+
+### Added
+
+- **IPv6 multicast scope decoder.** Front-door tool for the v3.6.0
+  multicast theme: decodes any FF00::/8 address into scope, flags,
+  scheme hint, group ID, and well-known group lookup. Deep-links to
+  per-scheme tools (SSM, embedded-RP) when applicable. Also migrates
+  the ipv6_in_prefix() helper from functions-embedded-v4.php to
+  functions-ipv6.php for shared use across IPv6 tools. (#396)
+- **SSM / unicast-prefix-based multicast (RFC 3306).** Build and decode
+  `FF3x::/12` group addresses with embedded unicast prefix. Composes
+  with the multicast scope decoder via deep-link. (#398)
+- **Embedded-RP multicast (RFC 3956).** Build and decode `FF7x::/12`
+  multicast groups with embedded RP address and RIID. Composes with
+  the multicast scope decoder via deep-link. (#397)
+- **IPv6 PMTU helper.** Computes effective payload size, fragmentation
+  breakdown (offsets, M-bit, per-fragment payload), and surfaces
+  RFC 8200 §5 minimum link MTU (1280) warnings. Supports extension
+  header overhead accounting. (#399)
+- **A11y assertions for the 4 new IPv6 multicast drawers** (`multicast`,
+  `ssm`, `embedded-rp`, `pmtu`).
+- **Bulk endpoint coverage for v3.6.0 endpoints.** `items[]` mode now
+  accepts `multicast6`, `ssm6`, `embedded-rp6`, `pmtu6`.
+- **Strengthened v3.5.0 a11y tests** with tab-order, focus-return-after-ESC,
+  and prefers-reduced-motion assertions across the 9 v3.5.0 drawers.
+
 ## [3.5.1] - 2026-05-09
 
 **Patch.** Code-quality cleanup carried over from v3.5.0's review trail,

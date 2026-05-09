@@ -65,6 +65,10 @@ nav:
     - IPv6 Prefix-Delegation Planner: prefix-plan6.md
     - IPv6 Nibble-Boundary Helper: nibble6.md
     - RFC 3531 Sparse Allocation: rfc3531.md
+    - IPv6 Multicast Decoder: multicast6.md
+    - IPv6 SSM (RFC 3306): ssm6.md
+    - IPv6 Embedded-RP (RFC 3956): embedded-rp6.md
+    - IPv6 PMTU Helper: pmtu6.md
     - Allocation Tree: tree.md
     - Wildcard ↔ CIDR: wildcard.md
     - IP Lookup: lookup.md
@@ -83,7 +87,7 @@ nav:
     - Operator Config: config.md
 
 extra:
-  version: "3.5.1"
+  version: "3.6.0"
 
 extra_css:
   - stylesheets/extra.css

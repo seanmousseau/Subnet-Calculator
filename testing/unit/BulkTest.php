@@ -368,4 +368,193 @@ final class BulkTest extends TestCase
         $this->assertStringContainsString('prefix', $r[0]['error']);
         $this->assertFalse($r[1]['ok']);
     }
+
+    // ── v3.6.0 ──────────────────────────────────────────────────────────────
+
+    public function testDispatchMulticast6Success(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'multicast6', 'params' => ['ipv6' => 'ff02::1']],
+        ]);
+        $this->assertTrue($r[0]['ok'], (string)($r[0]['error'] ?? ''));
+        $this->assertSame('multicast6', $r[0]['op']);
+        $this->assertArrayHasKey('scope', $r[0]);
+        $this->assertArrayHasKey('scheme', $r[0]);
+    }
+
+    public function testDispatchMulticast6MissingField(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'multicast6', 'params' => []],
+        ]);
+        $this->assertFalse($r[0]['ok']);
+        $this->assertStringContainsString('ipv6', $r[0]['error']);
+    }
+
+    public function testDispatchSsm6EncodeSuccess(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'ssm6', 'params' => [
+                'mode'           => 'encode',
+                'unicast_prefix' => '2001:db8::/64',
+                'scope'          => 5,
+                'group_id'       => 1,
+            ]],
+        ]);
+        $this->assertTrue($r[0]['ok'], (string)($r[0]['error'] ?? ''));
+        $this->assertSame('encode', $r[0]['mode']);
+        $this->assertArrayHasKey('address', $r[0]);
+    }
+
+    public function testDispatchSsm6DecodeRoundTrip(): void
+    {
+        $enc = bulk_dispatch_ops([
+            ['op' => 'ssm6', 'params' => [
+                'mode' => 'encode', 'unicast_prefix' => '2001:db8::/64',
+                'scope' => 5, 'group_id' => 42,
+            ]],
+        ]);
+        $this->assertTrue($enc[0]['ok']);
+        $dec = bulk_dispatch_ops([
+            ['op' => 'ssm6', 'params' => ['mode' => 'decode', 'ipv6' => $enc[0]['address']]],
+        ]);
+        $this->assertTrue($dec[0]['ok'], (string)($dec[0]['error'] ?? ''));
+        $this->assertSame(42, $dec[0]['group_id']);
+    }
+
+    public function testDispatchSsm6BadScope(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'ssm6', 'params' => [
+                'mode' => 'encode', 'unicast_prefix' => '2001:db8::/64',
+                'scope' => 99, 'group_id' => 1,
+            ]],
+        ]);
+        $this->assertFalse($r[0]['ok']);
+    }
+
+    public function testDispatchEmbeddedRp6EncodeSuccess(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'embedded-rp6', 'params' => [
+                'mode'             => 'encode',
+                'rp_address'       => '2001:db8::1',
+                'rp_prefix_length' => 64,
+                'riid'             => 1,
+                'scope'            => 5,
+                'group_id'         => 1,
+            ]],
+        ]);
+        $this->assertTrue($r[0]['ok'], (string)($r[0]['error'] ?? ''));
+        $this->assertSame('encode', $r[0]['mode']);
+        $this->assertArrayHasKey('rp_address', $r[0]);
+    }
+
+    public function testDispatchEmbeddedRp6DecodeRoundTrip(): void
+    {
+        $enc = bulk_dispatch_ops([
+            ['op' => 'embedded-rp6', 'params' => [
+                'mode' => 'encode', 'rp_address' => '2001:db8::1',
+                'rp_prefix_length' => 64, 'riid' => 1, 'scope' => 5, 'group_id' => 1,
+            ]],
+        ]);
+        $this->assertTrue($enc[0]['ok']);
+        $dec = bulk_dispatch_ops([
+            ['op' => 'embedded-rp6', 'params' => ['mode' => 'decode', 'ipv6' => $enc[0]['address']]],
+        ]);
+        $this->assertTrue($dec[0]['ok'], (string)($dec[0]['error'] ?? ''));
+        $this->assertSame(1, $dec[0]['riid']);
+    }
+
+    public function testDispatchEmbeddedRp6MissingField(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'embedded-rp6', 'params' => ['mode' => 'encode']],
+        ]);
+        $this->assertFalse($r[0]['ok']);
+    }
+
+    public function testDispatchPmtu6Success(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'pmtu6', 'params' => ['path_mtu' => 1500, 'payload_size' => 4000]],
+        ]);
+        $this->assertTrue($r[0]['ok'], (string)($r[0]['error'] ?? ''));
+        $this->assertSame(1500, $r[0]['path_mtu']);
+        $this->assertTrue($r[0]['needs_fragmentation']);
+        $this->assertGreaterThan(1, $r[0]['fragment_count']);
+    }
+
+    public function testDispatchPmtu6WithExtensionHeaders(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'pmtu6', 'params' => [
+                'path_mtu'          => 1500,
+                'payload_size'      => 100,
+                'extension_headers' => [8, 16],
+            ]],
+        ]);
+        $this->assertTrue($r[0]['ok'], (string)($r[0]['error'] ?? ''));
+        $this->assertSame(24, $r[0]['extension_overhead']);
+    }
+
+    public function testDispatchPmtu6MissingField(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'pmtu6', 'params' => ['path_mtu' => 1500]],
+        ]);
+        $this->assertFalse($r[0]['ok']);
+        $this->assertStringContainsString('payload_size', $r[0]['error']);
+    }
+
+    public function testDispatchPmtu6BadExtensionHeader(): void
+    {
+        $r = bulk_dispatch_ops([
+            ['op' => 'pmtu6', 'params' => [
+                'path_mtu' => 1500, 'payload_size' => 100,
+                'extension_headers' => [7],
+            ]],
+        ]);
+        $this->assertFalse($r[0]['ok']);
+    }
+
+    public function testDispatchV36MixedBatchAllSucceed(): void
+    {
+        $items = [
+            ['op' => 'multicast6',   'params' => ['ipv6' => 'ff02::1']],
+            ['op' => 'ssm6',         'params' => ['mode' => 'encode',
+                'unicast_prefix' => '2001:db8::/64', 'scope' => 5, 'group_id' => 1]],
+            ['op' => 'embedded-rp6', 'params' => ['mode' => 'encode',
+                'rp_address' => '2001:db8::1', 'rp_prefix_length' => 64,
+                'riid' => 1, 'scope' => 5, 'group_id' => 1]],
+            ['op' => 'pmtu6',        'params' => ['path_mtu' => 1500, 'payload_size' => 100]],
+        ];
+        $r = bulk_dispatch_ops($items);
+        $this->assertCount(4, $r);
+        foreach ($r as $i => $env) {
+            $this->assertTrue(
+                $env['ok'],
+                "Item $i ({$env['op']}) should succeed; error: " . ($env['error'] ?? '<none>')
+            );
+            $this->assertSame($items[$i]['op'], $env['op']);
+        }
+    }
+
+    public function testDispatchHeterogeneousV34V35V36Batch(): void
+    {
+        $items = [
+            ['op' => 'rdns6',       'params' => ['address' => '2001:db8::1', 'prefix' => 64]],
+            ['op' => 'nibble6',     'params' => ['prefix' => '2001:db8::/49']],
+            ['op' => 'multicast6',  'params' => ['ipv6' => 'ff02::1']],
+            ['op' => 'pmtu6',       'params' => ['path_mtu' => 1500, 'payload_size' => 0]],
+        ];
+        $r = bulk_dispatch_ops($items);
+        $this->assertCount(4, $r);
+        foreach ($r as $i => $env) {
+            $this->assertTrue(
+                $env['ok'],
+                "Item $i ({$env['op']}) should succeed; error: " . ($env['error'] ?? '<none>')
+            );
+        }
+    }
 }

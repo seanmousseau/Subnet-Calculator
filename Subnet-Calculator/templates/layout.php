@@ -772,9 +772,13 @@ if ($i < 3) {
         elseif (!empty($prefix_plan6)) { $open_tool_ipv6 = 'prefix-plan'; }
         elseif (!empty($nibble6)) { $open_tool_ipv6 = 'nibble'; }
         elseif (!empty($rfc3531)) { $open_tool_ipv6 = 'rfc3531'; }
+        elseif (!empty($multicast6)) { $open_tool_ipv6 = 'multicast'; }
+        elseif (!empty($ssm6)) { $open_tool_ipv6 = 'ssm'; }
+        elseif (!empty($embedded_rp6)) { $open_tool_ipv6 = 'embedded-rp'; }
+        elseif (!empty($pmtu6)) { $open_tool_ipv6 = 'pmtu'; }
         // v3.4.0 — fallback: /ipv6/<tool> rewrites to ?tool=<tool>; honour it
         // when no other GET trigger has already chosen a tool above.
-        $ipv6_tool_whitelist = ['split6','ula','range6','supernet6','zoneid','derive','slaac','lookup','diff','rdns6','mapped6','embedded-v4','6to4','teredo','isatap','6rd','prefix-plan','nibble','rfc3531'];
+        $ipv6_tool_whitelist = ['split6','ula','range6','supernet6','zoneid','derive','slaac','lookup','diff','rdns6','mapped6','embedded-v4','6to4','teredo','isatap','6rd','prefix-plan','nibble','rfc3531','multicast','ssm','embedded-rp','pmtu'];
         if ($open_tool_ipv6 === null && $active_tab === 'ipv6'
             && in_array($requested_tool, $ipv6_tool_whitelist, true)) {
             $open_tool_ipv6 = $requested_tool;
@@ -800,6 +804,10 @@ if ($i < 3) {
             <button type="button" class="tool-trigger" data-tool="prefix-plan" aria-expanded="false">Prefix Plan</button>
             <button type="button" class="tool-trigger" data-tool="nibble" aria-expanded="false">Nibble Neighbours</button>
             <button type="button" class="tool-trigger" data-tool="rfc3531" aria-expanded="false">RFC 3531 Sparse</button>
+            <button type="button" class="tool-trigger" data-tool="multicast" aria-expanded="false">Multicast Decoder</button>
+            <button type="button" class="tool-trigger" data-tool="ssm" aria-expanded="false">SSM (RFC 3306)</button>
+            <button type="button" class="tool-trigger" data-tool="embedded-rp" aria-expanded="false">Embedded-RP (RFC 3956)</button>
+            <button type="button" class="tool-trigger" data-tool="pmtu" aria-expanded="false">PMTU Helper</button>
         </div>
 
         <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv6">
@@ -2350,6 +2358,469 @@ if ($i < 3) {
                             </tbody>
                         </table>
                         <p><small>RFC 3531 sparse allocation orders the reservation field for growth-friendly prefix assignment. Centermost is the canonical strategy from §3 — the centre value is allocated first, then halves bisect outward, leaving room either side for future expansion.</small></p>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="multicast">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IPv6 multicast scope decoder<?= help_bubble('ipv6-multicast', 'Front door for the v3.6.0 multicast tools. Decodes any FF00::/8 address into scope, flags, scheme hint, and 112-bit group ID. Looks up well-known groups (RFC 4291 / 7761 / 5905). Deep-links to the SSM and embedded-RP tools when the P or R flag is set.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="multicast6_input">IPv6 multicast address<?= help_bubble('multicast6-input', 'Any IPv6 multicast literal (FF00::/8). Examples: FF02::1 (all nodes), FF02::1:FF12:3456 (solicited-node), FF3E::1234:5678 (SSM global), FF7E:140:2001:db8:cafe::1234 (embedded-RP).') ?></label>
+                                <input type="text" id="multicast6_input" name="multicast6_input"
+                                       value="<?= htmlspecialchars($multicast6_input ?? '') ?>"
+                                       placeholder="FF02::1"
+                                       autocomplete="off" spellcheck="false"
+                                       <?= !empty($multicast6['error']) ? 'aria-invalid="true" aria-describedby="multicast6-error"' : '' ?>>
+                            </div>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Decode</button>
+                        </div>
+                    </form>
+                    <?php if (!empty($multicast6['error'])) : ?>
+                        <div class="error" id="multicast6-error"><?= htmlspecialchars((string)$multicast6['error']) ?></div>
+                    <?php elseif (!empty($multicast6) && isset($multicast6['scheme'])) : ?>
+                        <?php
+                        $_mc_scheme  = (string)$multicast6['scheme'];
+                        $_mc_route   = $multicast6['detail_route'] ?? null;
+                        $_mc_flags   = (int)($multicast6['flags'] ?? 0);
+                        $_mc_history = 'multicast: ' . (string)($multicast6['input'] ?? '');
+                        $_mc_flag_bits = sprintf(
+                            '0b%s%s%s%s (R=%d P=%d T=%d)',
+                            (($_mc_flags & 0x8) !== 0) ? '1' : '0',
+                            (($_mc_flags & 0x4) !== 0) ? '1' : '0',
+                            (($_mc_flags & 0x2) !== 0) ? '1' : '0',
+                            (($_mc_flags & 0x1) !== 0) ? '1' : '0',
+                            (($_mc_flags & 0x4) !== 0) ? 1 : 0,
+                            (($_mc_flags & 0x2) !== 0) ? 1 : 0,
+                            (($_mc_flags & 0x1) !== 0) ? 1 : 0
+                        );
+                        ?>
+                        <dl class="zoneid-result"
+                            data-history-source="multicast"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_mc_history) ?>">
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Address (canonical)</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)($multicast6['address'] ?? '')) ?></code>
+                                    <?= copy_button((string)($multicast6['address'] ?? ''), 'Copy canonical address') ?>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Scope</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= (int)($multicast6['scope'] ?? 0) ?> (<?= htmlspecialchars((string)($multicast6['scope_name'] ?? '')) ?>)</code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Flags</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars($_mc_flag_bits) ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Scheme</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars($_mc_scheme) ?></code>
+                                </dd>
+                            </div>
+                            <?php if (!empty($multicast6['well_known']) && is_array($multicast6['well_known'])) : ?>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Well-known group</dt>
+                                    <dd class="zoneid-result__value">
+                                        <code><?= htmlspecialchars((string)$multicast6['well_known']['name']) ?></code>
+                                        <small> (<?= htmlspecialchars((string)$multicast6['well_known']['rfc']) ?>)</small>
+                                    </dd>
+                                </div>
+                            <?php endif; ?>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Group ID</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)($multicast6['group_id'] ?? '')) ?></code>
+                                </dd>
+                            </div>
+                            <?php if ($_mc_route !== null && $_mc_route !== '') : ?>
+                                <div class="zoneid-result__row">
+                                    <dt class="zoneid-result__label">Open in tool</dt>
+                                    <dd class="zoneid-result__value">
+                                        <a class="splitter-btn" href="<?= htmlspecialchars((string)$_mc_route) ?>">Open <?= htmlspecialchars($_mc_scheme) ?> tool</a>
+                                    </dd>
+                                </div>
+                            <?php endif; ?>
+                        </dl>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="ssm">
+                <div class="overlap-panel">
+                    <div class="overlap-title">SSM / unicast-prefix-based multicast (RFC 3306)<?= help_bubble('ipv6-ssm', 'Build and decode FF3x::/12 multicast group addresses with an embedded unicast prefix. RFC 3306 § 4 / RFC 4607. Encode mode composes a group address from a unicast prefix (0..64), scope (1..15), and 32-bit group ID. Decode mode reverses the process; it requires the flag nibble to be exactly 0x3 (P+T) — embedded-RP groups (R+P+T = 0x7) belong in the embedded-RP tool.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="ssm6_mode">Mode<?= help_bubble('ssm6-mode', 'Encode: unicast prefix + scope + group ID → FF3x:: SSM group. Decode: SSM group → unicast prefix + scope + group ID.') ?></label>
+                                <select id="ssm6_mode" name="ssm6_mode">
+                                    <option value="encode"<?= ($ssm6_mode ?? 'encode') === 'encode' ? ' selected' : '' ?>>Encode (parts → SSM group)</option>
+                                    <option value="decode"<?= ($ssm6_mode ?? 'encode') === 'decode' ? ' selected' : '' ?>>Decode (SSM group → parts)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <?php if (($ssm6_mode ?? 'encode') === 'encode') : ?>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="ssm6_unicast_prefix">Unicast prefix<?= help_bubble('ssm6-unicast-prefix', 'IPv6 unicast prefix to embed, in <code>address/length</code> form. Length must be 0..64 — only the upper 64 bits of the prefix fit in an SSM group address. Host bits are masked automatically. Examples: <code>2001:db8::/32</code>, <code>fd00::/8</code>, <code>::/0</code>.') ?></label>
+                                    <input type="text" id="ssm6_unicast_prefix" name="ssm6_unicast_prefix"
+                                           value="<?= htmlspecialchars($ssm6_unicast_prefix_input ?? '') ?>"
+                                           placeholder="2001:db8::/32"
+                                           autocomplete="off" spellcheck="false">
+                                </div>
+                                <div class="form-group form-group--mask">
+                                    <label for="ssm6_scope">Scope<?= help_bubble('ssm6-scope', 'Multicast scope (1..15). Common values: 2 (link-local), 5 (site-local), 8 (organization-local), 14 / 0xE (global). RFC 4291 §2.7 + RFC 7346.') ?></label>
+                                    <input type="number" id="ssm6_scope" name="ssm6_scope"
+                                           value="<?= htmlspecialchars($ssm6_scope_input ?? '14') ?>"
+                                           min="1" max="15"
+                                           autocomplete="off">
+                                </div>
+                                <div class="form-group">
+                                    <label for="ssm6_group_id">Group ID<?= help_bubble('ssm6-group-id', '32-bit unsigned group ID (0..4294967295). Accepts decimal or hex (<code>0x12345678</code>). RFC 3306 §4 places this in the low 32 bits of the multicast address.') ?></label>
+                                    <input type="text" id="ssm6_group_id" name="ssm6_group_id"
+                                           value="<?= htmlspecialchars($ssm6_group_id_input ?? '') ?>"
+                                           placeholder="0x12345678 or 305419896"
+                                           autocomplete="off" spellcheck="false">
+                                </div>
+                            </div>
+                        <?php else : ?>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="ssm6_ipv6">SSM group address<?= help_bubble('ssm6-ipv6', 'An IPv6 multicast literal in FF3x::/12 with the P+T flags set (flag nibble 0x3). Example: <code>FF3E::1234:5678</code> (zero-prefix global SSM), <code>FF3E:20:2001:db8::1234:5678</code> (RFC 3306 §6 worked example).') ?></label>
+                                    <input type="text" id="ssm6_ipv6" name="ssm6_ipv6"
+                                           value="<?= htmlspecialchars($ssm6_ipv6_input ?? '') ?>"
+                                           placeholder="FF3E:20:2001:db8::1234:5678"
+                                           autocomplete="off" spellcheck="false"
+                                           <?= !empty($ssm6['error']) ? 'aria-invalid="true" aria-describedby="ssm6-error"' : '' ?>>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn"><?= ($ssm6_mode ?? 'encode') === 'encode' ? 'Build group' : 'Decode group' ?></button>
+                        </div>
+                    </form>
+                    <?php if (!empty($ssm6['error'])) : ?>
+                        <div class="error" id="ssm6-error"><?= htmlspecialchars((string)$ssm6['error']) ?></div>
+                    <?php elseif (!empty($ssm6) && isset($ssm6['address'])) : ?>
+                        <?php
+                        $_ssm_history = 'ssm: ' . (string)($ssm6['address'] ?? '');
+                        ?>
+                        <dl class="zoneid-result"
+                            data-history-source="ssm"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_ssm_history) ?>">
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">SSM group address</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)($ssm6['address'] ?? '')) ?></code>
+                                    <?= copy_button((string)($ssm6['address'] ?? ''), 'Copy SSM group address') ?>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Scope</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= (int)($ssm6['scope'] ?? 0) ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Prefix length</dt>
+                                <dd class="zoneid-result__value">
+                                    <code>/<?= (int)($ssm6['prefix_length'] ?? 0) ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Unicast prefix</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)($ssm6['unicast_prefix'] ?? '')) ?></code>
+                                    <?= copy_button((string)($ssm6['unicast_prefix'] ?? ''), 'Copy unicast prefix') ?>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Group ID</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars(sprintf('0x%08x (%d)', (int)($ssm6['group_id'] ?? 0), (int)($ssm6['group_id'] ?? 0))) ?></code>
+                                </dd>
+                            </div>
+                        </dl>
+                        <p><small>RFC 3306 §4 / RFC 4607. The flag nibble is fixed at 0x3 (P+T); embedded-RP groups (R+P+T = 0x7) belong in the embedded-RP tool.</small></p>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="embedded-rp">
+                <div class="overlap-panel">
+                    <div class="overlap-title">Embedded-RP multicast (RFC 3956)<?= help_bubble('ipv6-embedded-rp', 'Build and decode FF7x::/12 multicast group addresses with the Rendezvous Point address embedded directly in the group address. RFC 3956. Encode mode composes a group from an RP address (whose host suffix is replaced by the explicit RIID), RP prefix length (0..64), 4-bit RIID, scope (1..15), and 32-bit group ID. Decode mode reverses the process; it requires the flag nibble to be exactly 0x7 (R+P+T) — SSM groups (P+T = 0x3) belong in the SSM tool.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="embedded_rp6_mode">Mode<?= help_bubble('embedded-rp6-mode', 'Encode: RP parts → FF7x:: embedded-RP group. Decode: FF7x:: group → RP address, prefix length, RIID, scope, and group ID.') ?></label>
+                                <select id="embedded_rp6_mode" name="embedded_rp6_mode">
+                                    <option value="encode"<?= ($embedded_rp6_mode ?? 'encode') === 'encode' ? ' selected' : '' ?>>Encode (parts → embedded-RP group)</option>
+                                    <option value="decode"<?= ($embedded_rp6_mode ?? 'encode') === 'decode' ? ' selected' : '' ?>>Decode (group → parts)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <?php if (($embedded_rp6_mode ?? 'encode') === 'encode') : ?>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="embedded_rp6_rp_address">RP address<?= help_bubble('embedded-rp6-rp-address', 'Rendezvous Point IPv6 address. Only the upper bits selected by the prefix length are encoded into the multicast group; the host suffix is ignored and replaced by the explicit RIID. Example: <code>2001:db8:cafe::1</code>.') ?></label>
+                                    <input type="text" id="embedded_rp6_rp_address" name="embedded_rp6_rp_address"
+                                           value="<?= htmlspecialchars($embedded_rp6_rp_address_input ?? '') ?>"
+                                           placeholder="2001:db8:cafe::1"
+                                           autocomplete="off" spellcheck="false">
+                                </div>
+                                <div class="form-group form-group--mask">
+                                    <label for="embedded_rp6_rp_prefix_length">RP prefix length<?= help_bubble('embedded-rp6-rp-prefix-length', 'Length of the RP prefix in bits (0..64). RFC 3956 caps this at 64 because only the upper 64 bits of the RP prefix fit in the multicast address. Typical values: 32 (provider prefix), 48 (site prefix), 56 / 64 (subnet).') ?></label>
+                                    <input type="number" id="embedded_rp6_rp_prefix_length" name="embedded_rp6_rp_prefix_length"
+                                           value="<?= htmlspecialchars($embedded_rp6_rp_prefix_length_input ?? '') ?>"
+                                           min="0" max="64"
+                                           placeholder="48"
+                                           autocomplete="off">
+                                </div>
+                                <div class="form-group form-group--mask">
+                                    <label for="embedded_rp6_riid">RIID<?= help_bubble('embedded-rp6-riid', '4-bit RP interface ID (0..15). Selects which interface on the RP terminates the shared tree. The canonical RP address is reconstructed as <code>&lt;rp-prefix&gt;::&lt;riid&gt;</code>.') ?></label>
+                                    <input type="number" id="embedded_rp6_riid" name="embedded_rp6_riid"
+                                           value="<?= htmlspecialchars($embedded_rp6_riid_input ?? '') ?>"
+                                           min="0" max="15"
+                                           placeholder="1"
+                                           autocomplete="off">
+                                </div>
+                                <div class="form-group form-group--mask">
+                                    <label for="embedded_rp6_scope">Scope<?= help_bubble('embedded-rp6-scope', 'Multicast scope (1..15). Common values: 2 (link-local), 5 (site-local), 8 (organization-local), 14 / 0xE (global). RFC 4291 §2.7 + RFC 7346.') ?></label>
+                                    <input type="number" id="embedded_rp6_scope" name="embedded_rp6_scope"
+                                           value="<?= htmlspecialchars($embedded_rp6_scope_input ?? '14') ?>"
+                                           min="1" max="15"
+                                           autocomplete="off">
+                                </div>
+                                <div class="form-group">
+                                    <label for="embedded_rp6_group_id">Group ID<?= help_bubble('embedded-rp6-group-id', '32-bit unsigned group ID (0..4294967295). Accepts decimal or hex (<code>0x12345678</code>). RFC 3956 places this in the low 32 bits of the multicast address.') ?></label>
+                                    <input type="text" id="embedded_rp6_group_id" name="embedded_rp6_group_id"
+                                           value="<?= htmlspecialchars($embedded_rp6_group_id_input ?? '') ?>"
+                                           placeholder="0x12345678 or 305419896"
+                                           autocomplete="off" spellcheck="false">
+                                </div>
+                            </div>
+                        <?php else : ?>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="embedded_rp6_ipv6">Embedded-RP group address<?= help_bubble('embedded-rp6-ipv6', 'An IPv6 multicast literal in FF7x::/12 with the R+P+T flags set (flag nibble 0x7). Example: <code>ff7e:130:2001:db8:cafe:0:1234:5678</code> (RP = 2001:db8:cafe::1, RIID = 1, scope = 0xE, group = 0x12345678).') ?></label>
+                                    <input type="text" id="embedded_rp6_ipv6" name="embedded_rp6_ipv6"
+                                           value="<?= htmlspecialchars($embedded_rp6_ipv6_input ?? '') ?>"
+                                           placeholder="ff7e:130:2001:db8:cafe:0:1234:5678"
+                                           autocomplete="off" spellcheck="false"
+                                           <?= !empty($embedded_rp6['error']) ? 'aria-invalid="true" aria-describedby="embedded-rp6-error"' : '' ?>>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn"><?= ($embedded_rp6_mode ?? 'encode') === 'encode' ? 'Build group' : 'Decode group' ?></button>
+                        </div>
+                    </form>
+                    <?php if (!empty($embedded_rp6['error'])) : ?>
+                        <div class="error" id="embedded-rp6-error"><?= htmlspecialchars((string)$embedded_rp6['error']) ?></div>
+                    <?php elseif (!empty($embedded_rp6) && isset($embedded_rp6['address'])) : ?>
+                        <?php
+                        $_erp_history = 'embedded-rp: ' . (string)($embedded_rp6['address'] ?? '');
+                        ?>
+                        <dl class="zoneid-result"
+                            data-history-source="embedded-rp"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_erp_history) ?>">
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Embedded-RP group address</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)($embedded_rp6['address'] ?? '')) ?></code>
+                                    <?= copy_button((string)($embedded_rp6['address'] ?? ''), 'Copy embedded-RP group address') ?>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Scope</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= (int)($embedded_rp6['scope'] ?? 0) ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">RP prefix length</dt>
+                                <dd class="zoneid-result__value">
+                                    <code>/<?= (int)($embedded_rp6['rp_prefix_length'] ?? 0) ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">RP prefix</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)($embedded_rp6['rp_prefix'] ?? '')) ?></code>
+                                    <?= copy_button((string)($embedded_rp6['rp_prefix'] ?? ''), 'Copy RP prefix') ?>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">RP address</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars((string)($embedded_rp6['rp_address'] ?? '')) ?></code>
+                                    <?= copy_button((string)($embedded_rp6['rp_address'] ?? ''), 'Copy RP address') ?>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">RIID</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= (int)($embedded_rp6['riid'] ?? 0) ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Group ID</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= htmlspecialchars(sprintf('0x%08x (%d)', (int)($embedded_rp6['group_id'] ?? 0), (int)($embedded_rp6['group_id'] ?? 0))) ?></code>
+                                </dd>
+                            </div>
+                        </dl>
+                        <p><small>RFC 3956. The flag nibble is fixed at 0x7 (R+P+T); SSM-only groups (P+T = 0x3) belong in the SSM tool.</small></p>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="tool-panel" data-tool="pmtu">
+                <div class="overlap-panel">
+                    <div class="overlap-title">IPv6 PMTU helper<?= help_bubble('ipv6-pmtu', 'Compute the effective payload and per-fragment breakdown for an IPv6 packet over a path with the given MTU and extension-header overhead. Surfaces RFC 8200 §5 minimum link MTU (1280) warnings, the rule that routers do not fragment IPv6, and the RFC 8200 §3 fixed 40-byte header. Per-fragment payload is rounded down to an 8-byte boundary; the last fragment carries the remainder with M=0.') ?></div>
+                    <form method="post" novalidate>
+                        <input type="hidden" name="tab" value="ipv6">
+                        <div class="form-row">
+                            <div class="form-group form-group--mask">
+                                <label for="pmtu6_path_mtu">Path MTU (bytes)<?= help_bubble('pmtu6-path-mtu', 'Path MTU in bytes. The IPv6 minimum link MTU is 1280 (RFC 8200 §5); values below that are flagged but still computed. Common values: 1280 (IPv6 minimum), 1500 (Ethernet), 9000 (jumbo frame).') ?></label>
+                                <input type="number" id="pmtu6_path_mtu" name="pmtu6_path_mtu"
+                                       value="<?= htmlspecialchars($pmtu6_path_mtu_input ?? '') ?>"
+                                       min="1"
+                                       placeholder="1500"
+                                       autocomplete="off"
+                                       <?= !empty($pmtu6['error']) ? 'aria-invalid="true" aria-describedby="pmtu6-error"' : '' ?>>
+                            </div>
+                            <div class="form-group form-group--mask">
+                                <label for="pmtu6_payload_size">Payload size (bytes)<?= help_bubble('pmtu6-payload-size', 'Upper-layer payload to send (bytes). Zero is allowed. If the payload exceeds the effective per-packet payload, the helper computes the per-fragment breakdown.') ?></label>
+                                <input type="number" id="pmtu6_payload_size" name="pmtu6_payload_size"
+                                       value="<?= htmlspecialchars($pmtu6_payload_size_input ?? '') ?>"
+                                       min="0"
+                                       placeholder="3000"
+                                       autocomplete="off">
+                            </div>
+                            <div class="form-group">
+                                <label for="pmtu6_extension_headers">Extension headers (bytes, comma-separated)<?= help_bubble('pmtu6-extension-headers', 'Optional list of extension-header sizes in bytes, separated by commas. Each value must be a positive multiple of 8. Example: <code>8,8</code> for Hop-by-Hop + Routing. The 8-byte Fragment header (RFC 8200 §4.5) is added automatically per fragment when fragmentation is needed.') ?></label>
+                                <input type="text" id="pmtu6_extension_headers" name="pmtu6_extension_headers"
+                                       value="<?= htmlspecialchars($pmtu6_extension_headers_input ?? '') ?>"
+                                       placeholder="e.g. 8,8 for HBH+routing"
+                                       autocomplete="off" spellcheck="false">
+                            </div>
+                        </div>
+                        <div class="splitter-row">
+                            <button type="submit" class="splitter-btn">Compute</button>
+                        </div>
+                    </form>
+                    <?php if (!empty($pmtu6['error'])) : ?>
+                        <div class="error" id="pmtu6-error"><?= htmlspecialchars((string)$pmtu6['error']) ?></div>
+                    <?php elseif (!empty($pmtu6['result'])) : ?>
+                        <?php
+                        $_pmtu_r       = $pmtu6['result'];
+                        $_pmtu_history = sprintf(
+                            'pmtu: %d / %d',
+                            (int)$_pmtu_r['path_mtu'],
+                            (int)$_pmtu_r['payload_size']
+                        );
+                        ?>
+                        <dl class="zoneid-result"
+                            data-history-source="pmtu"
+                            data-history-active="1"
+                            data-history-label="<?= htmlspecialchars($_pmtu_history) ?>">
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Path MTU</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= (int)$_pmtu_r['path_mtu'] ?> bytes</code>
+                                    <?php if (!$_pmtu_r['meets_minimum']) : ?>
+                                        <small> (below IPv6 minimum 1280)</small>
+                                    <?php endif; ?>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Fixed header</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= (int)$_pmtu_r['fixed_header'] ?> bytes</code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Extension overhead</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= (int)$_pmtu_r['extension_overhead'] ?> bytes</code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Total overhead</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= (int)$_pmtu_r['total_overhead'] ?> bytes</code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Effective payload</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= (int)$_pmtu_r['effective_payload'] ?> bytes</code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Payload size</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= (int)$_pmtu_r['payload_size'] ?> bytes</code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Needs fragmentation</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= $_pmtu_r['needs_fragmentation'] ? 'yes' : 'no' ?></code>
+                                </dd>
+                            </div>
+                            <div class="zoneid-result__row">
+                                <dt class="zoneid-result__label">Fragment count</dt>
+                                <dd class="zoneid-result__value">
+                                    <code><?= (int)$_pmtu_r['fragment_count'] ?></code>
+                                </dd>
+                            </div>
+                        </dl>
+                        <?php if ($_pmtu_r['needs_fragmentation']) : ?>
+                            <table class="vlsm-table" style="margin-top:1rem;">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">#</th>
+                                        <th scope="col">Offset (8-byte units)</th>
+                                        <th scope="col">M-bit</th>
+                                        <th scope="col">Payload bytes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($_pmtu_r['fragments'] as $_frag_i => $_frag) : ?>
+                                        <tr>
+                                            <td><?= (int)$_frag_i + 1 ?></td>
+                                            <td><code><?= (int)$_frag['offset'] ?></code></td>
+                                            <td><code><?= (int)$_frag['m_bit'] ?></code></td>
+                                            <td><code><?= (int)$_frag['payload_bytes'] ?></code></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php endif; ?>
+                        <?php if (!empty($_pmtu_r['notes'])) : ?>
+                            <ul class="zoneid-notes" style="margin-top:1rem;">
+                                <?php foreach ($_pmtu_r['notes'] as $_pmtu_note) : ?>
+                                    <li><?= htmlspecialchars((string)$_pmtu_note) ?></li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </div>

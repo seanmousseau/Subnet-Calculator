@@ -120,3 +120,35 @@ function calculate_subnet6(string $ip, int $prefix): array
         'address_compressed' => $address_compressed,
     ];
 }
+
+// Migrated from functions-embedded-v4.php in v3.6.0 T2.
+/**
+ * Return true if $address parses as a valid IPv6 literal whose top
+ * $prefix_length bits match the $prefix network. GMP throughout for
+ * arbitrary prefix lengths.
+ *
+ * Returns false (no throw) on parse failure or prefix length out of
+ * the 0..128 range — the caller should validate inputs first.
+ */
+function ipv6_in_prefix(string $address, string $prefix, int $prefix_length): bool
+{
+    if ($prefix_length < 0 || $prefix_length > 128) {
+        return false;
+    }
+    $abin = @inet_pton($address);
+    $pbin = @inet_pton($prefix);
+    if ($abin === false || $pbin === false || strlen($abin) !== 16 || strlen($pbin) !== 16) {
+        return false;
+    }
+    if ($prefix_length === 0) {
+        return true;
+    }
+    $a = gmp_import($abin);
+    $p = gmp_import($pbin);
+    $shift = 128 - $prefix_length;
+    // Build mask = ((1 << 128) - 1) ^ ((1 << shift) - 1)
+    $all  = gmp_sub(gmp_pow(2, 128), 1);
+    $low  = $shift === 0 ? gmp_init(0) : gmp_sub(gmp_pow(2, $shift), 1);
+    $mask = gmp_xor($all, $low);
+    return gmp_cmp(gmp_and($a, $mask), gmp_and($p, $mask)) === 0;
+}
