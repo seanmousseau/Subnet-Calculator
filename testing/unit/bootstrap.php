@@ -34,6 +34,9 @@ require_once $base . 'functions-nat64.php';
 // phpcs:disable PSR1.Files.SideEffects -- module include for plan_prefix_delegation().
 require_once $base . 'functions-prefix-plan6.php';
 // phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for rfc3531_allocation_order()/rfc3531_apply().
+require_once $base . 'functions-rfc3531.php';
+// phpcs:enable PSR1.Files.SideEffects
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require $base . 'functions-resolve.php';

@@ -18,6 +18,11 @@ $range_max_cidrs      = 256;  // IP range → CIDR converter: max CIDRs returned
 // Defaults to 256; clamped to a hard ceiling of 4096 regardless of operator
 // override. Mirrors $split_max_subnets pattern. (v3.5.0)
 $prefix_plan6_max_count = 256;
+// Maximum number of reservation bits accepted by the RFC 3531
+// sparse-allocation tool. Defaults to 8 (256 children); clamped to a
+// hard ceiling of 12 (4096 children) regardless of operator override.
+// Mirrors $prefix_plan6_max_count's clamped-cap pattern. (v3.5.0)
+$rfc3531_max_bits = 8;
 $form_protection      = 'none';
 $turnstile_site_key   = '';
 $turnstile_secret_key = '';
@@ -116,6 +121,7 @@ $lookup_max_cidrs  = max(1, min((int)$lookup_max_cidrs, 1000));
 $lookup_max_ips    = max(1, min((int)$lookup_max_ips, 10000));
 $range_max_cidrs   = max(1, min((int)$range_max_cidrs, 100000));
 $prefix_plan6_max_count = min(max((int)$prefix_plan6_max_count, 1), 4096);
+$rfc3531_max_bits        = min(max((int)$rfc3531_max_bits, 1), 12);
 $fa = trim(preg_replace('/[\r\n]/', '', (string)$frame_ancestors));
 if (!preg_match('/^(\*|\'none\'|\'self\'|(\s*(https?:\/\/[^\s;,]+))+)$/', $fa)) {
     error_log('sc: invalid $frame_ancestors value — reset to *');

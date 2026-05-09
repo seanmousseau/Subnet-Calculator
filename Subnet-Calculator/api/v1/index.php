@@ -43,6 +43,9 @@ require_once $base . 'functions-nat64.php';
 // phpcs:disable PSR1.Files.SideEffects -- module include for plan_prefix_delegation().
 require_once $base . 'functions-prefix-plan6.php';
 // phpcs:enable PSR1.Files.SideEffects
+// phpcs:disable PSR1.Files.SideEffects -- module include for rfc3531_allocation_order()/rfc3531_apply().
+require_once $base . 'functions-rfc3531.php';
+// phpcs:enable PSR1.Files.SideEffects
 require $base . 'functions-ula.php';
 require $base . 'functions-session.php';
 require_once $base . 'functions-resolve.php';
@@ -137,6 +140,7 @@ if ($uri === '/' && $method === 'GET') {
             'POST /api/v1/nat64',
             'POST /api/v1/prefix-plan6',
             'POST /api/v1/nibble6',
+            'POST /api/v1/rfc3531',
             'POST /api/v1/bulk',
             'POST /api/v1/sessions',
             'GET  /api/v1/sessions/{id}',
@@ -287,6 +291,9 @@ switch ($route_key) {
         break;
     case 'POST /nibble6':
         require __DIR__ . '/handlers/nibble6.php';
+        break;
+    case 'POST /rfc3531':
+        require __DIR__ . '/handlers/rfc3531.php';
         break;
     case 'POST /bulk':
         require __DIR__ . '/handlers/bulk.php';

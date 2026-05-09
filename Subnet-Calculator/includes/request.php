@@ -973,6 +973,65 @@ function sc_run_nibble6(string $prefix_input): array
     }
 }
 
+// ─── RFC 3531 helper (shared by POST handler and GET shareable URL) ─────────
+
+/**
+ * Run rfc3531_apply() against raw user inputs and return an associative
+ * array mirroring sc_run_prefix_plan6(): empty on no input, `error` on
+ * failure, `result` on success. Shared by the POST handler and the GET
+ * shareable-URL hydration path. (v3.5.0 Task 10)
+ *
+ * @return array{
+ *     parent_prefix?: string,
+ *     reservation_bits_input?: string,
+ *     strategy?: string,
+ *     result?: array{
+ *         parent: array{prefix: string, length: int},
+ *         strategy: string,
+ *         reservation_bits: int,
+ *         allocation_order: list<int>,
+ *         children: list<array{order: int, value: int, prefix: string}>
+ *     },
+ *     error?: string|null
+ * }
+ */
+function sc_run_rfc3531(
+    string $parent_prefix_input,
+    string $reservation_bits_input,
+    string $strategy_input
+): array {
+    $parent   = trim($parent_prefix_input);
+    $bits     = trim($reservation_bits_input);
+    $strategy = trim($strategy_input);
+    if ($strategy === '') {
+        $strategy = 'centermost';
+    }
+
+    if ($parent === '' && $bits === '') {
+        return [];
+    }
+
+    $base = [
+        'parent_prefix'          => $parent,
+        'reservation_bits_input' => $bits,
+        'strategy'               => $strategy,
+    ];
+
+    if ($parent === '' || $bits === '') {
+        return $base + ['error' => 'Parent prefix and reservation bits are both required.'];
+    }
+    if (!ctype_digit($bits)) {
+        return $base + ['error' => 'Reservation bits must be a positive integer.'];
+    }
+
+    try {
+        $r = rfc3531_apply($parent, (int) $bits, $strategy);
+        return $base + ['result' => $r, 'error' => null];
+    } catch (\InvalidArgumentException $e) {
+        return $base + ['error' => $e->getMessage()];
+    }
+}
+
 // ─── Diff helper (shared by POST handler and GET shareable URL) ──────────────
 
 /**
@@ -1177,6 +1236,13 @@ $prefix_plan6_nibble_align        = true;
 /** @var array{parent_prefix?: string, child_length_input?: string, count_input?: string, start_offset_input?: string, nibble_align?: bool, result?: array{parent: array{prefix: string, length: int, total_children_str: string}, children: list<array{index: int, prefix: string, first: string, last: string, contains_64s: string}>, free: array{remaining_str: string}, normalized_child_length: int}, error?: string|null} */
 $prefix_plan6 = [];
 
+// v3.5.0 Task 10 — RFC 3531 sparse-allocation guidance
+$rfc3531_parent_input           = '';
+$rfc3531_reservation_bits_input = '';
+$rfc3531_strategy_input         = 'centermost';
+/** @var array{parent_prefix?: string, reservation_bits_input?: string, strategy?: string, result?: array{parent: array{prefix: string, length: int}, strategy: string, reservation_bits: int, allocation_order: list<int>, children: list<array{order: int, value: int, prefix: string}>}, error?: string|null} */
+$rfc3531 = [];
+
 $ula_global_id_input = '';
 /** @var array{result?: array{prefix?: string, global_id?: string, example_64s?: string[], available_64s?: int}, error?: string} */
 $ula = [];
@@ -1262,6 +1328,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || isset($_POST['prefix_plan6_child_length'])
         || isset($_POST['prefix_plan6_count']);
     $is_nibble6       = isset($_POST['nibble6_prefix']);
+    $is_rfc3531       = isset($_POST['rfc3531_parent'])
+        || isset($_POST['rfc3531_reservation_bits']);
 
     // Tool drawers (splitter/overlap/vlsm/vlsm6/supernet/ula/session/range/tree/wildcard/lookup/diff)
     // bypass honeypot/CAPTCHA gates because they're follow-on actions in an already-loaded session,
@@ -1272,7 +1340,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || $is_derive || $is_slaac || $is_rdns6 || $is_mapped6 || $is_embedded_v4
         || $is_sixtofour || $is_teredo || $is_isatap || $is_sixrd || $is_nat64
         || $is_prefix_plan6
-        || $is_nibble6;
+        || $is_nibble6
+        || $is_rfc3531;
 
     if (!$is_tool && $form_protection === 'honeypot') {
         if (trim((string)($_POST['url'] ?? '')) !== '') {
@@ -1783,6 +1852,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $active_tab = 'ipv6';
         $nibble6_prefix_input = trim((string)($_POST['nibble6_prefix'] ?? ''));
         $nibble6              = sc_run_nibble6($nibble6_prefix_input);
+    }
+
+    if ($is_rfc3531 && !$form_blocked) {
+        $active_tab = 'ipv6';
+        $rfc3531_parent_input           = trim((string)($_POST['rfc3531_parent']           ?? ''));
+        $rfc3531_reservation_bits_input = trim((string)($_POST['rfc3531_reservation_bits'] ?? ''));
+        $rfc3531_strategy_input         = trim((string)($_POST['rfc3531_strategy']         ?? 'centermost'));
+        $rfc3531 = sc_run_rfc3531(
+            $rfc3531_parent_input,
+            $rfc3531_reservation_bits_input,
+            $rfc3531_strategy_input
+        );
     }
 
     if ($is_prefix_plan6 && !$form_blocked) {
@@ -2344,6 +2425,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($active_tab === 'ipv6' && isset($_GET['nibble6_prefix'])) {
         $nibble6_prefix_input = trim((string)($_GET['nibble6_prefix'] ?? ''));
         $nibble6              = sc_run_nibble6($nibble6_prefix_input);
+    }
+
+    // RFC 3531 sparse-allocation shareable GET URL (v3.5.0 Task 10)
+    if (
+        $active_tab === 'ipv6'
+        && (
+            isset($_GET['rfc3531_parent'])
+            || isset($_GET['rfc3531_reservation_bits'])
+        )
+    ) {
+        $rfc3531_parent_input           = trim((string)($_GET['rfc3531_parent']           ?? ''));
+        $rfc3531_reservation_bits_input = trim((string)($_GET['rfc3531_reservation_bits'] ?? ''));
+        $rfc3531_strategy_input         = trim((string)($_GET['rfc3531_strategy']         ?? 'centermost'));
+        $rfc3531 = sc_run_rfc3531(
+            $rfc3531_parent_input,
+            $rfc3531_reservation_bits_input,
+            $rfc3531_strategy_input
+        );
     }
 
     // Supernet6 / summarise6 shareable GET URL (v3.3.0)

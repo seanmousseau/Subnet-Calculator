@@ -64,6 +64,7 @@ nav:
     - 6rd Address Tool: 6rd.md
     - IPv6 Prefix-Delegation Planner: prefix-plan6.md
     - IPv6 Nibble-Boundary Helper: nibble6.md
+    - RFC 3531 Sparse Allocation: rfc3531.md
     - Allocation Tree: tree.md
     - Wildcard ↔ CIDR: wildcard.md
     - IP Lookup: lookup.md

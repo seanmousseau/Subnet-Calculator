@@ -81,6 +81,8 @@ tags:
     description: IPv6 prefix-delegation planner — slice a parent prefix into nibble-aligned child prefixes (operator math, not detection)
   - name: Nibble6
     description: IPv6 nibble-boundary helper — surface the nibble-aligned neighbours (above and below) of any IPv6 prefix
+  - name: Rfc3531
+    description: RFC 3531 sparse-allocation guidance — centermost / leftmost / rightmost bit-reservation strategy for growth-friendly prefix assignment
   - name: Bulk
     description: Batch subnet calculation
   - name: Range
@@ -2955,6 +2957,142 @@ paths:
                                 example: "4096"
         "400":
           description: Missing required field or unparseable input
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401":
+          description: Missing or invalid Bearer token
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: Endpoint disabled by $api_allowed_endpoints configuration
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
+            X-RateLimit-Reset:     { $ref: "#/components/headers/XRateLimitReset" }
+            Retry-After:           { $ref: "#/components/headers/RetryAfter" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /rfc3531:
+    post:
+      operationId: rfc3531
+      tags: [Rfc3531]
+      summary: Apply an RFC 3531 sparse-allocation strategy to a parent IPv6 prefix
+      description: |
+        RFC 3531 §3 describes a flexible bit-reservation method for
+        managing prefix growth. Given a parent prefix and a reservation
+        field of N bits, this endpoint produces:
+
+          • the **allocation order** — a list of `2^N` bit-pattern
+            values (or `2^N - 1` under centermost, where 0 is omitted
+            as the default reservation);
+          • the **child prefixes** — concrete `parent_length + N`-bit
+            CIDRs in that order, each with `order`, `value`, and `prefix`.
+
+        Three strategies:
+
+          • **centermost** — bisect outward from the middle. The canonical
+            RFC 3531 §3 example (4 bits) yields `8, 4, 12, 2, 6, 10, 14,
+            1, 3, 5, 7, 9, 11, 13, 15`. Best for growth-friendly
+            allocation: future expansion has room either side of every
+            reservation.
+          • **leftmost** — monotonic `0, 1, 2, …, 2^N-1`. Dense sequential
+            allocation (no growth headroom).
+          • **rightmost** — `2^N-1, …, 1, 0`. Mirror of leftmost.
+
+        The maximum reservation_bits is sourced from the
+        `$rfc3531_max_bits` config token (default 8 → 256 children;
+        clamped to a hard ceiling of 12 → 4096 children).
+
+        Composes with `/api/v1/prefix-plan6`: the prefix-delegation
+        planner answers "how many child blocks fit," and `/rfc3531`
+        answers "in what order should I assign them so future growth
+        survives."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parent_prefix, reservation_bits]
+              properties:
+                parent_prefix:
+                  type: string
+                  example: "2001:db8::/48"
+                reservation_bits:
+                  type: integer
+                  minimum: 1
+                  maximum: 12
+                  description: |
+                    Number of bits in the reservation field. The default
+                    cap is 8 (256 children); operators can raise it via
+                    the `$rfc3531_max_bits` config token, up to a hard
+                    ceiling of 12 (4096 children).
+                  example: 4
+                strategy:
+                  type: string
+                  enum: [centermost, leftmost, rightmost]
+                  default: centermost
+            examples:
+              centermost4:
+                summary: RFC 3531 §3 worked example (4 bits, centermost)
+                value: { parent_prefix: "2001:db8::/48", reservation_bits: 4, strategy: "centermost" }
+              leftmost4:
+                summary: Dense sequential allocation
+                value: { parent_prefix: "2001:db8::/48", reservation_bits: 4, strategy: "leftmost" }
+      responses:
+        "200":
+          description: Allocation plan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [parent, strategy, reservation_bits, allocation_order, children]
+                        properties:
+                          parent:
+                            type: object
+                            required: [prefix, length]
+                            properties:
+                              prefix: { type: string, example: "2001:db8::/48" }
+                              length: { type: integer, example: 48 }
+                          strategy:
+                            type: string
+                            enum: [centermost, leftmost, rightmost]
+                            example: "centermost"
+                          reservation_bits:
+                            type: integer
+                            example: 4
+                          allocation_order:
+                            type: array
+                            items: { type: integer }
+                            example: [8, 4, 12, 2, 6, 10, 14, 1, 3, 5, 7, 9, 11, 13, 15]
+                          children:
+                            type: array
+                            items:
+                              type: object
+                              required: [order, value, prefix]
+                              properties:
+                                order: { type: integer, example: 0 }
+                                value: { type: integer, example: 8 }
+                                prefix: { type: string, example: "2001:db8:0:8000::/52" }
+        "400":
+          description: Missing required field, unparseable input, or out-of-range request
           headers:
             X-RateLimit-Limit:     { $ref: "#/components/headers/XRateLimitLimit" }
             X-RateLimit-Remaining: { $ref: "#/components/headers/XRateLimitRemaining" }
