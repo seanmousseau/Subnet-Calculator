@@ -83,7 +83,7 @@ nav:
     - Operator Config: config.md
 
 extra:
-  version: "3.4.1"
+  version: "3.5.0"
 
 extra_css:
   - stylesheets/extra.css
