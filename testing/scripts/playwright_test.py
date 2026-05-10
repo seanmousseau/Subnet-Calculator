@@ -5388,6 +5388,280 @@ async def test_a11y_v350_prefers_reduced_motion_respected(page: Page) -> None:
         await page.emulate_media(reduced_motion="no-preference")
 
 
+# v3.7.0 T7 — every drawer in the app, with the parent tab/panel they live on.
+# Tab values: "ipv4" or "ipv6". `lookup` and `diff` exist on BOTH tabs as
+# distinct DOM nodes; we exercise each instance via the tab parameter.
+ALL_DRAWERS_V370: list[tuple[str, str]] = [
+    # IPv4 tab
+    ("ipv4", "split"),
+    ("ipv4", "supernet"),
+    ("ipv4", "range"),
+    ("ipv4", "tree"),
+    ("ipv4", "tree-editor"),
+    ("ipv4", "wildcard"),
+    ("ipv4", "lookup"),
+    ("ipv4", "diff"),
+    # VLSM tab — overlap / multi-CIDR / save-session triggers live in
+    # the IPv4 VLSM tool-toolbar (#panel-vlsm), not in #panel-ipv4.
+    ("vlsm", "overlap"),
+    ("vlsm", "multi"),
+    ("vlsm", "session"),
+    # IPv6 tab
+    ("ipv6", "split6"),
+    ("ipv6", "ula"),
+    ("ipv6", "range6"),
+    ("ipv6", "supernet6"),
+    ("ipv6", "zoneid"),
+    ("ipv6", "derive"),
+    ("ipv6", "slaac"),
+    ("ipv6", "lookup"),
+    ("ipv6", "diff"),
+    ("ipv6", "rdns6"),
+    ("ipv6", "mapped6"),
+    ("ipv6", "embedded-v4"),
+    ("ipv6", "6to4"),
+    ("ipv6", "teredo"),
+    ("ipv6", "isatap"),
+    ("ipv6", "6rd"),
+    ("ipv6", "prefix-plan"),
+    ("ipv6", "nibble"),
+    ("ipv6", "rfc3531"),
+    ("ipv6", "multicast"),
+    ("ipv6", "ssm"),
+    ("ipv6", "embedded-rp"),
+    ("ipv6", "pmtu"),
+    # IPv6 VLSM tab — save-session trigger lives in the IPv6 VLSM
+    # tool-toolbar (#panel-vlsm6), not in #panel-ipv6.
+    ("vlsm6", "session6"),
+]
+
+
+async def test_a11y_all_drawers_tab_order(page: Page) -> None:
+    """v3.7.0 (T7) — strict tab-order audit on every drawer in the app.
+
+    Pattern carried over from v3.6.0 T6 (the v3.5.0 / v3.6.0 IPv6 subsets)
+    and extended to cover every ``data-tool`` slug — both IPv4 and IPv6
+    tabs, including the lookup/diff drawers that exist on both tabs.
+
+    For each drawer:
+      1. Open via the trigger button on the appropriate tab.
+      2. Assert the drawer has at least 2 focusable elements (input +
+         submit) — necessary for the focus trap installed by
+         ``app.js _buildTrap`` to function.
+      3. Programmatically focus the first non-help interactive element
+         and assert focus lands inside the drawer.
+      4. Focus the LAST focusable element, press Tab, and assert focus
+         is still inside the drawer (focus-trap wrap behaviour).
+    """
+    section("v3.7.0 — a11y tab order on every drawer (IPv4 + IPv6)")
+    for tab, slug in ALL_DRAWERS_V370:
+        panel_sel = f"#panel-{tab}"
+        await navigate(page, APP_URL + f"?tab={tab}")
+        trigger = page.locator(
+            f"{panel_sel} button.tool-trigger[data-tool='{slug}']"
+        )
+        await trigger.click()
+        await page.wait_for_selector(f"{panel_sel} .tool-drawer.open")
+
+        focusable = await page.evaluate(
+            f"""() => {{
+                const panel = document.querySelector(
+                  "{panel_sel} .tool-panel[data-tool='{slug}']"
+                );
+                if (!panel) return 0;
+                return Array.from(panel.querySelectorAll(
+                  'input, button, textarea, select, [tabindex]:not([tabindex="-1"])'
+                )).filter(el => !el.disabled && el.offsetParent !== null).length;
+            }}"""
+        )
+        assert_true(
+            f"tab-order v3.7.0 {tab}/{slug}: drawer has focusable elements",
+            focusable >= 2,
+            f"got: {focusable}",
+        )
+
+        in_drawer = await page.evaluate(
+            f"""() => {{
+                const drawer = document.querySelector(
+                  "{panel_sel} .tool-drawer.open"
+                );
+                const panel = document.querySelector(
+                  "{panel_sel} .tool-panel[data-tool='{slug}']"
+                );
+                const candidates = panel ? Array.from(panel.querySelectorAll(
+                  'input:not([type="hidden"]), button:not([aria-label="Help"]):not(.help-bubble-icon), textarea, select'
+                )).filter(el => !el.disabled && el.offsetParent !== null) : [];
+                const first = candidates[0] || null;
+                if (first) first.focus();
+                return drawer ? drawer.contains(document.activeElement) : false;
+            }}"""
+        )
+        assert_true(
+            f"tab-order v3.7.0 {tab}/{slug}: focus lands inside drawer",
+            bool(in_drawer),
+        )
+
+        await page.evaluate(
+            f"""() => {{
+                const drawer = document.querySelector(
+                  "{panel_sel} .tool-drawer.open"
+                );
+                if (!drawer) return;
+                const els = Array.from(drawer.querySelectorAll(
+                  'input, button, textarea, select, [tabindex]:not([tabindex="-1"])'
+                )).filter(el => !el.disabled && el.offsetParent !== null);
+                if (els.length) els[els.length - 1].focus();
+            }}"""
+        )
+        await page.keyboard.press("Tab")
+        wrapped = await page.evaluate(
+            f"""() => {{
+                const drawer = document.querySelector(
+                  "{panel_sel} .tool-drawer.open"
+                );
+                return !!(drawer && drawer.contains(document.activeElement));
+            }}"""
+        )
+        assert_true(
+            f"tab-order v3.7.0 {tab}/{slug}: focus trap wraps last → first",
+            bool(wrapped),
+        )
+
+        await page.keyboard.press("Escape")
+        await page.wait_for_selector(f"{panel_sel} .tool-drawer:not(.open)")
+
+
+async def test_a11y_all_drawers_focus_return_after_esc(page: Page) -> None:
+    """v3.7.0 (T7) — ESC returns focus to the originating trigger on every drawer.
+
+    Carried over from v3.6.0 T6 and extended to cover every drawer slug
+    on both the IPv4 and IPv6 tabs (including duplicate lookup/diff
+    drawers).
+    """
+    section("v3.7.0 — a11y focus returns to trigger after ESC (every drawer)")
+    for tab, slug in ALL_DRAWERS_V370:
+        panel_sel = f"#panel-{tab}"
+        await navigate(page, APP_URL + f"?tab={tab}")
+        trigger = page.locator(
+            f"{panel_sel} button.tool-trigger[data-tool='{slug}']"
+        )
+        await trigger.click()
+        await page.wait_for_selector(f"{panel_sel} .tool-drawer.open")
+        # Move focus into a drawer input so the ESC handler has a clear
+        # "previously focused" element to restore — ``close()`` in app.js
+        # always restores focus to ``_activeTrigger`` (set on open()).
+        await page.evaluate(
+            f"""() => {{
+                const panel = document.querySelector(
+                  "{panel_sel} .tool-panel[data-tool='{slug}']"
+                );
+                const candidates = panel ? Array.from(panel.querySelectorAll(
+                  'input:not([type="hidden"]), button:not([aria-label="Help"]):not(.help-bubble-icon), textarea, select'
+                )).filter(el => !el.disabled && el.offsetParent !== null) : [];
+                const first = candidates[0] || null;
+                if (first) first.focus();
+            }}"""
+        )
+        await page.keyboard.press("Escape")
+        await page.wait_for_selector(f"{panel_sel} .tool-drawer:not(.open)")
+        # ``document.activeElement.dataset.tool`` matches the trigger that
+        # was used to open the drawer. On the IPv4 tab the lookup/diff
+        # triggers live in #panel-ipv4 and on the IPv6 tab they live in
+        # #panel-ipv6 — distinct DOM nodes that share the same data-tool
+        # value, so we additionally assert the active element is inside
+        # the right panel.
+        focused = await page.evaluate(
+            f"""() => {{
+                const ae = document.activeElement;
+                if (!ae) return null;
+                const inPanel = !!ae.closest("{panel_sel}");
+                return {{ slug: ae.dataset ? ae.dataset.tool : null, inPanel }};
+            }}"""
+        )
+        assert_eq(
+            f"focus-return v3.7.0 {tab}/{slug}: data-tool on active element",
+            focused.get("slug") if focused else None,
+            slug,
+        )
+        assert_true(
+            f"focus-return v3.7.0 {tab}/{slug}: active element is in {panel_sel}",
+            bool(focused and focused.get("inPanel")),
+        )
+
+
+async def test_a11y_all_drawers_prefers_reduced_motion(page: Page) -> None:
+    """v3.7.0 (T7) — prefers-reduced-motion is respected on every drawer.
+
+    Carried over from v3.6.0 T6's nibble-only check and extended to
+    every drawer. Asserts that under
+    ``page.emulate_media(reduced_motion='reduce')`` the panel's
+    computed ``transition-duration`` and ``animation-duration`` are
+    zero or near-zero (≤ 10ms).
+    """
+    section("v3.7.0 — a11y prefers-reduced-motion respected (every drawer)")
+
+    def _zeroish(s: str) -> bool:
+        for entry in s.split(","):
+            e = entry.strip()
+            if e.endswith("ms"):
+                try:
+                    if float(e[:-2]) > 10:
+                        return False
+                except ValueError:
+                    return False
+            elif e.endswith("s"):
+                try:
+                    if float(e[:-1]) > 0.01:
+                        return False
+                except ValueError:
+                    return False
+        return True
+
+    await page.emulate_media(reduced_motion="reduce")
+    try:
+        for tab, slug in ALL_DRAWERS_V370:
+            panel_sel = f"#panel-{tab}"
+            await navigate(page, APP_URL + f"?tab={tab}")
+            trigger = page.locator(
+                f"{panel_sel} button.tool-trigger[data-tool='{slug}']"
+            )
+            await trigger.click()
+            await page.wait_for_selector(f"{panel_sel} .tool-drawer.open")
+
+            prm = await page.evaluate(
+                "() => window.matchMedia('(prefers-reduced-motion: reduce)').matches"
+            )
+            assert_true(
+                f"reduced-motion v3.7.0 {tab}/{slug}: media query matches",
+                bool(prm),
+            )
+
+            panel = page.locator(
+                f"{panel_sel} .tool-panel[data-tool='{slug}']"
+            )
+            durs = await panel.evaluate(
+                """(el) => {
+                    const cs = window.getComputedStyle(el);
+                    return [cs.transitionDuration, cs.animationDuration];
+                }"""
+            )
+            assert_true(
+                f"reduced-motion v3.7.0 {tab}/{slug}: transition-duration zeroed",
+                _zeroish(durs[0]),
+                f"got transition-duration={durs[0]!r}",
+            )
+            assert_true(
+                f"reduced-motion v3.7.0 {tab}/{slug}: animation-duration zeroed",
+                _zeroish(durs[1]),
+                f"got animation-duration={durs[1]!r}",
+            )
+
+            await page.keyboard.press("Escape")
+            await page.wait_for_selector(f"{panel_sel} .tool-drawer:not(.open)")
+    finally:
+        await page.emulate_media(reduced_motion="no-preference")
+
+
 async def test_api_bulk_covers_v360_endpoints(page: Page) -> None:
     """v3.6.0 (T6) — bulk multi-op `items[]` covers all 4 new ops."""
     section("API — bulk multi-op covers v3.6.0 IPv6 multicast endpoints")
@@ -10415,6 +10689,9 @@ async def main() -> None:
             await test_a11y_v350_drawers_tab_order(page)
             await test_a11y_v350_drawers_focus_return_after_esc(page)
             await test_a11y_v350_prefers_reduced_motion_respected(page)
+            await test_a11y_all_drawers_tab_order(page)
+            await test_a11y_all_drawers_focus_return_after_esc(page)
+            await test_a11y_all_drawers_prefers_reduced_motion(page)
             await test_api_tree(page)
             await test_tooltips_visual_polish(page)
             await test_tooltips_accessibility(page)
