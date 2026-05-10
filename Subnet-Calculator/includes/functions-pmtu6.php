@@ -50,6 +50,16 @@ function pmtu_compute(int $path_mtu, int $payload_size, array $extension_headers
     if ($payload_size < 0) {
         throw new InvalidArgumentException('Payload size must be zero or a positive integer.');
     }
+    if ($payload_size > 65535) {
+        throw new InvalidArgumentException(
+            'payload_size must not exceed 65535 bytes (max IPv6 packet payload)'
+        );
+    }
+    if (count($extension_headers) > 16) {
+        throw new InvalidArgumentException(
+            'extension_headers must not contain more than 16 entries'
+        );
+    }
 
     $extension_overhead = 0;
     foreach ($extension_headers as $ext) {
@@ -99,6 +109,12 @@ function pmtu_compute(int $path_mtu, int $payload_size, array $extension_headers
             throw new InvalidArgumentException(
                 'Path MTU is too small to carry any fragmented payload after ' .
                 'fixed and extension headers and the 8-byte Fragment header.'
+            );
+        }
+        $projected_count = (int)ceil($payload_size / $per_fragment_max);
+        if ($projected_count > 4096) {
+            throw new InvalidArgumentException(
+                'Result would produce more than 4096 fragments'
             );
         }
 

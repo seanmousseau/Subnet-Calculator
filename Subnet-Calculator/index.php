@@ -65,6 +65,14 @@ if ($frame_ancestors === "'none'") {
 } elseif ($frame_ancestors === "'self'") {
     header('X-Frame-Options: SAMEORIGIN');
 }
+// HSTS — only on HTTPS (RFC 6797 §7.2). Honor X-Forwarded-Proto when present
+// (reverse-proxy case). Operator opt-out via $hsts_max_age = 0. (v3.6.3, #425)
+$is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+if ($is_https && $hsts_max_age > 0) {
+    $hsts_extra = $hsts_preload ? '; preload' : '';
+    header("Strict-Transport-Security: max-age={$hsts_max_age}; includeSubDomains{$hsts_extra}");
+}
 $csp_nonce    = base64_encode(random_bytes(16));
 $turnstile_active = ($form_protection === 'turnstile'              && $turnstile_site_key !== ''                 && $turnstile_secret_key !== '');
 $hcaptcha_active  = ($form_protection === 'hcaptcha'               && $hcaptcha_site_key !== ''                  && $hcaptcha_secret_key !== '');

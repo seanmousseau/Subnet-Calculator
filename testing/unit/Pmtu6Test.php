@@ -130,4 +130,23 @@ final class Pmtu6Test extends TestCase
         $this->assertSame(0, $r['fragments'][1]['m_bit']);
         $this->assertSame(13, $r['fragments'][1]['payload_bytes']);
     }
+
+    // v3.6.3 #424 — payload_size DoS guard
+    public function testRejectsPayloadOver65535(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        pmtu_compute(1280, 65536);
+    }
+
+    public function testAcceptsPayloadAt65535Boundary(): void
+    {
+        $r = pmtu_compute(1280, 65535);
+        $this->assertGreaterThan(0, $r['fragment_count']);
+    }
+
+    public function testRejectsExcessiveExtensionHeaders(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        pmtu_compute(1500, 100, array_fill(0, 17, 8));
+    }
 }

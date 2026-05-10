@@ -24,6 +24,14 @@ if (array_key_exists('items', $body)) {
         json_err('Maximum 50 items per request.');
     }
 
+    // Charge an additional rate-limit hit per item beyond the first (the router
+    // already charged 1). Prevents 50× amplification of expensive ops via the
+    // bulk endpoint. (v3.6.3, #427-M1)
+    $extra = count($items) - 1;
+    if ($extra > 0) {
+        api_rate_limit(api_client_key(), $extra);
+    }
+
     $gmp_loaded = extension_loaded('gmp');
     if (!$gmp_loaded) {
         json_err('The /bulk multi-op mode requires the PHP GMP extension.', 503);
@@ -44,6 +52,12 @@ if (!is_array($cidrs) || count($cidrs) === 0) {
 }
 if (count($cidrs) > 50) {
     json_err('Maximum 50 CIDRs per request.');
+}
+
+// Charge per-item rate-limit (v3.6.3, #427-M1) — see note in items branch.
+$extra = count($cidrs) - 1;
+if ($extra > 0) {
+    api_rate_limit(api_client_key(), $extra);
 }
 
 $gmp_loaded = extension_loaded('gmp');

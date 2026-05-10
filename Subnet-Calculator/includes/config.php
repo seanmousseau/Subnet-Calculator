@@ -6,7 +6,7 @@ declare(strict_types=1);
 // These are the built-in defaults. To override, copy config.php.example to
 // config.php alongside this file — config.php is never overwritten by upgrades.
 
-$app_version          = '3.6.2';
+$app_version          = '3.6.3';
 $locale               = 'en'; // BCP 47 locale tag for number formatting (e.g. 'de', 'fr')
 $fixed_bg_color       = 'null';
 $default_tab          = 'ipv4'; // 'ipv4', 'ipv6', or 'vlsm'
@@ -54,7 +54,23 @@ $api_tokens              = [];   // [] = open; ['token1'] = auth required
 $api_rate_limit_rpm      = 60;   // requests/minute per IP (0 = disabled)
 $api_rate_limit_tokens   = [];   // per-token RPM overrides: ['token' => rpm]
 $api_allowed_endpoints   = [];   // [] = all allowed; non-empty = allowlist
-$api_cors_origins        = '*';  // CORS Access-Control-Allow-Origin
+// CORS Access-Control-Allow-Origin (v3.6.3, #426).
+// Default is ['*'] for back-compat with the open API. Set to a specific
+// allowlist (e.g. ['https://example.com']) when API auth is configured.
+// String '*' is also accepted for back-compat with pre-v3.6.3 configs.
+$api_cors_origins        = ['*'];
+
+// HSTS — Strict-Transport-Security header (v3.6.3, #425).
+// Sent on HTTPS responses only. max-age clamped to 0..2 years.
+$hsts_max_age = 31536000;  // 1 year (max 63072000 = 2 years)
+$hsts_preload = false;     // operator opt-in; only enable after confirming
+                            // HTTPS for all subdomains and a clean preload-list audit
+
+// Trusted proxies — only honor X-Forwarded-For when REMOTE_ADDR is in this
+// allowlist. Default empty = ignore XFF (safe for direct-exposure deploys).
+// Set to ['127.0.0.1', '::1'] for a local reverse proxy, or to specific
+// Cloudflare/other-CDN egress IPs. (v3.6.3, #427-M3)
+$api_trusted_proxies = [];
 
 // Session persistence (v2.0.0)
 $session_enabled    = false;  // Enable SQLite-backed VLSM session save/restore
@@ -171,8 +187,22 @@ if (!is_array($api_rate_limit_tokens)) {
 if (!is_array($api_allowed_endpoints)) {
     $api_allowed_endpoints = [];
 }
-if (!is_string($api_cors_origins) || $api_cors_origins === '') {
-    $api_cors_origins = '*';
+// Normalise $api_cors_origins. Pre-v3.6.3 configs may set this as a string;
+// v3.6.3+ prefers an array. Accept both for back-compat.
+if (is_string($api_cors_origins)) {
+    $api_cors_origins = $api_cors_origins === '' ? ['*'] : [$api_cors_origins];
+}
+if (!is_array($api_cors_origins) || $api_cors_origins === []) {
+    $api_cors_origins = ['*'];
+}
+
+// HSTS clamping (v3.6.3, #425). Max 2 years per the HSTS spec common cap.
+$hsts_max_age = min(max((int)$hsts_max_age, 0), 63072000);
+$hsts_preload = (bool)$hsts_preload;
+
+// Trusted proxies (v3.6.3, #427-M3).
+if (!is_array($api_trusted_proxies)) {
+    $api_trusted_proxies = [];
 }
 $session_enabled  = (bool)$session_enabled;
 $session_db_path  = is_string($session_db_path) ? $session_db_path : '';

@@ -137,4 +137,11 @@ final class Ssm6Test extends TestCase
         $this->assertSame('::', strtolower($r['unicast_prefix']));
         $this->assertSame(0x12345678, $r['group_id']);
     }
+
+    // v3.6.3 #427-M5 — decoder must reject scope=0 (RFC 4291 §2.7 reserved)
+    public function test_decode_rejects_scope_zero(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        decode_ssm_group('FF30::1234:5678');
+    }
 }

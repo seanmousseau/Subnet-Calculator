@@ -149,6 +149,11 @@ function decode_embedded_rp_group(string $ipv6): array
             'Address is not an embedded-RP multicast group (flags must be 0x7 = R+P+T).'
         );
     }
+    if ($scope < 1) {
+        throw new InvalidArgumentException(
+            'Scope must be 1..15 (RFC 4291 §2.7 reserves scope 0)'
+        );
+    }
 
     // High nibble of byte 2 is reserved; ignore it but expose RIID from the low nibble.
     $riid = ord($bin[2]) & 0x0F;
