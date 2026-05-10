@@ -26,8 +26,8 @@
     <form class="tree-editor-init" data-role="tree-load-form">
         <label for="tree_editor_session_id" class="tree-parent-label">Or load saved session</label>
         <input type="text" id="tree_editor_session_id" data-role="tree-load-id"
-               placeholder="8-char session ID" autocomplete="off" spellcheck="false"
-               pattern="[0-9a-f]{8}" maxlength="8">
+               placeholder="16-char session ID" autocomplete="off" spellcheck="false"
+               pattern="[0-9a-f]{16}" maxlength="16">
         <button type="submit" class="splitter-btn">Load Session</button>
     </form>
 

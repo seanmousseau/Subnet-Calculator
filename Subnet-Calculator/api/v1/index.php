@@ -207,7 +207,7 @@ if (!empty($api_allowed_endpoints) && $uri !== '/') {
 $route_key = $method . ' ' . $uri;
 
 // Sessions GET with ID: /sessions/{id}
-if ($method === 'GET' && preg_match('#^/sessions/([0-9a-f]{8})$#', $uri, $m)) {
+if ($method === 'GET' && preg_match('#^/sessions/([0-9a-f]{16})$#', $uri, $m)) {
     $_GET['session_id'] = $m[1];
     require __DIR__ . '/handlers/sessions.php';
 }

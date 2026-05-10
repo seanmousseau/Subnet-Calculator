@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.4] - 2026-05-09
+
+**Cleanup patch.** Defense-in-depth and session-ID hardening from the
+2026-05-09 broad security review.
+
+### Changed
+
+- **Shareable VLSM session IDs widened from 32-bit (8 hex) to 64-bit
+  (16 hex)** keyspace. Reduces enumeration surface from ~4 billion to
+  ~1.8×10^19. Sessions are calculator state (not authentication), so
+  exposure was low risk, but this is a clean win. **BREAKING:**
+  shareable URLs minted before v3.6.4 will return 404. Sessions are
+  short-lived by design (configurable TTL); no migration. (#428)
+
+### Fixed
+
+- **`cidrs_overlap()` now validates inputs explicitly** — throws
+  `InvalidArgumentException` on missing slash, invalid IPv4, or
+  prefix length outside 0..32. Previous behaviour silently ran with
+  `(int)null = 0` and `ip2long(false) & 0xFFFFFFFF = 0`, producing
+  misleading "identical" results for malformed inputs. The public API
+  handler validates upstream so end users couldn't reach this path,
+  but defense-in-depth matches v3.5.x/v3.6.x helper conventions. (#423)
+
 ## [3.6.3] - 2026-05-09
 
 **Security patch.** Addresses findings from the 2026-05-09 broad

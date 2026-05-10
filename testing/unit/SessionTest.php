@@ -32,10 +32,10 @@ class SessionTest extends TestCase
 
     // ── session_create ─────────────────────────────────────────────────────────
 
-    public function testCreate_Returns8CharHexId(): void
+    public function testCreate_Returns16CharHexId(): void
     {
         $id = session_create($this->db, ['tab' => 'vlsm'], 30);
-        $this->assertMatchesRegularExpression('/^[0-9a-f]{8}$/', $id);
+        $this->assertMatchesRegularExpression('/^[0-9a-f]{16}$/', $id);
     }
 
     public function testCreate_IdIsUnique(): void

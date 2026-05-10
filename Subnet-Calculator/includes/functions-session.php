@@ -55,9 +55,9 @@ function session_create(\SQLite3 $db, array $payload, int $ttl_days): string
 {
     session_purge($db);
 
-    // Generate a unique 8-character hex ID
+    // Generate a unique 16-character hex ID (64-bit keyspace)
     do {
-        $id   = bin2hex(random_bytes(4));
+        $id   = bin2hex(random_bytes(8));
         $stmt = session_prepare($db, 'SELECT 1 FROM sessions WHERE id = :id');
         $stmt->bindValue(':id', $id, SQLITE3_TEXT);
         $result = $stmt->execute();
