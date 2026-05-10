@@ -46,7 +46,7 @@ function session_prepare(\SQLite3 $db, string $sql): \SQLite3Stmt
 }
 
 /**
- * Create a new session and return its 8-character hex ID.
+ * Create a new session and return its 16-character hex ID (8 random bytes).
  *
  * @param  array<mixed>  $payload
  * @throws \Exception on database failure

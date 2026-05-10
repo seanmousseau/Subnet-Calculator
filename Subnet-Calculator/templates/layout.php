@@ -461,30 +461,55 @@ if ($i < 3) {
             $open_tool_ipv6 = $requested_tool;
         }
         ?>
-        <div class="tool-toolbar"<?= $open_tool_ipv6 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv6) . '"' : '' ?>>
-            <button type="button" class="tool-trigger" data-tool="split6" aria-expanded="false">Split Subnet</button>
-            <button type="button" class="tool-trigger" data-tool="ula" aria-expanded="false">ULA Generator</button>
-            <button type="button" class="tool-trigger" data-tool="range6" aria-expanded="false">Range&rarr;CIDR</button>
-            <button type="button" class="tool-trigger" data-tool="supernet6" aria-expanded="false">Supernet</button>
-            <button type="button" class="tool-trigger" data-tool="zoneid" aria-expanded="false">Zone ID</button>
-            <button type="button" class="tool-trigger" data-tool="derive" aria-expanded="false">Derive Address</button>
-            <button type="button" class="tool-trigger" data-tool="slaac" aria-expanded="false">SLAAC Privacy</button>
-            <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
-            <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
-            <button type="button" class="tool-trigger" data-tool="rdns6" aria-expanded="false">Reverse DNS</button>
-            <button type="button" class="tool-trigger" data-tool="mapped6" aria-expanded="false">IPv4-mapped / NAT64</button>
-            <button type="button" class="tool-trigger" data-tool="embedded-v4" aria-expanded="false">Embedded IPv4</button>
-            <button type="button" class="tool-trigger" data-tool="6to4" aria-expanded="false">6to4</button>
-            <button type="button" class="tool-trigger" data-tool="teredo" aria-expanded="false">Teredo</button>
-            <button type="button" class="tool-trigger" data-tool="isatap" aria-expanded="false">ISATAP</button>
-            <button type="button" class="tool-trigger" data-tool="6rd" aria-expanded="false">6rd</button>
-            <button type="button" class="tool-trigger" data-tool="prefix-plan" aria-expanded="false">Prefix Plan</button>
-            <button type="button" class="tool-trigger" data-tool="nibble" aria-expanded="false">Nibble Neighbours</button>
-            <button type="button" class="tool-trigger" data-tool="rfc3531" aria-expanded="false">RFC 3531 Sparse</button>
-            <button type="button" class="tool-trigger" data-tool="multicast" aria-expanded="false">Multicast Decoder</button>
-            <button type="button" class="tool-trigger" data-tool="ssm" aria-expanded="false">SSM (RFC 3306)</button>
-            <button type="button" class="tool-trigger" data-tool="embedded-rp" aria-expanded="false">Embedded-RP (RFC 3956)</button>
-            <button type="button" class="tool-trigger" data-tool="pmtu" aria-expanded="false">PMTU Helper</button>
+        <div class="tool-toolbar tool-toolbar-grouped"<?= $open_tool_ipv6 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv6) . '"' : '' ?>>
+            <details class="tool-group" data-group="foundational" open>
+                <summary class="tool-group-summary">Foundational</summary>
+                <div class="tool-group-tools">
+                    <button type="button" class="tool-trigger" data-tool="split6" aria-expanded="false">Split Subnet</button>
+                    <button type="button" class="tool-trigger" data-tool="ula" aria-expanded="false">ULA Generator</button>
+                    <button type="button" class="tool-trigger" data-tool="range6" aria-expanded="false">Range&rarr;CIDR</button>
+                    <button type="button" class="tool-trigger" data-tool="supernet6" aria-expanded="false">Supernet</button>
+                </div>
+            </details>
+            <details class="tool-group" data-group="address-utilities" open>
+                <summary class="tool-group-summary">Address utilities</summary>
+                <div class="tool-group-tools">
+                    <button type="button" class="tool-trigger" data-tool="zoneid" aria-expanded="false">Zone ID</button>
+                    <button type="button" class="tool-trigger" data-tool="derive" aria-expanded="false">Derive Address</button>
+                    <button type="button" class="tool-trigger" data-tool="slaac" aria-expanded="false">SLAAC Privacy</button>
+                    <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
+                    <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
+                    <button type="button" class="tool-trigger" data-tool="rdns6" aria-expanded="false">Reverse DNS</button>
+                </div>
+            </details>
+            <details class="tool-group" data-group="transition" open>
+                <summary class="tool-group-summary">Transition</summary>
+                <div class="tool-group-tools">
+                    <button type="button" class="tool-trigger" data-tool="mapped6" aria-expanded="false">IPv4-mapped / NAT64</button>
+                    <button type="button" class="tool-trigger" data-tool="embedded-v4" aria-expanded="false">Embedded IPv4</button>
+                    <button type="button" class="tool-trigger" data-tool="6to4" aria-expanded="false">6to4</button>
+                    <button type="button" class="tool-trigger" data-tool="teredo" aria-expanded="false">Teredo</button>
+                    <button type="button" class="tool-trigger" data-tool="isatap" aria-expanded="false">ISATAP</button>
+                    <button type="button" class="tool-trigger" data-tool="6rd" aria-expanded="false">6rd</button>
+                </div>
+            </details>
+            <details class="tool-group" data-group="prefix-planning" open>
+                <summary class="tool-group-summary">Prefix planning</summary>
+                <div class="tool-group-tools">
+                    <button type="button" class="tool-trigger" data-tool="prefix-plan" aria-expanded="false">Prefix Plan</button>
+                    <button type="button" class="tool-trigger" data-tool="nibble" aria-expanded="false">Nibble Neighbours</button>
+                    <button type="button" class="tool-trigger" data-tool="rfc3531" aria-expanded="false">RFC 3531 Sparse</button>
+                </div>
+            </details>
+            <details class="tool-group" data-group="multicast" open>
+                <summary class="tool-group-summary">Multicast</summary>
+                <div class="tool-group-tools">
+                    <button type="button" class="tool-trigger" data-tool="multicast" aria-expanded="false">Multicast Decoder</button>
+                    <button type="button" class="tool-trigger" data-tool="ssm" aria-expanded="false">SSM (RFC 3306)</button>
+                    <button type="button" class="tool-trigger" data-tool="embedded-rp" aria-expanded="false">Embedded-RP (RFC 3956)</button>
+                    <button type="button" class="tool-trigger" data-tool="pmtu" aria-expanded="false">PMTU Helper</button>
+                </div>
+            </details>
         </div>
 
         <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv6">

@@ -1282,7 +1282,17 @@
             .card { overflow: clip; }
             .form-row { flex-direction: column; }
             .split-list { grid-template-columns: 1fr; }
-            h1 { flex: 1; font-size: clamp(1.1rem, 5vw, 1.35rem); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            /* v3.7.0 T4: allow h1 to wrap to two lines instead of truncating
+               with an ellipsis at 375px viewports (#420). */
+            h1 {
+                flex: 1;
+                font-size: clamp(1.05rem, 4.5vw, 1.35rem);
+                min-width: 0;
+                overflow: visible;
+                text-overflow: clip;
+                white-space: normal;
+                line-height: 1.2;
+            }
             .logo { width: 36px; height: 36px; }
             .result-value { overflow-wrap: anywhere; }
             .theme-toggle { flex-shrink: 0; }
@@ -1290,6 +1300,28 @@
                app title has room to render in full alongside the icon-button
                cluster. Version is still visible in the docs/footer + meta. */
             .version { display: none; }
+
+            /* v3.7.0 T4: lay tab strip out as 2x2 grid below 480px so the
+               4 tabs fit without horizontal scroll on a 375px viewport. */
+            .tabs {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 0;
+            }
+            .tab-btn {
+                width: 100%;
+                padding: 0.5rem;
+                font-size: 0.8rem;
+            }
+
+            /* v3.7.0 T4: contain wide tables/content inside a drawer so the
+               page itself never gains a horizontal scrollbar. */
+            .tool-drawer { max-width: 100vw; }
+            .tool-drawer table,
+            .tool-drawer .vlsm-results,
+            .tool-drawer .split-list-scroll,
+            .tool-drawer pre,
+            .tool-drawer .result-value { max-width: 100%; overflow-x: auto; }
         }
 
         @media (481px <= width <= 767px) {
@@ -1450,6 +1482,46 @@
 .tool-trigger:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
+}
+
+/* ── Tool groups (v3.7.0 T3) ──────────────────────────────────────────────── */
+/* JS-enabled toolbar overrides display:flex on .tool-toolbar but groups need
+   the toolbar laid out as a vertical stack of <details> elements instead. */
+.js-enabled .tool-toolbar.tool-toolbar-grouped {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: stretch;
+}
+.tool-group {
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+.tool-group-summary {
+    cursor: pointer;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-text-subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.35rem 0.25rem;
+    list-style: revert;
+    user-select: none;
+    border-radius: 4px;
+}
+.tool-group-summary:hover { color: var(--color-text); }
+.tool-group-summary:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+.tool-group[open] > .tool-group-summary { color: var(--color-text); }
+.tool-group-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.4rem 0 0.25rem 0.75rem;
 }
 
 /* ── Tool Drawer ──────────────────────────────────────────────────────────── */
@@ -2241,7 +2313,7 @@
     transition: border-color 200ms, background-color 200ms;
 }
 .tree-preset-item:hover,
-.tree-preset-item:focus,
+.tree-preset-item:focus-visible,
 .tree-preset-item[aria-selected="true"] {
     border-color: var(--color-accent);
     background: var(--color-surface);
