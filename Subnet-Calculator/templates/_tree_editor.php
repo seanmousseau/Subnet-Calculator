@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * Tree-editor partial (#302, v3.0.0 PR3b).
  *
