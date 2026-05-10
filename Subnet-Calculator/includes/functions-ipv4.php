@@ -104,8 +104,8 @@ function cidrs_overlap(string $cidr_a, string $cidr_b): string
             throw new InvalidArgumentException(sprintf('%s: missing prefix length', $name));
         }
     }
-    [$ip_a, $px_a] = explode('/', $cidr_a);
-    [$ip_b, $px_b] = explode('/', $cidr_b);
+    [$ip_a, $px_a] = explode('/', $cidr_a, 2);
+    [$ip_b, $px_b] = explode('/', $cidr_b, 2);
     if (!ctype_digit($px_a) || (int)$px_a > 32) {
         throw new InvalidArgumentException('cidr_a: prefix length must be 0..32');
     }

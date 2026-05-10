@@ -518,6 +518,30 @@ const toolDrawer = {
         document.documentElement.classList.add('js-enabled');
         // CSS (.js-enabled .tool-panel { display: none }) hides all panels once js-enabled is set.
 
+        // v3.7.0 T3: tool-group collapse-state persistence.
+        // Default-open all groups on first visit; persist user-collapse only.
+        const TOOL_GROUP_KEY = 'sc_tool_group_state';
+        let toolGroupState = {};
+        try {
+            toolGroupState = JSON.parse(localStorage.getItem(TOOL_GROUP_KEY) || '{}') || {};
+        } catch (e) { void e; toolGroupState = {}; }
+        document.querySelectorAll('.tool-group').forEach(group => {
+            const name = group.dataset.group;
+            if (!name) return;
+            const stored = toolGroupState[name];
+            if (stored === 'closed') {
+                group.removeAttribute('open');
+            } else if (stored === 'open') {
+                group.setAttribute('open', '');
+            }
+            // No stored value → keep server-rendered default (open).
+            group.addEventListener('toggle', () => {
+                toolGroupState[name] = group.open ? 'open' : 'closed';
+                try { localStorage.setItem(TOOL_GROUP_KEY, JSON.stringify(toolGroupState)); }
+                catch (e) { void e; }
+            });
+        });
+
         // Toolbar button clicks
         document.querySelectorAll('.tool-trigger').forEach(btn => {
             btn.addEventListener('click', () => {

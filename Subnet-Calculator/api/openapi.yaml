@@ -1474,11 +1474,11 @@ paths:
                         type: object
                         required: [id]
                         properties:
-                          id: { type: string, example: "a1b2c3d4" }
+                          id: { type: string, example: "a1b2c3d4e5f60718" }
               example:
                 ok: true
                 data:
-                  id: "a1b2c3d4"
+                  id: "a1b2c3d4e5f60718"
         "400":
           description: Invalid payload
           headers:
@@ -1521,7 +1521,7 @@ paths:
       tags: [Sessions]
       summary: Load a saved session by ID
       description: >
-        Retrieves a previously saved VLSM session by its 8-hex-char ID.
+        Retrieves a previously saved VLSM session by its 16-hex-char ID.
         Sessions expire after the server-configured TTL (default 30 days).
         Requires `$session_enabled = true` on the server.
       parameters:
@@ -1551,7 +1551,7 @@ paths:
               example:
                 ok: true
                 data:
-                  id: "a1b2c3d4"
+                  id: "a1b2c3d4e5f60718"
                   payload:
                     network: "10.0.0.0"
                     cidr: "24"
@@ -4964,7 +4964,7 @@ paths:
                         properties:
                           id:             { type: integer, example: 1 }
                           token:          { type: string,  example: "sk_live_a1b2c3d4e5f6...", description: "Returned exactly once — store securely." }
-                          prefix:         { type: string,  example: "a1b2c3d4" }
+                          prefix:         { type: string,  example: "a1b2c3d4e5f60718" }
                           name:           { type: string,  example: "production" }
                           created_at:     { type: integer, example: 1714742400 }
                           rate_limit_rpm: { type: [integer, "null"], description: "Echo of the per-key RPM override, if set." }
