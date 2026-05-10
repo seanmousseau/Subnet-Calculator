@@ -2606,7 +2606,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ipv4 tab is reported as a tab mismatch rather than silently mis-rendered.
     if ($session_enabled && in_array($active_tab, ['vlsm', 'vlsm6'], true) && isset($_GET['s'])) {
         $session_load_id = trim((string)$_GET['s']);
-        if (preg_match('/^[0-9a-f]{8}$/', $session_load_id)) {
+        if (preg_match('/^[0-9a-f]{16}$/', $session_load_id)) {
             try {
                 $db_path = $session_db_path !== '' ? $session_db_path
                     : dirname(__DIR__) . '/data/sessions.sqlite';

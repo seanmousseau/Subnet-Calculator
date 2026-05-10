@@ -5560,7 +5560,7 @@ async def test_vlsm6_session_save_load(page: Page) -> None:
     )
     href_text_raw = await saved_bar.first.text_content()
     href_text = href_text_raw or ""
-    m = re.search(r"\?tab=vlsm6&s=([0-9a-f]{8})", href_text)
+    m = re.search(r"\?tab=vlsm6&s=([0-9a-f]{16})", href_text)
     assert_true(
         "vlsm6 save: URL contains tab=vlsm6 and 8-char id",
         m is not None,
@@ -5647,7 +5647,7 @@ async def test_vlsm6_session_drawer_pattern(page: Page) -> None:
         '.session-saved-bar code.share-url'
     )
     saved_text = (await saved_url_node.first.text_content()) or ""
-    m = re.search(r"\?tab=vlsm6&s=([0-9a-f]{8})", saved_text)
+    m = re.search(r"\?tab=vlsm6&s=([0-9a-f]{16})", saved_text)
     assert_true(
         "vlsm6 drawer: post-save share URL has 8-char id",
         m is not None,
@@ -9744,7 +9744,7 @@ async def test_tree_editor_save_session(page: Page) -> None:
     await page.click("[data-action='save-session']")
     # status banner shows "Saved as session XXXXXXXX".
     await page.wait_for_function(
-        "() => /Saved as session [0-9a-f]{8}/.test(document.querySelector('.tree-editor-status').textContent || '')",
+        "() => /Saved as session [0-9a-f]{16}/.test(document.querySelector('.tree-editor-status').textContent || '')",
         timeout=5000,
     )
     status = await page.locator(".tree-editor-status").text_content()

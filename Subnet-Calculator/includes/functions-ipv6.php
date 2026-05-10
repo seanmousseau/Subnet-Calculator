@@ -42,8 +42,19 @@ function gmp_to_ipv6(\GMP $n): string
  */
 function cidrs_overlap6(string $cidr_a, string $cidr_b): string
 {
+    foreach (['cidr_a' => $cidr_a, 'cidr_b' => $cidr_b] as $name => $cidr) {
+        if (!str_contains($cidr, '/')) {
+            throw new \InvalidArgumentException(sprintf('%s: missing prefix length', $name));
+        }
+    }
     [$ip_a, $px_a] = explode('/', $cidr_a);
     [$ip_b, $px_b] = explode('/', $cidr_b);
+    if (!ctype_digit($px_a) || (int)$px_a > 128) {
+        throw new \InvalidArgumentException('cidr_a: prefix length must be 0..128');
+    }
+    if (!ctype_digit($px_b) || (int)$px_b > 128) {
+        throw new \InvalidArgumentException('cidr_b: prefix length must be 0..128');
+    }
     $px_a    = (int)$px_a;
     $px_b    = (int)$px_b;
     $net_a   = ipv6_to_gmp($ip_a);

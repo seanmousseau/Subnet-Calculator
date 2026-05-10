@@ -12,7 +12,7 @@ $db_path = ($session_db_path !== '') ? $session_db_path
 // GET /sessions/{id} — load a session
 if ($method === 'GET') {
     $load_id = trim((string)($_GET['session_id'] ?? ''));
-    if (!preg_match('/^[0-9a-f]{8}$/', $load_id)) {
+    if (!preg_match('/^[0-9a-f]{16}$/', $load_id)) {
         json_err('Invalid session ID format.');
     }
     if (!file_exists($db_path)) {

@@ -99,12 +99,31 @@ function wildcard_to_cidr(string $wildcard): string
 
 function cidrs_overlap(string $cidr_a, string $cidr_b): string
 {
+    foreach (['cidr_a' => $cidr_a, 'cidr_b' => $cidr_b] as $name => $cidr) {
+        if (!str_contains($cidr, '/')) {
+            throw new InvalidArgumentException(sprintf('%s: missing prefix length', $name));
+        }
+    }
     [$ip_a, $px_a] = explode('/', $cidr_a);
     [$ip_b, $px_b] = explode('/', $cidr_b);
+    if (!ctype_digit($px_a) || (int)$px_a > 32) {
+        throw new InvalidArgumentException('cidr_a: prefix length must be 0..32');
+    }
+    if (!ctype_digit($px_b) || (int)$px_b > 32) {
+        throw new InvalidArgumentException('cidr_b: prefix length must be 0..32');
+    }
+    $net_a_long = ip2long($ip_a);
+    $net_b_long = ip2long($ip_b);
+    if ($net_a_long === false) {
+        throw new InvalidArgumentException('cidr_a: invalid IPv4 address');
+    }
+    if ($net_b_long === false) {
+        throw new InvalidArgumentException('cidr_b: invalid IPv4 address');
+    }
     $px_a  = (int)$px_a;
     $px_b  = (int)$px_b;
-    $net_a = ip2long($ip_a) & 0xFFFFFFFF;
-    $net_b = ip2long($ip_b) & 0xFFFFFFFF;
+    $net_a = $net_a_long & 0xFFFFFFFF;
+    $net_b = $net_b_long & 0xFFFFFFFF;
     $test_px = min($px_a, $px_b);
     $mask    = $test_px === 0 ? 0 : ((~0 << (32 - $test_px)) & 0xFFFFFFFF);
     if (($net_a & $mask) !== ($net_b & $mask)) {
