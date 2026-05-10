@@ -102,9 +102,27 @@ $api_rate_limit_tokens = [];
 // Example: ['ipv4', 'ipv6'] — expose only the core calculation endpoints.
 $api_allowed_endpoints = [];
 
-// CORS Access-Control-Allow-Origin header value for API responses.
-// '*' = allow all origins; set to a specific origin to restrict.
-$api_cors_origins = '*';
+// CORS Access-Control-Allow-Origin allowlist for API responses (v3.6.3, #426).
+// Default ['*'] = allow all origins (back-compat with the open API). When API
+// auth is configured (via $api_tokens or admin-minted SQLite keys), set this
+// to a specific allowlist to scope cross-origin access:
+//   $api_cors_origins = ['https://app.example.com', 'https://admin.example.com'];
+// String '*' is also accepted for back-compat with pre-v3.6.3 configs.
+$api_cors_origins = ['*'];
+
+// HSTS — Strict-Transport-Security header (v3.6.3, #425). Sent on HTTPS
+// responses only. max-age clamped to 0..63072000 (2 years). Set to 0 to
+// disable. $hsts_preload sends "; preload" — only opt in after confirming
+// HTTPS for all subdomains and a clean preload-list audit.
+$hsts_max_age = 31536000;
+$hsts_preload = false;
+
+// Trusted proxies — only honor X-Forwarded-For when REMOTE_ADDR is in this
+// list (v3.6.3, #427-M3). Default empty = ignore XFF entirely (safe for
+// direct-exposure deploys). Examples:
+//   ['127.0.0.1', '::1']                   — local reverse proxy
+//   ['203.0.113.10', '203.0.113.11']       — specific known proxy IPs
+$api_trusted_proxies = [];
 
 // ── Session persistence (v2.0.0) ──────────────────────────────────────────
 // Enable SQLite-backed VLSM session save/restore and short-URL sharing.

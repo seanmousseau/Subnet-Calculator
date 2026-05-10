@@ -32,8 +32,39 @@ function json_err(string $message, int $code = 400): never
 function api_cors(): void
 {
     global $api_cors_origins;
-    $origin = (string)($api_cors_origins ?? '*');
-    header('Access-Control-Allow-Origin: ' . $origin);
+
+    // Normalise to an array (config.php should have done this, but be defensive
+    // in case helpers.php is required without bootstrap order guarantees).
+    $allowlist = $api_cors_origins ?? ['*'];
+    if (is_string($allowlist)) {
+        $allowlist = $allowlist === '' ? ['*'] : [$allowlist];
+    }
+    if (!is_array($allowlist) || $allowlist === []) {
+        $allowlist = ['*'];
+    }
+
+    $wildcard = '*';
+    if (in_array($wildcard, $allowlist, true)) {
+        // Intentional back-compat default for the open API. Operators with
+        // API auth configured see an error_log warning below.
+        header('Access-Control-Allow-Origin: ' . $wildcard);
+        // Warn when API auth is configured but CORS is open. Keeps back-compat
+        // (don't refuse to start) but flags the misconfiguration. (v3.6.3, #426)
+        if (api_sqlite_keys_present()) {
+            error_log(
+                "[security] CORS is set to '*' but API auth keys are configured. " .
+                "Set \$api_cors_origins to a specific allowlist."
+            );
+        }
+    } else {
+        $origin_raw = $_SERVER['HTTP_ORIGIN'] ?? '';
+        $origin     = is_string($origin_raw) ? $origin_raw : '';
+        if ($origin !== '' && in_array($origin, $allowlist, true)) {
+            header('Access-Control-Allow-Origin: ' . $origin);
+            header('Vary: Origin');
+        }
+        // else: omit Access-Control-Allow-Origin entirely (browser will block)
+    }
     header('Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS');
     header('Access-Control-Allow-Headers: Authorization, Content-Type');
     header('Access-Control-Max-Age: 86400');
@@ -197,9 +228,13 @@ function api_authenticate(): void
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 
-function api_rate_limit(string $key): void
+function api_rate_limit(string $key, int $charge = 1): void
 {
     global $api_rate_limit_rpm, $api_rate_limit_tokens, $api_tokens, $session_db_path;
+
+    if ($charge < 1) {
+        $charge = 1;
+    }
 
     // Effective RPM lookup order (first match wins):
     //   1. Static $api_rate_limit_tokens[token] override (operator-edited config)
@@ -297,27 +332,34 @@ function api_rate_limit(string $key): void
         // Per RFC draft-ietf-httpapi-ratelimit-headers; remaining is computed
         // before the request is recorded (so the count includes the previous
         // requests but not this one yet — match standard semantics).
-        $remaining = max(0, $rpm - $count - 1);
+        $remaining = max(0, $rpm - $count - $charge);
         header('X-RateLimit-Limit: ' . $rpm);
         header('X-RateLimit-Remaining: ' . $remaining);
         header('X-RateLimit-Reset: ' . $reset);
-        if ($count >= $rpm) {
+        if ($count + $charge > $rpm) {
             $db->close();
             header('X-RateLimit-Remaining: 0');
             header('Retry-After: 60');
             json_err('Rate limit exceeded — ' . $rpm . ' requests/minute.', 429);
         }
+        // Charge $charge hits — bulk endpoint passes count(items) so a 50-item
+        // request consumes 50 of the per-minute budget. (v3.6.3, #427-M1)
         $ins = $db->prepare('INSERT INTO rate_limit (key, hit_at) VALUES (:k, :t)');
         if ($ins === false) {
             throw new \RuntimeException('Failed to prepare rate_limit insert.');
         }
-        $ins->bindValue(':k', $rl_key, SQLITE3_TEXT);
-        $ins->bindValue(':t', $now, SQLITE3_INTEGER);
-        $ins->execute();
+        for ($i = 0; $i < $charge; $i++) {
+            $ins->reset();
+            $ins->bindValue(':k', $rl_key, SQLITE3_TEXT);
+            $ins->bindValue(':t', $now, SQLITE3_INTEGER);
+            $ins->execute();
+        }
         $db->close();
     } catch (\Throwable $e) {
+        // Fail closed: a corrupt/locked rate-limit DB must not silently
+        // re-open the API to unbounded traffic. (v3.6.3, #427-M2)
         error_log('sc api rate-limit error: ' . $e->getMessage());
-        // fail open
+        json_err('Rate limit store unavailable.', 503);
     }
 }
 
@@ -396,7 +438,20 @@ function api_body(): array
 
 function api_client_key(): string
 {
-    $ipRaw = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? null;
-    $ip    = is_string($ipRaw) ? $ipRaw : 'unknown';
-    return trim(explode(',', $ip)[0]);
+    global $api_trusted_proxies;
+
+    $remote_addr_raw = $_SERVER['REMOTE_ADDR'] ?? null;
+    $remote_addr     = is_string($remote_addr_raw) ? $remote_addr_raw : '';
+
+    // Only honor X-Forwarded-For when the immediate peer is a trusted proxy.
+    // Default empty allowlist = ignore XFF entirely. (v3.6.3, #427-M3)
+    $trusted = is_array($api_trusted_proxies ?? null) ? $api_trusted_proxies : [];
+    if ($remote_addr !== '' && in_array($remote_addr, $trusted, true)) {
+        $xffRaw = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? null;
+        $xff    = is_string($xffRaw) ? $xffRaw : '';
+        if ($xff !== '') {
+            return trim(explode(',', $xff)[0]);
+        }
+    }
+    return $remote_addr !== '' ? $remote_addr : 'unknown';
 }

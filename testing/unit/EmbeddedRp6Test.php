@@ -177,4 +177,11 @@ final class EmbeddedRp6Test extends TestCase
         $this->assertSame('::1', strtolower($r['rp_address']));
         $this->assertSame(0x12345678, $r['group_id']);
     }
+
+    // v3.6.3 #427-M5 — decoder must reject scope=0 (RFC 4291 §2.7 reserved)
+    public function test_decode_rejects_scope_zero(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        decode_embedded_rp_group('FF70:130:2001:db8:cafe::1234:5678');
+    }
 }

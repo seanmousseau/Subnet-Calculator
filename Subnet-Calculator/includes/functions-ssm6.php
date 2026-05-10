@@ -140,6 +140,11 @@ function decode_ssm_group(string $ipv6): array
             'Address is not a unicast-prefix-based / SSM multicast group (flags must be 0x3 = P+T).'
         );
     }
+    if ($scope < 1) {
+        throw new InvalidArgumentException(
+            'Scope must be 1..15 (RFC 4291 §2.7 reserves scope 0)'
+        );
+    }
 
     $prefix_length = ord($bin[3]);
     if ($prefix_length > 64) {

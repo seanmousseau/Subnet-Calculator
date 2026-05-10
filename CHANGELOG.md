@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.3] - 2026-05-09
+
+**Security patch.** Addresses findings from the 2026-05-09 broad
+security review.
+
+### Security
+
+- **`/api/v1/pmtu6` `payload_size` capped at 65535** (max IPv6 packet
+  payload). Prevents memory-amplification DoS from `payload_size=10^9`
+  inputs. Defensive `fragment_count` cap of 4096 added. Affected the
+  API endpoint, the bulk endpoint's `pmtu6` op, and the web form.
+  (#424)
+- **Strict-Transport-Security header** now sent on HTTPS responses.
+  New operator-config tokens `$hsts_max_age` (default 1 year, max
+  2 years) and `$hsts_preload` (default off; opt-in). (#425)
+- **CORS allowlist support** via new `$api_cors_origins` config
+  token. Default is `['*']` for back-compat with the open API; set to
+  a specific origin list when API authentication is configured.
+  Emits a warning to error log when API auth is configured but CORS
+  is left as `'*'`. (#426)
+- **Bulk endpoint rate-limit** now charges `count(items)` hits per
+  request instead of 1, preventing 50× amplification of expensive
+  ops. (#427-M1)
+- **Rate-limit failures fail closed** (return 503) instead of
+  silently swallowing SQLite errors, matching the auth path. (#427-M2)
+- **`X-Forwarded-For` only honored from trusted proxies** via new
+  `$api_trusted_proxies` config token (default `[]`). Prevents
+  rate-limit bypass via XFF spoofing on direct-exposure deployments.
+  (#427-M3)
+- **`extension_headers` array capped at 16 entries** in PMTU.
+  (#427-M4)
+- **SSM and embedded-RP decoders reject scope=0** (RFC 4291 reserved),
+  matching their build-side validation. (#427-M5)
+
 ## [3.6.2] - 2026-05-09
 
 **Patch.** Fixes a P1 functional bug in the IPv4 overlap checker
