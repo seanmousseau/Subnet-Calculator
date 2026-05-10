@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-05-09
+
+**UX polish + layout refactor.** First post-IPv6-roadmap minor.
+
+### Added
+
+- **IPv6 tools grouped into 5 collapsible categories**: Foundational
+  (split6, ula, range6, supernet6), Address utilities (zoneid, derive,
+  slaac, rdns6), Transition (mapped6, embedded-v4, 6to4, teredo,
+  isatap, 6rd), Prefix planning (prefix-plan, nibble, rfc3531),
+  Multicast (multicast, ssm, embedded-rp, pmtu). Default-open on
+  first visit; localStorage persists user-collapse state.
+- **A11y assertions strengthened across every drawer**: strict
+  tab-order, focus-return-after-ESC, prefers-reduced-motion respect.
+  ~90 new Playwright assertions.
+
+### Changed
+
+- **Mobile layout**: h1 wraps below 480px (no more "Subnet Cal..."
+  truncation). Tab strip becomes 2x2 grid below 480px (no horizontal
+  scroll). Drawer width clamped on narrow viewports; wide tables
+  scroll within their own region. (#420)
+- **`templates/layout.php` refactored** from 3387 lines to ~948 by
+  extracting per-tool drawer partials into `templates/_tools/*.php`
+  (35 files). Markup output byte-for-byte identical to v3.6.4 modulo
+  include whitespace.
+
+### Fixed
+
+- **`:focus` → `:focus-visible`** sweep: mouse clicks no longer leave
+  sticky teal outline on tool triggers. Keyboard focus retains the
+  ring as expected. (#420)
+- **CR-nit cleanup batch**: `cidrs_overlap()` and `cidrs_overlap6()`
+  use `explode('/', $cidr, 2)` for safety; `session_create()` docblock
+  updated for v3.6.4's 16-char IDs; OpenAPI session-ID examples
+  updated to 16-char; `declare(strict_types=1)` added to
+  `_tree_editor.php`.
+
 ## [3.6.4] - 2026-05-09
 
 **Cleanup patch.** Defense-in-depth and session-ID hardening from the
