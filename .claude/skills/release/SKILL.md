@@ -15,5 +15,16 @@ Run the full Subnet Calculator release workflow:
    - Bump `extra.version` in `mkdocs.yml` to `"X.Y.Z"`.
    - Update the tarball filename in `docs/index.md` (the `tar -xzf` install snippet).
 7. Build the release tarball: `tar -czf releases/subnet-calculator-X.Y.Z.tar.gz -C Subnet-Calculator .`
-8. Commit all changes with message: `release: vX.Y.Z`
-9. Confirm with user before pushing and opening a PR from `dev → main`.
+8. **Sync internal docs** (`docs/internal/`). Review the per-release spec/plan files (`docs/superpowers/specs/` and `docs/superpowers/plans/`) for this version and propagate anything load-bearing into the long-lived docs:
+   - `design-document.md` — new invariants (§5), design decisions (§6), tools (§7), endpoints (§8); update scale numbers (test counts, line counts) in §3/§9.
+   - `design-guide.md` — new UX patterns or principles.
+   - `coding-guide.md` — convention changes.
+   - `api-contract.md` — new error codes, breaking-change notes, deprecations.
+   - `data-dictionary.md` — schema, column, index, migration, or DB-path changes.
+   - `config-reference.md` — added/removed/renamed/redefaulted operator config variables.
+   - `security-model.md` — threat-surface changes or new controls.
+   - `runbooks.md` — new incident classes learned this cycle.
+   - Bump the "Last updated" header on every doc touched.
+   - If nothing changed for a given doc, skip it (don't bump just to bump).
+9. Commit all changes with message: `release: vX.Y.Z`
+10. Confirm with user before pushing and opening a PR from `dev → main`.
