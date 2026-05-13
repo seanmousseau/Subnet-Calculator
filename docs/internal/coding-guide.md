@@ -363,7 +363,7 @@ Scopes: `ipv4`, `ipv6`, `api`, `ui`, `vlsm`, `vlsm6`, `admin`, `release`, `docs`
 
 ### PR descriptions
 
-```
+```text
 ## Summary
 1–3 bullets
 

@@ -1,5 +1,6 @@
 # Security Model
 
+**Last updated:** 2026-05-13 (app v3.7.0)
 **Audience:** Developer / future-agent reasoning about threats or reviewing security-sensitive changes.
 **Companion to:** `design-document.md` §11 (controls inventory).
 **Premise:** This document explains *what* we defend against and *why* — the controls in §11 explain *how*. Both must move together.

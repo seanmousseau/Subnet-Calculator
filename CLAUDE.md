@@ -55,7 +55,7 @@ Release checklist: [`design-document.md`](docs/internal/design-document.md) §10
 
 ## Repository layout (top-level only)
 
-```
+```text
 Subnet-Calculator/      ← docroot (point webserver here)
   index.php, sw.js, .htaccess, config.php.example
   includes/             ← pure functions; web-blocked

@@ -1,5 +1,6 @@
 # Design Guide
 
+**Last updated:** 2026-05-13 (app v3.7.0)
 **Audience:** Developer / future-agent making UX or visual decisions.
 **Companions:**
 - `docs/superpowers/style-guide.md` — visual identity (logo, colours, typography, spacing tokens). The source of truth for *what things look like*.
@@ -158,7 +159,7 @@ When a UX call isn't obvious:
 2. **Does this break a principle above?** → Reconsider. The principles are load-bearing; deviating costs more than the feature is worth.
 3. **Does the user actually need this on the calculator page?** → If no, it doesn't belong here. We don't have an admin panel for end-user features. The calculator is the page.
 4. **Will this make sense to someone landing cold via a shareable URL?** → If no, the shareability principle is broken.
-5. **What does `ui-ux-pro-max` say?** → For any non-trivial UI change, consult before AND after the edit. This is a release gate (see `design-document.md` §6.x).
+5. **What does `ui-ux-pro-max` say?** → For any non-trivial UI change, consult before AND after the edit. This is a release gate (see [`design-document.md`](design-document.md) §6.9 — the manual-regression mandate that introduced the consult pattern).
 
 ---
 
