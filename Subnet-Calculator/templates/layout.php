@@ -226,6 +226,12 @@ if ($i < 3) {
             <div class="share-bar">
                 <span class="share-label">Share</span>
                 <code class="share-url"><?= htmlspecialchars($share_url_abs) ?></code>
+                <?php if ($session_enabled) : ?>
+                <button type="button" class="share-shorten"
+                        data-tab="ipv4"
+                        data-ip="<?= htmlspecialchars($input_ip, ENT_QUOTES, 'UTF-8') ?>"
+                        data-mask="<?= htmlspecialchars($input_mask, ENT_QUOTES, 'UTF-8') ?>">Shorten</button>
+                <?php endif; ?>
                 <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
             </div>
             <?php endif; ?>
@@ -436,6 +442,12 @@ if ($i < 3) {
             <div class="share-bar">
                 <span class="share-label">Share</span>
                 <code class="share-url"><?= htmlspecialchars($share_url_abs) ?></code>
+                <?php if ($session_enabled) : ?>
+                <button type="button" class="share-shorten"
+                        data-tab="ipv6"
+                        data-ip="<?= htmlspecialchars($input_ipv6, ENT_QUOTES, 'UTF-8') ?>"
+                        data-mask="<?= htmlspecialchars($input_prefix, ENT_QUOTES, 'UTF-8') ?>">Shorten</button>
+                <?php endif; ?>
                 <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
             </div>
             <?php endif; ?>

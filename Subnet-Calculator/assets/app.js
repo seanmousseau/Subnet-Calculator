@@ -161,6 +161,43 @@ document.querySelectorAll('.share-copy').forEach(btn => {
     });
 });
 
+// v3.9.0 (#449) — Shorten button mints a session-ID short link via /api/v1/sessions.
+document.querySelectorAll('.share-shorten').forEach(function (btn) {
+    btn.addEventListener('click', async function () {
+        const tab  = btn.dataset.tab  || 'ipv4';
+        const ip   = btn.dataset.ip   || '';
+        const mask = btn.dataset.mask || '';
+        if (!ip) { showToast('Nothing to shorten'); return; }
+        btn.disabled = true;
+        try {
+            const resp = await fetch('api/v1/sessions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ payload: { type: 'calc', tab: tab, ip: ip, mask: mask } }),
+            });
+            const env = await resp.json().catch(() => null);
+            if (!resp.ok || !env) { showToast('Shorten failed'); return; }
+            const sid = env.data && env.data.id;
+            if (!sid) { showToast('Shorten failed'); return; }
+            const shortPath = window.location.pathname + '?s=' + encodeURIComponent(sid);
+            const shortAbs  = window.location.origin + shortPath;
+            const bar = btn.closest('.share-bar');
+            if (bar) {
+                const urlEl  = bar.querySelector('.share-url');
+                const copyEl = bar.querySelector('.share-copy');
+                if (urlEl)  urlEl.textContent = shortAbs;
+                if (copyEl) copyEl.setAttribute('data-copy', shortPath);
+            }
+            btn.style.display = 'none';
+            showToast('Short link ready — copy it');
+        } catch (e) {
+            showToast('Shorten failed');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+});
+
 // ── Subnet splitter: click to copy ──────────────────────────────────────────
 document.querySelectorAll('.split-item').forEach(item => {
     item.addEventListener('click', e => {

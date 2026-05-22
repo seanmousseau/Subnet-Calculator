@@ -550,6 +550,23 @@
 
         .share-copy:hover { background: var(--color-border); color: var(--color-text); }
 
+        /* #449 — Shorten button (mints a session-ID short link). */
+        .share-shorten {
+            background: none;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            color: var(--color-text-subtle);
+            cursor: pointer;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            flex-shrink: 0;
+            transition: background 0.15s, color 0.15s;
+        }
+        .share-shorten:hover { background: var(--color-border); color: var(--color-text); }
+        .share-shorten:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+        .share-shorten:disabled { opacity: 0.6; cursor: progress; }
+
         /* Toast */
         .toast {
             position: fixed;

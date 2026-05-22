@@ -2604,7 +2604,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // (default 'ipv4' for back-compat). The active tab determines which
     // template variables get populated, so an IPv6 session loaded on the
     // ipv4 tab is reported as a tab mismatch rather than silently mis-rendered.
-    if ($session_enabled && in_array($active_tab, ['vlsm', 'vlsm6'], true) && isset($_GET['s'])) {
+    if ($session_enabled && in_array($active_tab, ['ipv4', 'ipv6', 'vlsm', 'vlsm6'], true) && isset($_GET['s'])) {
         $session_load_id = trim((string)$_GET['s']);
         if (preg_match('/^[0-9a-f]{16}$/', $session_load_id)) {
             try {
@@ -2618,12 +2618,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $session_error = 'Session not found or expired.';
                     } else {
                         $payload_type = (string)($payload['type'] ?? 'ipv4');
-                        $expected_type = $active_tab === 'vlsm6' ? 'ipv6' : 'ipv4';
-                        if ($payload_type !== $expected_type) {
-                            $session_error = 'Session is for the '
-                                . ($payload_type === 'ipv6' ? 'IPv6' : 'IPv4')
-                                . ' VLSM planner — switch tabs to load it.';
-                        } elseif ($payload_type === 'ipv6') {
+                        // v3.9.0 #449: 'calc' payloads rehydrate the IPv4/IPv6 calculator
+                        // form. Active-tab follows the payload (and is overridden so the
+                        // correct panel renders).
+                        if ($payload_type === 'calc') {
+                            $calc_tab = (string)($payload['tab'] ?? 'ipv4');
+                            if (!in_array($calc_tab, ['ipv4', 'ipv6'], true)) {
+                                $session_error = 'Invalid calc session.';
+                            } elseif (!in_array($active_tab, ['ipv4', 'ipv6'], true)) {
+                                $session_error = 'Session is for the calculator — switch to the IPv4 or IPv6 tab to load it.';
+                            } else {
+                                $active_tab = $calc_tab;
+                                if ($calc_tab === 'ipv4') {
+                                    $input_ip   = (string)($payload['ip']   ?? '');
+                                    $input_mask = (string)($payload['mask'] ?? '');
+                                } else {
+                                    $input_ipv6   = (string)($payload['ip']   ?? '');
+                                    $input_prefix = (string)($payload['mask'] ?? '');
+                                }
+                            }
+                        } elseif (!in_array($active_tab, ['vlsm', 'vlsm6'], true)) {
+                            $session_error = 'Session is for the VLSM planner — switch tabs to load it.';
+                        } else {
+                            $expected_type = $active_tab === 'vlsm6' ? 'ipv6' : 'ipv4';
+                            if ($payload_type !== $expected_type) {
+                                $session_error = 'Session is for the '
+                                    . ($payload_type === 'ipv6' ? 'IPv6' : 'IPv4')
+                                    . ' VLSM planner — switch tabs to load it.';
+                            } elseif ($payload_type === 'ipv6') {
                             $vlsm6_network    = (string)($payload['network'] ?? '');
                             $vlsm6_cidr_input = (string)($payload['cidr']    ?? '');
                             $raw_reqs6        = $payload['requirements'] ?? [];
@@ -2684,6 +2706,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     }
                                 }
                             }
+                        }
                         }
                     }
                 } else {

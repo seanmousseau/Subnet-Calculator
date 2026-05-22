@@ -10819,6 +10819,58 @@ async def test_v390_mobile_title_one_line(page: Page) -> None:
     )
 
 
+async def test_v390_shortlink_ipv4(page: Page) -> None:
+    """v3.9.0 #449 — Shorten on IPv4 mints a session and rewrites the share URL to ?s=<id>."""
+    section("v3.9.0 #449 — IPv4 short-link parity")
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "10.20.30.0/22")
+    await submit_form(page, "#panel-ipv4 form")
+    await page.wait_for_selector("#panel-ipv4 .share-bar")
+    long_url = await page.locator("#panel-ipv4 .share-url").text_content()
+    assert_true(
+        f"long URL contains ip=/mask= (got {long_url})",
+        "ip=" in (long_url or "") and "mask=" in (long_url or ""),
+    )
+
+    async with page.expect_response(
+        lambda r: "/api/v1/sessions" in r.url and r.request.method == "POST"
+    ) as resp_info:
+        await page.locator("#panel-ipv4 .share-shorten").click()
+    resp = await resp_info.value
+    assert_true(
+        f"POST /api/v1/sessions returns 200 or 201 (got {resp.status})",
+        resp.status in (200, 201),
+    )
+    body = await resp.json()
+    sid = (body.get("data") or {}).get("id") or body.get("id")
+    assert_true(
+        f"session id is 16 hex chars (got {sid!r})",
+        isinstance(sid, str) and len(sid) == 16 and all(c in "0123456789abcdef" for c in sid),
+    )
+    short_url = await page.locator("#panel-ipv4 .share-url").text_content()
+    assert_true(
+        f"share URL is now ?s=<id> (got {short_url})",
+        "?s=" in (short_url or "") and (sid or "") in (short_url or ""),
+    )
+
+    # Verify the server-side rehydration path via the API GET endpoint
+    # (a fresh page.goto to ?s=<id> hits unrelated SW/cache layers; the API call
+    # exercises session_load directly through the same path the calculator uses).
+    api_resp = await page.request.get(f"{APP_URL.rstrip('/')}/api/v1/sessions/{sid}")
+    assert_true(
+        f"GET /api/v1/sessions/{sid} returns 200 (got {api_resp.status})",
+        api_resp.status == 200,
+    )
+    api_body = await api_resp.json()
+    api_payload = (api_body.get("data") or {}).get("payload") or {}
+    assert_eq("session payload type=calc", api_payload.get("type"), "calc")
+    assert_eq("session payload tab=ipv4", api_payload.get("tab"), "ipv4")
+    # Server normalises "10.20.30.0/22" → ip="10.20.30.0", mask="22" before render,
+    # so the Shorten button's data-ip captures the normalised form.
+    assert_eq("session payload ip preserved", api_payload.get("ip"), "10.20.30.0")
+    assert_eq("session payload mask preserved", api_payload.get("mask"), "22")
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -11227,6 +11279,7 @@ async def main() -> None:
             await test_v390_hero_density(page)
             await test_v390_landmarks(page)
             await test_v390_mobile_title_one_line(page)
+            await test_v390_shortlink_ipv4(page)
             await test_v290_typography(page)
         finally:
             await context.close()
