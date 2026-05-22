@@ -10374,6 +10374,67 @@ async def test_focus_visible_on_keyboard_only(page: Page) -> None:
     void_ref = matches  # silence unused
 
 
+async def test_v371_touch_targets_44px(page: Page) -> None:
+    """v3.7.1 #436 — header + drawer icon buttons meet 44×44 minimum (WCAG 2.5.5)."""
+    section("v3.7.1 #436 — touch targets ≥44×44")
+    await navigate(page, APP_URL)
+
+    selectors = [
+        "#theme-toggle",
+        "#kbd-help-toggle",
+        "#history-toggle",
+    ]
+    for sel in selectors:
+        box = await page.locator(sel).bounding_box()
+        assert box is not None, f"{sel} has no bounding box (not visible?)"
+        assert_true(
+            f"{sel} width ≥44 (got {box['width']})",
+            box["width"] >= 44,
+        )
+        assert_true(
+            f"{sel} height ≥44 (got {box['height']})",
+            box["height"] >= 44,
+        )
+
+    # Open the Split Subnet drawer to reveal .tool-drawer-close, then measure it.
+    # The IPv4 tool drawer requires a calculated result before triggers activate.
+    await page.fill("#ip", "192.168.0.0")
+    await page.fill("#mask", "24")
+    await submit_form(page, "#panel-ipv4 form")
+    await page.click('#panel-ipv4 .tool-trigger[data-tool="split"]')
+    await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
+    close_box = await page.locator(
+        "#panel-ipv4 .tool-drawer.open .tool-drawer-close"
+    ).first.bounding_box()
+    assert close_box is not None, ".tool-drawer-close not visible"
+    assert_true(
+        f".tool-drawer-close width ≥44 (got {close_box['width']})",
+        close_box["width"] >= 44,
+    )
+    assert_true(
+        f".tool-drawer-close height ≥44 (got {close_box['height']})",
+        close_box["height"] >= 44,
+    )
+
+    # Close the drawer (Esc) so it doesn't intercept the next click.
+    await page.keyboard.press("Escape")
+
+    # Open the keyboard-shortcuts modal to reveal .modal-close.
+    await page.locator("#kbd-help-toggle").click()
+    modal_close_box = await page.locator(
+        "#kbd-overlay .modal-close"
+    ).bounding_box()
+    assert modal_close_box is not None, ".modal-close not visible"
+    assert_true(
+        f".modal-close width ≥44 (got {modal_close_box['width']})",
+        modal_close_box["width"] >= 44,
+    )
+    assert_true(
+        f".modal-close height ≥44 (got {modal_close_box['height']})",
+        modal_close_box["height"] >= 44,
+    )
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -10769,6 +10830,7 @@ async def main() -> None:
             await test_ipv6_tool_groups(page)
             await test_mobile_layout(page)
             await test_focus_visible_on_keyboard_only(page)
+            await test_v371_touch_targets_44px(page)
             await test_v290_typography(page)
         finally:
             await context.close()

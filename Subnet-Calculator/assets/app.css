@@ -404,6 +404,9 @@
             align-items: center;
             justify-content: center;
             margin-left: auto;
+            /* WCAG 2.5.5 — 44×44 minimum target. Inner icon stays small via flex centering. */
+            min-width: 44px;
+            min-height: 44px;
             padding: 0.3rem 0.4rem;
             transition: background 0.15s, color 0.15s;
         }
@@ -422,6 +425,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            /* WCAG 2.5.5 — 44×44 minimum target. */
+            min-width: 44px;
+            min-height: 44px;
             padding: 0.3rem 0.4rem;
             transition: background 0.15s, color 0.15s;
         }
@@ -1593,8 +1599,14 @@
     border: none;
     color: var(--color-text-faint);
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-size: 1.1rem;
     line-height: 1;
+    /* WCAG 2.5.5 — 44×44 minimum target. */
+    min-width: 44px;
+    min-height: 44px;
     padding: 0.2rem 0.4rem;
     border-radius: 4px;
 }
@@ -1757,8 +1769,14 @@
     border: none;
     color: var(--color-text-subtle);
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-size: 1.4rem;
     line-height: 1;
+    /* WCAG 2.5.5 — 44×44 minimum target. */
+    min-width: 44px;
+    min-height: 44px;
     padding: 0 0.3rem;
 }
 .modal-close:hover { color: var(--color-text); }
