@@ -1481,6 +1481,25 @@
 }
 .js-enabled .tool-toolbar { display: flex; }
 
+/* IPv4 tool IA grouping (#441): Transform / Visualize / Lookups */
+.tool-toolbar-group {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+}
+.tool-toolbar-group-label {
+    font-size: 0.7rem;
+    color: var(--color-text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-right: 0.15rem;
+}
+@media (width <= 480px) {
+    .tool-toolbar-group { width: 100%; }
+    .tool-toolbar-group-label { display: block; width: 100%; margin-bottom: 0.2rem; }
+}
+
 .tool-trigger {
     background: var(--color-surface);
     border: 1px solid var(--color-border);

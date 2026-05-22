@@ -247,14 +247,23 @@ if ($i < 3) {
         }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv4 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv4) . '"' : '' ?>>
-            <button type="button" class="tool-trigger" data-tool="split" aria-expanded="false">Split Subnet</button>
-            <button type="button" class="tool-trigger" data-tool="supernet" aria-expanded="false">Supernet</button>
-            <button type="button" class="tool-trigger" data-tool="range" aria-expanded="false">Range&rarr;CIDR</button>
-            <button type="button" class="tool-trigger" data-tool="tree" aria-expanded="false">Subnet Tree</button>
-            <button type="button" class="tool-trigger" data-tool="tree-editor" aria-expanded="false">Tree Editor</button>
-            <button type="button" class="tool-trigger" data-tool="wildcard" aria-expanded="false">Wildcard&harr;CIDR</button>
-            <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
-            <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
+            <div class="tool-toolbar-group">
+                <span class="tool-toolbar-group-label">Transform</span>
+                <button type="button" class="tool-trigger" data-tool="split" aria-expanded="false">Split Subnet</button>
+                <button type="button" class="tool-trigger" data-tool="supernet" aria-expanded="false">Supernet</button>
+                <button type="button" class="tool-trigger" data-tool="range" aria-expanded="false">Range&rarr;CIDR</button>
+                <button type="button" class="tool-trigger" data-tool="wildcard" aria-expanded="false">Wildcard&harr;CIDR</button>
+            </div>
+            <div class="tool-toolbar-group">
+                <span class="tool-toolbar-group-label">Visualize</span>
+                <button type="button" class="tool-trigger" data-tool="tree" aria-expanded="false">Subnet Tree</button>
+                <button type="button" class="tool-trigger" data-tool="tree-editor" aria-expanded="false">Tree Editor</button>
+            </div>
+            <div class="tool-toolbar-group">
+                <span class="tool-toolbar-group-label">Lookups</span>
+                <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
+                <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
+            </div>
         </div>
 
         <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv4">

@@ -10649,6 +10649,36 @@ async def test_v380_copy_affordance(page: Page) -> None:
     )
 
 
+async def test_v380_ipv4_tool_groups(page: Page) -> None:
+    """v3.8.0 #441 — IPv4 tools organised into 3 labelled groups: Transform / Visualize / Lookups."""
+    section("v3.8.0 #441 — IPv4 tool IA grouping")
+    await navigate(page, APP_URL)
+
+    labels = await page.eval_on_selector_all(
+        "#panel-ipv4 .tool-toolbar-group-label",
+        "els => els.map(el => el.textContent.trim())",
+    )
+    assert_eq("3 group labels present", len(labels), 3)
+    assert_eq("group labels match spec",
+              [l.lower() for l in labels],
+              ["transform", "visualize", "lookups"])
+
+    tools = await page.eval_on_selector_all(
+        "#panel-ipv4 .tool-toolbar-group .tool-trigger",
+        "els => els.map(el => el.dataset.tool)",
+    )
+    expected = ["split", "supernet", "range", "wildcard",
+                "tree", "tree-editor",
+                "lookup", "diff"]
+    assert_eq("8 tool triggers present in groups", sorted(tools), sorted(expected))
+
+    orphans = await page.eval_on_selector_all(
+        "#panel-ipv4 .tool-toolbar > .tool-trigger",
+        "els => els.length",
+    )
+    assert_eq("no orphan tool-triggers", orphans, 0)
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -11050,6 +11080,7 @@ async def main() -> None:
             await test_v380_inactive_panels_inert(page)
             await test_v380_reset_is_button(page)
             await test_v380_copy_affordance(page)
+            await test_v380_ipv4_tool_groups(page)
             await test_v290_typography(page)
         finally:
             await context.close()
