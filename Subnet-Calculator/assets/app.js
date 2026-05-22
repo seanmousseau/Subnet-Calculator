@@ -179,14 +179,17 @@ document.querySelectorAll('.share-shorten').forEach(function (btn) {
             if (!resp.ok || !env) { showToast('Shorten failed'); return; }
             const sid = env.data && env.data.id;
             if (!sid) { showToast('Shorten failed'); return; }
-            const shortPath = window.location.pathname + '?s=' + encodeURIComponent(sid);
-            const shortAbs  = window.location.origin + shortPath;
+            // data-copy is the query portion only — buildShareUrl() prepends `_base`
+            // (origin + pathname) and falls through for non-tab queries, producing
+            // a clean absolute URL. Passing a full path here would double the path.
+            const shortQuery = '?s=' + encodeURIComponent(sid);
+            const shortAbs   = buildShareUrl(shortQuery);
             const bar = btn.closest('.share-bar');
             if (bar) {
                 const urlEl  = bar.querySelector('.share-url');
                 const copyEl = bar.querySelector('.share-copy');
                 if (urlEl)  urlEl.textContent = shortAbs;
-                if (copyEl) copyEl.setAttribute('data-copy', shortPath);
+                if (copyEl) copyEl.setAttribute('data-copy', shortQuery);
             }
             btn.style.display = 'none';
             showToast('Short link ready — copy it');

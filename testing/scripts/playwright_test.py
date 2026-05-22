@@ -10769,21 +10769,24 @@ async def test_v390_hero_density(page: Page) -> None:
     """v3.9.0 #446 — card anchored near top of fold + value-prop chips render."""
     section("v3.9.0 #446 — hero anchored top-of-fold")
     await page.set_viewport_size({"width": 1440, "height": 900})
-    await navigate(page, APP_URL)
-    card_box = await page.locator("main.card").bounding_box()
-    assert card_box is not None
-    assert_true(
-        f"card top ≤300px from viewport top (got {card_box['y']:.0f})",
-        card_box["y"] <= 300,
-    )
-    chips = await page.eval_on_selector_all(
-        ".value-prop .value-prop-chip",
-        "els => els.map(el => el.textContent.trim())",
-    )
-    assert_true(
-        f"≥3 value-prop chips present (got {chips})",
-        len(chips) >= 3,
-    )
+    try:
+        await navigate(page, APP_URL)
+        card_box = await page.locator("main.card").bounding_box()
+        assert card_box is not None
+        assert_true(
+            f"card top ≤300px from viewport top (got {card_box['y']:.0f})",
+            card_box["y"] <= 300,
+        )
+        chips = await page.eval_on_selector_all(
+            ".value-prop .value-prop-chip",
+            "els => els.map(el => el.textContent.trim())",
+        )
+        assert_true(
+            f"≥3 value-prop chips present (got {chips})",
+            len(chips) >= 3,
+        )
+    finally:
+        await page.set_viewport_size({"width": 1280, "height": 720})
 
 
 async def test_v390_landmarks(page: Page) -> None:
@@ -10810,13 +10813,16 @@ async def test_v390_mobile_title_one_line(page: Page) -> None:
     """v3.9.0 #448 — h1 fits on one line at 375px."""
     section("v3.9.0 #448 — h1 one line at 375px")
     await page.set_viewport_size({"width": 375, "height": 812})
-    await navigate(page, APP_URL)
-    h1_box = await page.locator("header h1").first.bounding_box()
-    assert h1_box is not None
-    assert_true(
-        f"h1 fits on a single line at 375px (height={h1_box['height']:.0f})",
-        h1_box["height"] <= 45,
-    )
+    try:
+        await navigate(page, APP_URL)
+        h1_box = await page.locator("header h1").first.bounding_box()
+        assert h1_box is not None
+        assert_true(
+            f"h1 fits on a single line at 375px (height={h1_box['height']:.0f})",
+            h1_box["height"] <= 45,
+        )
+    finally:
+        await page.set_viewport_size({"width": 1280, "height": 720})
 
 
 async def test_v390_shortlink_ipv4(page: Page) -> None:
@@ -10826,6 +10832,10 @@ async def test_v390_shortlink_ipv4(page: Page) -> None:
     await page.fill("#ip", "10.20.30.0/22")
     await submit_form(page, "#panel-ipv4 form")
     await page.wait_for_selector("#panel-ipv4 .share-bar")
+    # Shorten is gated on $session_enabled; skip if the build doesn't expose it.
+    if await page.locator("#panel-ipv4 .share-shorten").count() == 0:
+        ok("session persistence disabled in this build — skipping #449 short-link assertions")
+        return
     long_url = await page.locator("#panel-ipv4 .share-url").text_content()
     assert_true(
         f"long URL contains ip=/mask= (got {long_url})",

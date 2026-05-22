@@ -115,16 +115,16 @@ if ($type === 'ipv4' || $type === 'ipv6') {
 } elseif ($type === 'calc') {
     // v3.9.0 (#449): plain IPv4/IPv6 calculator state — short-link parity
     // with the VLSM session-ID mechanism. Payload shape: { tab, ip, mask }.
-    $tab = (string)($payload['tab'] ?? '');
-    if (!in_array($tab, ['ipv4', 'ipv6'], true)) {
-        json_err('Field "tab" must be "ipv4" or "ipv6" for type=calc.');
+    $tab = $payload['tab'] ?? '';
+    if (!is_string($tab) || !in_array($tab, ['ipv4', 'ipv6'], true)) {
+        json_err('Field "tab" must be the string "ipv4" or "ipv6" for type=calc.');
     }
-    $ip = (string)($payload['ip'] ?? '');
-    if ($ip === '' || strlen($ip) > 64) {
+    $ip = $payload['ip'] ?? '';
+    if (!is_string($ip) || $ip === '' || strlen($ip) > 64) {
         json_err('Field "ip" must be a non-empty string up to 64 chars.');
     }
-    $mask = (string)($payload['mask'] ?? '');
-    if (strlen($mask) > 16) {
+    $mask = $payload['mask'] ?? '';
+    if (!is_string($mask) || strlen($mask) > 16) {
         json_err('Field "mask" must be a string up to 16 chars.');
     }
     // Normalise (drop unrelated keys to keep payload small).
