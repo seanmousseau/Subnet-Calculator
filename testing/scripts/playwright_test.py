@@ -10303,11 +10303,13 @@ async def test_mobile_layout(page: Page) -> None:
     try:
         await navigate(page, APP_URL)
 
-        # h1 should wrap; white-space must not be 'nowrap' below 480px
+        # v3.9.0 (#448) reversed v3.7.0 T4's wrap: now h1 stays on one line via
+        # nowrap + clamp() font-size, and the version chip is hidden below 480px
+        # to make room. The fit-on-one-line assertion is in test_v390_mobile_title_one_line.
         white_space = await page.eval_on_selector(
             "h1", "el => getComputedStyle(el).whiteSpace"
         )
-        assert_true("h1 white-space allows wrapping", white_space != "nowrap")
+        assert_eq("h1 white-space is nowrap at 375px", white_space, "nowrap")
 
         # Tab strip is a 2x2 grid (no horizontal scrollbar on .tabs)
         tabs_overflow = await page.eval_on_selector(
@@ -10804,6 +10806,19 @@ async def test_v390_landmarks(page: Page) -> None:
     assert_true("<nav> contains the tablist",  landmarks["navContainsTablist"])
 
 
+async def test_v390_mobile_title_one_line(page: Page) -> None:
+    """v3.9.0 #448 — h1 fits on one line at 375px."""
+    section("v3.9.0 #448 — h1 one line at 375px")
+    await page.set_viewport_size({"width": 375, "height": 812})
+    await navigate(page, APP_URL)
+    h1_box = await page.locator("header h1").first.bounding_box()
+    assert h1_box is not None
+    assert_true(
+        f"h1 fits on a single line at 375px (height={h1_box['height']:.0f})",
+        h1_box["height"] <= 45,
+    )
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -11211,6 +11226,7 @@ async def main() -> None:
             await test_v390_form_label_size(page)
             await test_v390_hero_density(page)
             await test_v390_landmarks(page)
+            await test_v390_mobile_title_one_line(page)
             await test_v290_typography(page)
         finally:
             await context.close()

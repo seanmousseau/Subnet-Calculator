@@ -1344,20 +1344,22 @@
             .card { overflow: clip; }
             .form-row { flex-direction: column; }
             .split-list { grid-template-columns: 1fr; }
-            /* v3.7.0 T4: allow h1 to wrap to two lines instead of truncating
-               with an ellipsis at 375px viewports (#420). */
+            /* v3.9.0 (#448): keep h1 on one line at 375px. Hide version chip +
+               clamp h1 font-size + nowrap. Earlier v3.7.0 T4 (#420) intentionally
+               allowed wrap; the v3.7.1 44×44 icon-buttons made that wrap rougher. */
             h1 {
                 flex: 1;
-                font-size: clamp(1.05rem, 4.5vw, 1.35rem);
+                font-size: clamp(1rem, 4.2vw, 1.25rem);
                 min-width: 0;
-                overflow: visible;
-                text-overflow: clip;
-                white-space: normal;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
                 line-height: 1.2;
             }
             .logo { width: 36px; height: 36px; }
             .result-value { overflow-wrap: anywhere; }
             .theme-toggle { flex-shrink: 0; }
+            .title-row { gap: 0.4rem; }
             /* v3.1.1 (#330): hide the version pill on narrow viewports so the
                app title has room to render in full alongside the icon-button
                cluster. Version is still visible in the docs/footer + meta. */
