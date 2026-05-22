@@ -113,9 +113,38 @@
             color: var(--color-text);
             min-height: 100vh;
             display: flex;
+            flex-direction: column;            /* #446: stack chip strip + card */
             align-items: center;
+            justify-content: flex-start;       /* #446: anchor top-of-fold */
+            padding: 4rem 1rem 2rem;
+        }
+
+        /* #446 — value-prop chip strip above the card on calculator pages. */
+        .value-prop {
+            display: flex;
+            flex-wrap: wrap;
             justify-content: center;
-            padding: 2rem 1rem;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            max-width: 560px;
+            width: 100%;
+        }
+        .value-prop-chip {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: 999px;
+            color: var(--color-text-faint);
+            font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.7rem;
+            transition: color 0.15s, border-color 0.15s;
+        }
+        .value-prop-chip:hover {
+            color: var(--color-accent);
+            border-color: rgb(6 214 160 / 28%);
+        }
+        @media (width <= 480px) {
+            .value-prop { display: none; }
         }
 
         html[data-theme="light"] body {
@@ -215,7 +244,7 @@
         .form-group { display: flex; flex-direction: column; flex: 1; }
 
         label {
-            font-size: 0.75rem;
+            font-size: 0.875rem;        /* #445: was 0.75rem (12px) — 14px reads better on mobile */
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.05em;
@@ -520,6 +549,23 @@
         }
 
         .share-copy:hover { background: var(--color-border); color: var(--color-text); }
+
+        /* #449 — Shorten button (mints a session-ID short link). */
+        .share-shorten {
+            background: none;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            color: var(--color-text-subtle);
+            cursor: pointer;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            flex-shrink: 0;
+            transition: background 0.15s, color 0.15s;
+        }
+        .share-shorten:hover { background: var(--color-border); color: var(--color-text); }
+        .share-shorten:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+        .share-shorten:disabled { opacity: 0.6; cursor: progress; }
 
         /* Toast */
         .toast {
@@ -1315,20 +1361,22 @@
             .card { overflow: clip; }
             .form-row { flex-direction: column; }
             .split-list { grid-template-columns: 1fr; }
-            /* v3.7.0 T4: allow h1 to wrap to two lines instead of truncating
-               with an ellipsis at 375px viewports (#420). */
+            /* v3.9.0 (#448): keep h1 on one line at 375px. Hide version chip +
+               clamp h1 font-size + nowrap. Earlier v3.7.0 T4 (#420) intentionally
+               allowed wrap; the v3.7.1 44×44 icon-buttons made that wrap rougher. */
             h1 {
                 flex: 1;
-                font-size: clamp(1.05rem, 4.5vw, 1.35rem);
+                font-size: clamp(1rem, 4.2vw, 1.25rem);
                 min-width: 0;
-                overflow: visible;
-                text-overflow: clip;
-                white-space: normal;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
                 line-height: 1.2;
             }
             .logo { width: 36px; height: 36px; }
             .result-value { overflow-wrap: anywhere; }
             .theme-toggle { flex-shrink: 0; }
+            .title-row { gap: 0.4rem; }
             /* v3.1.1 (#330): hide the version pill on narrow viewports so the
                app title has room to render in full alongside the icon-button
                cluster. Version is still visible in the docs/footer + meta. */

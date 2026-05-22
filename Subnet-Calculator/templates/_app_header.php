@@ -37,8 +37,16 @@ $_suppress_skip_link  = !empty($skip_link_emitted);
 <?php if (!$_suppress_skip_link) : ?>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 <?php endif; ?>
+<?php if ($_show_app_actions) : ?>
+<div class="value-prop" aria-hidden="true">
+    <span class="value-prop-chip">/24 IPv4</span>
+    <span class="value-prop-chip">/64 IPv6</span>
+    <span class="value-prop-chip">VLSM</span>
+    <span class="value-prop-chip">Share via URL</span>
+</div>
+<?php endif; ?>
 <main class="card<?= isset($admin_card_extra_class) ? ' ' . htmlspecialchars((string)$admin_card_extra_class) : '' ?>" id="main-content">
-    <div class="title-row">
+    <header class="title-row">
         <?php $logo_v = htmlspecialchars($app_version) . '-2'; ?>
         <picture>
             <source srcset="<?= htmlspecialchars($asset_base ?? 'assets') ?>/logo.webp?v=<?= $logo_v ?>" type="image/webp">
@@ -68,4 +76,4 @@ $_suppress_skip_link  = !empty($skip_link_emitted);
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M10 14h4"/></svg>
         </button>
         <?php endif; ?>
-    </div>
+    </header>

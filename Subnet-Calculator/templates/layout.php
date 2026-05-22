@@ -77,28 +77,30 @@ $breadcrumb_html  = null;
 require __DIR__ . '/_app_header.php';
 ?>
 
-    <div class="tabs" role="tablist" aria-label="IP version">
-        <button class="tab-btn<?= $active_tab === 'ipv4' ? ' active' : '' ?>"
-                role="tab" id="tab-ipv4"
-                aria-selected="<?= $active_tab === 'ipv4' ? 'true' : 'false' ?>"
-                aria-controls="panel-ipv4"
-                data-tab="ipv4">IPv4</button>
-        <button class="tab-btn<?= $active_tab === 'ipv6' ? ' active' : '' ?>"
-                role="tab" id="tab-ipv6"
-                aria-selected="<?= $active_tab === 'ipv6' ? 'true' : 'false' ?>"
-                aria-controls="panel-ipv6"
-                data-tab="ipv6">IPv6</button>
-        <button class="tab-btn<?= $active_tab === 'vlsm' ? ' active' : '' ?>"
-                role="tab" id="tab-vlsm"
-                aria-selected="<?= $active_tab === 'vlsm' ? 'true' : 'false' ?>"
-                aria-controls="panel-vlsm"
-                data-tab="vlsm">VLSM</button>
-        <button class="tab-btn<?= $active_tab === 'vlsm6' ? ' active' : '' ?>"
-                role="tab" id="tab-vlsm6"
-                aria-selected="<?= $active_tab === 'vlsm6' ? 'true' : 'false' ?>"
-                aria-controls="panel-vlsm6"
-                data-tab="vlsm6">VLSM IPv6</button>
-    </div>
+    <nav aria-label="IP version">
+        <div class="tabs" role="tablist">
+            <button class="tab-btn<?= $active_tab === 'ipv4' ? ' active' : '' ?>"
+                    role="tab" id="tab-ipv4"
+                    aria-selected="<?= $active_tab === 'ipv4' ? 'true' : 'false' ?>"
+                    aria-controls="panel-ipv4"
+                    data-tab="ipv4">IPv4</button>
+            <button class="tab-btn<?= $active_tab === 'ipv6' ? ' active' : '' ?>"
+                    role="tab" id="tab-ipv6"
+                    aria-selected="<?= $active_tab === 'ipv6' ? 'true' : 'false' ?>"
+                    aria-controls="panel-ipv6"
+                    data-tab="ipv6">IPv6</button>
+            <button class="tab-btn<?= $active_tab === 'vlsm' ? ' active' : '' ?>"
+                    role="tab" id="tab-vlsm"
+                    aria-selected="<?= $active_tab === 'vlsm' ? 'true' : 'false' ?>"
+                    aria-controls="panel-vlsm"
+                    data-tab="vlsm">VLSM</button>
+            <button class="tab-btn<?= $active_tab === 'vlsm6' ? ' active' : '' ?>"
+                    role="tab" id="tab-vlsm6"
+                    aria-selected="<?= $active_tab === 'vlsm6' ? 'true' : 'false' ?>"
+                    aria-controls="panel-vlsm6"
+                    data-tab="vlsm6">VLSM IPv6</button>
+        </div>
+    </nav>
 
     <!-- IPv4 Panel -->
     <div id="panel-ipv4" class="panel<?= $active_tab === 'ipv4' ? ' active' : '' ?>"
@@ -224,6 +226,12 @@ if ($i < 3) {
             <div class="share-bar">
                 <span class="share-label">Share</span>
                 <code class="share-url"><?= htmlspecialchars($share_url_abs) ?></code>
+                <?php if ($session_enabled) : ?>
+                <button type="button" class="share-shorten"
+                        data-tab="ipv4"
+                        data-ip="<?= htmlspecialchars($input_ip, ENT_QUOTES, 'UTF-8') ?>"
+                        data-mask="<?= htmlspecialchars($input_mask, ENT_QUOTES, 'UTF-8') ?>">Shorten</button>
+                <?php endif; ?>
                 <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
             </div>
             <?php endif; ?>
@@ -434,6 +442,12 @@ if ($i < 3) {
             <div class="share-bar">
                 <span class="share-label">Share</span>
                 <code class="share-url"><?= htmlspecialchars($share_url_abs) ?></code>
+                <?php if ($session_enabled) : ?>
+                <button type="button" class="share-shorten"
+                        data-tab="ipv6"
+                        data-ip="<?= htmlspecialchars($input_ipv6, ENT_QUOTES, 'UTF-8') ?>"
+                        data-mask="<?= htmlspecialchars($input_prefix, ENT_QUOTES, 'UTF-8') ?>">Shorten</button>
+                <?php endif; ?>
                 <button type="button" class="share-copy" data-copy="<?= htmlspecialchars($share_url) ?>">Copy</button>
             </div>
             <?php endif; ?>

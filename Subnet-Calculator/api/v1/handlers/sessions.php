@@ -47,8 +47,8 @@ if (!is_array($payload) || $payload === []) {
 // v3.0.0 (#315) — validate the type discriminator. Missing `type` defaults
 // to 'ipv4' for back-compat with v2 callers. Unknown types are rejected.
 $type = $payload['type'] ?? 'ipv4';
-if (!is_string($type) || !in_array($type, ['ipv4', 'ipv6', 'tree'], true)) {
-    json_err('Field "type" must be one of: ipv4, ipv6, tree.');
+if (!is_string($type) || !in_array($type, ['ipv4', 'ipv6', 'tree', 'calc'], true)) {
+    json_err('Field "type" must be one of: ipv4, ipv6, tree, calc.');
 }
 $payload['type'] = $type; // normalise so the loaded session always has it
 
@@ -112,6 +112,23 @@ if ($type === 'ipv4' || $type === 'ipv6') {
     } catch (\InvalidArgumentException $e) {
         json_err($e->getMessage());
     }
+} elseif ($type === 'calc') {
+    // v3.9.0 (#449): plain IPv4/IPv6 calculator state — short-link parity
+    // with the VLSM session-ID mechanism. Payload shape: { tab, ip, mask }.
+    $tab = $payload['tab'] ?? '';
+    if (!is_string($tab) || !in_array($tab, ['ipv4', 'ipv6'], true)) {
+        json_err('Field "tab" must be the string "ipv4" or "ipv6" for type=calc.');
+    }
+    $ip = $payload['ip'] ?? '';
+    if (!is_string($ip) || $ip === '' || strlen($ip) > 64) {
+        json_err('Field "ip" must be a non-empty string up to 64 chars.');
+    }
+    $mask = $payload['mask'] ?? '';
+    if (!is_string($mask) || strlen($mask) > 16) {
+        json_err('Field "mask" must be a string up to 16 chars.');
+    }
+    // Normalise (drop unrelated keys to keep payload small).
+    $payload = ['type' => 'calc', 'tab' => $tab, 'ip' => $ip, 'mask' => $mask];
 }
 
 $db_dir = dirname($db_path);

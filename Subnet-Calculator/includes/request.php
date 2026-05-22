@@ -2604,7 +2604,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // (default 'ipv4' for back-compat). The active tab determines which
     // template variables get populated, so an IPv6 session loaded on the
     // ipv4 tab is reported as a tab mismatch rather than silently mis-rendered.
-    if ($session_enabled && in_array($active_tab, ['vlsm', 'vlsm6'], true) && isset($_GET['s'])) {
+    if ($session_enabled && in_array($active_tab, ['ipv4', 'ipv6', 'vlsm', 'vlsm6'], true) && isset($_GET['s'])) {
         $session_load_id = trim((string)$_GET['s']);
         if (preg_match('/^[0-9a-f]{16}$/', $session_load_id)) {
             try {
@@ -2618,69 +2618,99 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $session_error = 'Session not found or expired.';
                     } else {
                         $payload_type = (string)($payload['type'] ?? 'ipv4');
-                        $expected_type = $active_tab === 'vlsm6' ? 'ipv6' : 'ipv4';
-                        if ($payload_type !== $expected_type) {
-                            $session_error = 'Session is for the '
-                                . ($payload_type === 'ipv6' ? 'IPv6' : 'IPv4')
-                                . ' VLSM planner — switch tabs to load it.';
-                        } elseif ($payload_type === 'ipv6') {
-                            $vlsm6_network    = (string)($payload['network'] ?? '');
-                            $vlsm6_cidr_input = (string)($payload['cidr']    ?? '');
-                            $raw_reqs6        = $payload['requirements'] ?? [];
-                            if (is_array($raw_reqs6)) {
-                                foreach ($raw_reqs6 as $req) {
-                                    if (!is_array($req) || !isset($req['name'], $req['hosts'])) {
-                                        continue;
-                                    }
-                                    $hosts_in = $req['hosts'];
-                                    if (is_int($hosts_in) && $hosts_in >= 1) {
-                                        $vlsm6_requirements[] = ['name' => (string)$req['name'], 'hosts' => $hosts_in];
-                                    } elseif (
-                                        is_string($hosts_in)
-                                        && preg_match('/^2\^([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/', $hosts_in)
-                                    ) {
-                                        $vlsm6_requirements[] = ['name' => (string)$req['name'], 'hosts' => $hosts_in];
-                                    }
+                        // v3.9.0 #449: 'calc' payloads rehydrate the IPv4/IPv6 calculator
+                        // form. Active-tab follows the payload (and is overridden so the
+                        // correct panel renders).
+                        if ($payload_type === 'calc') {
+                            $calc_tab = (string)($payload['tab'] ?? 'ipv4');
+                            if (!in_array($calc_tab, ['ipv4', 'ipv6'], true)) {
+                                $session_error = 'Invalid calc session.';
+                            } elseif (!in_array($active_tab, ['ipv4', 'ipv6'], true)) {
+                                $session_error = 'Session is for the calculator — '
+                                    . 'switch to the IPv4 or IPv6 tab to load it.';
+                            } else {
+                                $active_tab = $calc_tab;
+                                if ($calc_tab === 'ipv4') {
+                                    $input_ip   = (string)($payload['ip']   ?? '');
+                                    $input_mask = (string)($payload['mask'] ?? '');
+                                } else {
+                                    $input_ipv6   = (string)($payload['ip']   ?? '');
+                                    $input_prefix = (string)($payload['mask'] ?? '');
                                 }
                             }
-                            if ($vlsm6_requirements !== [] && $vlsm6_network !== '') {
-                                $rv6 = resolve_ipv6_input($vlsm6_network, $vlsm6_cidr_input);
-                                if ($rv6['result6']) {
-                                    $vlsm6_cidr_int   = (int)ltrim($rv6['result6']['prefix'], '/');
-                                    $vlsm6_network_ip = explode('/', $rv6['result6']['network_cidr'])[0];
-                                    $vr6 = vlsm6_allocate($vlsm6_network_ip, $vlsm6_cidr_int, $vlsm6_requirements);
-                                    if (isset($vr6['error'])) {
-                                        $vlsm6['error'] = $vr6['error'];
-                                    } else {
-                                        $vlsm6['result'] = $vr6['allocations'] ?? [];
-                                    }
-                                }
-                            }
+                        } elseif (!in_array($active_tab, ['vlsm', 'vlsm6'], true)) {
+                            $session_error = 'Session is for the VLSM planner — switch tabs to load it.';
                         } else {
-                            // ipv4 (or pre-v3 untyped payload)
-                            $vlsm_network    = (string)($payload['network'] ?? '');
-                            $vlsm_cidr_input = (string)($payload['cidr']    ?? '');
-                            $raw_reqs        = $payload['requirements'] ?? [];
-                            if (is_array($raw_reqs)) {
-                                foreach ($raw_reqs as $req) {
-                                    if (is_array($req) && isset($req['name'], $req['hosts'])) {
-                                        $vlsm_requirements[] = [
+                            $expected_type = $active_tab === 'vlsm6' ? 'ipv6' : 'ipv4';
+                            if ($payload_type !== $expected_type) {
+                                $session_error = 'Session is for the '
+                                    . ($payload_type === 'ipv6' ? 'IPv6' : 'IPv4')
+                                    . ' VLSM planner — switch tabs to load it.';
+                            } elseif ($payload_type === 'ipv6') {
+                                $vlsm6_network    = (string)($payload['network'] ?? '');
+                                $vlsm6_cidr_input = (string)($payload['cidr']    ?? '');
+                                $raw_reqs6        = $payload['requirements'] ?? [];
+                                if (is_array($raw_reqs6)) {
+                                    foreach ($raw_reqs6 as $req) {
+                                        if (!is_array($req) || !isset($req['name'], $req['hosts'])) {
+                                            continue;
+                                        }
+                                        $hosts_in = $req['hosts'];
+                                        if (is_int($hosts_in) && $hosts_in >= 1) {
+                                            $vlsm6_requirements[] = [
+                                                'name'  => (string)$req['name'],
+                                                'hosts' => $hosts_in,
+                                            ];
+                                        } elseif (
+                                            is_string($hosts_in)
+                                            && preg_match('/^2\^([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/', $hosts_in)
+                                        ) {
+                                            $vlsm6_requirements[] = [
+                                                'name'  => (string)$req['name'],
+                                                'hosts' => $hosts_in,
+                                            ];
+                                        }
+                                    }
+                                }
+                                if ($vlsm6_requirements !== [] && $vlsm6_network !== '') {
+                                    $rv6 = resolve_ipv6_input($vlsm6_network, $vlsm6_cidr_input);
+                                    if ($rv6['result6']) {
+                                        $vlsm6_cidr_int   = (int)ltrim($rv6['result6']['prefix'], '/');
+                                        $vlsm6_network_ip = explode('/', $rv6['result6']['network_cidr'])[0];
+                                        $vr6 = vlsm6_allocate($vlsm6_network_ip, $vlsm6_cidr_int, $vlsm6_requirements);
+                                        if (isset($vr6['error'])) {
+                                            $vlsm6['error'] = $vr6['error'];
+                                        } else {
+                                            $vlsm6['result'] = $vr6['allocations'] ?? [];
+                                        }
+                                    }
+                                }
+                            } else {
+                                // ipv4 (or pre-v3 untyped payload)
+                                $vlsm_network    = (string)($payload['network'] ?? '');
+                                $vlsm_cidr_input = (string)($payload['cidr']    ?? '');
+                                $raw_reqs        = $payload['requirements'] ?? [];
+                                if (is_array($raw_reqs)) {
+                                    foreach ($raw_reqs as $req) {
+                                        if (is_array($req) && isset($req['name'], $req['hosts'])) {
+                                            $vlsm_requirements[] = [
                                             'name'  => (string)$req['name'],
                                             'hosts' => (int)$req['hosts'],
-                                        ];
+                                            ];
+                                        }
                                     }
                                 }
-                            }
-                            if ($vlsm_requirements !== [] && $vlsm_network !== '') {
-                                $rv = resolve_ipv4_input($vlsm_network, $vlsm_cidr_input);
-                                if ($rv['result']) {
-                                    $vlsm_cidr_int   = (int)ltrim($rv['result']['netmask_cidr'], '/');
-                                    $vlsm_network_ip = explode('/', $rv['result']['network_cidr'])[0];
-                                    $vr = vlsm_allocate($vlsm_network_ip, $vlsm_cidr_int, $vlsm_requirements);
-                                    if (isset($vr['error'])) {
-                                        $vlsm['error'] = $vr['error'];
-                                    } else {
-                                        $vlsm['result'] = $vr['allocations'] ?? [];
+                                if ($vlsm_requirements !== [] && $vlsm_network !== '') {
+                                    $rv = resolve_ipv4_input($vlsm_network, $vlsm_cidr_input);
+                                    if ($rv['result']) {
+                                        $vlsm_cidr_int   = (int)ltrim($rv['result']['netmask_cidr'], '/');
+                                        $vlsm_network_ip = explode('/', $rv['result']['network_cidr'])[0];
+                                        $vr = vlsm_allocate($vlsm_network_ip, $vlsm_cidr_int, $vlsm_requirements);
+                                        if (isset($vr['error'])) {
+                                            $vlsm['error'] = $vr['error'];
+                                        } else {
+                                            $vlsm['result'] = $vr['allocations'] ?? [];
+                                        }
                                     }
                                 }
                             }

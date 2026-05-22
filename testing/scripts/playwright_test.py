@@ -10303,11 +10303,13 @@ async def test_mobile_layout(page: Page) -> None:
     try:
         await navigate(page, APP_URL)
 
-        # h1 should wrap; white-space must not be 'nowrap' below 480px
+        # v3.9.0 (#448) reversed v3.7.0 T4's wrap: now h1 stays on one line via
+        # nowrap + clamp() font-size, and the version chip is hidden below 480px
+        # to make room. The fit-on-one-line assertion is in test_v390_mobile_title_one_line.
         white_space = await page.eval_on_selector(
             "h1", "el => getComputedStyle(el).whiteSpace"
         )
-        assert_true("h1 white-space allows wrapping", white_space != "nowrap")
+        assert_eq("h1 white-space is nowrap at 375px", white_space, "nowrap")
 
         # Tab strip is a 2x2 grid (no horizontal scrollbar on .tabs)
         tabs_overflow = await page.eval_on_selector(
@@ -10740,6 +10742,145 @@ async def test_v380_drawer_docks_on_desktop(page: Page) -> None:
     )
 
 
+async def test_v390_form_label_size(page: Page) -> None:
+    """v3.9.0 #445 — form labels are ≥14px (was 12px / 0.75rem)."""
+    section("v3.9.0 #445 — form labels ≥14px")
+    await navigate(page, APP_URL)
+    fs = await page.eval_on_selector(
+        "label[for='ip']",
+        "el => getComputedStyle(el).fontSize",
+    )
+    px = float(fs.replace("px", ""))
+    assert_true(f"IPv4 IP-address label is ≥14px (got {fs})", px >= 14.0)
+
+    tab_to_label = [
+        ("#tab-ipv6", "label[for='ipv6']"),
+        ("#tab-vlsm", "label[for='vlsm_network']"),
+        ("#tab-vlsm6", "label[for='vlsm6_network']"),
+    ]
+    for tab_sel, label_sel in tab_to_label:
+        await page.click(tab_sel)
+        fs2 = await page.eval_on_selector(label_sel, "el => getComputedStyle(el).fontSize")
+        px2 = float(fs2.replace("px", ""))
+        assert_true(f"{label_sel} is ≥14px (got {fs2})", px2 >= 14.0)
+
+
+async def test_v390_hero_density(page: Page) -> None:
+    """v3.9.0 #446 — card anchored near top of fold + value-prop chips render."""
+    section("v3.9.0 #446 — hero anchored top-of-fold")
+    await page.set_viewport_size({"width": 1440, "height": 900})
+    try:
+        await navigate(page, APP_URL)
+        card_box = await page.locator("main.card").bounding_box()
+        assert card_box is not None
+        assert_true(
+            f"card top ≤300px from viewport top (got {card_box['y']:.0f})",
+            card_box["y"] <= 300,
+        )
+        chips = await page.eval_on_selector_all(
+            ".value-prop .value-prop-chip",
+            "els => els.map(el => el.textContent.trim())",
+        )
+        assert_true(
+            f"≥3 value-prop chips present (got {chips})",
+            len(chips) >= 3,
+        )
+    finally:
+        await page.set_viewport_size({"width": 1280, "height": 720})
+
+
+async def test_v390_landmarks(page: Page) -> None:
+    """v3.9.0 #447 — <header> wraps the title row; <nav> wraps the tablist."""
+    section("v3.9.0 #447 — header + nav landmarks")
+    await navigate(page, APP_URL)
+    landmarks = await page.evaluate(
+        """() => ({
+            header: document.querySelectorAll('header').length,
+            nav: document.querySelectorAll('nav').length,
+            navLabel: document.querySelector('nav')?.getAttribute('aria-label') || null,
+            headerHasH1: !!document.querySelector('header h1'),
+            navContainsTablist: !!document.querySelector('nav [role="tablist"]')
+        })"""
+    )
+    assert_true(f"exactly one <header> (got {landmarks['header']})", landmarks["header"] == 1)
+    assert_true(f"at least one <nav> (got {landmarks['nav']})",       landmarks["nav"] >= 1)
+    assert_eq("<nav aria-label='IP version'>", landmarks["navLabel"], "IP version")
+    assert_true("<header> contains the <h1>",  landmarks["headerHasH1"])
+    assert_true("<nav> contains the tablist",  landmarks["navContainsTablist"])
+
+
+async def test_v390_mobile_title_one_line(page: Page) -> None:
+    """v3.9.0 #448 — h1 fits on one line at 375px."""
+    section("v3.9.0 #448 — h1 one line at 375px")
+    await page.set_viewport_size({"width": 375, "height": 812})
+    try:
+        await navigate(page, APP_URL)
+        h1_box = await page.locator("header h1").first.bounding_box()
+        assert h1_box is not None
+        assert_true(
+            f"h1 fits on a single line at 375px (height={h1_box['height']:.0f})",
+            h1_box["height"] <= 45,
+        )
+    finally:
+        await page.set_viewport_size({"width": 1280, "height": 720})
+
+
+async def test_v390_shortlink_ipv4(page: Page) -> None:
+    """v3.9.0 #449 — Shorten on IPv4 mints a session and rewrites the share URL to ?s=<id>."""
+    section("v3.9.0 #449 — IPv4 short-link parity")
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "10.20.30.0/22")
+    await submit_form(page, "#panel-ipv4 form")
+    await page.wait_for_selector("#panel-ipv4 .share-bar")
+    # Shorten is gated on $session_enabled; skip if the build doesn't expose it.
+    if await page.locator("#panel-ipv4 .share-shorten").count() == 0:
+        ok("session persistence disabled in this build — skipping #449 short-link assertions")
+        return
+    long_url = await page.locator("#panel-ipv4 .share-url").text_content()
+    assert_true(
+        f"long URL contains ip=/mask= (got {long_url})",
+        "ip=" in (long_url or "") and "mask=" in (long_url or ""),
+    )
+
+    async with page.expect_response(
+        lambda r: "/api/v1/sessions" in r.url and r.request.method == "POST"
+    ) as resp_info:
+        await page.locator("#panel-ipv4 .share-shorten").click()
+    resp = await resp_info.value
+    assert_true(
+        f"POST /api/v1/sessions returns 200 or 201 (got {resp.status})",
+        resp.status in (200, 201),
+    )
+    body = await resp.json()
+    sid = (body.get("data") or {}).get("id") or body.get("id")
+    assert_true(
+        f"session id is 16 hex chars (got {sid!r})",
+        isinstance(sid, str) and len(sid) == 16 and all(c in "0123456789abcdef" for c in sid),
+    )
+    short_url = await page.locator("#panel-ipv4 .share-url").text_content()
+    assert_true(
+        f"share URL is now ?s=<id> (got {short_url})",
+        "?s=" in (short_url or "") and (sid or "") in (short_url or ""),
+    )
+
+    # Verify the server-side rehydration path via the API GET endpoint
+    # (a fresh page.goto to ?s=<id> hits unrelated SW/cache layers; the API call
+    # exercises session_load directly through the same path the calculator uses).
+    api_resp = await page.request.get(f"{APP_URL.rstrip('/')}/api/v1/sessions/{sid}")
+    assert_true(
+        f"GET /api/v1/sessions/{sid} returns 200 (got {api_resp.status})",
+        api_resp.status == 200,
+    )
+    api_body = await api_resp.json()
+    api_payload = (api_body.get("data") or {}).get("payload") or {}
+    assert_eq("session payload type=calc", api_payload.get("type"), "calc")
+    assert_eq("session payload tab=ipv4", api_payload.get("tab"), "ipv4")
+    # Server normalises "10.20.30.0/22" → ip="10.20.30.0", mask="22" before render,
+    # so the Shorten button's data-ip captures the normalised form.
+    assert_eq("session payload ip preserved", api_payload.get("ip"), "10.20.30.0")
+    assert_eq("session payload mask preserved", api_payload.get("mask"), "22")
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -11144,6 +11285,11 @@ async def main() -> None:
             await test_v380_ipv4_tool_groups(page)
             await test_v380_error_announced_and_marked(page)
             await test_v380_drawer_docks_on_desktop(page)
+            await test_v390_form_label_size(page)
+            await test_v390_hero_density(page)
+            await test_v390_landmarks(page)
+            await test_v390_mobile_title_one_line(page)
+            await test_v390_shortlink_ipv4(page)
             await test_v290_typography(page)
         finally:
             await context.close()
