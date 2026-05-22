@@ -141,7 +141,7 @@ require __DIR__ . '/_app_header.php';
         </form>
 
         <?php if ($error) : ?>
-            <div class="error" id="ipv4-error" role="alert"><?= htmlspecialchars($error) ?></div>
+            <div class="error" id="ipv4-error" role="alert"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
 
         <?php if ($result) : ?>
@@ -331,7 +331,7 @@ if ($i < 3) {
         </form>
 
         <?php if ($error6) : ?>
-            <div class="error" id="ipv6-error" role="alert"><?= htmlspecialchars($error6) ?></div>
+            <div class="error" id="ipv6-error" role="alert"><?= htmlspecialchars($error6, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
 
         <?php if ($result6) : ?>
@@ -624,7 +624,7 @@ if ($i < 3) {
             </div>
         </form>
         <?php if (!empty($vlsm['error'])) : ?>
-            <div class="error" role="alert"><?= htmlspecialchars($vlsm['error']) ?></div>
+            <div class="error" role="alert"><?= htmlspecialchars($vlsm['error'], ENT_QUOTES, 'UTF-8') ?></div>
         <?php elseif (isset($vlsm['result'])) : ?>
             <div class="vlsm-results">
                 <p class="vlsm-sort-note">Results sorted largest-first for efficient allocation.<?= help_bubble('vlsm-sort', 'Subnets are allocated from largest to smallest so that larger blocks can be placed at aligned boundaries without wasting address space.') ?></p>
@@ -779,7 +779,7 @@ if ($i < 3) {
             </div>
         </form>
         <?php if (!empty($vlsm6['error'])) : ?>
-            <div class="error" role="alert"><?= htmlspecialchars($vlsm6['error']) ?></div>
+            <div class="error" role="alert"><?= htmlspecialchars($vlsm6['error'], ENT_QUOTES, 'UTF-8') ?></div>
         <?php elseif (isset($vlsm6['result'])) : ?>
             <div class="vlsm-results">
                 <p class="vlsm-sort-note">Results sorted largest-first for efficient allocation.<?= help_bubble('vlsm6-sort', 'Subnets are allocated from largest to smallest so that larger blocks can be placed at aligned boundaries without wasting address space.') ?></p>

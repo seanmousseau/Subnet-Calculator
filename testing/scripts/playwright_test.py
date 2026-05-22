@@ -10632,10 +10632,17 @@ async def test_v380_copy_affordance(page: Page) -> None:
         alpha >= 0.08 or saturated,
     )
     # Glyph should be at least ~1em (not 0.8em); accept either em form or px equivalent.
-    fs = style["afterFs"]
+    # Glyph should be ~1em — compare to its own .result-value parent's font-size so the
+    # threshold scales with theme/zoom and catches regression to 0.8em.
+    glyph_px = float(style["afterFs"].replace("px", ""))
+    base_px = float(
+        (await page.locator("#panel-ipv4 .result-row .result-value").first.evaluate(
+            "el => getComputedStyle(el).fontSize"
+        )).replace("px", "")
+    )
     assert_true(
-        f"copy glyph >=0.95em (got {fs})",
-        fs not in ("0.7em", "0.8em") and "px" in fs and float(fs.replace("px", "")) >= 12,
+        f"copy glyph ~1em (glyph={glyph_px}px, base={base_px}px, ratio={glyph_px/base_px:.2f}em)",
+        glyph_px / base_px >= 0.95,
     )
     # CSS rule sets ::after color to var(--color-accent) under :hover/:focus-visible;
     # asserting via getComputedStyle is unreliable for pseudo-elements, so verify the rule
@@ -10660,7 +10667,7 @@ async def test_v380_ipv4_tool_groups(page: Page) -> None:
     )
     assert_eq("3 group labels present", len(labels), 3)
     assert_eq("group labels match spec",
-              [l.lower() for l in labels],
+              [label.lower() for label in labels],
               ["transform", "visualize", "lookups"])
 
     tools = await page.eval_on_selector_all(

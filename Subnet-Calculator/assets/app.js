@@ -62,6 +62,11 @@ document.querySelectorAll('button.btn.reset').forEach(function (btn) {
         panel.querySelectorAll('.results, .vlsm-results').forEach(el => el.remove());
         const errBox = panel.querySelector('.error');
         if (errBox) errBox.textContent = '';
+        // Clear stale aria-invalid markers so the red border + describedby don't linger.
+        panel.querySelectorAll('[aria-invalid="true"]').forEach(function (el) {
+            el.removeAttribute('aria-invalid');
+            el.removeAttribute('aria-describedby');
+        });
         // Update URL to clean state without reload, preserving the active tab.
         const tab = btn.dataset.resetTab || 'ipv4';
         const url = new URL(window.location.href);
