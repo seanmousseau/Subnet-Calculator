@@ -10679,6 +10679,31 @@ async def test_v380_ipv4_tool_groups(page: Page) -> None:
     assert_eq("no orphan tool-triggers", orphans, 0)
 
 
+async def test_v380_error_announced_and_marked(page: Page) -> None:
+    """v3.8.0 #440 — error region has role=alert and invalid input has a red border."""
+    section("v3.8.0 #440 — error semantics + invalid field marker")
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "999.999.999.999/22")
+    await submit_form(page, "#panel-ipv4 form")
+
+    err = page.locator("#ipv4-error")
+    role = await err.get_attribute("role")
+    assert_eq("error region has role=alert", role, "alert")
+
+    border = await page.eval_on_selector(
+        "#panel-ipv4 input[aria-invalid='true']",
+        "el => getComputedStyle(el).borderColor",
+    )
+    import re as _re
+    m = _re.match(r"rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)", border)
+    assert m is not None, f"unparseable border color: {border}"
+    r, g, b = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    assert_true(
+        f"invalid input border is red-dominant (got rgb({r}, {g}, {b}))",
+        r >= 180 and r > g + 40 and r > b + 40,
+    )
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -11081,6 +11106,7 @@ async def main() -> None:
             await test_v380_reset_is_button(page)
             await test_v380_copy_affordance(page)
             await test_v380_ipv4_tool_groups(page)
+            await test_v380_error_announced_and_marked(page)
             await test_v290_typography(page)
         finally:
             await context.close()

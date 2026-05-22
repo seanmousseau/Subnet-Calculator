@@ -293,6 +293,14 @@
         }
         a.btn.reset:active { transform: translateY(0); }
 
+        /* Invalid input marker (#440) — uses the existing error palette token. */
+        input[aria-invalid="true"],
+        input[aria-invalid="true"]:focus,
+        input[aria-invalid="true"]:focus-visible {
+            border-color: var(--color-error-text);
+            outline-color: var(--color-error-text);
+        }
+
         /* Error */
         .error {
             background: var(--color-error-bg);
