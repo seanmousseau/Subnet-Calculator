@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.0] - 2026-05-22
+
+**Polish minor.** Closes the five P3 items from the 2026-05-21 UX
+review.
+
+### Added
+
+- **Value-prop chip strip** above the card on the calculator
+  (`/24 IPv4 · /64 IPv6 · VLSM · Share via URL`). Hidden on mobile.
+  (#446)
+- **Shorten URL** action on IPv4/IPv6 share bars. Mints a 16-hex
+  session-ID via `/api/v1/sessions` (new `type: calc` payload) and
+  replaces the verbose `?ip=…&mask=…` URL with `?s=<id>`. Server-side
+  rehydration populates the calculator form when the short link is
+  followed. Only renders when `$session_enabled`. Reuses the v3.0.0
+  session-storage infrastructure; no new tables. (#449)
+
+### Changed
+
+- **Card is anchored top-of-fold on desktop** (`flex-start` + 4rem top
+  padding) instead of vertically centered. Mobile padding unchanged.
+  (#446)
+- **Form labels bumped from 12 px → 14 px** for legibility at arm's
+  length on mobile. (#445)
+- **h1 stays on one line at 375 px** via `clamp()` + `white-space: nowrap`;
+  the version chip is hidden below 480 px. Reverses v3.7.0 T4's
+  wrap-allowed behavior which became rough alongside v3.7.1's 44×44
+  icon buttons. (#448)
+
+### Accessibility
+
+- **`<header>` wraps the title row; `<nav aria-label="IP version">`
+  wraps the tablist.** Brings the landmark structure to the recommended
+  banner / navigation / main / contentinfo set. (#447)
+
 ## [3.8.0] - 2026-05-22
 
 **UX + a11y minor.** Closes findings #439–#444 from the 2026-05-21 UX
