@@ -346,7 +346,7 @@
         }
 
         .result-row:nth-child(odd) { background: var(--color-surface-alt); }
-        .result-row:hover { background: rgb(6 214 160 / 4%) !important; }
+        .result-row:hover { background: rgb(6 214 160 / 10%) !important; }
 
         .result-label { color: var(--color-text-subtle); font-size: 0.8rem; }
 
@@ -360,13 +360,15 @@
         }
 
         .result-value::after {
-            content: ' \29d8';
+            content: ' \1f4cb';            /* 📋 clipboard glyph (#442) */
             color: transparent;
-            font-size: 0.8em;
+            font-size: 1em;
+            margin-left: 0.4em;
             transition: color 0.15s;
         }
 
-        .result-row:hover .result-value::after { color: var(--color-text-faint); }
+        .result-row:hover .result-value::after,
+        .result-row:focus-visible .result-value::after { color: var(--color-accent); }
 
         .hosts-row .result-value { color: var(--color-green); }
 

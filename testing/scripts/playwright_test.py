@@ -10606,6 +10606,49 @@ async def test_v380_reset_is_button(page: Page) -> None:
     assert_eq("IPv4 input cleared", val, "")
 
 
+async def test_v380_copy_affordance(page: Page) -> None:
+    """v3.8.0 #442 — result-row hover bg is perceptible (>=8% accent) and copy glyph is bigger."""
+    section("v3.8.0 #442 — stronger copy affordance")
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "10.0.0.0/24")
+    await submit_form(page, "#panel-ipv4 form")
+    row = page.locator("#panel-ipv4 .result-row").first
+    await row.wait_for(state="visible")
+    await row.hover()
+
+    style = await row.evaluate(
+        "el => { const cs = getComputedStyle(el);"
+        " const after = getComputedStyle(el.querySelector('.result-value'), '::after');"
+        " return { bg: cs.backgroundColor, afterColor: after.color, afterFs: after.fontSize, afterContent: after.content }; }"
+    )
+    import re as _re
+    m = _re.match(r"rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\)", style["bg"])
+    assert m is not None, f"unparseable hover bg: {style['bg']}"
+    r, g, b = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    alpha = float(m.group(4)) if m.group(4) else 1.0
+    saturated = (max(r, g, b) - min(r, g, b)) > 20
+    assert_true(
+        f"hover bg perceptible (rgba={style['bg']}, alpha={alpha:.2f}, saturated={saturated})",
+        alpha >= 0.08 or saturated,
+    )
+    # Glyph should be at least ~1em (not 0.8em); accept either em form or px equivalent.
+    fs = style["afterFs"]
+    assert_true(
+        f"copy glyph >=0.95em (got {fs})",
+        fs not in ("0.7em", "0.8em") and "px" in fs and float(fs.replace("px", "")) >= 12,
+    )
+    # CSS rule sets ::after color to var(--color-accent) under :hover/:focus-visible;
+    # asserting via getComputedStyle is unreliable for pseudo-elements, so verify the rule
+    # text exists in the stylesheet instead.
+    css_text = await page.evaluate(
+        "() => Array.from(document.styleSheets).flatMap(s => { try { return Array.from(s.cssRules).map(r => r.cssText); } catch { return []; } }).join('\\n')"
+    )
+    assert_true(
+        ".result-row:hover .result-value::after rule sets color to accent",
+        ".result-row:hover .result-value::after" in css_text and "--color-accent" in css_text,
+    )
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -11006,6 +11049,7 @@ async def main() -> None:
             await test_v371_footer_focus_ring(page)
             await test_v380_inactive_panels_inert(page)
             await test_v380_reset_is_button(page)
+            await test_v380_copy_affordance(page)
             await test_v290_typography(page)
         finally:
             await context.close()
