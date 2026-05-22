@@ -10704,6 +10704,35 @@ async def test_v380_error_announced_and_marked(page: Page) -> None:
     )
 
 
+async def test_v380_drawer_docks_on_desktop(page: Page) -> None:
+    """v3.8.0 #439 — at ≥1280px the drawer docks alongside the card, not over it."""
+    section("v3.8.0 #439 — drawer docks on desktop")
+    await page.set_viewport_size({"width": 1440, "height": 900})
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "10.0.0.0/24")
+    await submit_form(page, "#panel-ipv4 form")
+    await page.locator('#panel-ipv4 .tool-trigger[data-tool="split"]').click()
+    await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
+
+    card_box = await page.locator("main.card").bounding_box()
+    drawer_box = await page.locator("#panel-ipv4 .tool-drawer.open").bounding_box()
+    assert card_box is not None and drawer_box is not None, "card/drawer not laid out"
+
+    card_right = card_box["x"] + card_box["width"]
+    assert_true(
+        f"drawer is to the right of the card at 1440px (drawer.left={drawer_box['x']:.0f}, card.right={card_right:.0f})",
+        drawer_box["x"] >= card_right - 2,
+    )
+
+    # Drawer must not cover the form (#439's core complaint).
+    netmask = await page.locator("#mask").bounding_box()
+    assert netmask is not None
+    assert_true(
+        f"netmask field not covered by drawer (mask.right={(netmask['x']+netmask['width']):.0f}, drawer.left={drawer_box['x']:.0f})",
+        netmask["x"] + netmask["width"] <= drawer_box["x"] + 1,
+    )
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -11107,6 +11136,7 @@ async def main() -> None:
             await test_v380_copy_affordance(page)
             await test_v380_ipv4_tool_groups(page)
             await test_v380_error_announced_and_marked(page)
+            await test_v380_drawer_docks_on_desktop(page)
             await test_v290_typography(page)
         finally:
             await context.close()

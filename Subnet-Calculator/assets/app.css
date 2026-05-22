@@ -1597,6 +1597,37 @@
 }
 .js-enabled .tool-drawer.open { transform: translateX(0); }
 
+/* Dock alongside the card on wide viewports (#439). The card is centred and
+ * max-width:560 (800 above 1024). Place the drawer to the right of the card.
+ * Threshold is 1440 because at 1280 the docked drawer would overflow viewport-right. */
+@media (width >= 1440px) {
+    .js-enabled .tool-drawer {
+        position: fixed;
+        top: 50%;
+        left: calc(50% + 420px);
+        right: auto;
+        bottom: auto;
+        width: 360px;
+        max-height: 80vh;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-left: 1px solid var(--color-border);
+        border-radius: 12px;
+        box-shadow: 0 12px 32px rgb(0 0 0 / 30%);
+        overflow-y: auto;
+        transform: translateY(-50%) translateX(20px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 150ms ease, transform 150ms ease;
+        z-index: 10;
+    }
+    .js-enabled .tool-drawer.open {
+        transform: translateY(-50%) translateX(0);
+        opacity: 1;
+        pointer-events: auto;
+    }
+}
+
 /* Bottom sheet on narrow viewports */
 @media (width <= 480px) {
     .js-enabled .tool-drawer {
