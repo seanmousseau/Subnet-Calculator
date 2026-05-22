@@ -2646,67 +2646,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     . ($payload_type === 'ipv6' ? 'IPv6' : 'IPv4')
                                     . ' VLSM planner — switch tabs to load it.';
                             } elseif ($payload_type === 'ipv6') {
-                            $vlsm6_network    = (string)($payload['network'] ?? '');
-                            $vlsm6_cidr_input = (string)($payload['cidr']    ?? '');
-                            $raw_reqs6        = $payload['requirements'] ?? [];
-                            if (is_array($raw_reqs6)) {
-                                foreach ($raw_reqs6 as $req) {
-                                    if (!is_array($req) || !isset($req['name'], $req['hosts'])) {
-                                        continue;
-                                    }
-                                    $hosts_in = $req['hosts'];
-                                    if (is_int($hosts_in) && $hosts_in >= 1) {
-                                        $vlsm6_requirements[] = ['name' => (string)$req['name'], 'hosts' => $hosts_in];
-                                    } elseif (
-                                        is_string($hosts_in)
-                                        && preg_match('/^2\^([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/', $hosts_in)
-                                    ) {
-                                        $vlsm6_requirements[] = ['name' => (string)$req['name'], 'hosts' => $hosts_in];
-                                    }
-                                }
-                            }
-                            if ($vlsm6_requirements !== [] && $vlsm6_network !== '') {
-                                $rv6 = resolve_ipv6_input($vlsm6_network, $vlsm6_cidr_input);
-                                if ($rv6['result6']) {
-                                    $vlsm6_cidr_int   = (int)ltrim($rv6['result6']['prefix'], '/');
-                                    $vlsm6_network_ip = explode('/', $rv6['result6']['network_cidr'])[0];
-                                    $vr6 = vlsm6_allocate($vlsm6_network_ip, $vlsm6_cidr_int, $vlsm6_requirements);
-                                    if (isset($vr6['error'])) {
-                                        $vlsm6['error'] = $vr6['error'];
-                                    } else {
-                                        $vlsm6['result'] = $vr6['allocations'] ?? [];
+                                $vlsm6_network    = (string)($payload['network'] ?? '');
+                                $vlsm6_cidr_input = (string)($payload['cidr']    ?? '');
+                                $raw_reqs6        = $payload['requirements'] ?? [];
+                                if (is_array($raw_reqs6)) {
+                                    foreach ($raw_reqs6 as $req) {
+                                        if (!is_array($req) || !isset($req['name'], $req['hosts'])) {
+                                            continue;
+                                        }
+                                        $hosts_in = $req['hosts'];
+                                        if (is_int($hosts_in) && $hosts_in >= 1) {
+                                            $vlsm6_requirements[] = ['name' => (string)$req['name'], 'hosts' => $hosts_in];
+                                        } elseif (
+                                            is_string($hosts_in)
+                                            && preg_match('/^2\^([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/', $hosts_in)
+                                        ) {
+                                            $vlsm6_requirements[] = ['name' => (string)$req['name'], 'hosts' => $hosts_in];
+                                        }
                                     }
                                 }
-                            }
-                        } else {
-                            // ipv4 (or pre-v3 untyped payload)
-                            $vlsm_network    = (string)($payload['network'] ?? '');
-                            $vlsm_cidr_input = (string)($payload['cidr']    ?? '');
-                            $raw_reqs        = $payload['requirements'] ?? [];
-                            if (is_array($raw_reqs)) {
-                                foreach ($raw_reqs as $req) {
-                                    if (is_array($req) && isset($req['name'], $req['hosts'])) {
-                                        $vlsm_requirements[] = [
+                                if ($vlsm6_requirements !== [] && $vlsm6_network !== '') {
+                                    $rv6 = resolve_ipv6_input($vlsm6_network, $vlsm6_cidr_input);
+                                    if ($rv6['result6']) {
+                                        $vlsm6_cidr_int   = (int)ltrim($rv6['result6']['prefix'], '/');
+                                        $vlsm6_network_ip = explode('/', $rv6['result6']['network_cidr'])[0];
+                                        $vr6 = vlsm6_allocate($vlsm6_network_ip, $vlsm6_cidr_int, $vlsm6_requirements);
+                                        if (isset($vr6['error'])) {
+                                            $vlsm6['error'] = $vr6['error'];
+                                        } else {
+                                            $vlsm6['result'] = $vr6['allocations'] ?? [];
+                                        }
+                                    }
+                                }
+                            } else {
+                                // ipv4 (or pre-v3 untyped payload)
+                                $vlsm_network    = (string)($payload['network'] ?? '');
+                                $vlsm_cidr_input = (string)($payload['cidr']    ?? '');
+                                $raw_reqs        = $payload['requirements'] ?? [];
+                                if (is_array($raw_reqs)) {
+                                    foreach ($raw_reqs as $req) {
+                                        if (is_array($req) && isset($req['name'], $req['hosts'])) {
+                                            $vlsm_requirements[] = [
                                             'name'  => (string)$req['name'],
                                             'hosts' => (int)$req['hosts'],
-                                        ];
+                                            ];
+                                        }
+                                    }
+                                }
+                                if ($vlsm_requirements !== [] && $vlsm_network !== '') {
+                                    $rv = resolve_ipv4_input($vlsm_network, $vlsm_cidr_input);
+                                    if ($rv['result']) {
+                                        $vlsm_cidr_int   = (int)ltrim($rv['result']['netmask_cidr'], '/');
+                                        $vlsm_network_ip = explode('/', $rv['result']['network_cidr'])[0];
+                                        $vr = vlsm_allocate($vlsm_network_ip, $vlsm_cidr_int, $vlsm_requirements);
+                                        if (isset($vr['error'])) {
+                                            $vlsm['error'] = $vr['error'];
+                                        } else {
+                                            $vlsm['result'] = $vr['allocations'] ?? [];
+                                        }
                                     }
                                 }
                             }
-                            if ($vlsm_requirements !== [] && $vlsm_network !== '') {
-                                $rv = resolve_ipv4_input($vlsm_network, $vlsm_cidr_input);
-                                if ($rv['result']) {
-                                    $vlsm_cidr_int   = (int)ltrim($rv['result']['netmask_cidr'], '/');
-                                    $vlsm_network_ip = explode('/', $rv['result']['network_cidr'])[0];
-                                    $vr = vlsm_allocate($vlsm_network_ip, $vlsm_cidr_int, $vlsm_requirements);
-                                    if (isset($vr['error'])) {
-                                        $vlsm['error'] = $vr['error'];
-                                    } else {
-                                        $vlsm['result'] = $vr['allocations'] ?? [];
-                                    }
-                                }
-                            }
-                        }
                         }
                     }
                 } else {
