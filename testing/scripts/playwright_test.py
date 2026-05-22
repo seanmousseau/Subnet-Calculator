@@ -10784,6 +10784,26 @@ async def test_v390_hero_density(page: Page) -> None:
     )
 
 
+async def test_v390_landmarks(page: Page) -> None:
+    """v3.9.0 #447 — <header> wraps the title row; <nav> wraps the tablist."""
+    section("v3.9.0 #447 — header + nav landmarks")
+    await navigate(page, APP_URL)
+    landmarks = await page.evaluate(
+        """() => ({
+            header: document.querySelectorAll('header').length,
+            nav: document.querySelectorAll('nav').length,
+            navLabel: document.querySelector('nav')?.getAttribute('aria-label') || null,
+            headerHasH1: !!document.querySelector('header h1'),
+            navContainsTablist: !!document.querySelector('nav [role="tablist"]')
+        })"""
+    )
+    assert_true(f"exactly one <header> (got {landmarks['header']})", landmarks["header"] == 1)
+    assert_true(f"at least one <nav> (got {landmarks['nav']})",       landmarks["nav"] >= 1)
+    assert_eq("<nav aria-label='IP version'>", landmarks["navLabel"], "IP version")
+    assert_true("<header> contains the <h1>",  landmarks["headerHasH1"])
+    assert_true("<nav> contains the tablist",  landmarks["navContainsTablist"])
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -11190,6 +11210,7 @@ async def main() -> None:
             await test_v380_drawer_docks_on_desktop(page)
             await test_v390_form_label_size(page)
             await test_v390_hero_density(page)
+            await test_v390_landmarks(page)
             await test_v290_typography(page)
         finally:
             await context.close()
