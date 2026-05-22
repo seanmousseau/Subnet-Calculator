@@ -10497,6 +10497,41 @@ async def test_v371_calculate_focus_ring(page: Page) -> None:
     )
 
 
+async def test_v371_footer_focus_ring(page: Page) -> None:
+    """v3.7.1 #438 — footer links use the project focus ring, not the browser default."""
+    section("v3.7.1 #438 — footer focus consistency")
+    await navigate(page, APP_URL)
+
+    link = page.locator('footer a[href*="github"]').first
+    await link.focus()
+
+    style = await link.evaluate(
+        "el => { const cs = getComputedStyle(el); return {"
+        "  outlineColor: cs.outlineColor,"
+        "  outlineStyle: cs.outlineStyle,"
+        "  outlineWidth: cs.outlineWidth"
+        "}; }"
+    )
+
+    # Browser default is `outline-style: auto` with a blue auto color.
+    assert_true(
+        f"footer a outline-style is not browser default (got {style['outlineStyle']})",
+        style["outlineStyle"] in ("solid", "dashed", "dotted"),
+    )
+
+    accent = await page.evaluate(
+        "() => getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim()"
+    )
+    # The accent token is hex; normalize both sides to rgb for comparison.
+    rgb_from_browser = style["outlineColor"]
+    accent_rgb = await page.evaluate(
+        "(hex) => { const d = document.createElement('div'); d.style.color = hex; document.body.appendChild(d);"
+        "  const c = getComputedStyle(d).color; d.remove(); return c; }",
+        accent,
+    )
+    assert_eq("footer a outline color matches --color-accent", rgb_from_browser, accent_rgb)
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -10894,6 +10929,7 @@ async def main() -> None:
             await test_focus_visible_on_keyboard_only(page)
             await test_v371_touch_targets_44px(page)
             await test_v371_calculate_focus_ring(page)
+            await test_v371_footer_focus_ring(page)
             await test_v290_typography(page)
         finally:
             await context.close()
