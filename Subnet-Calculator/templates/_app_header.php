@@ -37,6 +37,14 @@ $_suppress_skip_link  = !empty($skip_link_emitted);
 <?php if (!$_suppress_skip_link) : ?>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 <?php endif; ?>
+<?php if ($_show_app_actions) : ?>
+<div class="value-prop" aria-hidden="true">
+    <span class="value-prop-chip">/24 IPv4</span>
+    <span class="value-prop-chip">/64 IPv6</span>
+    <span class="value-prop-chip">VLSM</span>
+    <span class="value-prop-chip">Share via URL</span>
+</div>
+<?php endif; ?>
 <main class="card<?= isset($admin_card_extra_class) ? ' ' . htmlspecialchars((string)$admin_card_extra_class) : '' ?>" id="main-content">
     <div class="title-row">
         <?php $logo_v = htmlspecialchars($app_version) . '-2'; ?>

@@ -10763,6 +10763,27 @@ async def test_v390_form_label_size(page: Page) -> None:
         assert_true(f"{label_sel} is ≥14px (got {fs2})", px2 >= 14.0)
 
 
+async def test_v390_hero_density(page: Page) -> None:
+    """v3.9.0 #446 — card anchored near top of fold + value-prop chips render."""
+    section("v3.9.0 #446 — hero anchored top-of-fold")
+    await page.set_viewport_size({"width": 1440, "height": 900})
+    await navigate(page, APP_URL)
+    card_box = await page.locator("main.card").bounding_box()
+    assert card_box is not None
+    assert_true(
+        f"card top ≤300px from viewport top (got {card_box['y']:.0f})",
+        card_box["y"] <= 300,
+    )
+    chips = await page.eval_on_selector_all(
+        ".value-prop .value-prop-chip",
+        "els => els.map(el => el.textContent.trim())",
+    )
+    assert_true(
+        f"≥3 value-prop chips present (got {chips})",
+        len(chips) >= 3,
+    )
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -11168,6 +11189,7 @@ async def main() -> None:
             await test_v380_error_announced_and_marked(page)
             await test_v380_drawer_docks_on_desktop(page)
             await test_v390_form_label_size(page)
+            await test_v390_hero_density(page)
             await test_v290_typography(page)
         finally:
             await context.close()
