@@ -720,8 +720,7 @@
          * blends into the teal button bg. Use a bg-colored inner ring + accent outer
          * ring (double-shadow pattern) so it remains visible against any theme bg. */
         .btn-row button[type="submit"]:focus-visible,
-        .btn[type="submit"]:focus-visible,
-        .btn-primary:focus-visible {
+        .btn[type="submit"]:focus-visible {
             outline: none;
             box-shadow:
                 0 0 0 2px var(--color-bg),

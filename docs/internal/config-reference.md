@@ -2,7 +2,7 @@
 
 **Audience:** Operator (Sean) + future-agent setting up or tuning a deployment.
 **Source:** `Subnet-Calculator/includes/config.php` (defaults) overridden by `Subnet-Calculator/config.php` if present (operator-only overrides; git-ignored).
-**Last updated:** 2026-05-13 (app v3.7.0)
+**Last updated:** 2026-05-21 (app v3.7.1)
 
 Every operator-tunable variable shipped by the app is enumerated here. If you find a `$variable` in code that isn't documented here, the docs are stale — add it.
 
