@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.1] - 2026-05-21
+
+**Accessibility patch.** Closes three P0 findings from the 2026-05-21 UX
+review (#436, #437, #438).
+
+### Accessibility
+
+- **Header + drawer icon-button touch targets now meet WCAG 2.5.5**
+  (≥44×44 px). Affects `.theme-toggle`, `.header-icon-btn`,
+  `.tool-drawer-close`, and `.modal-close`. Visual chrome unchanged;
+  only the hit-test area grew. (#436)
+- **Primary Calculate button now has a visible focus ring** — a double
+  box-shadow using `--color-bg` + `--color-accent` replaces the global
+  teal outline, which previously blended into the teal button
+  background (~1.3:1 contrast). (#437)
+- **Footer links use the project focus ring** (teal, matches inputs +
+  tabs) instead of the browser default `outline-style: auto`. (#438)
+
 ## [3.7.0] - 2026-05-09
 
 **UX polish + layout refactor.** First post-IPv6-roadmap minor.

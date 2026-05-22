@@ -1,8 +1,8 @@
 # Subnet Calculator — Master Design Document
 
 **Status:** Living document. Update at the end of any release or major change.
-**Current version:** v3.7.0
-**Last updated:** 2026-05-13
+**Current version:** v3.7.1
+**Last updated:** 2026-05-21
 **Authoritative for:** Architecture, design decisions, code methodology, invariants, and the "why" behind every load-bearing choice.
 
 This document is the single source of truth for understanding the app's structure and intent. The `README.md` is for users; `CLAUDE.md` is the agent quick-reference; `CHANGELOG.md` is the per-release log. **This file explains why the code looks the way it does.**

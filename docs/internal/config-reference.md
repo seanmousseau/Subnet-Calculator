@@ -22,7 +22,7 @@ To override a value: copy `config.php.example` → `config.php` and edit. Never 
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `$app_version` | `'3.7.0'` | Read-only at runtime. Bumped via `/release` skill. Do not override. |
+| `$app_version` | `'3.7.1'` | Read-only at runtime. Bumped via `/release` skill. Do not override. |
 | `$locale` | `'en'` | BCP 47 locale tag for number formatting (e.g., `'de'`, `'fr'`). |
 | `$fixed_bg_color` | `'null'` | Optional hard-coded background colour (overrides theme `--color-bg`). String `'null'` = no override. |
 | `$default_tab` | `'ipv4'` | Initial tab on page load. Valid: `'ipv4'`, `'ipv6'`, `'vlsm'`. |
