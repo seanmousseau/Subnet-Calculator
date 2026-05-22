@@ -2,7 +2,7 @@
 
 **Audience:** Operator (Sean) + future-agent setting up or tuning a deployment.
 **Source:** `Subnet-Calculator/includes/config.php` (defaults) overridden by `Subnet-Calculator/config.php` if present (operator-only overrides; git-ignored).
-**Last updated:** 2026-05-13 (app v3.7.0)
+**Last updated:** 2026-05-21 (app v3.7.1)
 
 Every operator-tunable variable shipped by the app is enumerated here. If you find a `$variable` in code that isn't documented here, the docs are stale — add it.
 
@@ -22,7 +22,7 @@ To override a value: copy `config.php.example` → `config.php` and edit. Never 
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `$app_version` | `'3.7.0'` | Read-only at runtime. Bumped via `/release` skill. Do not override. |
+| `$app_version` | `'3.7.1'` | Read-only at runtime. Bumped via `/release` skill. Do not override. |
 | `$locale` | `'en'` | BCP 47 locale tag for number formatting (e.g., `'de'`, `'fr'`). |
 | `$fixed_bg_color` | `'null'` | Optional hard-coded background colour (overrides theme `--color-bg`). String `'null'` = no override. |
 | `$default_tab` | `'ipv4'` | Initial tab on page load. Valid: `'ipv4'`, `'ipv6'`, `'vlsm'`. |
