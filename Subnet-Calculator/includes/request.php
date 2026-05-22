@@ -2626,7 +2626,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             if (!in_array($calc_tab, ['ipv4', 'ipv6'], true)) {
                                 $session_error = 'Invalid calc session.';
                             } elseif (!in_array($active_tab, ['ipv4', 'ipv6'], true)) {
-                                $session_error = 'Session is for the calculator — switch to the IPv4 or IPv6 tab to load it.';
+                                $session_error = 'Session is for the calculator — '
+                                    . 'switch to the IPv4 or IPv6 tab to load it.';
                             } else {
                                 $active_tab = $calc_tab;
                                 if ($calc_tab === 'ipv4') {
@@ -2656,12 +2657,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         }
                                         $hosts_in = $req['hosts'];
                                         if (is_int($hosts_in) && $hosts_in >= 1) {
-                                            $vlsm6_requirements[] = ['name' => (string)$req['name'], 'hosts' => $hosts_in];
+                                            $vlsm6_requirements[] = [
+                                                'name'  => (string)$req['name'],
+                                                'hosts' => $hosts_in,
+                                            ];
                                         } elseif (
                                             is_string($hosts_in)
                                             && preg_match('/^2\^([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/', $hosts_in)
                                         ) {
-                                            $vlsm6_requirements[] = ['name' => (string)$req['name'], 'hosts' => $hosts_in];
+                                            $vlsm6_requirements[] = [
+                                                'name'  => (string)$req['name'],
+                                                'hosts' => $hosts_in,
+                                            ];
                                         }
                                     }
                                 }
