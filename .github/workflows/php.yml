@@ -62,4 +62,7 @@ jobs:
 
       - name: Spectral — lint OpenAPI spec
         if: hashFiles('Subnet-Calculator/api/openapi.yaml') != ''
-        run: npx --yes @stoplight/spectral-cli@6 lint Subnet-Calculator/api/openapi.yaml
+        # Pinned: looser `@6` started failing 2026-05-21 with
+        # "Cannot read properties of null (reading 'enum')" — a transitive-dep
+        # regression resolved by npx's clean install. Bump deliberately.
+        run: npx --yes @stoplight/spectral-cli@6.16.0 lint Subnet-Calculator/api/openapi.yaml
