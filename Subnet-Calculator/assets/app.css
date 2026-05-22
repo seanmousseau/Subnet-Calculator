@@ -710,6 +710,18 @@
             outline-offset: 2px;
         }
 
+        /* #437 — primary CTA needs a high-contrast ring; the global teal outline
+         * blends into the teal button bg. Use a bg-colored inner ring + accent outer
+         * ring (double-shadow pattern) so it remains visible against any theme bg. */
+        .btn-row button[type="submit"]:focus-visible,
+        .btn[type="submit"]:focus-visible,
+        .btn-primary:focus-visible {
+            outline: none;
+            box-shadow:
+                0 0 0 2px var(--color-bg),
+                0 0 0 4px var(--color-accent);
+        }
+
         /* VLSM planner */
         .vlsm-form { margin-bottom: 0.75rem; }
 

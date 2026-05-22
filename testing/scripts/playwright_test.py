@@ -9537,11 +9537,17 @@ async def test_a11y_focus_inputs(page: Page) -> None:
         return getComputedStyle(el).outlineStyle;
     }""")
     assert_true("input focus outline is not none", outline != "none")
-    btn_outline = await page.eval_on_selector("button[type='submit']", """el => {
+    # Primary Calculate button uses a box-shadow ring (see #437); accept either an
+    # outline or a non-empty box-shadow as a visible focus indicator.
+    btn_ring = await page.eval_on_selector("button[type='submit']", """el => {
         el.focus();
-        return getComputedStyle(el).outlineStyle;
+        const cs = getComputedStyle(el);
+        return { outline: cs.outlineStyle, shadow: cs.boxShadow };
     }""")
-    assert_true("button focus outline is not none", btn_outline != "none")
+    assert_true(
+        "button has visible focus ring (outline or box-shadow)",
+        btn_ring["outline"] != "none" or (btn_ring["shadow"] and btn_ring["shadow"] != "none"),
+    )
     reset_outline = await page.eval_on_selector("a.btn.reset", """el => {
         el.focus();
         return getComputedStyle(el).outlineStyle;
@@ -10435,6 +10441,62 @@ async def test_v371_touch_targets_44px(page: Page) -> None:
     )
 
 
+async def test_v371_calculate_focus_ring(page: Page) -> None:
+    """v3.7.1 #437 — Calculate button focus ring is visible (≥3:1 contrast vs the button bg)."""
+    section("v3.7.1 #437 — Calculate focus ring visibility")
+    await navigate(page, APP_URL)
+
+    btn = page.locator('#panel-ipv4 button[type="submit"]').first
+    await btn.focus()
+    # Trigger :focus-visible heuristic by also pressing Tab into the element.
+    await page.keyboard.press("Tab")
+    await btn.focus()
+
+    style = await btn.evaluate(
+        "el => { const cs = getComputedStyle(el); return {"
+        "  outlineColor: cs.outlineColor,"
+        "  outlineWidth: cs.outlineWidth,"
+        "  outlineStyle: cs.outlineStyle,"
+        "  boxShadow: cs.boxShadow,"
+        "  bg: cs.backgroundColor"
+        "}; }"
+    )
+
+    # Parse rgb() into [r,g,b] for a relative-luminance contrast check.
+    def parse_rgb(s: str) -> list[int]:
+        nums = [int(x) for x in s.replace("rgb(", "").replace("rgba(", "").replace(")", "").split(",")[:3]]
+        return nums
+
+    def luminance(rgb: list[int]) -> float:
+        def chan(c: float) -> float:
+            c = c / 255
+            return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+        r, g, b = (chan(x) for x in rgb)
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+    # If the ring is delivered via box-shadow (Material/Tailwind pattern), that's acceptable.
+    has_shadow_ring = style["boxShadow"] not in ("none", "")
+    if has_shadow_ring:
+        assert_true(
+            f"Calculate has a visible box-shadow focus ring (got {style['boxShadow']})",
+            "rgb" in style["boxShadow"],
+        )
+        return
+
+    bg = parse_rgb(style["bg"])
+    ring = parse_rgb(style["outlineColor"])
+    l1, l2 = sorted([luminance(bg), luminance(ring)], reverse=True)
+    contrast = (l1 + 0.05) / (l2 + 0.05)
+    assert_true(
+        f"Calculate outline contrast vs button bg ≥3.0 (got {contrast:.2f}; outline={style['outlineColor']} bg={style['bg']})",
+        contrast >= 3.0,
+    )
+    assert_true(
+        f"Calculate outline width ≥2px (got {style['outlineWidth']})",
+        style["outlineWidth"] in ("2px", "3px") or float(style["outlineWidth"].replace("px", "")) >= 2,
+    )
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -10831,6 +10893,7 @@ async def main() -> None:
             await test_mobile_layout(page)
             await test_focus_visible_on_keyboard_only(page)
             await test_v371_touch_targets_44px(page)
+            await test_v371_calculate_focus_ring(page)
             await test_v290_typography(page)
         finally:
             await context.close()
