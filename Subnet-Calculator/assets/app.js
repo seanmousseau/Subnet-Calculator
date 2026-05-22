@@ -20,10 +20,17 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
             b.classList.remove('active');
             b.setAttribute('aria-selected', 'false');
         });
-        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => {
+            p.classList.remove('active');
+            p.setAttribute('hidden', '');
+            p.setAttribute('inert', '');
+        });
         btn.classList.add('active');
         btn.setAttribute('aria-selected', 'true');
-        document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+        const active = document.getElementById('panel-' + btn.dataset.tab);
+        active.classList.add('active');
+        active.removeAttribute('hidden');
+        active.removeAttribute('inert');
         autoFocusActive();
     });
 
@@ -34,6 +41,37 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         if (e.key === 'ArrowRight') next = tabs[(idx + 1) % tabs.length];
         if (e.key === 'ArrowLeft')  next = tabs[(idx - 1 + tabs.length) % tabs.length];
         if (next) { e.preventDefault(); next.focus(); next.click(); }
+    });
+});
+
+// ── Reset button (clear panel form state without page reload) ────────────────
+document.querySelectorAll('button.btn.reset').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        const panel = btn.closest('.panel');
+        if (!panel) return;
+        // Clear every input/textarea in this panel (skip the hidden tab marker).
+        panel.querySelectorAll('input:not([type="hidden"]), textarea').forEach(function (el) {
+            if (el.type === 'checkbox' || el.type === 'radio') {
+                el.checked = el.defaultChecked;
+            } else {
+                el.value = '';
+            }
+        });
+        // Drop any per-panel result section if rendered (server-side render; best-effort).
+        panel.querySelectorAll('.results, .vlsm-results').forEach(el => el.remove());
+        const errBox = panel.querySelector('.error');
+        if (errBox) errBox.textContent = '';
+        // Clear stale aria-invalid markers so the red border + describedby don't linger.
+        panel.querySelectorAll('[aria-invalid="true"]').forEach(function (el) {
+            el.removeAttribute('aria-invalid');
+            el.removeAttribute('aria-describedby');
+        });
+        // Update URL to clean state without reload, preserving the active tab.
+        const tab = btn.dataset.resetTab || 'ipv4';
+        const url = new URL(window.location.href);
+        url.search = tab === 'ipv4' ? '' : '?tab=' + tab;
+        window.history.replaceState({}, '', url);
     });
 });
 

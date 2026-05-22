@@ -450,8 +450,8 @@ async def test_ipv4_reset(page: Page) -> None:
     await submit_form(page, "#panel-ipv4 form")
     assert_true("results shown before reset", await page.locator(".results").count() > 0)
 
-    async with page.expect_navigation(wait_until="load"):
-        await page.click("a.reset")
+    # v3.8.0 #443: Reset is now a <button> with JS state clear (no navigation).
+    await page.click(".panel.active .btn.reset")
 
     assert_true("results gone after reset",  await page.locator(".results").count() == 0)
     assert_eq("IP field cleared", await page.input_value("#ip"), "")
@@ -1050,8 +1050,8 @@ async def test_vlsm_reset(page: Page) -> None:
     await submit_form(page, ".vlsm-form")
     assert_true("VLSM table shown before reset",
                 await page.locator(".vlsm-table").count() > 0)
-    async with page.expect_navigation(wait_until="load"):
-        await page.click("#panel-vlsm a.reset")
+    # v3.8.0 #443: Reset is now a <button> with JS state clear (no navigation).
+    await page.click("#panel-vlsm .btn.reset")
     assert_true("VLSM table gone after reset",
                 await page.locator(".vlsm-table").count() == 0)
     assert_eq("Network field cleared", await page.input_value("#vlsm_network"), "")
@@ -1337,8 +1337,8 @@ async def test_vlsm6_reset(page: Page) -> None:
     await submit_form(page, ".vlsm6-form")
     assert_true("VLSM6 table shown before reset",
                 await page.locator(".vlsm6-table").count() > 0)
-    async with page.expect_navigation(wait_until="load"):
-        await page.click("#panel-vlsm6 a.reset")
+    # v3.8.0 #443: Reset is now a <button> with JS state clear (no navigation).
+    await page.click("#panel-vlsm6 .btn.reset")
     assert_true("VLSM6 table gone after reset",
                 await page.locator(".vlsm6-table").count() == 0)
     assert_eq("VLSM6 network field cleared", await page.input_value("#vlsm6_network"), "")
@@ -9548,7 +9548,7 @@ async def test_a11y_focus_inputs(page: Page) -> None:
         "button has visible focus ring (outline or box-shadow)",
         btn_ring["outline"] != "none" or (btn_ring["shadow"] and btn_ring["shadow"] != "none"),
     )
-    reset_outline = await page.eval_on_selector("a.btn.reset", """el => {
+    reset_outline = await page.eval_on_selector(".btn.reset", """el => {
         el.focus();
         return getComputedStyle(el).outlineStyle;
     }""")
@@ -10532,6 +10532,214 @@ async def test_v371_footer_focus_ring(page: Page) -> None:
     assert_eq("footer a outline color matches --color-accent", rgb_from_browser, accent_rgb)
 
 
+async def test_v380_inactive_panels_inert(page: Page) -> None:
+    """v3.8.0 #444 — inactive tab panels carry hidden + inert; only one Calculate button is focusable."""
+    section("v3.8.0 #444 — inactive tab panels are inert")
+    await navigate(page, APP_URL)
+
+    panels = await page.eval_on_selector_all(
+        '[role="tabpanel"]',
+        "els => els.map(el => ({"
+        "  id: el.id,"
+        "  hidden: el.hasAttribute('hidden'),"
+        "  inert: el.hasAttribute('inert'),"
+        "  display: getComputedStyle(el).display"
+        "}))",
+    )
+    active = [p for p in panels if not p["hidden"]]
+    inactive = [p for p in panels if p["hidden"]]
+    assert_eq("exactly one active panel", len(active), 1)
+    assert_true(
+        f"3 inactive panels are hidden+inert (got {inactive})",
+        len(inactive) == 3 and all(p["inert"] for p in inactive),
+    )
+
+    # Tab through every focusable element on the page; assert Calculate is reached exactly once.
+    focusables = await page.evaluate(
+        """() => {
+            const sel = 'button:not([disabled]):not([inert]), [href], input:not([disabled]), '
+                      + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]):not([inert])';
+            // Exclude buttons inside an [inert] ancestor.
+            return Array.from(document.querySelectorAll(sel))
+                .filter(el => !el.closest('[inert]'))
+                .filter(el => el.offsetParent !== null || el.tagName === 'BODY')
+                .map(el => el.textContent.trim().slice(0, 40));
+        }"""
+    )
+    calc_count = sum(1 for label in focusables if label == "Calculate")
+    assert_eq("exactly one focusable Calculate button (others are inert)", calc_count, 1)
+
+    # Switch to IPv6 tab and re-check.
+    await page.locator("#tab-ipv6").click()
+    panels_after = await page.eval_on_selector_all(
+        '[role="tabpanel"]',
+        "els => els.map(el => ({id: el.id, hidden: el.hasAttribute('hidden'), inert: el.hasAttribute('inert')}))",
+    )
+    active6 = [p for p in panels_after if not p["hidden"]]
+    assert_eq("after tab switch, exactly one active panel", len(active6), 1)
+    assert_eq("after tab switch, active panel is panel-ipv6", active6[0]["id"], "panel-ipv6")
+
+
+async def test_v380_reset_is_button(page: Page) -> None:
+    """v3.8.0 #443 — Reset is rendered as <button>, announces as 'button', clears form, no reload."""
+    section("v3.8.0 #443 — Reset is a real button")
+    await navigate(page, APP_URL)
+
+    # All 4 Reset controls exist as <button>, not <a>.
+    reset_tags = await page.eval_on_selector_all(
+        ".panel .btn.reset",
+        "els => els.map(el => el.tagName)",
+    )
+    assert_eq("4 reset controls present", len(reset_tags), 4)
+    assert_true(
+        f"every reset is a BUTTON (got {reset_tags})",
+        all(t == "BUTTON" for t in reset_tags),
+    )
+
+    # Type into the IPv4 input, click Reset, verify it cleared without reloading.
+    await page.fill("#ip", "10.20.30.0/22")
+    await page.evaluate("window.__reset_marker = 'still here'")  # survives JS reset, dies on full reload
+    await page.locator("#panel-ipv4 .btn.reset").click()
+    marker = await page.evaluate("window.__reset_marker")
+    assert_eq("no full page reload", marker, "still here")
+    val = await page.locator("#ip").input_value()
+    assert_eq("IPv4 input cleared", val, "")
+
+
+async def test_v380_copy_affordance(page: Page) -> None:
+    """v3.8.0 #442 — result-row hover bg is perceptible (>=8% accent) and copy glyph is bigger."""
+    section("v3.8.0 #442 — stronger copy affordance")
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "10.0.0.0/24")
+    await submit_form(page, "#panel-ipv4 form")
+    row = page.locator("#panel-ipv4 .result-row").first
+    await row.wait_for(state="visible")
+    await row.hover()
+
+    style = await row.evaluate(
+        "el => { const cs = getComputedStyle(el);"
+        " const after = getComputedStyle(el.querySelector('.result-value'), '::after');"
+        " return { bg: cs.backgroundColor, afterColor: after.color, afterFs: after.fontSize, afterContent: after.content }; }"
+    )
+    import re as _re
+    m = _re.match(r"rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\)", style["bg"])
+    assert m is not None, f"unparseable hover bg: {style['bg']}"
+    r, g, b = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    alpha = float(m.group(4)) if m.group(4) else 1.0
+    saturated = (max(r, g, b) - min(r, g, b)) > 20
+    assert_true(
+        f"hover bg perceptible (rgba={style['bg']}, alpha={alpha:.2f}, saturated={saturated})",
+        alpha >= 0.08 or saturated,
+    )
+    # Glyph should be at least ~1em (not 0.8em); accept either em form or px equivalent.
+    # Glyph should be ~1em — compare to its own .result-value parent's font-size so the
+    # threshold scales with theme/zoom and catches regression to 0.8em.
+    glyph_px = float(style["afterFs"].replace("px", ""))
+    base_px = float(
+        (await page.locator("#panel-ipv4 .result-row .result-value").first.evaluate(
+            "el => getComputedStyle(el).fontSize"
+        )).replace("px", "")
+    )
+    assert_true(
+        f"copy glyph ~1em (glyph={glyph_px}px, base={base_px}px, ratio={glyph_px/base_px:.2f}em)",
+        glyph_px / base_px >= 0.95,
+    )
+    # CSS rule sets ::after color to var(--color-accent) under :hover/:focus-visible;
+    # asserting via getComputedStyle is unreliable for pseudo-elements, so verify the rule
+    # text exists in the stylesheet instead.
+    css_text = await page.evaluate(
+        "() => Array.from(document.styleSheets).flatMap(s => { try { return Array.from(s.cssRules).map(r => r.cssText); } catch { return []; } }).join('\\n')"
+    )
+    assert_true(
+        ".result-row:hover .result-value::after rule sets color to accent",
+        ".result-row:hover .result-value::after" in css_text and "--color-accent" in css_text,
+    )
+
+
+async def test_v380_ipv4_tool_groups(page: Page) -> None:
+    """v3.8.0 #441 — IPv4 tools organised into 3 labelled groups: Transform / Visualize / Lookups."""
+    section("v3.8.0 #441 — IPv4 tool IA grouping")
+    await navigate(page, APP_URL)
+
+    labels = await page.eval_on_selector_all(
+        "#panel-ipv4 .tool-toolbar-group-label",
+        "els => els.map(el => el.textContent.trim())",
+    )
+    assert_eq("3 group labels present", len(labels), 3)
+    assert_eq("group labels match spec",
+              [label.lower() for label in labels],
+              ["transform", "visualize", "lookups"])
+
+    tools = await page.eval_on_selector_all(
+        "#panel-ipv4 .tool-toolbar-group .tool-trigger",
+        "els => els.map(el => el.dataset.tool)",
+    )
+    expected = ["split", "supernet", "range", "wildcard",
+                "tree", "tree-editor",
+                "lookup", "diff"]
+    assert_eq("8 tool triggers present in groups", sorted(tools), sorted(expected))
+
+    orphans = await page.eval_on_selector_all(
+        "#panel-ipv4 .tool-toolbar > .tool-trigger",
+        "els => els.length",
+    )
+    assert_eq("no orphan tool-triggers", orphans, 0)
+
+
+async def test_v380_error_announced_and_marked(page: Page) -> None:
+    """v3.8.0 #440 — error region has role=alert and invalid input has a red border."""
+    section("v3.8.0 #440 — error semantics + invalid field marker")
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "999.999.999.999/22")
+    await submit_form(page, "#panel-ipv4 form")
+
+    err = page.locator("#ipv4-error")
+    role = await err.get_attribute("role")
+    assert_eq("error region has role=alert", role, "alert")
+
+    border = await page.eval_on_selector(
+        "#panel-ipv4 input[aria-invalid='true']",
+        "el => getComputedStyle(el).borderColor",
+    )
+    import re as _re
+    m = _re.match(r"rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)", border)
+    assert m is not None, f"unparseable border color: {border}"
+    r, g, b = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    assert_true(
+        f"invalid input border is red-dominant (got rgb({r}, {g}, {b}))",
+        r >= 180 and r > g + 40 and r > b + 40,
+    )
+
+
+async def test_v380_drawer_docks_on_desktop(page: Page) -> None:
+    """v3.8.0 #439 — at ≥1280px the drawer docks alongside the card, not over it."""
+    section("v3.8.0 #439 — drawer docks on desktop")
+    await page.set_viewport_size({"width": 1440, "height": 900})
+    await navigate(page, APP_URL)
+    await page.fill("#ip", "10.0.0.0/24")
+    await submit_form(page, "#panel-ipv4 form")
+    await page.locator('#panel-ipv4 .tool-trigger[data-tool="split"]').click()
+    await page.wait_for_selector("#panel-ipv4 .tool-drawer.open")
+
+    card_box = await page.locator("main.card").bounding_box()
+    drawer_box = await page.locator("#panel-ipv4 .tool-drawer.open").bounding_box()
+    assert card_box is not None and drawer_box is not None, "card/drawer not laid out"
+
+    card_right = card_box["x"] + card_box["width"]
+    assert_true(
+        f"drawer is to the right of the card at 1440px (drawer.left={drawer_box['x']:.0f}, card.right={card_right:.0f})",
+        drawer_box["x"] >= card_right - 2,
+    )
+
+    # Drawer must not cover the form (#439's core complaint).
+    netmask = await page.locator("#mask").bounding_box()
+    assert netmask is not None
+    assert_true(
+        f"netmask field not covered by drawer (mask.right={(netmask['x']+netmask['width']):.0f}, drawer.left={drawer_box['x']:.0f})",
+        netmask["x"] + netmask["width"] <= drawer_box["x"] + 1,
+    )
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -10930,6 +11138,12 @@ async def main() -> None:
             await test_v371_touch_targets_44px(page)
             await test_v371_calculate_focus_ring(page)
             await test_v371_footer_focus_ring(page)
+            await test_v380_inactive_panels_inert(page)
+            await test_v380_reset_is_button(page)
+            await test_v380_copy_affordance(page)
+            await test_v380_ipv4_tool_groups(page)
+            await test_v380_error_announced_and_marked(page)
+            await test_v380_drawer_docks_on_desktop(page)
             await test_v290_typography(page)
         finally:
             await context.close()

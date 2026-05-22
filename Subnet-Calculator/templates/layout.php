@@ -102,7 +102,8 @@ require __DIR__ . '/_app_header.php';
 
     <!-- IPv4 Panel -->
     <div id="panel-ipv4" class="panel<?= $active_tab === 'ipv4' ? ' active' : '' ?>"
-         role="tabpanel" aria-labelledby="tab-ipv4" tabindex="-1">
+         role="tabpanel" aria-labelledby="tab-ipv4" tabindex="-1"
+         <?= $active_tab !== 'ipv4' ? 'hidden inert' : '' ?>>
         <form method="post" novalidate>
             <input type="hidden" name="tab" value="ipv4">
             <div class="form-row">
@@ -125,7 +126,7 @@ require __DIR__ . '/_app_header.php';
             </div>
             <div class="btn-row">
                 <button type="submit">Calculate</button>
-                <a href="?" class="btn reset">Reset</a>
+                <button type="button" class="btn reset" data-reset-tab="">Reset</button>
             </div>
             <?php if ($form_protection === 'honeypot') : ?>
                 <input type="text" name="url" class="sc-honeypot" tabindex="-1" autocomplete="off" value="">
@@ -140,7 +141,7 @@ require __DIR__ . '/_app_header.php';
         </form>
 
         <?php if ($error) : ?>
-            <div class="error" id="ipv4-error"><?= htmlspecialchars($error) ?></div>
+            <div class="error" id="ipv4-error" role="alert"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
 
         <?php if ($result) : ?>
@@ -246,14 +247,23 @@ if ($i < 3) {
         }
         ?>
         <div class="tool-toolbar"<?= $open_tool_ipv4 ? ' data-open-tool="' . htmlspecialchars($open_tool_ipv4) . '"' : '' ?>>
-            <button type="button" class="tool-trigger" data-tool="split" aria-expanded="false">Split Subnet</button>
-            <button type="button" class="tool-trigger" data-tool="supernet" aria-expanded="false">Supernet</button>
-            <button type="button" class="tool-trigger" data-tool="range" aria-expanded="false">Range&rarr;CIDR</button>
-            <button type="button" class="tool-trigger" data-tool="tree" aria-expanded="false">Subnet Tree</button>
-            <button type="button" class="tool-trigger" data-tool="tree-editor" aria-expanded="false">Tree Editor</button>
-            <button type="button" class="tool-trigger" data-tool="wildcard" aria-expanded="false">Wildcard&harr;CIDR</button>
-            <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
-            <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
+            <div class="tool-toolbar-group">
+                <span class="tool-toolbar-group-label">Transform</span>
+                <button type="button" class="tool-trigger" data-tool="split" aria-expanded="false">Split Subnet</button>
+                <button type="button" class="tool-trigger" data-tool="supernet" aria-expanded="false">Supernet</button>
+                <button type="button" class="tool-trigger" data-tool="range" aria-expanded="false">Range&rarr;CIDR</button>
+                <button type="button" class="tool-trigger" data-tool="wildcard" aria-expanded="false">Wildcard&harr;CIDR</button>
+            </div>
+            <div class="tool-toolbar-group">
+                <span class="tool-toolbar-group-label">Visualize</span>
+                <button type="button" class="tool-trigger" data-tool="tree" aria-expanded="false">Subnet Tree</button>
+                <button type="button" class="tool-trigger" data-tool="tree-editor" aria-expanded="false">Tree Editor</button>
+            </div>
+            <div class="tool-toolbar-group">
+                <span class="tool-toolbar-group-label">Lookups</span>
+                <button type="button" class="tool-trigger" data-tool="lookup" aria-expanded="false">IP Lookup</button>
+                <button type="button" class="tool-trigger" data-tool="diff" aria-expanded="false">Subnet Diff</button>
+            </div>
         </div>
 
         <div class="tool-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-ipv4">
@@ -282,7 +292,8 @@ if ($i < 3) {
 
     <!-- IPv6 Panel -->
     <div id="panel-ipv6" class="panel<?= $active_tab === 'ipv6' ? ' active' : '' ?>"
-         role="tabpanel" aria-labelledby="tab-ipv6" tabindex="-1">
+         role="tabpanel" aria-labelledby="tab-ipv6" tabindex="-1"
+         <?= $active_tab !== 'ipv6' ? 'hidden inert' : '' ?>>
         <form method="post" novalidate>
             <input type="hidden" name="tab" value="ipv6">
             <div class="form-row">
@@ -305,7 +316,7 @@ if ($i < 3) {
             </div>
             <div class="btn-row">
                 <button type="submit">Calculate</button>
-                <a href="?tab=ipv6" class="btn reset">Reset</a>
+                <button type="button" class="btn reset" data-reset-tab="ipv6">Reset</button>
             </div>
             <?php if ($form_protection === 'honeypot') : ?>
                 <input type="text" name="url" class="sc-honeypot" tabindex="-1" autocomplete="off" value="">
@@ -320,7 +331,7 @@ if ($i < 3) {
         </form>
 
         <?php if ($error6) : ?>
-            <div class="error" id="ipv6-error"><?= htmlspecialchars($error6) ?></div>
+            <div class="error" id="ipv6-error" role="alert"><?= htmlspecialchars($error6, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
 
         <?php if ($result6) : ?>
@@ -565,7 +576,8 @@ if ($i < 3) {
 
     <!-- VLSM Panel -->
     <div id="panel-vlsm" class="panel<?= $active_tab === 'vlsm' ? ' active' : '' ?>"
-         role="tabpanel" aria-labelledby="tab-vlsm" tabindex="-1">
+         role="tabpanel" aria-labelledby="tab-vlsm" tabindex="-1"
+         <?= $active_tab !== 'vlsm' ? 'hidden inert' : '' ?>>
         <form method="post" class="vlsm-form" novalidate>
             <input type="hidden" name="tab" value="vlsm">
             <div class="form-row">
@@ -608,11 +620,11 @@ if ($i < 3) {
             <div class="vlsm-actions">
                 <button type="button" class="vlsm-add-row">+ Add Subnet</button>
                 <button type="submit" class="btn">Calculate</button>
-                <a href="?tab=vlsm" class="btn reset">Reset</a>
+                <button type="button" class="btn reset" data-reset-tab="vlsm">Reset</button>
             </div>
         </form>
         <?php if (!empty($vlsm['error'])) : ?>
-            <div class="error"><?= htmlspecialchars($vlsm['error']) ?></div>
+            <div class="error" role="alert"><?= htmlspecialchars($vlsm['error'], ENT_QUOTES, 'UTF-8') ?></div>
         <?php elseif (isset($vlsm['result'])) : ?>
             <div class="vlsm-results">
                 <p class="vlsm-sort-note">Results sorted largest-first for efficient allocation.<?= help_bubble('vlsm-sort', 'Subnets are allocated from largest to smallest so that larger blocks can be placed at aligned boundaries without wasting address space.') ?></p>
@@ -719,7 +731,8 @@ if ($i < 3) {
 
     <!-- VLSM IPv6 Panel -->
     <div id="panel-vlsm6" class="panel<?= $active_tab === 'vlsm6' ? ' active' : '' ?>"
-         role="tabpanel" aria-labelledby="tab-vlsm6" tabindex="-1">
+         role="tabpanel" aria-labelledby="tab-vlsm6" tabindex="-1"
+         <?= $active_tab !== 'vlsm6' ? 'hidden inert' : '' ?>>
         <form method="post" class="vlsm6-form" novalidate>
             <input type="hidden" name="tab" value="vlsm6">
             <div class="form-row">
@@ -762,11 +775,11 @@ if ($i < 3) {
             <div class="vlsm-actions">
                 <button type="button" class="vlsm6-add-row">+ Add Subnet</button>
                 <button type="submit" class="btn">Calculate</button>
-                <a href="?tab=vlsm6" class="btn reset">Reset</a>
+                <button type="button" class="btn reset" data-reset-tab="vlsm6">Reset</button>
             </div>
         </form>
         <?php if (!empty($vlsm6['error'])) : ?>
-            <div class="error"><?= htmlspecialchars($vlsm6['error']) ?></div>
+            <div class="error" role="alert"><?= htmlspecialchars($vlsm6['error'], ENT_QUOTES, 'UTF-8') ?></div>
         <?php elseif (isset($vlsm6['result'])) : ?>
             <div class="vlsm-results">
                 <p class="vlsm-sort-note">Results sorted largest-first for efficient allocation.<?= help_bubble('vlsm6-sort', 'Subnets are allocated from largest to smallest so that larger blocks can be placed at aligned boundaries without wasting address space.') ?></p>

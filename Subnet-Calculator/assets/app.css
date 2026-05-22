@@ -293,6 +293,14 @@
         }
         a.btn.reset:active { transform: translateY(0); }
 
+        /* Invalid input marker (#440) — uses the existing error palette token. */
+        input[aria-invalid="true"],
+        input[aria-invalid="true"]:focus,
+        input[aria-invalid="true"]:focus-visible {
+            border-color: var(--color-error-text);
+            outline-color: var(--color-error-text);
+        }
+
         /* Error */
         .error {
             background: var(--color-error-bg);
@@ -346,7 +354,7 @@
         }
 
         .result-row:nth-child(odd) { background: var(--color-surface-alt); }
-        .result-row:hover { background: rgb(6 214 160 / 4%) !important; }
+        .result-row:hover { background: rgb(6 214 160 / 10%) !important; }
 
         .result-label { color: var(--color-text-subtle); font-size: 0.8rem; }
 
@@ -360,13 +368,15 @@
         }
 
         .result-value::after {
-            content: ' \29d8';
+            content: ' \1f4cb';            /* 📋 clipboard glyph (#442) */
             color: transparent;
-            font-size: 0.8em;
+            font-size: 1em;
+            margin-left: 0.4em;
             transition: color 0.15s;
         }
 
-        .result-row:hover .result-value::after { color: var(--color-text-faint); }
+        .result-row:hover .result-value::after,
+        .result-row:focus-visible .result-value::after { color: var(--color-accent); }
 
         .hosts-row .result-value { color: var(--color-green); }
 
@@ -1479,6 +1489,25 @@
 }
 .js-enabled .tool-toolbar { display: flex; }
 
+/* IPv4 tool IA grouping (#441): Transform / Visualize / Lookups */
+.tool-toolbar-group {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+}
+.tool-toolbar-group-label {
+    font-size: 0.7rem;
+    color: var(--color-text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-right: 0.15rem;
+}
+@media (width <= 480px) {
+    .tool-toolbar-group { width: 100%; }
+    .tool-toolbar-group-label { display: block; width: 100%; margin-bottom: 0.2rem; }
+}
+
 .tool-trigger {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
@@ -1567,6 +1596,37 @@
     z-index: 10;
 }
 .js-enabled .tool-drawer.open { transform: translateX(0); }
+
+/* Dock alongside the card on wide viewports (#439). The card is centred and
+ * max-width:560 (800 above 1024). Place the drawer to the right of the card.
+ * Threshold is 1440 because at 1280 the docked drawer would overflow viewport-right. */
+@media (width >= 1440px) {
+    .js-enabled .tool-drawer {
+        position: fixed;
+        top: 50%;
+        left: calc(50% + 420px);
+        right: auto;
+        bottom: auto;
+        width: 360px;
+        max-height: 80vh;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-left: 1px solid var(--color-border);
+        border-radius: 12px;
+        box-shadow: 0 12px 32px rgb(0 0 0 / 30%);
+        overflow-y: auto;
+        transform: translateY(-50%) translateX(20px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 150ms ease, transform 150ms ease;
+        z-index: 10;
+    }
+    .js-enabled .tool-drawer.open {
+        transform: translateY(-50%) translateX(0);
+        opacity: 1;
+        pointer-events: auto;
+    }
+}
 
 /* Bottom sheet on narrow viewports */
 @media (width <= 480px) {
