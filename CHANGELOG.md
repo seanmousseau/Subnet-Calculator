@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] - 2026-05-22
+
+**UX + a11y minor.** Closes findings #439–#444 from the 2026-05-21 UX
+review. CSS + light markup + small JS hooks only — no PHP, schema, or
+API changes.
+
+### Added
+
+- **IPv4 tool buttons grouped by purpose** — Transform / Visualize /
+  Lookups labelled clusters under the form. (#441)
+- **Copy affordance on result rows strengthened** — hover bg bumped to
+  10% accent, copy glyph upgraded to 📋 at 1em with a visible hover
+  state. Click-to-copy semantics unchanged. (#442)
+
+### Changed
+
+- **Tool drawer docks alongside the card at ≥1440 px** instead of
+  overlaying it. Tablet (≤1439 px) keeps the slide-in overlay; mobile
+  (≤480 px) keeps the bottom sheet. (#439)
+- **Reset is now a `<button>`** with a JS state clear (no full page
+  reload). Announces as "button" to AT. (#443)
+
+### Accessibility
+
+- **Form errors are announced** via `role="alert"` on the four `.error`
+  regions. (#440)
+- **Invalid inputs show a red border** (`--color-error-text`) when
+  `aria-invalid="true"`. (#440)
+- **Inactive tab panels carry `hidden` + `inert`** so AT and Tab
+  navigation only reach the active panel. (#444)
+
 ## [3.7.1] - 2026-05-21
 
 **Accessibility patch.** Closes three P0 findings from the 2026-05-21 UX
