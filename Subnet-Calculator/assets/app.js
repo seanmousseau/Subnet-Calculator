@@ -44,6 +44,32 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     });
 });
 
+// ── Reset button (clear panel form state without page reload) ────────────────
+document.querySelectorAll('button.btn.reset').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        const panel = btn.closest('.panel');
+        if (!panel) return;
+        // Clear every input/textarea in this panel (skip the hidden tab marker).
+        panel.querySelectorAll('input:not([type="hidden"]), textarea').forEach(function (el) {
+            if (el.type === 'checkbox' || el.type === 'radio') {
+                el.checked = el.defaultChecked;
+            } else {
+                el.value = '';
+            }
+        });
+        // Drop any per-panel result section if rendered (server-side render; best-effort).
+        panel.querySelectorAll('.results, .vlsm-results').forEach(el => el.remove());
+        const errBox = panel.querySelector('.error');
+        if (errBox) errBox.textContent = '';
+        // Update URL to clean state without reload, preserving the active tab.
+        const tab = btn.dataset.resetTab || 'ipv4';
+        const url = new URL(window.location.href);
+        url.search = tab === 'ipv4' ? '' : '?tab=' + tab;
+        window.history.replaceState({}, '', url);
+    });
+});
+
 // ── Copy to clipboard (with execCommand fallback for cross-origin iframes) ───
 function showToast(msg) {
     const t = document.getElementById('toast');

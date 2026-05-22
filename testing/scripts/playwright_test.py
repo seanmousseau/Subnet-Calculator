@@ -450,8 +450,8 @@ async def test_ipv4_reset(page: Page) -> None:
     await submit_form(page, "#panel-ipv4 form")
     assert_true("results shown before reset", await page.locator(".results").count() > 0)
 
-    async with page.expect_navigation(wait_until="load"):
-        await page.click("a.reset")
+    # v3.8.0 #443: Reset is now a <button> with JS state clear (no navigation).
+    await page.click(".panel.active .btn.reset")
 
     assert_true("results gone after reset",  await page.locator(".results").count() == 0)
     assert_eq("IP field cleared", await page.input_value("#ip"), "")
@@ -1050,8 +1050,8 @@ async def test_vlsm_reset(page: Page) -> None:
     await submit_form(page, ".vlsm-form")
     assert_true("VLSM table shown before reset",
                 await page.locator(".vlsm-table").count() > 0)
-    async with page.expect_navigation(wait_until="load"):
-        await page.click("#panel-vlsm a.reset")
+    # v3.8.0 #443: Reset is now a <button> with JS state clear (no navigation).
+    await page.click("#panel-vlsm .btn.reset")
     assert_true("VLSM table gone after reset",
                 await page.locator(".vlsm-table").count() == 0)
     assert_eq("Network field cleared", await page.input_value("#vlsm_network"), "")
@@ -1337,8 +1337,8 @@ async def test_vlsm6_reset(page: Page) -> None:
     await submit_form(page, ".vlsm6-form")
     assert_true("VLSM6 table shown before reset",
                 await page.locator(".vlsm6-table").count() > 0)
-    async with page.expect_navigation(wait_until="load"):
-        await page.click("#panel-vlsm6 a.reset")
+    # v3.8.0 #443: Reset is now a <button> with JS state clear (no navigation).
+    await page.click("#panel-vlsm6 .btn.reset")
     assert_true("VLSM6 table gone after reset",
                 await page.locator(".vlsm6-table").count() == 0)
     assert_eq("VLSM6 network field cleared", await page.input_value("#vlsm6_network"), "")
@@ -9548,7 +9548,7 @@ async def test_a11y_focus_inputs(page: Page) -> None:
         "button has visible focus ring (outline or box-shadow)",
         btn_ring["outline"] != "none" or (btn_ring["shadow"] and btn_ring["shadow"] != "none"),
     )
-    reset_outline = await page.eval_on_selector("a.btn.reset", """el => {
+    reset_outline = await page.eval_on_selector(".btn.reset", """el => {
         el.focus();
         return getComputedStyle(el).outlineStyle;
     }""")
@@ -10580,6 +10580,32 @@ async def test_v380_inactive_panels_inert(page: Page) -> None:
     assert_eq("after tab switch, active panel is panel-ipv6", active6[0]["id"], "panel-ipv6")
 
 
+async def test_v380_reset_is_button(page: Page) -> None:
+    """v3.8.0 #443 — Reset is rendered as <button>, announces as 'button', clears form, no reload."""
+    section("v3.8.0 #443 — Reset is a real button")
+    await navigate(page, APP_URL)
+
+    # All 4 Reset controls exist as <button>, not <a>.
+    reset_tags = await page.eval_on_selector_all(
+        ".panel .btn.reset",
+        "els => els.map(el => el.tagName)",
+    )
+    assert_eq("4 reset controls present", len(reset_tags), 4)
+    assert_true(
+        f"every reset is a BUTTON (got {reset_tags})",
+        all(t == "BUTTON" for t in reset_tags),
+    )
+
+    # Type into the IPv4 input, click Reset, verify it cleared without reloading.
+    await page.fill("#ip", "10.20.30.0/22")
+    await page.evaluate("window.__reset_marker = 'still here'")  # survives JS reset, dies on full reload
+    await page.locator("#panel-ipv4 .btn.reset").click()
+    marker = await page.evaluate("window.__reset_marker")
+    assert_eq("no full page reload", marker, "still here")
+    val = await page.locator("#ip").input_value()
+    assert_eq("IPv4 input cleared", val, "")
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -10979,6 +11005,7 @@ async def main() -> None:
             await test_v371_calculate_focus_ring(page)
             await test_v371_footer_focus_ring(page)
             await test_v380_inactive_panels_inert(page)
+            await test_v380_reset_is_button(page)
             await test_v290_typography(page)
         finally:
             await context.close()

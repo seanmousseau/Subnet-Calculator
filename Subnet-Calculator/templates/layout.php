@@ -126,7 +126,7 @@ require __DIR__ . '/_app_header.php';
             </div>
             <div class="btn-row">
                 <button type="submit">Calculate</button>
-                <a href="?" class="btn reset">Reset</a>
+                <button type="button" class="btn reset" data-reset-tab="">Reset</button>
             </div>
             <?php if ($form_protection === 'honeypot') : ?>
                 <input type="text" name="url" class="sc-honeypot" tabindex="-1" autocomplete="off" value="">
@@ -307,7 +307,7 @@ if ($i < 3) {
             </div>
             <div class="btn-row">
                 <button type="submit">Calculate</button>
-                <a href="?tab=ipv6" class="btn reset">Reset</a>
+                <button type="button" class="btn reset" data-reset-tab="ipv6">Reset</button>
             </div>
             <?php if ($form_protection === 'honeypot') : ?>
                 <input type="text" name="url" class="sc-honeypot" tabindex="-1" autocomplete="off" value="">
@@ -611,7 +611,7 @@ if ($i < 3) {
             <div class="vlsm-actions">
                 <button type="button" class="vlsm-add-row">+ Add Subnet</button>
                 <button type="submit" class="btn">Calculate</button>
-                <a href="?tab=vlsm" class="btn reset">Reset</a>
+                <button type="button" class="btn reset" data-reset-tab="vlsm">Reset</button>
             </div>
         </form>
         <?php if (!empty($vlsm['error'])) : ?>
@@ -766,7 +766,7 @@ if ($i < 3) {
             <div class="vlsm-actions">
                 <button type="button" class="vlsm6-add-row">+ Add Subnet</button>
                 <button type="submit" class="btn">Calculate</button>
-                <a href="?tab=vlsm6" class="btn reset">Reset</a>
+                <button type="button" class="btn reset" data-reset-tab="vlsm6">Reset</button>
             </div>
         </form>
         <?php if (!empty($vlsm6['error'])) : ?>
