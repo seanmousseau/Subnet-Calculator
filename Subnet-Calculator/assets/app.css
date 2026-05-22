@@ -215,7 +215,7 @@
         .form-group { display: flex; flex-direction: column; flex: 1; }
 
         label {
-            font-size: 0.75rem;
+            font-size: 0.875rem;        /* #445: was 0.75rem (12px) — 14px reads better on mobile */
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.05em;

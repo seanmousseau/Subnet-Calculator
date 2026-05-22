@@ -10740,6 +10740,29 @@ async def test_v380_drawer_docks_on_desktop(page: Page) -> None:
     )
 
 
+async def test_v390_form_label_size(page: Page) -> None:
+    """v3.9.0 #445 — form labels are ≥14px (was 12px / 0.75rem)."""
+    section("v3.9.0 #445 — form labels ≥14px")
+    await navigate(page, APP_URL)
+    fs = await page.eval_on_selector(
+        "label[for='ip']",
+        "el => getComputedStyle(el).fontSize",
+    )
+    px = float(fs.replace("px", ""))
+    assert_true(f"IPv4 IP-address label is ≥14px (got {fs})", px >= 14.0)
+
+    tab_to_label = [
+        ("#tab-ipv6", "label[for='ipv6']"),
+        ("#tab-vlsm", "label[for='vlsm_network']"),
+        ("#tab-vlsm6", "label[for='vlsm6_network']"),
+    ]
+    for tab_sel, label_sel in tab_to_label:
+        await page.click(tab_sel)
+        fs2 = await page.eval_on_selector(label_sel, "el => getComputedStyle(el).fontSize")
+        px2 = float(fs2.replace("px", ""))
+        assert_true(f"{label_sel} is ≥14px (got {fs2})", px2 >= 14.0)
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -11144,6 +11167,7 @@ async def main() -> None:
             await test_v380_ipv4_tool_groups(page)
             await test_v380_error_announced_and_marked(page)
             await test_v380_drawer_docks_on_desktop(page)
+            await test_v390_form_label_size(page)
             await test_v290_typography(page)
         finally:
             await context.close()
