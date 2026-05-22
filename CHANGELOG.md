@@ -18,6 +18,9 @@ API changes.
 - **Copy affordance on result rows strengthened** — hover bg bumped to
   10% accent, copy glyph upgraded to 📋 at 1em with a visible hover
   state. Click-to-copy semantics unchanged. (#442)
+- **BIMI-compatible brand SVG** at `assets/bimi.svg` (SVG Tiny PS 1.2,
+  493 bytes) for operators who want to publish a BIMI DNS record. See
+  `default._bimi.<your-host>` TXT record format in the BIMI Group spec.
 
 ### Changed
 

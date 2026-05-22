@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny-ps" viewBox="0 0 480 480">
+  <title>Subnet Calculator</title>
+  <circle cx="240" cy="240" r="240" fill="#0D1117"/>
+  <g fill="#06D6A0">
+    <path d="M 95 145 L 235 145 L 235 200 L 160 200 L 160 220 L 235 220 L 235 335 L 95 335 L 95 280 L 170 280 L 170 260 L 95 260 Z"/>
+    <path d="M 275 145 L 405 145 L 405 200 L 335 200 L 335 280 L 405 280 L 405 335 L 275 335 Z"/>
+  </g>
+</svg>
