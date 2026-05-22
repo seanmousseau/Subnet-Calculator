@@ -62,7 +62,12 @@ jobs:
 
       - name: Spectral — lint OpenAPI spec
         if: hashFiles('Subnet-Calculator/api/openapi.yaml') != ''
-        # Pinned: looser `@6` started failing 2026-05-21 with
-        # "Cannot read properties of null (reading 'enum')" — a transitive-dep
-        # regression resolved by npx's clean install. Bump deliberately.
-        run: npx --yes @stoplight/spectral-cli@6.16.0 lint Subnet-Calculator/api/openapi.yaml
+        # Use the official Spectral Docker image — its locked dep tree avoids
+        # the 2026-05-21 nimma transitive-dep regression that breaks every
+        # `npx @stoplight/spectral-cli` install. Ruleset lives at
+        # Subnet-Calculator/api/.spectral.yaml.
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/Subnet-Calculator/api:/spec" \
+            stoplight/spectral:latest \
+            lint /spec/openapi.yaml --ruleset /spec/.spectral.yaml
