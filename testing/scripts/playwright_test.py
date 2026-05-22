@@ -10532,6 +10532,54 @@ async def test_v371_footer_focus_ring(page: Page) -> None:
     assert_eq("footer a outline color matches --color-accent", rgb_from_browser, accent_rgb)
 
 
+async def test_v380_inactive_panels_inert(page: Page) -> None:
+    """v3.8.0 #444 — inactive tab panels carry hidden + inert; only one Calculate button is focusable."""
+    section("v3.8.0 #444 — inactive tab panels are inert")
+    await navigate(page, APP_URL)
+
+    panels = await page.eval_on_selector_all(
+        '[role="tabpanel"]',
+        "els => els.map(el => ({"
+        "  id: el.id,"
+        "  hidden: el.hasAttribute('hidden'),"
+        "  inert: el.hasAttribute('inert'),"
+        "  display: getComputedStyle(el).display"
+        "}))",
+    )
+    active = [p for p in panels if not p["hidden"]]
+    inactive = [p for p in panels if p["hidden"]]
+    assert_eq("exactly one active panel", len(active), 1)
+    assert_true(
+        f"3 inactive panels are hidden+inert (got {inactive})",
+        len(inactive) == 3 and all(p["inert"] for p in inactive),
+    )
+
+    # Tab through every focusable element on the page; assert Calculate is reached exactly once.
+    focusables = await page.evaluate(
+        """() => {
+            const sel = 'button:not([disabled]):not([inert]), [href], input:not([disabled]), '
+                      + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]):not([inert])';
+            // Exclude buttons inside an [inert] ancestor.
+            return Array.from(document.querySelectorAll(sel))
+                .filter(el => !el.closest('[inert]'))
+                .filter(el => el.offsetParent !== null || el.tagName === 'BODY')
+                .map(el => el.textContent.trim().slice(0, 40));
+        }"""
+    )
+    calc_count = sum(1 for label in focusables if label == "Calculate")
+    assert_eq("exactly one focusable Calculate button (others are inert)", calc_count, 1)
+
+    # Switch to IPv6 tab and re-check.
+    await page.locator("#tab-ipv6").click()
+    panels_after = await page.eval_on_selector_all(
+        '[role="tabpanel"]',
+        "els => els.map(el => ({id: el.id, hidden: el.hasAttribute('hidden'), inert: el.hasAttribute('inert')}))",
+    )
+    active6 = [p for p in panels_after if not p["hidden"]]
+    assert_eq("after tab switch, exactly one active panel", len(active6), 1)
+    assert_eq("after tab switch, active panel is panel-ipv6", active6[0]["id"], "panel-ipv6")
+
+
 async def test_v290_typography(page: Page) -> None:
     """v2.9.0: Verify Space Grotesk, Plus Jakarta Sans, and Fira Code are loaded."""
     section("v2.9.0 — typography verification")
@@ -10930,6 +10978,7 @@ async def main() -> None:
             await test_v371_touch_targets_44px(page)
             await test_v371_calculate_focus_ring(page)
             await test_v371_footer_focus_ring(page)
+            await test_v380_inactive_panels_inert(page)
             await test_v290_typography(page)
         finally:
             await context.close()

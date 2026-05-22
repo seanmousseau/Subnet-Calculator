@@ -20,10 +20,17 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
             b.classList.remove('active');
             b.setAttribute('aria-selected', 'false');
         });
-        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => {
+            p.classList.remove('active');
+            p.setAttribute('hidden', '');
+            p.setAttribute('inert', '');
+        });
         btn.classList.add('active');
         btn.setAttribute('aria-selected', 'true');
-        document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+        const active = document.getElementById('panel-' + btn.dataset.tab);
+        active.classList.add('active');
+        active.removeAttribute('hidden');
+        active.removeAttribute('inert');
         autoFocusActive();
     });
 

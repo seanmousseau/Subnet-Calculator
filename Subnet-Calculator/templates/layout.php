@@ -102,7 +102,8 @@ require __DIR__ . '/_app_header.php';
 
     <!-- IPv4 Panel -->
     <div id="panel-ipv4" class="panel<?= $active_tab === 'ipv4' ? ' active' : '' ?>"
-         role="tabpanel" aria-labelledby="tab-ipv4" tabindex="-1">
+         role="tabpanel" aria-labelledby="tab-ipv4" tabindex="-1"
+         <?= $active_tab !== 'ipv4' ? 'hidden inert' : '' ?>>
         <form method="post" novalidate>
             <input type="hidden" name="tab" value="ipv4">
             <div class="form-row">
@@ -282,7 +283,8 @@ if ($i < 3) {
 
     <!-- IPv6 Panel -->
     <div id="panel-ipv6" class="panel<?= $active_tab === 'ipv6' ? ' active' : '' ?>"
-         role="tabpanel" aria-labelledby="tab-ipv6" tabindex="-1">
+         role="tabpanel" aria-labelledby="tab-ipv6" tabindex="-1"
+         <?= $active_tab !== 'ipv6' ? 'hidden inert' : '' ?>>
         <form method="post" novalidate>
             <input type="hidden" name="tab" value="ipv6">
             <div class="form-row">
@@ -565,7 +567,8 @@ if ($i < 3) {
 
     <!-- VLSM Panel -->
     <div id="panel-vlsm" class="panel<?= $active_tab === 'vlsm' ? ' active' : '' ?>"
-         role="tabpanel" aria-labelledby="tab-vlsm" tabindex="-1">
+         role="tabpanel" aria-labelledby="tab-vlsm" tabindex="-1"
+         <?= $active_tab !== 'vlsm' ? 'hidden inert' : '' ?>>
         <form method="post" class="vlsm-form" novalidate>
             <input type="hidden" name="tab" value="vlsm">
             <div class="form-row">
@@ -719,7 +722,8 @@ if ($i < 3) {
 
     <!-- VLSM IPv6 Panel -->
     <div id="panel-vlsm6" class="panel<?= $active_tab === 'vlsm6' ? ' active' : '' ?>"
-         role="tabpanel" aria-labelledby="tab-vlsm6" tabindex="-1">
+         role="tabpanel" aria-labelledby="tab-vlsm6" tabindex="-1"
+         <?= $active_tab !== 'vlsm6' ? 'hidden inert' : '' ?>>
         <form method="post" class="vlsm6-form" novalidate>
             <input type="hidden" name="tab" value="vlsm6">
             <div class="form-row">
