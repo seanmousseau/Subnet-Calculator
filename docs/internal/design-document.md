@@ -1,7 +1,7 @@
 # Subnet Calculator — Master Design Document
 
 **Status:** Living document. Update at the end of any release or major change.
-**Current version:** v3.9.0
+**Current version:** v3.9.1
 **Last updated:** 2026-05-22
 **Authoritative for:** Architecture, design decisions, code methodology, invariants, and the "why" behind every load-bearing choice.
 

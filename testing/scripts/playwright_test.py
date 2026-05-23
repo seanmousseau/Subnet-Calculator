@@ -10766,7 +10766,11 @@ async def test_v390_form_label_size(page: Page) -> None:
 
 
 async def test_v390_hero_density(page: Page) -> None:
-    """v3.9.0 #446 — card anchored near top of fold + value-prop chips render."""
+    """v3.9.0 #446 — card is anchored near the top of the fold at 1440px.
+
+    v3.9.1 (#446 follow-up): removed the value-prop chip strip per
+    operator review; only the anchor-position fix remains.
+    """
     section("v3.9.0 #446 — hero anchored top-of-fold")
     await page.set_viewport_size({"width": 1440, "height": 900})
     try:
@@ -10776,14 +10780,6 @@ async def test_v390_hero_density(page: Page) -> None:
         assert_true(
             f"card top ≤300px from viewport top (got {card_box['y']:.0f})",
             card_box["y"] <= 300,
-        )
-        chips = await page.eval_on_selector_all(
-            ".value-prop .value-prop-chip",
-            "els => els.map(el => el.textContent.trim())",
-        )
-        assert_true(
-            f"≥3 value-prop chips present (got {chips})",
-            len(chips) >= 3,
         )
     finally:
         await page.set_viewport_size({"width": 1280, "height": 720})
