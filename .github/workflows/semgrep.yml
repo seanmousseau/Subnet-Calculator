@@ -13,7 +13,7 @@ jobs:
       image: semgrep/semgrep
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Semgrep — OWASP / PHP security rulesets
         run: |
